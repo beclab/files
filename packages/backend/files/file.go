@@ -424,11 +424,11 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 			// 	return err
 			// }
 			listing.NumDirs++
-			listing.Size += file.Size + file.Listing.Size
-			listing.NumTotalFiles += file.Listing.NumTotalFiles
+			// listing.Size += file.Size + file.Listing.Size
+			// listing.NumTotalFiles += file.Listing.NumTotalFiles
 		} else {
 			listing.NumFiles++
-			listing.NumTotalFiles++
+			// listing.NumTotalFiles++
 
 			if isInvalidLink {
 				file.Type = "invalid_link"
