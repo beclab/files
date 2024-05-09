@@ -8,10 +8,6 @@ import (
 	"encoding/json"
 	e "errors"
 	"fmt"
-	"github.com/filebrowser/filebrowser/v2/errors"
-	"github.com/filebrowser/filebrowser/v2/files"
-	"github.com/spf13/afero"
-	v "github.com/spf13/viper"
 	"io"
 	"io/ioutil"
 	"log"
@@ -25,6 +21,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/filebrowser/filebrowser/v2/errors"
+	"github.com/filebrowser/filebrowser/v2/files"
+	"github.com/spf13/afero"
+	v "github.com/spf13/viper"
 )
 
 func resourceDriveGetInfo(path string, d *data) (*files.FileInfo, int, error) {
@@ -51,7 +52,7 @@ func resourceDriveGetInfo(path string, d *data) (*files.FileInfo, int, error) {
 	if file.IsDir {
 		//fmt.Println(file)
 		//file.Size = file.Listing.Size
-		recursiveSize(file)
+		// recursiveSize(file)
 		file.Listing.Sorting = d.user.Sorting
 		file.Listing.ApplySort()
 		return file, http.StatusOK, nil //renderJSON(w, r, file)
