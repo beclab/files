@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/shirou/gopsutil/v3/disk"
-	"github.com/spf13/afero"
 	"io"
 	"io/ioutil"
 	"log"
@@ -17,25 +15,28 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/spf13/afero"
+
 	"github.com/filebrowser/filebrowser/v2/errors"
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/fileutils"
 	v "github.com/spf13/viper"
 )
 
-func recursiveSize(file *files.FileInfo) {
-	if file.IsDir {
-		for _, info := range file.Items {
-			//fmt.Println(info)
-			recursiveSize(info)
-		}
-		if file.Listing != nil {
-			file.Size += file.Listing.Size
-			file.FileSize += file.Listing.FileSize
-		}
-	}
-	return
-}
+// func recursiveSize(file *files.FileInfo) {
+// 	if file.IsDir {
+// 		for _, info := range file.Items {
+// 			//fmt.Println(info)
+// 			recursiveSize(info)
+// 		}
+// 		if file.Listing != nil {
+// 			file.Size += file.Listing.Size
+// 			file.FileSize += file.Listing.FileSize
+// 		}
+// 	}
+// 	return
+// }
 
 var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	file, err := files.NewFileInfo(files.FileOptions{
@@ -52,9 +53,9 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 
 	if file.IsDir {
-		fmt.Println(file)
-		//file.Size = file.Listing.Size
-		recursiveSize(file)
+		// fmt.Println(file)
+		// file.Size = file.Listing.Size
+		// recursiveSize(file)
 		file.Listing.Sorting = d.user.Sorting
 		file.Listing.ApplySort()
 		return renderJSON(w, r, file)

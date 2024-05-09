@@ -383,7 +383,7 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 		NumDirs:       0,
 		NumFiles:      0,
 		NumTotalFiles: 0,
-		Size:          0, // 新增字段，用于存储目录的大小
+		Size:          0,
 		FileSize:      0,
 	}
 
@@ -419,16 +419,16 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 		}
 
 		if file.IsDir {
-			err := file.readListing(checker, readHeader) // 递归处理子目录
-			if err != nil {
-				return err
-			}
+			// err := file.readListing(checker, readHeader)
+			// if err != nil {
+			// 	return err
+			// }
 			listing.NumDirs++
-			listing.Size += file.Size + file.Listing.Size // 累加子目录的大小
-			listing.NumTotalFiles += file.Listing.NumTotalFiles
+			// listing.Size += file.Size + file.Listing.Size
+			// listing.NumTotalFiles += file.Listing.NumTotalFiles
 		} else {
 			listing.NumFiles++
-			listing.NumTotalFiles++
+			// listing.NumTotalFiles++
 
 			if isInvalidLink {
 				file.Type = "invalid_link"
