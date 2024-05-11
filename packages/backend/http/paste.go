@@ -28,6 +28,27 @@ import (
 	v "github.com/spf13/viper"
 )
 
+func ioCopyFile(sourcePath, targetPath string) error {
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	targetFile, err := os.Create(targetPath)
+	if err != nil {
+		return err
+	}
+	defer targetFile.Close()
+
+	_, err = io.Copy(targetFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func resourceDriveGetInfo(path string, d *data) (*files.FileInfo, int, error) {
 	d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
 	//fmt.Println(d.user.Fs)
@@ -229,17 +250,22 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	//fmt.Println("Going to write file!")
 	err = d.RunHook(func() error {
 		//fmt.Println("Opening ", bufferFilePath)
-		bufferFile, err := os.Open(bufferFilePath)
-		if err != nil {
-			return err
-		}
-		defer bufferFile.Close()
+		//bufferFile, err := os.Open(bufferFilePath)
+		//if err != nil {
+		//	return err
+		//}
+		//defer bufferFile.Close()
 		//fmt.Println("Opened ", bufferFilePath)
 
-		_, writeErr := writeFile(d.user.Fs, targetPath, bufferFile)
-		if writeErr != nil {
-			fmt.Println(writeErr)
-			return writeErr
+		//_, writeErr := writeFile(d.user.Fs, targetPath, bufferFile)
+		//if writeErr != nil {
+		//	fmt.Println(writeErr)
+		//	return writeErr
+		//}
+		err := ioCopyFile(bufferFilePath, "data/"+targetPath)
+		if err != nil {
+			fmt.Println(err)
+			return err
 		}
 		//fmt.Println("Writer File done!")
 
