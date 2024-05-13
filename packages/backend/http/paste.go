@@ -317,38 +317,6 @@ func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, 
 	return http.StatusOK, nil
 }
 
-//func cacheFileToBuffer(src string, bufferFilePath string, r *http.Request) error {
-//	url := "http://127.0.0.1:80/api/raw" + src
-//
-//	request, err := http.NewRequest("GET", url, nil)
-//	if err != nil {
-//		return err
-//	}
-//
-//	// 设置请求头
-//	request.Header = r.Header
-//
-//	client := http.Client{}
-//	response, err := client.Do(request)
-//	if err != nil {
-//		return err
-//	}
-//	defer response.Body.Close()
-//
-//	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
-//	if err != nil {
-//		return err
-//	}
-//	defer bufferFile.Close()
-//
-//	_, err = io.Copy(bufferFile, response.Body)
-//	if err != nil {
-//		return err
-//	}
-//
-//	return nil
-//}
-
 func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	targetURL := "http://127.0.0.1:80/api/resources" + dst + "/?mode=" + mode.String() //strconv.FormatUint(uint64(mode), 10)
 	//fmt.Println(targetURL)
@@ -380,156 +348,277 @@ func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	return nil
 }
 
-func cacheFileToBuffer(src string, bufferFilePath string, r *http.Request) error {
-	url := "http://127.0.0.1:80/api/raw" + src
+func cacheFileToBuffer(src string, bufferFilePath string) error {
+	//fd, err := file.Fs.Open(file.Path)
+	//if err != nil {
+	//	return err
+	//}
+	//defer fd.Close()
 
-	request, err := http.NewRequest("GET", url, nil)
+	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
+	fmt.Println(newSrc)
+	fd, err := os.Open(newSrc)
 	if err != nil {
 		return err
 	}
+	defer fd.Close()
 
-	// 设置请求头
-	request.Header = r.Header
-
-	client := http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("请求失败，状态码：%d", response.StatusCode)
-	}
-
-	contentDisposition := response.Header.Get("Content-Disposition")
-	if contentDisposition == "" {
-		return fmt.Errorf("无法识别的响应格式")
-	}
-
-	// 从Content-Disposition头中获取文件名
-	_, params, err := mime.ParseMediaType(contentDisposition)
-	if err != nil {
-		return err
-	}
-	filename := params["filename"]
-	fmt.Println("下载的文件名: ", filename)
-
+	//bufferFilePath := "buffer.bin"
 	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
 	defer bufferFile.Close()
 
-	// 检查Content-Encoding是否为gzip
-	if response.Header.Get("Content-Encoding") == "gzip" {
-		// 创建gzip Reader
-		gzipReader, err := gzip.NewReader(response.Body)
-		if err != nil {
-			return err
-		}
-		defer gzipReader.Close()
-
-		// 将解压缩后的响应体写入文件
-		_, err = io.Copy(bufferFile, gzipReader)
-		if err != nil {
-			return err
-		}
-	} else {
-		// 读取整个响应体
-		bodyBytes, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			return err
-		}
-
-		// 将响应体写入文件
-		_, err = io.Copy(bufferFile, bytes.NewReader(bodyBytes))
-		if err != nil {
-			return err
-		}
+	_, err = io.Copy(bufferFile, fd)
+	if err != nil {
+		return err
 	}
-
-	// 打印状态码
-	//fmt.Println("状态码:", response.StatusCode)
-
-	// 打印响应头
-	//fmt.Println("响应头:")
-	//for key, values := range response.Header {
-	//	for _, value := range values {
-	//		fmt.Printf("%s: %s\n", key, value)
-	//	}
-	//}
 
 	return nil
 }
 
-func cacheBufferToFile(bufferFilePath string, dst string, mode os.FileMode, r *http.Request) (int, error) {
-	targetURL := "http://127.0.0.1:80/api/resources" + dst + "?mode=" + mode.String() // strconv.FormatUint(uint64(mode), 10)
-	//fmt.Println(targetURL)
-	bufferFile, err := os.Open(bufferFilePath)
-	if err != nil {
-		return http.StatusInternalServerError, err
+//func cacheFileToBuffer(src string, bufferFilePath string, r *http.Request) error {
+//	url := "http://127.0.0.1:80/api/raw" + src
+//
+//	request, err := http.NewRequest("GET", url, nil)
+//	if err != nil {
+//		return err
+//	}
+//
+//	// 设置请求头
+//	request.Header = r.Header
+//
+//	client := http.Client{}
+//	response, err := client.Do(request)
+//	if err != nil {
+//		return err
+//	}
+//	defer response.Body.Close()
+//
+//	if response.StatusCode != http.StatusOK {
+//		return fmt.Errorf("请求失败，状态码：%d", response.StatusCode)
+//	}
+//
+//	contentDisposition := response.Header.Get("Content-Disposition")
+//	if contentDisposition == "" {
+//		return fmt.Errorf("无法识别的响应格式")
+//	}
+//
+//	// 从Content-Disposition头中获取文件名
+//	_, params, err := mime.ParseMediaType(contentDisposition)
+//	if err != nil {
+//		return err
+//	}
+//	filename := params["filename"]
+//	fmt.Println("下载的文件名: ", filename)
+//
+//	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+//	if err != nil {
+//		return err
+//	}
+//	defer bufferFile.Close()
+//
+//	// 检查Content-Encoding是否为gzip
+//	if response.Header.Get("Content-Encoding") == "gzip" {
+//		// 创建gzip Reader
+//		gzipReader, err := gzip.NewReader(response.Body)
+//		if err != nil {
+//			return err
+//		}
+//		defer gzipReader.Close()
+//
+//		// 将解压缩后的响应体写入文件
+//		_, err = io.Copy(bufferFile, gzipReader)
+//		if err != nil {
+//			return err
+//		}
+//	} else {
+//		// 读取整个响应体
+//		bodyBytes, err := ioutil.ReadAll(response.Body)
+//		if err != nil {
+//			return err
+//		}
+//
+//		// 将响应体写入文件
+//		_, err = io.Copy(bufferFile, bytes.NewReader(bodyBytes))
+//		if err != nil {
+//			return err
+//		}
+//	}
+//
+//	// 打印状态码
+//	//fmt.Println("状态码:", response.StatusCode)
+//
+//	// 打印响应头
+//	//fmt.Println("响应头:")
+//	//for key, values := range response.Header {
+//	//	for _, value := range values {
+//	//		fmt.Printf("%s: %s\n", key, value)
+//	//	}
+//	//}
+//
+//	return nil
+//}
+
+func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *data) (int, error) {
+	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
+	if !d.user.Perm.Create || !d.Check(targetPath) {
+		return http.StatusForbidden, nil
 	}
-	defer bufferFile.Close()
 
-	// 创建一个 POST 请求
-	request, err := http.NewRequest("POST", targetURL, bufferFile)
-	if err != nil {
-		return http.StatusInternalServerError, err
+	// Directories creation on POST.
+	if strings.HasSuffix(targetPath, "/") {
+		err := d.user.Fs.MkdirAll(targetPath, mode) // 0775) //nolint:gomnd
+		return errToStatus(err), err
 	}
 
-	// 设置请求的 Content-Type
-	request.Header = r.Header
-	request.Header.Set("Content-Type", "application/octet-stream")
-
-	// 发送请求
-	client := http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return http.StatusInternalServerError, err
+	_, err := files.NewFileInfo(files.FileOptions{
+		Fs:         d.user.Fs,
+		Path:       targetPath,
+		Modify:     d.user.Perm.Modify,
+		Expand:     false,
+		ReadHeader: d.server.TypeDetectionByHeader,
+		Checker:    d,
+	})
+	if err == nil {
+		// Permission for overwriting the file
+		if !d.user.Perm.Modify {
+			return http.StatusForbidden, nil
+		}
 	}
-	defer response.Body.Close()
 
-	// 检查响应状态码
-	if response.StatusCode != http.StatusOK {
-		//fmt.Println(response.StatusCode)
-		return response.StatusCode, fmt.Errorf("file upload failed with status: %d", response.StatusCode)
+	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
+	fmt.Println(newTargetPath)
+	//fmt.Println("Going to write file!")
+	err = d.RunHook(func() error {
+		err := ioCopyFile(bufferFilePath, newTargetPath)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		return nil
+	}, "upload", targetPath, "", d.user)
+
+	if err != nil {
+		//_ = d.user.Fs.RemoveAll(targetPath)
+		err = os.RemoveAll(newTargetPath)
+		if err == nil {
+			fmt.Println("Rollback Failed:", err)
+		}
+		fmt.Println("Rollback success")
+	}
+
+	return errToStatus(err), err
+}
+
+//func cacheBufferToFile(bufferFilePath string, dst string, mode os.FileMode, r *http.Request) (int, error) {
+//	targetURL := "http://127.0.0.1:80/api/resources" + dst + "?mode=" + mode.String() // strconv.FormatUint(uint64(mode), 10)
+//	//fmt.Println(targetURL)
+//	bufferFile, err := os.Open(bufferFilePath)
+//	if err != nil {
+//		return http.StatusInternalServerError, err
+//	}
+//	defer bufferFile.Close()
+//
+//	// 创建一个 POST 请求
+//	request, err := http.NewRequest("POST", targetURL, bufferFile)
+//	if err != nil {
+//		return http.StatusInternalServerError, err
+//	}
+//
+//	// 设置请求的 Content-Type
+//	request.Header = r.Header
+//	request.Header.Set("Content-Type", "application/octet-stream")
+//
+//	// 发送请求
+//	client := http.Client{}
+//	response, err := client.Do(request)
+//	if err != nil {
+//		return http.StatusInternalServerError, err
+//	}
+//	defer response.Body.Close()
+//
+//	// 检查响应状态码
+//	if response.StatusCode != http.StatusOK {
+//		//fmt.Println(response.StatusCode)
+//		return response.StatusCode, fmt.Errorf("file upload failed with status: %d", response.StatusCode)
+//	}
+//
+//	return http.StatusOK, nil
+//}
+
+func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, d *data) (int, error) {
+	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
+	//fmt.Println("deleting", path)
+	if path == "/" || !d.user.Perm.Delete {
+		return http.StatusForbidden, nil
+	}
+
+	// No thumbnails in cache for the time being
+	//file, err := files.NewFileInfo(files.FileOptions{
+	//	Fs:         d.user.Fs,
+	//	Path:       path,
+	//	Modify:     d.user.Perm.Modify,
+	//	Expand:     false,
+	//	ReadHeader: d.server.TypeDetectionByHeader,
+	//	Checker:    d,
+	//})
+	//if err != nil {
+	//	return errToStatus(err), err
+	//}
+
+	// delete thumbnails
+	//err = delThumbs(ctx, fileCache, file)
+	//if err != nil {
+	//	return errToStatus(err), err
+	//}
+
+	err := d.RunHook(func() error {
+		newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
+		fmt.Println(newTargetPath)
+		return os.RemoveAll(newTargetPath)
+		//return d.user.Fs.RemoveAll(path)
+	}, "delete", path, "", d.user)
+
+	if err != nil {
+		return errToStatus(err), err
 	}
 
 	return http.StatusOK, nil
 }
 
-func resourceCacheDelete(path string, r *http.Request) (int, error) {
-	targetURL := "http://127.0.0.1:80/api/resources" + path
-
-	// 创建一个带超时的 HTTP 客户端
-	client := http.Client{
-		Timeout: time.Second * 10,
-	}
-
-	// 创建 DELETE 请求
-	request, err := http.NewRequest("DELETE", targetURL, nil)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	// 设置请求头，仅包含必要的信息
-	request.Header = r.Header
-
-	// 发送请求
-	response, err := client.Do(request)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	defer response.Body.Close()
-
-	// 检查响应状态码
-	if response.StatusCode != http.StatusOK {
-		return response.StatusCode, fmt.Errorf("file delete failed with status: %d", response.StatusCode)
-	}
-
-	return http.StatusOK, nil
-}
+//func resourceCacheDelete(path string, r *http.Request) (int, error) {
+//	targetURL := "http://127.0.0.1:80/api/resources" + path
+//
+//	// 创建一个带超时的 HTTP 客户端
+//	client := http.Client{
+//		Timeout: time.Second * 10,
+//	}
+//
+//	// 创建 DELETE 请求
+//	request, err := http.NewRequest("DELETE", targetURL, nil)
+//	if err != nil {
+//		return http.StatusInternalServerError, err
+//	}
+//
+//	// 设置请求头，仅包含必要的信息
+//	request.Header = r.Header
+//
+//	// 发送请求
+//	response, err := client.Do(request)
+//	if err != nil {
+//		return http.StatusInternalServerError, err
+//	}
+//	defer response.Body.Close()
+//
+//	// 检查响应状态码
+//	if response.StatusCode != http.StatusOK {
+//		return response.StatusCode, fmt.Errorf("file delete failed with status: %d", response.StatusCode)
+//	}
+//
+//	return http.StatusOK, nil
+//}
 
 func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) error {
 	// 去除路径开头和结尾的斜杠
@@ -1849,7 +1938,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		err = cacheFileToBuffer(src, bufferPath, r)
+		err = cacheFileToBuffer(src, bufferPath)
 		if err != nil {
 			return err
 		}
@@ -1889,7 +1978,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		removeDiskBuffer(bufferPath)
 	} else if dstType == "cache" {
 		fmt.Println("Begin to cache paste!")
-		status, err := cacheBufferToFile(bufferPath, dst, mode, r)
+		status, err := cacheBufferToFile(bufferPath, dst, mode, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -1968,7 +2057,7 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 		}
 		return nil
 	} else if srcType == "cache" {
-		status, err := resourceCacheDelete(src, r)
+		status, err := resourceCacheDelete(fileCache, src, ctx, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
