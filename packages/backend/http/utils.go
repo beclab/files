@@ -42,6 +42,8 @@ func errToStatus(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, libErrors.ErrRootUserDeletion):
 		return http.StatusForbidden
+	case err.Error() == "file size exceeds 4GB":
+		return http.StatusRequestEntityTooLarge
 	default:
 		return http.StatusInternalServerError
 	}

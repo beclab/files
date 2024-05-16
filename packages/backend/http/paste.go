@@ -1201,6 +1201,9 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 				return pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, r)
 			}, action, src, dst, d.user)
 		}
+		if errToStatus(err) == http.StatusRequestEntityTooLarge {
+			fmt.Fprintln(w, err.Error())
+		}
 		return errToStatus(err), err
 	})
 }
@@ -1905,8 +1908,8 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		diskSize = fileInfo.Size
 		// Won't deal a file which is bigger than 4G for the time being
 		if diskSize >= 4*1024*1024*1024 {
-			fmt.Println("The file is too big to deal with.")
-			return os.ErrPermission
+			fmt.Println("file size exceeds 4GB")
+			return e.New("file size exceeds 4GB") //os.ErrPermission
 		}
 		fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src)
@@ -1925,8 +1928,8 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 	} else if srcType == "cache" {
 		var err error
 		if diskSize >= 4*1024*1024*1024 {
-			fmt.Println("The file is too big to deal with.")
-			return os.ErrPermission
+			fmt.Println("file size exceeds 4GB")
+			return e.New("file size exceeds 4GB") //os.ErrPermission
 		}
 		fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src)
@@ -1945,8 +1948,8 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 	} else if srcType == "sync" {
 		var err error
 		if diskSize >= 4*1024*1024*1024 {
-			fmt.Println("The file is too big to deal with.")
-			return os.ErrPermission
+			fmt.Println("file size exceeds 4GB")
+			return e.New("file size exceeds 4GB") //os.ErrPermission
 		}
 		fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src)
