@@ -164,10 +164,12 @@ type DatasetRedis struct {
 }
 
 func UpdateDatasetFolderPaths(datasetID string, paths []string) {
-	redisKey := fmt.Sprintf("DATASET_%s", datasetID)
+	//getRedisKey := fmt.Sprintf("user-space-%s_zinc-files:DATASET_%s", BflName, datasetID)
+	getRedisKey := fmt.Sprintf("DATASET_%s", datasetID)
+	setRedisKey := fmt.Sprintf("DATASET_%s", datasetID)
 
 	// 从 Redis 中获取数据集信息
-	datasetJSON := my_redis.RedisGet(redisKey)
+	datasetJSON := my_redis.RedisGet(getRedisKey)
 
 	var dataset DatasetRedis
 	if datasetJSON != "" {
@@ -181,7 +183,10 @@ func UpdateDatasetFolderPaths(datasetID string, paths []string) {
 
 	// 更新数据集的路径信息
 	dataset.DatasetID = datasetID
+	fmt.Println("paths=", paths)
+	fmt.Println("PathPrefix=", PathPrefix)
 	dataset.Paths = dedupArray(paths, PathPrefix)
+	fmt.Println("dataset.Paths=", dataset.Paths)
 	dataset.LastUpdateTime = fmt.Sprintf("%d", time.Now().Unix())
 
 	fmt.Println("DatasetID:", dataset.DatasetID, ", Paths:", dataset.Paths, ", LastUpdateTime:", dataset.LastUpdateTime)
@@ -194,5 +199,5 @@ func UpdateDatasetFolderPaths(datasetID string, paths []string) {
 	}
 	fmt.Println(newDatasetJSON)
 
-	my_redis.RedisSet(redisKey, string(newDatasetJSON), time.Duration(0))
+	my_redis.RedisSet(setRedisKey, string(newDatasetJSON), time.Duration(0))
 }

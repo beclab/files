@@ -102,3 +102,8 @@ func RedisAddInt(key string, value int, expire time.Duration) int {
 	RedisSet(key, origin+value, expire)
 	return origin + value
 }
+
+func RedisDelKey(key string) {
+	redisClient.Del(key)
+	return
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	e "errors"
 	"fmt"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
@@ -34,6 +35,8 @@ var Host = "127.0.0.1"
 var FileIndex = os.Getenv("ZINC_INDEX") // "Files"
 
 var PathPrefix = os.Getenv("PATH_PREFIX") // "/Home"
+
+var BflName = os.Getenv("BFL_NAME")
 
 const DefaultMaxResult = 10
 
@@ -338,6 +341,10 @@ func getRedisDatasetIDs() ([]string, error) {
 	for i, key := range keys {
 		parts := strings.Split(key, "_")
 		datasetIDs[i] = parts[len(parts)-1]
+		data := my_redis.RedisGet(key)
+		fmt.Println("Redis key: ", key, ", Data: ", data)
+		data = my_redis.RedisGet("DATASET_" + datasetIDs[i])
+		fmt.Println("Redis key: ", "DATASET_"+datasetIDs[i], ", Data: ", data)
 	}
 	return datasetIDs, nil
 }
@@ -348,6 +355,7 @@ func GetDatasetFolderStatus(datasetIDs []string, all int, clean int) (map[string
 		ID            string `json:"id"`
 		Name          string `json:"name"`
 		DocumentCount int    `json:"document_count"`
+		AppCount      int    `json:"app_count"`
 	}
 
 	type DatasetResponse struct {
@@ -404,7 +412,7 @@ func GetDatasetFolderStatus(datasetIDs []string, all int, clean int) (map[string
 		var dataset map[string]interface{}
 		err = json.Unmarshal([]byte(value), &dataset)
 		if err != nil {
-			return nil, fmt.Errorf("解析 Redis 值为 JSON 失败：%s\n", err.Error())
+			return nil, fmt.Errorf("Parse Redis to JSON failed: %s\n", err.Error())
 		}
 
 		fmt.Println("dataCopy=", dataCopy)
@@ -413,6 +421,12 @@ func GetDatasetFolderStatus(datasetIDs []string, all int, clean int) (map[string
 			if dataItem.ID == datasetID {
 				dataset["datasetName"] = dataItem.Name
 				dataset["indexDocNum"] = dataItem.DocumentCount
+				dataset["linkedAgentNum"] = dataItem.AppCount
+				if dataItem.Name == BflName+"'s Document" {
+					dataset["default"] = true
+				} else {
+					dataset["default"] = false
+				}
 				break
 			}
 		}
@@ -515,14 +529,15 @@ type DatasetFolderPathsProviderRequest struct {
 }
 
 type DatasetFolderPathsRequest struct {
-	DatasetID   string   `json:"dataset_id"`
-	DatasetName string   `json:"dataset_name"`
-	Paths       []string `json:"paths"`
+	DatasetID      string   `json:"dataset_id"`
+	DatasetName    string   `json:"dataset_name"`
+	Paths          []string `json:"paths"`
+	CreateOrDelete int      `json:"create_or_delete"`
 }
 
-func GetDatasetIDs(datasetID, datasetName string) ([]string, error) {
-	if datasetID != "" {
-		return []string{datasetID}, nil
+func GetDatasetIDsAndCreateNewDataset(datasetID, datasetName string, createOrDelete int) ([]string, error) {
+	if createOrDelete == 1 && datasetName == "" {
+		return nil, e.New("Only can create base a name")
 	}
 
 	if datasetName != "" {
@@ -554,33 +569,43 @@ func GetDatasetIDs(datasetID, datasetName string) ([]string, error) {
 		}
 
 		if len(datasetIDs) > 0 {
+			if createOrDelete == 1 {
+				return datasetIDs, e.New("Dataset with this name already exists. Can't create a new one.")
+			}
 			return datasetIDs, nil
 		}
 
-		// 如果没有找到匹配的数据集，则创建一个新的数据集
-		postData := make(map[string]interface{})
-		postData["name"] = datasetName
+		// if not found any, create a new dataset if createOrDelete == 1
+		if createOrDelete == 1 {
+			postData := make(map[string]interface{})
+			postData["name"] = datasetName
 
-		resp, err = CallDifyGatewayBaseProvider(2, postData)
-		if err != nil {
-			return nil, fmt.Errorf("创建数据集失败：%s\n", err.Error())
+			resp, err = CallDifyGatewayBaseProvider(2, postData)
+			if err != nil {
+				return nil, fmt.Errorf("Dataset Create Failed：%s\n", err.Error())
+			}
+
+			var createDatasetResponse struct {
+				Data struct {
+					ID string `json:"id"`
+				} `json:"data"`
+			}
+
+			err = json.Unmarshal(resp, &createDatasetResponse)
+			if err != nil {
+				return nil, fmt.Errorf("Parse dataset create response failed：%s\n", err.Error())
+			}
+
+			return []string{createDatasetResponse.Data.ID}, nil
 		}
-
-		var createDatasetResponse struct {
-			Data struct {
-				ID string `json:"id"`
-			} `json:"data"`
-		}
-
-		err = json.Unmarshal(resp, &createDatasetResponse)
-		if err != nil {
-			return nil, fmt.Errorf("解析创建数据集的响应失败：%s\n", err.Error())
-		}
-
-		return []string{createDatasetResponse.Data.ID}, nil
+		return []string{}, nil
 	}
 
-	return nil, fmt.Errorf("datasetID 和 datasetName 均为空")
+	if datasetID != "" {
+		return []string{datasetID}, nil
+	}
+
+	return nil, fmt.Errorf("both datasetID and datasetName are empty")
 }
 
 func (s *Service) HandleDatasetFolderPaths(c *gin.Context) {
@@ -608,6 +633,7 @@ func (s *Service) HandleDatasetFolderPaths(c *gin.Context) {
 	var datasetID = ""
 	var datasetName = ""
 	var paths = []string{}
+	var createOrDelete = 0
 	if token.Data.DatasetID != "" {
 		fmt.Println(token.Data.DatasetID)
 		datasetID = token.Data.DatasetID
@@ -623,13 +649,22 @@ func (s *Service) HandleDatasetFolderPaths(c *gin.Context) {
 		//fmt.Println(token.Data.Query)
 		//paths = token.Data.Query
 	}
+	fmt.Println(token.Data.CreateOrDelete)
+	createOrDelete = token.Data.CreateOrDelete
+
 	fmt.Println(datasetID)
 	fmt.Println(datasetName)
 	fmt.Println(paths)
 
-	datasetIDs, err := GetDatasetIDs(datasetID, datasetName)
+	datasetIDs, err := GetDatasetIDsAndCreateNewDataset(datasetID, datasetName, createOrDelete)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to identify dataset IDs!"})
+		if err.Error() == "Dataset with this name already exists. Can't create a new one." {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		} else if err.Error() == "Only can create base a name" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to identify dataset IDs!"})
+		}
 		return
 	}
 	fmt.Println("datasetIDs:", datasetIDs)
@@ -640,6 +675,7 @@ func (s *Service) HandleDatasetFolderPaths(c *gin.Context) {
 		response[updateID] = make(map[string]string)
 		response[updateID]["datasetID"] = updateID
 		response[updateID]["paths"] = GetRedisPathsForDataset(updateID)
+		response[updateID]["status"] = "running"
 	}
 	c.Header("Content-Type", "application/json")
 	defer func() {
@@ -648,19 +684,83 @@ func (s *Service) HandleDatasetFolderPaths(c *gin.Context) {
 
 	// 在原函数返回前调用新函数
 	s.SendUpdateDatasetFolderPathsRequest(false)
+	if createOrDelete == -1 {
+		for _, updateID := range datasetIDs {
+			deleteData := make(map[string]interface{})
+			deleteData["datasetID"] = updateID
+			UpdateDatasetFolderPaths(updateID, []string{})
+			deleteResp, err := CallDifyGatewayBaseProvider(5, deleteData)
+			if err != nil {
+				fmt.Println("Dataset Delete Failed: %s\n", err.Error())
+				return
+			}
+			fmt.Println(deleteResp)
+			response[updateID]["paths"] = ""
+			response[updateID]["status"] = "deleted"
+			my_redis.RedisDelKey("DATASET_" + updateID)
+		}
+	}
 }
 
 func (s *Service) SendUpdateDatasetFolderPathsRequest(init bool) {
 	if init {
 		datasetIDs, err := getRedisDatasetIDs()
 		if err != nil {
-			fmt.Println("获取 Redis 中的 datasetIDs 失败: %s", err.Error())
+			fmt.Println("get datasetIDs from Redis failed: %s", err.Error())
 			return
 		}
-		if len(datasetIDs) == 0 {
-			fmt.Println("Redis中尚无数据，不要影响dify gateway")
+		//if len(datasetIDs) == 0 {
+		basicDatasetName := BflName + "'s Document"
+		resp, err := CallDifyGatewayBaseProvider(1, nil) //http.Get(url)
+		if err != nil {
+			fmt.Println("Get Basic Dataset Failed!")
 			return
 		}
+
+		var datasetResponse struct {
+			Data struct {
+				Data []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"data"`
+			} `json:"data"`
+		}
+
+		err = json.NewDecoder(bytes.NewReader(resp)).Decode(&datasetResponse)
+		if err != nil {
+			fmt.Println("Parse Dataset Response Failed!")
+			return
+		}
+
+		var basicDatasetIDs []string
+
+		for _, dataItem := range datasetResponse.Data.Data {
+			if dataItem.Name == basicDatasetName {
+				basicDatasetIDs = append(basicDatasetIDs, dataItem.ID)
+			}
+		}
+
+		if len(basicDatasetIDs) > 0 {
+			fmt.Println("Basic DatasetID: ", datasetIDs)
+			for _, basicDatasetID := range basicDatasetIDs {
+				curValue := my_redis.RedisGet("DATASET_" + basicDatasetID)
+				var curDataset map[string]interface{}
+				err = json.Unmarshal([]byte(curValue), &curDataset)
+				if err != nil {
+					fmt.Errorf("Parse Redis to JSON failed: %s\n", err.Error())
+					return
+				}
+				if curDataset["paths"] == nil {
+					fmt.Println("Basic Dataset ", basicDatasetID, " need to be initialized")
+					UpdateDatasetFolderPaths(basicDatasetID, []string{"/data/Home/Documents"})
+				} else {
+					fmt.Println("Basic Dataset ", basicDatasetID, " is now with paths ", curDataset["paths"])
+				}
+			}
+		}
+		// fmt.Println("Redis no data，won't disturb dify gateway")
+		// return
+		//}
 	}
 
 	resp, err := CallDifyGatewayBaseProvider(4, nil)
@@ -767,9 +867,10 @@ func (s *Service) HandleDatasetFolderPathsTest(c *gin.Context) {
 	reqBody := string(body)
 
 	type Request struct {
-		Paths       []string `json:"paths"`
-		DatasetName string   `json:"datasetName"`
-		DatasetID   string   `json:"datasetID"`
+		Paths          []string `json:"paths"`
+		DatasetName    string   `json:"dataset_name"`
+		DatasetID      string   `json:"dataset_id"`
+		CreateOrDelete int      `json:"create_or_delete"`
 	}
 	var requestData Request
 	err = json.Unmarshal([]byte(reqBody), &requestData)
@@ -780,15 +881,22 @@ func (s *Service) HandleDatasetFolderPathsTest(c *gin.Context) {
 	paths := requestData.Paths
 	datasetName := requestData.DatasetName
 	datasetID := requestData.DatasetID
+	createOrDelete := requestData.CreateOrDelete
 
 	fmt.Println("dataset folder paths")
 	fmt.Println("datasetID:", datasetID)
 	fmt.Println("datasetName:", datasetName)
 	fmt.Println("paths:", paths, ", length:", len(paths))
 
-	datasetIDs, err := GetDatasetIDs(datasetID, datasetName)
+	datasetIDs, err := GetDatasetIDsAndCreateNewDataset(datasetID, datasetName, createOrDelete)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to identify dataset IDs!"})
+		if err.Error() == "Dataset with this name already exists. Can't create a new one." {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		} else if err.Error() == "Only can create base a name" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to identify dataset IDs!"})
+		}
 		return
 	}
 	fmt.Println("datasetIDs:", datasetIDs)
@@ -799,6 +907,7 @@ func (s *Service) HandleDatasetFolderPathsTest(c *gin.Context) {
 		response[updateID] = make(map[string]string)
 		response[updateID]["datasetID"] = updateID
 		response[updateID]["paths"] = GetRedisPathsForDataset(updateID)
+		response[updateID]["status"] = "running"
 	}
 
 	c.Header("Content-Type", "application/json")
@@ -808,4 +917,20 @@ func (s *Service) HandleDatasetFolderPathsTest(c *gin.Context) {
 
 	// 在原函数返回前调用新函数
 	s.SendUpdateDatasetFolderPathsRequest(false)
+	if createOrDelete == -1 {
+		for _, updateID := range datasetIDs {
+			deleteData := make(map[string]interface{})
+			deleteData["datasetID"] = updateID
+			UpdateDatasetFolderPaths(updateID, []string{})
+			deleteResp, err := CallDifyGatewayBaseProvider(5, deleteData)
+			if err != nil {
+				fmt.Println("Dataset Delete Failed: %s\n", err.Error())
+				return
+			}
+			fmt.Println(deleteResp)
+			response[updateID]["paths"] = ""
+			response[updateID]["status"] = "deleted"
+			my_redis.RedisDelKey("DATASET_" + updateID)
+		}
+	}
 }
