@@ -709,6 +709,7 @@ func (s *Service) SendUpdateDatasetFolderPathsRequest(init bool) {
 			fmt.Println("get datasetIDs from Redis failed: %s", err.Error())
 			return
 		}
+		fmt.Println("Current Redis DatasetIDs:", datasetIDs)
 		//if len(datasetIDs) == 0 {
 		basicDatasetName := BflName + "'s Document"
 		resp, err := CallDifyGatewayBaseProvider(1, nil) //http.Get(url)
@@ -741,16 +742,15 @@ func (s *Service) SendUpdateDatasetFolderPathsRequest(init bool) {
 		}
 
 		if len(basicDatasetIDs) > 0 {
-			fmt.Println("Basic DatasetID: ", datasetIDs)
+			fmt.Println("Basic DatasetID: ", basicDatasetIDs)
 			for _, basicDatasetID := range basicDatasetIDs {
 				curValue := my_redis.RedisGet("DATASET_" + basicDatasetID)
 				var curDataset map[string]interface{}
 				err = json.Unmarshal([]byte(curValue), &curDataset)
 				if err != nil {
 					fmt.Errorf("Parse Redis to JSON failed: %s\n", err.Error())
-					return
 				}
-				if curDataset["paths"] == nil {
+				if err != nil || curValue == "" || curDataset["paths"] == nil {
 					fmt.Println("Basic Dataset ", basicDatasetID, " need to be initialized")
 					UpdateDatasetFolderPaths(basicDatasetID, []string{"/data/Home/Documents"})
 				} else {
