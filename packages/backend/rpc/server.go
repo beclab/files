@@ -704,58 +704,61 @@ func (s *Service) HandleDatasetFolderPaths(c *gin.Context) {
 
 func (s *Service) SendUpdateDatasetFolderPathsRequest(init bool) {
 	if init {
-		datasetIDs, err := getRedisDatasetIDs()
-		if err != nil {
-			fmt.Println("get datasetIDs from Redis failed: %s", err.Error())
-			return
-		}
-		fmt.Println("Current Redis DatasetIDs:", datasetIDs)
-		//if len(datasetIDs) == 0 {
-		basicDatasetName := BflName + "'s Document"
-		resp, err := CallDifyGatewayBaseProvider(1, nil) //http.Get(url)
-		if err != nil {
-			fmt.Println("Get Basic Dataset Failed!")
-			return
-		}
-
-		var datasetResponse struct {
-			Data struct {
-				Data []struct {
-					ID   string `json:"id"`
-					Name string `json:"name"`
-				} `json:"data"`
-			} `json:"data"`
-		}
-
-		err = json.NewDecoder(bytes.NewReader(resp)).Decode(&datasetResponse)
-		if err != nil {
-			fmt.Println("Parse Dataset Response Failed!")
-			return
-		}
-
-		var basicDatasetIDs []string
-
-		for _, dataItem := range datasetResponse.Data.Data {
-			if dataItem.Name == basicDatasetName {
-				basicDatasetIDs = append(basicDatasetIDs, dataItem.ID)
+		for {
+			datasetIDs, err := getRedisDatasetIDs()
+			if err != nil {
+				fmt.Println("get datasetIDs from Redis failed: %s", err.Error())
+				return
 			}
-		}
+			fmt.Println("Current Redis DatasetIDs:", datasetIDs)
+			//if len(datasetIDs) == 0 {
+			basicDatasetName := BflName + "'s Document"
+			resp, err := CallDifyGatewayBaseProvider(1, nil) //http.Get(url)
+			if err != nil {
+				fmt.Println("Get Basic Dataset Failed!")
+				return
+			}
 
-		if len(basicDatasetIDs) > 0 {
-			fmt.Println("Basic DatasetID: ", basicDatasetIDs)
-			for _, basicDatasetID := range basicDatasetIDs {
-				curValue := my_redis.RedisGet("DATASET_" + basicDatasetID)
-				var curDataset map[string]interface{}
-				err = json.Unmarshal([]byte(curValue), &curDataset)
-				if err != nil {
-					fmt.Errorf("Parse Redis to JSON failed: %s\n", err.Error())
+			var datasetResponse struct {
+				Data struct {
+					Data []struct {
+						ID   string `json:"id"`
+						Name string `json:"name"`
+					} `json:"data"`
+				} `json:"data"`
+			}
+
+			err = json.NewDecoder(bytes.NewReader(resp)).Decode(&datasetResponse)
+			if err != nil {
+				fmt.Println("Parse Dataset Response Failed!")
+				return
+			}
+
+			var basicDatasetIDs []string
+
+			for _, dataItem := range datasetResponse.Data.Data {
+				if dataItem.Name == basicDatasetName {
+					basicDatasetIDs = append(basicDatasetIDs, dataItem.ID)
 				}
-				if err != nil || curValue == "" || curDataset["paths"] == nil {
-					fmt.Println("Basic Dataset ", basicDatasetID, " need to be initialized")
-					UpdateDatasetFolderPaths(basicDatasetID, []string{"/data/Home/Documents"})
-				} else {
-					fmt.Println("Basic Dataset ", basicDatasetID, " is now with paths ", curDataset["paths"])
+			}
+
+			if len(basicDatasetIDs) > 0 {
+				fmt.Println("Basic DatasetID: ", basicDatasetIDs)
+				for _, basicDatasetID := range basicDatasetIDs {
+					curValue := my_redis.RedisGet("DATASET_" + basicDatasetID)
+					var curDataset map[string]interface{}
+					err = json.Unmarshal([]byte(curValue), &curDataset)
+					if err != nil {
+						fmt.Errorf("Parse Redis to JSON failed: %s\n", err.Error())
+					}
+					if err != nil || curValue == "" || curDataset["paths"] == nil {
+						fmt.Println("Basic Dataset ", basicDatasetID, " need to be initialized")
+						UpdateDatasetFolderPaths(basicDatasetID, []string{"/data/Home/Documents"})
+					} else {
+						fmt.Println("Basic Dataset ", basicDatasetID, " is now with paths ", curDataset["paths"])
+					}
 				}
+				break
 			}
 		}
 		// fmt.Println("Redis no data，won't disturb dify gateway")
