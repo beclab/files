@@ -868,6 +868,16 @@ func generateUniqueIdentifier(relativePath string) string {
 	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
 }
 
+func getFileExtension(filename string) string {
+	extension := path.Ext(filename)
+	//if extension == "" {
+	//	extension = "blob"
+	//} else {
+	//	extension = extension[1:]
+	//}
+	return extension
+}
+
 func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Request) (int, error) {
 	// Step1: deal with URL
 	// 去除路径开头和结尾的斜杠
@@ -902,9 +912,17 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	fmt.Println("prefix:", prefix)
 	fmt.Println("filename:", filename)
 
+	extension := getFileExtension(filename)
+	fmt.Println("extension:", extension)
+	mimeType := "application/octet-stream"
+	if extension != "" {
+		mimeType = mime.TypeByExtension(extension)
+	}
+	fmt.Println("MIME Type:", mimeType)
+
 	// step2: GET upload URL
 	//getUrl := "http://seafile/api2/repos/" + repoID + "/upload-link/?p=/" + prefix //+ "&from=web"
-	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=/" + prefix + "&from=web"
+	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=/" + prefix + "&from=api"
 	fmt.Println(getUrl)
 
 	getRequest, err := http.NewRequest("GET", getUrl, nil)
@@ -939,10 +957,8 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	fmt.Println("Upload link:", uploadLink)
 
 	// step3: deal with upload URL
-	// 步骤3: 处理上传 URL
 	//targetURL := "http://seafile:8082" + uploadLink[9:] + "?ret-json=1"
 	targetURL := "http://127.0.0.1:80" + uploadLink + "?ret-json=1"
-
 	fmt.Println(targetURL)
 
 	// 打开要上传的文件
@@ -952,89 +968,116 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	}
 	defer bufferFile.Close()
 
-	// 创建一个新的多部分表单数据请求
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
+	fileInfo, err := bufferFile.Stat()
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	fileSize := fileInfo.Size()
 
-	// 添加表单字段
+	chunkSize := int64(5 * 1024 * 1024) // 5 MB
+	totalChunks := (fileSize + chunkSize - 1) / chunkSize
 	identifier := generateUniqueIdentifier(filename)
-	fmt.Println("Identifier: ", identifier)
-	fmt.Println("Parent Dir: ", prefix)
-	fmt.Println("Chunk Size: ", strconv.FormatInt(size, 10))
-	writer.WriteField("resumableChunkNumber", "1")
-	writer.WriteField("resumableChunkSize", "5242880") // 5*1024*1024
-	writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(size, 10))
-	writer.WriteField("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
-	writer.WriteField("resumableType", "")
-	writer.WriteField("resumableIdentifier", identifier) //"096b7d0f1af58ccf5bfb1dbde97fb51cresponse")
-	writer.WriteField("resumableFilename", filename)     // "response")
-	writer.WriteField("resumableRelativePath", filename) // "response")
-	writer.WriteField("resumableTotalChunks", "1")
-	writer.WriteField("parent_dir", "/"+prefix+"//") //"/")
 
-	// 将文件添加到表单
-	part, err := writer.CreateFormFile("file", filename) //"response")
-	if err != nil {
-		return http.StatusInternalServerError, err
+	var chunkStart int64 = 0
+	for chunkNumber := int64(1); chunkNumber <= totalChunks; chunkNumber++ {
+		// 读取当前分片的数据
+		offset := (chunkNumber - 1) * chunkSize
+		chunkData := make([]byte, chunkSize)
+		bytesRead, err := bufferFile.ReadAt(chunkData, offset)
+		if err != nil && err != io.EOF {
+			return http.StatusInternalServerError, err
+		}
+
+		// 创建一个新的多部分表单数据请求
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+
+		// 添加表单字段
+		fmt.Println("Identifier: ", identifier)
+		fmt.Println("Parent Dir: ", "/"+prefix)
+		fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
+		fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
+		fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
+		fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
+		fmt.Println("resumableType", mimeType)
+		fmt.Println("resumableFilename", filename)     // "response")
+		fmt.Println("resumableRelativePath", filename) // "response")
+		fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
+
+		writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
+		writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
+		writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
+		writer.WriteField("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
+		writer.WriteField("resumableType", mimeType)
+		writer.WriteField("resumableIdentifier", identifier) //"096b7d0f1af58ccf5bfb1dbde97fb51cresponse")
+		writer.WriteField("resumableFilename", filename)     // "response")
+		writer.WriteField("resumableRelativePath", filename) // "response")
+		writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
+		writer.WriteField("parent_dir", "/"+prefix) //+"//")
+
+		// 将缓冲区内容作为字符串输出
+		content := body.String()
+		fmt.Println(content)
+
+		// 将文件分片添加到表单
+		part, err := writer.CreateFormFile("file", filename)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+		_, err = part.Write(chunkData[:bytesRead])
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+
+		// 关闭表单写入器
+		err = writer.Close()
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+
+		// 创建 HTTP 请求
+		request, err := http.NewRequest("POST", targetURL, body)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+
+		// 设置请求头
+		request.Header = r.Header
+		request.Header.Set("Content-Type", writer.FormDataContentType())
+		//Content-Disposition:attachment; filename="2022.zip"
+		//Content-Length:5244224
+		//Content-Range:bytes 10485760-15728639/61034314
+		request.Header.Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+		//request.Header.Set("Content-Length", strconv.FormatInt(int64(bytesRead), 10))
+		request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(size, 10))
+		chunkStart += int64(bytesRead)
+
+		//for key, values := range request.Header {
+		//	for _, value := range values {
+		//		fmt.Printf("%s: %s\n", key, value)
+		//	}
+		//}
+
+		// 发送请求
+		client := http.Client{}
+		response, err := client.Do(request)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+		defer response.Body.Close()
+
+		// Read the response body as a string
+		postBody, err := io.ReadAll(response.Body)
+		if err != nil {
+			return errToStatus(err), err
+		}
+
+		// 检查响应状态码
+		if response.StatusCode != http.StatusOK {
+			fmt.Println(string(postBody))
+			return response.StatusCode, fmt.Errorf("文件上传失败,状态码: %d", response.StatusCode)
+		}
 	}
-	_, err = io.Copy(part, bufferFile)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	err = writer.Close()
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	//// 输出创建好的表单字段
-	//fmt.Println("Form fields:")
-	//writer.WriteField("", "")
-	//for key, values := range writer.FormDataContentType() {
-	//	fmt.Printf("%s: %s\n", key, values)
-	//}
-
-	// 创建 HTTP 请求
-	request, err := http.NewRequest("POST", targetURL, body)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	// 设置请求头
-	request.Header = r.Header
-	//for key, values := range getResponse.Header {
-	//	request.Header[key] = values
-	//}
-	request.Header.Set("Content-Type", writer.FormDataContentType())
-	//fmt.Println("上传请求头:")
-	//for key, values := range request.Header {
-	//	for _, value := range values {
-	//		fmt.Printf("%s: %s\n", key, value)
-	//	}
-	//}
-
-	// 发送请求
-	client := http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	defer response.Body.Close()
-
-	// Read the response body as a string
-	postBody, err := io.ReadAll(response.Body)
-	if err != nil {
-		return errToStatus(err), err
-	}
-
-	// 检查响应状态码
-	if response.StatusCode != http.StatusOK {
-		fmt.Println(string(postBody))
-		//fmt.Println(response.Status)
-		//fmt.Println(response.StatusCode)
-		return response.StatusCode, fmt.Errorf("文件上传失败,状态码: %d", response.StatusCode)
-	}
-
 	return http.StatusOK, nil
 }
 
