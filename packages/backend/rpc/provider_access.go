@@ -122,8 +122,8 @@ func getAccessToken(dataType, group string, ops []string) (string, error) {
 }
 
 func CallDifyGatewayBaseProvider(opType int, opData map[string]interface{}) ([]byte, error) {
-	if KnowledgeBase != "True" {
-		fmt.Println("KnowledgeBase is not functional")
+	if KnowledgeBaseEnabled != "True" {
+		fmt.Println("KnowledgeBase is not enabled")
 		return nil, nil
 	}
 

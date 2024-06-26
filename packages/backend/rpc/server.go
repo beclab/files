@@ -32,13 +32,17 @@ var SessionCookieName = "session_id"
 
 var Host = "127.0.0.1"
 
+var ESEnabled = os.Getenv("ES_ENABLED")
+
+var WatcherEnabled = os.Getenv("WATCHER_ENABLED")
+
+var KnowledgeBaseEnabled = os.Getenv("KNOWLEDGE_BASE_ENABLED")
+
 var FileIndex = os.Getenv("ZINC_INDEX") // "Files"
 
 var PathPrefix = os.Getenv("PATH_PREFIX") // "/Home"
 
 var BflName = os.Getenv("BFL_NAME")
-
-var KnowledgeBase = os.Getenv("KNOWLEDGE_BASE")
 
 const DefaultMaxResult = 10
 
@@ -75,8 +79,10 @@ func InitRpcService(url, port, username, password string, bsModelConfig map[stri
 			maxPendingLength: maxPendingLength,
 		}
 
-		if err := RpcServer.EsSetupIndex(); err != nil {
-			panic(err)
+		if ESEnabled == "True" {
+			if err := RpcServer.EsSetupIndex(); err != nil {
+				panic(err)
+			}
 		}
 
 		//load routes
@@ -130,7 +136,7 @@ func (c *Service) loadRoutes() error {
 	//RpcEngine.POST("/provider/query_file", c.HandleSearchFolderPaths)
 	RpcEngine.POST("/provider/get_search_folder_status", c.HandleSearchFolderStatus)
 	RpcEngine.POST("/provider/update_search_folder_paths", c.HandleSearchFolderPaths)
-	if KnowledgeBase == "True" {
+	if KnowledgeBaseEnabled == "True" {
 		RpcEngine.POST("/provider/get_dataset_folder_status", c.HandleDatasetFolderStatus)
 		RpcEngine.POST("/provider/update_dataset_folder_paths", c.HandleDatasetFolderPaths)
 		RpcEngine.POST("/api/get_dataset_folder_status_test", c.HandleDatasetFolderStatusTest)
