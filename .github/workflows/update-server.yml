@@ -41,8 +41,22 @@ jobs:
         with:
           fallback: latest
 
+#      - name: Build
+#        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
+
       - name: Build
-        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
+        run: |
+          cd packages/backend/
+          go mod tidy
+          for GOOS in linux; do
+            for GOARCH in amd64 arm64; do
+              export GOOS=$GOOS
+              export GOARCH=$GOARCH
+              make build-backend
+              mkdir -p dist/$GOOS-$GOARCH
+              mv filebrowser dist/$GOOS-$GOARCH/
+            done
+          done
 
       - name: Build and push
         uses: docker/build-push-action@v2

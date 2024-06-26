@@ -16,6 +16,17 @@ VOLUME /srv
 EXPOSE 8110
 
 COPY packages/backend/docker_config.json /.filebrowser.json
-COPY packages/backend/filebrowser /filebrowser
+#COPY packages/backend/filebrowser /filebrowser
+RUN mkdir dist
+COPY packages/backend/dist dist
+
+# Detect the CPU architecture and copy the appropriate binary
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+        cp dist/linux-amd64/filebrowser /filebrowser; \
+    elif [ "$(uname -m)" = "aarch64" ]; then \
+        cp dist/linux-arm64/filebrowser /filebrowser; \
+    else \
+        echo "Unsupported CPU architecture" && exit 1; \
+    fi
 
 ENTRYPOINT [ "/filebrowser" ]
