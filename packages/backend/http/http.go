@@ -85,8 +85,10 @@ func NewHandler(
 		Handler(monkey(previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
 	api.PathPrefix("/command").Handler(monkey(commandsHandler, "/api/command")).Methods("GET")
 	api.PathPrefix("/search").Handler(monkey(searchHandler, "/api/search")).Methods("GET")
-	api.HandleFunc("/get_dataset_folder_status_test", ginHandlerAdapter(rpc.RpcEngine))
-	api.HandleFunc("/update_dataset_folder_paths_test", ginHandlerAdapter(rpc.RpcEngine))
+	if rpc.KnowledgeBase == "True" {
+		api.HandleFunc("/get_dataset_folder_status_test", ginHandlerAdapter(rpc.RpcEngine))
+		api.HandleFunc("/update_dataset_folder_paths_test", ginHandlerAdapter(rpc.RpcEngine))
+	}
 
 	files := r.PathPrefix("/files").Subrouter()
 	files.HandleFunc("/healthcheck", ginHandlerAdapter(rpc.RpcEngine))

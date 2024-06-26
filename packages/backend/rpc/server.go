@@ -38,6 +38,8 @@ var PathPrefix = os.Getenv("PATH_PREFIX") // "/Home"
 
 var BflName = os.Getenv("BFL_NAME")
 
+var KnowledgeBase = os.Getenv("KNOWLEDGE_BASE")
+
 const DefaultMaxResult = 10
 
 var once sync.Once
@@ -128,10 +130,12 @@ func (c *Service) loadRoutes() error {
 	//RpcEngine.POST("/provider/query_file", c.HandleSearchFolderPaths)
 	RpcEngine.POST("/provider/get_search_folder_status", c.HandleSearchFolderStatus)
 	RpcEngine.POST("/provider/update_search_folder_paths", c.HandleSearchFolderPaths)
-	RpcEngine.POST("/provider/get_dataset_folder_status", c.HandleDatasetFolderStatus)
-	RpcEngine.POST("/provider/update_dataset_folder_paths", c.HandleDatasetFolderPaths)
-	RpcEngine.POST("/api/get_dataset_folder_status_test", c.HandleDatasetFolderStatusTest)
-	RpcEngine.POST("/api/update_dataset_folder_paths_test", c.HandleDatasetFolderPathsTest)
+	if KnowledgeBase == "True" {
+		RpcEngine.POST("/provider/get_dataset_folder_status", c.HandleDatasetFolderStatus)
+		RpcEngine.POST("/provider/update_dataset_folder_paths", c.HandleDatasetFolderPaths)
+		RpcEngine.POST("/api/get_dataset_folder_status_test", c.HandleDatasetFolderStatusTest)
+		RpcEngine.POST("/api/update_dataset_folder_paths_test", c.HandleDatasetFolderPathsTest)
+	}
 
 	c.CallbackGroup = RpcEngine.Group("/api/callback")
 	log.Printf("init rpc server")

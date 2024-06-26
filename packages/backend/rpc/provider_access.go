@@ -122,6 +122,10 @@ func getAccessToken(dataType, group string, ops []string) (string, error) {
 }
 
 func CallDifyGatewayBaseProvider(opType int, opData map[string]interface{}) ([]byte, error) {
+	if KnowledgeBase != "True" {
+		fmt.Println("KnowledgeBase is not functional")
+		return nil, nil
+	}
 
 	accessToken, err := getAccessToken("gateway", "service.agent", []string{"DifyGatewayBaseProvider"})
 	if err != nil {
