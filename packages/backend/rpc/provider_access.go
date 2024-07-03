@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -127,7 +128,7 @@ func CallDifyGatewayBaseProvider(opType int, opData map[string]interface{}) ([]b
 		return nil, nil
 	}
 
-	accessToken, err := getAccessToken("gateway", "service.agent", []string{"DifyGatewayBaseProvider"})
+	accessToken, err := getAccessToken("gateway", "service.difyfusionclient", []string{"DifyGatewayBaseProvider"})
 	if err != nil {
 		fmt.Println("get access token failed: ", err)
 		return nil, err
@@ -148,7 +149,7 @@ func CallDifyGatewayBaseProvider(opType int, opData map[string]interface{}) ([]b
 	fmt.Println(requestJSON)
 
 	bodyReader := bytes.NewReader(requestBytes)
-	requestUrl := "http://" + OsSystemServer + "/system-server/v1alpha1/gateway/service.agent/v1/DifyGatewayBaseProvider"
+	requestUrl := "http://" + OsSystemServer + "/system-server/v1alpha1/gateway/service.difyfusionclient/v1/DifyGatewayBaseProvider"
 
 	fmt.Println(requestUrl)
 	req, err := http.NewRequest(http.MethodPost, requestUrl, bodyReader)
@@ -185,6 +186,11 @@ func CallDifyGatewayBaseProvider(opType int, opData map[string]interface{}) ([]b
 	if resp.StatusCode != http.StatusOK {
 		fmt.Println("status code error: ", errors.New(resp.Status))
 		return nil, errors.New(resp.Status)
+	}
+
+	if strings.Contains(string(body), "provider not found") {
+		fmt.Println("provider not found")
+		return nil, nil
 	}
 	defer resp.Body.Close()
 	return body, nil
