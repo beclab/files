@@ -76,7 +76,7 @@ var (
 					Containers: []corev1.Container{
 						{
 							Name:            "files",
-							Image:           "beclab/files-server:v0.2.24",
+							Image:           os.Getenv("FILES_SERVER_TAG"), //"beclab/files-server:v0.2.24",
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							VolumeMounts: []corev1.VolumeMount{
 								{
