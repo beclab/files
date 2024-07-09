@@ -85,23 +85,23 @@ func NewHandler(
 		Handler(monkey(previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
 	api.PathPrefix("/command").Handler(monkey(commandsHandler, "/api/command")).Methods("GET")
 	api.PathPrefix("/search").Handler(monkey(searchHandler, "/api/search")).Methods("GET")
-	if rpc.KnowledgeBaseEnabled == "True" {
-		api.HandleFunc("/get_dataset_folder_status_test", ginHandlerAdapter(rpc.RpcEngine))
-		api.HandleFunc("/update_dataset_folder_paths_test", ginHandlerAdapter(rpc.RpcEngine))
-	}
+	//if rpc.KnowledgeBaseEnabled == "True" {
+	//	api.HandleFunc("/get_dataset_folder_status_test", ginHandlerAdapter(rpc.RpcEngine))
+	//	api.HandleFunc("/update_dataset_folder_paths_test", ginHandlerAdapter(rpc.RpcEngine))
+	//}
 
 	files := r.PathPrefix("/files").Subrouter()
 	files.HandleFunc("/healthcheck", ginHandlerAdapter(rpc.RpcEngine))
 	//files.HandleFunc("/input", ginHandlerAdapter(rpc.RpcEngine))
 	//files.HandleFunc("/delete", ginHandlerAdapter(rpc.RpcEngine))
-	files.HandleFunc("/query", ginHandlerAdapter(rpc.RpcEngine))
+	//files.HandleFunc("/query", ginHandlerAdapter(rpc.RpcEngine))
 
-	provider := r.PathPrefix("/provider").Subrouter()
-	provider.HandleFunc("/query_file", ginHandlerAdapter(rpc.RpcEngine))
-	provider.HandleFunc("/get_search_folder_status", ginHandlerAdapter(rpc.RpcEngine))
-	provider.HandleFunc("/update_search_folder_paths", ginHandlerAdapter(rpc.RpcEngine))
-	provider.HandleFunc("/get_dataset_folder_status", ginHandlerAdapter(rpc.RpcEngine))
-	provider.HandleFunc("/update_dataset_folder_paths", ginHandlerAdapter(rpc.RpcEngine))
+	//provider := r.PathPrefix("/provider").Subrouter()
+	//provider.HandleFunc("/query_file", ginHandlerAdapter(rpc.RpcEngine))
+	//provider.HandleFunc("/get_search_folder_status", ginHandlerAdapter(rpc.RpcEngine))
+	//provider.HandleFunc("/update_search_folder_paths", ginHandlerAdapter(rpc.RpcEngine))
+	//provider.HandleFunc("/get_dataset_folder_status", ginHandlerAdapter(rpc.RpcEngine))
+	//provider.HandleFunc("/update_dataset_folder_paths", ginHandlerAdapter(rpc.RpcEngine))
 
 	public := api.PathPrefix("/public").Subrouter()
 	public.PathPrefix("/dl").Handler(monkey(publicDlHandler, "/api/public/dl/")).Methods("GET")
