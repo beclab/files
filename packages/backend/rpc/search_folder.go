@@ -1,12 +1,9 @@
 package rpc
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"os"
 	"strings"
-	"time"
 )
 
 //func GetSearchFolderStatus() (map[string]interface{}, error) {
@@ -156,47 +153,47 @@ func dedupArray(paths []string, prefix string) []string {
 //	return
 //}
 
-type DatasetRedis struct {
-	DatasetID      string   `json:"datasetID"`
-	Paths          []string `json:"paths"`
-	LastUpdateTime string   `json:"lastUpdateTime"`
-}
+//type DatasetRedis struct {
+//	DatasetID      string   `json:"datasetID"`
+//	Paths          []string `json:"paths"`
+//	LastUpdateTime string   `json:"lastUpdateTime"`
+//}
 
-func UpdateDatasetFolderPaths(datasetID string, paths []string) {
-	//getRedisKey := fmt.Sprintf("user-space-%s_zinc-files:DATASET_%s", BflName, datasetID)
-	getRedisKey := fmt.Sprintf("DATASET_%s", datasetID)
-	setRedisKey := fmt.Sprintf("DATASET_%s", datasetID)
-
-	// 从 Redis 中获取数据集信息
-	datasetJSON := my_redis.RedisGet(getRedisKey)
-
-	var dataset DatasetRedis
-	if datasetJSON != "" {
-		// 解析 Redis 中的数据集信息
-		err := json.Unmarshal([]byte(datasetJSON), &dataset)
-		if err != nil {
-			fmt.Printf("解析 Redis 中的数据集信息失败：%s\n", err.Error())
-			return
-		}
-	}
-
-	// 更新数据集的路径信息
-	dataset.DatasetID = datasetID
-	fmt.Println("paths=", paths)
-	fmt.Println("PathPrefix=", PathPrefix)
-	dataset.Paths = dedupArray(paths, PathPrefix)
-	fmt.Println("dataset.Paths=", dataset.Paths)
-	dataset.LastUpdateTime = fmt.Sprintf("%d", time.Now().Unix())
-
-	fmt.Println("DatasetID:", dataset.DatasetID, ", Paths:", dataset.Paths, ", LastUpdateTime:", dataset.LastUpdateTime)
-
-	// 将更新后的数据集信息存储回 Redis
-	newDatasetJSON, err := json.Marshal(dataset)
-	if err != nil {
-		fmt.Printf("序列化更新后的数据集信息失败：%s\n", err.Error())
-		return
-	}
-	fmt.Println(newDatasetJSON)
-
-	my_redis.RedisSet(setRedisKey, string(newDatasetJSON), time.Duration(0))
-}
+//func UpdateDatasetFolderPaths(datasetID string, paths []string) {
+//	//getRedisKey := fmt.Sprintf("user-space-%s_zinc-files:DATASET_%s", BflName, datasetID)
+//	getRedisKey := fmt.Sprintf("DATASET_%s", datasetID)
+//	setRedisKey := fmt.Sprintf("DATASET_%s", datasetID)
+//
+//	// 从 Redis 中获取数据集信息
+//	datasetJSON := my_redis.RedisGet(getRedisKey)
+//
+//	var dataset DatasetRedis
+//	if datasetJSON != "" {
+//		// 解析 Redis 中的数据集信息
+//		err := json.Unmarshal([]byte(datasetJSON), &dataset)
+//		if err != nil {
+//			fmt.Printf("解析 Redis 中的数据集信息失败：%s\n", err.Error())
+//			return
+//		}
+//	}
+//
+//	// 更新数据集的路径信息
+//	dataset.DatasetID = datasetID
+//	fmt.Println("paths=", paths)
+//	fmt.Println("PathPrefix=", PathPrefix)
+//	dataset.Paths = dedupArray(paths, PathPrefix)
+//	fmt.Println("dataset.Paths=", dataset.Paths)
+//	dataset.LastUpdateTime = fmt.Sprintf("%d", time.Now().Unix())
+//
+//	fmt.Println("DatasetID:", dataset.DatasetID, ", Paths:", dataset.Paths, ", LastUpdateTime:", dataset.LastUpdateTime)
+//
+//	// 将更新后的数据集信息存储回 Redis
+//	newDatasetJSON, err := json.Marshal(dataset)
+//	if err != nil {
+//		fmt.Printf("序列化更新后的数据集信息失败：%s\n", err.Error())
+//		return
+//	}
+//	fmt.Println(newDatasetJSON)
+//
+//	my_redis.RedisSet(setRedisKey, string(newDatasetJSON), time.Duration(0))
+//}
