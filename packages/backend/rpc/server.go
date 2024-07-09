@@ -32,13 +32,13 @@ var SessionCookieName = "session_id"
 
 var Host = "127.0.0.1"
 
-var ESEnabled = os.Getenv("ES_ENABLED")
+//var ESEnabled = os.Getenv("ES_ENABLED")
 
 var WatcherEnabled = os.Getenv("WATCHER_ENABLED")
 
 var KnowledgeBaseEnabled = os.Getenv("KNOWLEDGE_BASE_ENABLED")
 
-var FileIndex = os.Getenv("ZINC_INDEX") // "Files"
+//var FileIndex = os.Getenv("ZINC_INDEX") // "Files"
 
 var PathPrefix = os.Getenv("PATH_PREFIX") // "/Home"
 
@@ -65,25 +65,25 @@ type Service struct {
 
 func InitRpcService(url, port, username, password string, bsModelConfig map[string]string) {
 	once.Do(func() {
-		esClient, _ := InitES(url, username, password)
+		//esClient, _ := InitES(url, username, password)
 		ctxTemp := context.WithValue(context.Background(), "Username", username)
 		ctx := context.WithValue(ctxTemp, "Password", password)
 
 		RpcServer = &Service{
-			port:             port,
-			zincUrl:          url,
-			username:         username,
-			password:         password,
-			esClient:         esClient,
+			port:     port,
+			zincUrl:  url,
+			username: username,
+			password: password,
+			//esClient:         esClient,
 			context:          ctx,
 			maxPendingLength: maxPendingLength,
 		}
 
-		if ESEnabled == "True" {
-			if err := RpcServer.EsSetupIndex(); err != nil {
-				panic(err)
-			}
-		}
+		//if ESEnabled == "True" {
+		//	if err := RpcServer.EsSetupIndex(); err != nil {
+		//		panic(err)
+		//	}
+		//}
 
 		//load routes
 		RpcServer.loadRoutes()
@@ -128,10 +128,10 @@ func (c *Service) loadRoutes() error {
 		c.String(http.StatusOK, "ok")
 	})
 
-	RpcEngine.POST("/files/input", c.HandleInput)
-	RpcEngine.POST("/files/delete", c.HandleDelete)
-	RpcEngine.POST("/files/query", c.HandleQuery)
-	RpcEngine.POST("/provider/query_file", c.QueryFile)
+	//RpcEngine.POST("/files/input", c.HandleInput)
+	//RpcEngine.POST("/files/delete", c.HandleDelete)
+	//RpcEngine.POST("/files/query", c.HandleQuery)
+	//RpcEngine.POST("/provider/query_file", c.QueryFile)
 	//下面一行用于重定向测试：
 	//RpcEngine.POST("/provider/query_file", c.HandleSearchFolderPaths)
 	RpcEngine.POST("/provider/get_search_folder_status", c.HandleSearchFolderStatus)
@@ -148,66 +148,70 @@ func (c *Service) loadRoutes() error {
 	return nil
 }
 
-func (s *Service) HandleInput(c *gin.Context) {
-	index := c.Query("index")
-	if index == "Files" || index == "" {
-		index = FileIndex
-	}
-	if index != FileIndex {
-		rep := Resp{
-			ResultCode: ErrorCodeUnknow,
-			ResultMsg:  fmt.Sprintf("only support index %s", FileIndex),
-		}
-		c.JSON(http.StatusBadRequest, rep)
-	}
-	if index == FileIndex {
-		s.HandleFileInput(c)
-	}
-}
+//func (s *Service) HandleInput(c *gin.Context) {
+//	index := c.Query("index")
+//	if index == "Files" || index == "" {
+//		index = FileIndex
+//	}
+//	if index != FileIndex {
+//		rep := Resp{
+//			ResultCode: ErrorCodeUnknow,
+//			ResultMsg:  fmt.Sprintf("only support index %s", FileIndex),
+//		}
+//		c.JSON(http.StatusBadRequest, rep)
+//	}
+//	if index == FileIndex {
+//		s.HandleFileInput(c)
+//	}
+//}
 
-func (s *Service) HandleDelete(c *gin.Context) {
-	index := c.Query("index")
-	if index == "Files" || index == "" {
-		index = FileIndex
-	}
-	if index != FileIndex {
-		rep := Resp{
-			ResultCode: ErrorCodeUnknow,
-			ResultMsg:  fmt.Sprintf("only support index %s", FileIndex),
-		}
-		c.JSON(http.StatusBadRequest, rep)
-	}
-	if index == FileIndex {
-		s.HandleFileDelete(c)
-	}
-}
+//func (s *Service) HandleDelete(c *gin.Context) {
+//	index := c.Query("index")
+//	if index == "Files" || index == "" {
+//		index = FileIndex
+//	}
+//	if index != FileIndex {
+//		rep := Resp{
+//			ResultCode: ErrorCodeUnknow,
+//			ResultMsg:  fmt.Sprintf("only support index %s", FileIndex),
+//		}
+//		c.JSON(http.StatusBadRequest, rep)
+//	}
+//	if index == FileIndex {
+//		s.HandleFileDelete(c)
+//	}
+//}
 
-func (s *Service) HandleQuery(c *gin.Context) {
-	index := c.Query("index")
-	if index == "Files" || index == "" {
-		index = FileIndex
-	}
-	if index != FileIndex {
-		rep := Resp{
-			ResultCode: ErrorCodeUnknow,
-			ResultMsg:  fmt.Sprintf("only support index %s", FileIndex),
-		}
-		c.JSON(http.StatusBadRequest, rep)
-	}
-	if index == FileIndex {
-		s.HandleFileQuery(c)
-	}
-}
+//func (s *Service) HandleQuery(c *gin.Context) {
+//	index := c.Query("index")
+//	if index == "Files" || index == "" {
+//		index = FileIndex
+//	}
+//	if index != FileIndex {
+//		rep := Resp{
+//			ResultCode: ErrorCodeUnknow,
+//			ResultMsg:  fmt.Sprintf("only support index %s", FileIndex),
+//		}
+//		c.JSON(http.StatusBadRequest, rep)
+//	}
+//	if index == FileIndex {
+//		s.HandleFileQuery(c)
+//	}
+//}
 
 func (s *Service) HandleSearchFolderStatus(c *gin.Context) {
 
-	response, err := GetSearchFolderStatus()
+	//response, err := GetSearchFolderStatus()
+	//defer func() {
+	//if err == nil {
+	//	c.JSON(http.StatusOK, response)
+	//} else {
+	//	c.JSON(http.StatusInternalServerError, "Internel server error")
+	//}
+	//}()
+
 	defer func() {
-		if err == nil {
-			c.JSON(http.StatusOK, response)
-		} else {
-			c.JSON(http.StatusInternalServerError, "Internel server error")
-		}
+		c.JSON(http.StatusOK, "No more Zinc search")
 	}()
 }
 
@@ -229,44 +233,48 @@ type PathsRequest struct {
 }
 
 func (s *Service) HandleSearchFolderPaths(c *gin.Context) {
-	fmt.Println("You got the files-deployment search folder paths provider~!")
-	token := PathsProviderRequest{
-		Token: c.GetHeader("X-Access-Token"),
-	}
-	if err := c.ShouldBindJSON(&token); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse request body"})
-		return
-	}
+	//fmt.Println("You got the files-deployment search folder paths provider~!")
+	//token := PathsProviderRequest{
+	//	Token: c.GetHeader("X-Access-Token"),
+	//}
+	//if err := c.ShouldBindJSON(&token); err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse request body"})
+	//	return
+	//}
+	//
+	//fmt.Println("search folder paths")
+	//fmt.Println(token)
+	//fmt.Println(token.Data)
+	//
+	//req := c.Request
+	//// 解析表单数据
+	//if err := req.ParseForm(); err != nil {
+	//	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse form data"})
+	//	return
+	//}
+	//
+	//// 添加paths字段
+	//var paths = []string{}
+	//if len(token.Data.Paths) > 0 {
+	//	fmt.Println(token.Data.Paths)
+	//	paths = token.Data.Paths
+	//} else {
+	//	//fmt.Println(token.Data.Query)
+	//	//paths = token.Data.Query
+	//}
+	//fmt.Println(paths)
+	//
+	//UpdateSearchFolderPaths(paths)
+	//response := map[string]interface{}{
+	//	"paths": my_redis.RedisGet("paths"),
+	//}
+	//c.Header("Content-Type", "application/json")
+	//defer func() {
+	//	c.JSON(http.StatusOK, response)
+	//}()
 
-	fmt.Println("search folder paths")
-	fmt.Println(token)
-	fmt.Println(token.Data)
-
-	req := c.Request
-	// 解析表单数据
-	if err := req.ParseForm(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse form data"})
-		return
-	}
-
-	// 添加paths字段
-	var paths = []string{}
-	if len(token.Data.Paths) > 0 {
-		fmt.Println(token.Data.Paths)
-		paths = token.Data.Paths
-	} else {
-		//fmt.Println(token.Data.Query)
-		//paths = token.Data.Query
-	}
-	fmt.Println(paths)
-
-	UpdateSearchFolderPaths(paths)
-	response := map[string]interface{}{
-		"paths": my_redis.RedisGet("paths"),
-	}
-	c.Header("Content-Type", "application/json")
 	defer func() {
-		c.JSON(http.StatusOK, response)
+		c.JSON(http.StatusOK, "No more Zinc search")
 	}()
 }
 

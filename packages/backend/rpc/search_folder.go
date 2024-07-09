@@ -5,43 +5,42 @@ import (
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
 
-func GetSearchFolderStatus() (map[string]interface{}, error) {
-	indexingStatus, err := strconv.Atoi(my_redis.RedisGet("indexing_status"))
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	indexingError, err := strconv.ParseBool(my_redis.RedisGet("indexing_error"))
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	var status = "indexing"
-	if indexingError {
-		status = "errored"
-	} else {
-		if indexingStatus == 0 {
-			status = "running"
-		}
-	}
-	count, err := RpcServer.EsCountFiles(FileIndex)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	result := map[string]interface{}{
-		"status":           status,
-		"last_update_time": my_redis.RedisGet("last_update_time"),
-		"index_doc_num":    count,
-		"paths":            my_redis.RedisGet("paths"),
-	}
-	return result, nil
-}
+//func GetSearchFolderStatus() (map[string]interface{}, error) {
+//	indexingStatus, err := strconv.Atoi(my_redis.RedisGet("indexing_status"))
+//	if err != nil {
+//		fmt.Println(err)
+//		return nil, err
+//	}
+//	indexingError, err := strconv.ParseBool(my_redis.RedisGet("indexing_error"))
+//	if err != nil {
+//		fmt.Println(err)
+//		return nil, err
+//	}
+//	var status = "indexing"
+//	if indexingError {
+//		status = "errored"
+//	} else {
+//		if indexingStatus == 0 {
+//			status = "running"
+//		}
+//	}
+//	count, err := RpcServer.EsCountFiles(FileIndex)
+//	if err != nil {
+//		fmt.Println(err)
+//		return nil, err
+//	}
+//	result := map[string]interface{}{
+//		"status":           status,
+//		"last_update_time": my_redis.RedisGet("last_update_time"),
+//		"index_doc_num":    count,
+//		"paths":            my_redis.RedisGet("paths"),
+//	}
+//	return result, nil
+//}
 
 func isInvalidDir(dirPath string) bool {
 	// 使用 os.Stat 函数获取路径的文件信息
@@ -108,54 +107,54 @@ func dedupArray(paths []string, prefix string) []string {
 	return result
 }
 
-// difference 函数返回仅在 a 中存在而不在 b 中存在的元素切片
-func difference(a, b []string) []string {
-	m := make(map[string]bool)
-	for _, value := range b {
-		m[value] = true
-	}
-
-	var diff []string
-	for _, value := range a {
-		if !m[value] {
-			diff = append(diff, value)
-		}
-	}
-
-	return diff
-}
-
-func UpdateSearchFolderPaths(paths []string) {
-	// A为原始，B为输入，设A、B均经历过“父子去重”，自己“父子去重”为简单去重后，取出所有没有在自己中有任一元素作为父祖路径的元素集合
-	// 则：
-	// ADD = B-A
-	// REDIS = B
-	// DELETE = A-B
-
-	// A
-	agoPaths := dedupArray(strings.Split(my_redis.RedisGet("paths"), ","), PathPrefix)
-	fmt.Println("ago paths: ", agoPaths, len(agoPaths))
-
-	// B
-	basePaths := dedupArray(paths, PathPrefix)
-	fmt.Println("base paths: ", basePaths, len(basePaths))
-
-	// ADD
-	addPaths := difference(basePaths, agoPaths)
-	fmt.Println("add paths: ", addPaths, len(addPaths))
-
-	// REDIS
-	redisPaths := basePaths // append(addPaths, calibPaths...)
-	fmt.Println("redis paths:", redisPaths, len(redisPaths))
-
-	// DELETE
-	deletePaths := difference(agoPaths, redisPaths)
-	fmt.Println("delete paths:", deletePaths, len(deletePaths))
-
-	my_redis.RedisSet("paths", strings.Join(redisPaths, ","), time.Duration(0))
-	WatchPath(addPaths, deletePaths)
-	return
-}
+//// difference 函数返回仅在 a 中存在而不在 b 中存在的元素切片
+//func difference(a, b []string) []string {
+//	m := make(map[string]bool)
+//	for _, value := range b {
+//		m[value] = true
+//	}
+//
+//	var diff []string
+//	for _, value := range a {
+//		if !m[value] {
+//			diff = append(diff, value)
+//		}
+//	}
+//
+//	return diff
+//}
+//
+//func UpdateSearchFolderPaths(paths []string) {
+//	// A为原始，B为输入，设A、B均经历过“父子去重”，自己“父子去重”为简单去重后，取出所有没有在自己中有任一元素作为父祖路径的元素集合
+//	// 则：
+//	// ADD = B-A
+//	// REDIS = B
+//	// DELETE = A-B
+//
+//	// A
+//	agoPaths := dedupArray(strings.Split(my_redis.RedisGet("paths"), ","), PathPrefix)
+//	fmt.Println("ago paths: ", agoPaths, len(agoPaths))
+//
+//	// B
+//	basePaths := dedupArray(paths, PathPrefix)
+//	fmt.Println("base paths: ", basePaths, len(basePaths))
+//
+//	// ADD
+//	addPaths := difference(basePaths, agoPaths)
+//	fmt.Println("add paths: ", addPaths, len(addPaths))
+//
+//	// REDIS
+//	redisPaths := basePaths // append(addPaths, calibPaths...)
+//	fmt.Println("redis paths:", redisPaths, len(redisPaths))
+//
+//	// DELETE
+//	deletePaths := difference(agoPaths, redisPaths)
+//	fmt.Println("delete paths:", deletePaths, len(deletePaths))
+//
+//	my_redis.RedisSet("paths", strings.Join(redisPaths, ","), time.Duration(0))
+//	WatchPath(addPaths, deletePaths)
+//	return
+//}
 
 type DatasetRedis struct {
 	DatasetID      string   `json:"datasetID"`
