@@ -16,22 +16,23 @@ package proxy
 
 import (
 	"context"
-	"net/http"
-	"net/url"
-	"regexp"
-
 	"github.com/Above-Os/files/gateway/pkg/appdata"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
 )
 
 const (
-	API_PREFIX  = "/api/resources/AppData"
-	API_PREFIX2 = "/api/raw/AppData"
-	NODE_HEADER = "X-Terminus-Node"
+	API_RESOURCES_PREFIX = "/api/resources/AppData"
+	API_RAW_PREFIX       = "/api/raw/AppData"
+	NODE_HEADER          = "X-Terminus-Node"
+	API_PREFIX           = "/api"
 )
 
 type GatewayHandler func(c echo.Context) (next bool, err error)
@@ -62,10 +63,12 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 		k8sClient: kubernetes.NewForConfigOrDie(b.KubeConfig),
 	}
 	// add handlers
-	backendProxy.addHandlers(API_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
-	backendProxy.addHandlers(API_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
-	backendProxy.addHandlers(API_PREFIX2, backendProxy.listNodesOrNot(backendProxy.listNodes))
-	backendProxy.addHandlers(API_PREFIX2+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RESOURCES_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RESOURCES_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RAW_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RAW_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREFIX, backendProxy.apiHandler)
+	backendProxy.addHandlers(API_PREFIX+"/", backendProxy.apiHandler)
 
 	proxy.Use(middleware.Recover())
 	proxy.Use(middleware.Logger())
@@ -93,16 +96,25 @@ func (p *BackendProxy) Shutdown() {
 func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		path := c.Request().URL.Path
-		if !regexp.MustCompile("^"+API_PREFIX+".*").Match([]byte(path)) && !regexp.MustCompile("^"+API_PREFIX2+".*").Match([]byte(path)) {
+
+		if !regexp.MustCompile("^"+API_RESOURCES_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+API_RAW_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+API_PREFIX+".*").Match([]byte(path)) {
 			klog.Error("unimplement api call, ", path)
 			return c.String(http.StatusNotImplemented, "api not found")
 		}
 
-		switch {
-		case path != API_PREFIX && path != API_PREFIX2:
-			if _, ok := c.Request().Header[NODE_HEADER]; !ok {
-				klog.Error("node info not found from header")
-				return c.String(http.StatusBadRequest, "node not found")
+		if strings.HasPrefix(path, API_PREFIX) &&
+			!strings.HasPrefix(path, API_RESOURCES_PREFIX) &&
+			!strings.HasPrefix(path, API_RAW_PREFIX) {
+			// return next(c)
+		} else {
+			switch {
+			case path != API_RESOURCES_PREFIX && path != API_RAW_PREFIX:
+				if _, ok := c.Request().Header[NODE_HEADER]; !ok {
+					klog.Error("node info not found from header")
+					return c.String(http.StatusBadRequest, "node not found")
+				}
 			}
 		}
 		return next(c)
@@ -133,7 +145,12 @@ func (p *BackendProxy) addHandlers(route string, handler GatewayHandler) {
 
 func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	node := c.Request().Header[NODE_HEADER]
-	host := appdata.GetAppDataServiceEndpoint(node[0])
+	var host = ""
+	if len(node) > 0 {
+		host = appdata.GetAppDataServiceEndpoint(node[0])
+	} else {
+		host = "127.0.0.1:8110"
+	}
 
 	url, _ := url.ParseRequestURI("http://" + host + "/")
 	return &middleware.ProxyTarget{URL: url}
