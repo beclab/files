@@ -161,6 +161,24 @@ func init() {
 	FileImage = os.Getenv("FILE_IMAGE")
 }
 
+func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, nodeName string, key string, bflName string) (string, error) {
+	if bflName == "" {
+		klog.Error("get Annotation error, bfl-name is empty")
+		return "", errors.New("bfl-name is emtpty")
+	}
+
+	namespace := "user-space-" + bflName
+
+	bfl, err := client.AppsV1().StatefulSets(namespace).Get(ctx, "bfl", metav1.GetOptions{})
+	if err != nil {
+		klog.Error("find user's bfl error, ", err, ", ", Namespace)
+		return "", err
+	}
+
+	klog.Infof("bfl.Annotations: %+v", bfl.Annotations)
+	return bfl.Annotations[key], nil
+}
+
 func GetAppDataDeploymentDef(ctx context.Context, client *kubernetes.Clientset, nodeName string) (*appsv1.Deployment, error) {
 	if Namespace == "" {
 		klog.Error("get appdata deployment error, namespace is empty")

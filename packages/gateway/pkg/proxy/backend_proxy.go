@@ -32,6 +32,7 @@ const (
 	API_RESOURCES_PREFIX = "/api/resources/AppData"
 	API_RAW_PREFIX       = "/api/raw/AppData"
 	NODE_HEADER          = "X-Terminus-Node"
+	BFL_HEADER           = "X-Bfl-User"
 	API_PREFIX           = "/api"
 	UPLOADER_PREFIX      = "/upload"
 	MEDIA_PREFIX         = "/videos"
@@ -69,12 +70,12 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	backendProxy.addHandlers(API_RESOURCES_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_RAW_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_RAW_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
-	backendProxy.addHandlers(API_PREFIX, backendProxy.apiHandler)
-	backendProxy.addHandlers(API_PREFIX+"/", backendProxy.apiHandler)
-	backendProxy.addHandlers(UPLOADER_PREFIX, backendProxy.uploaderHandler)
-	backendProxy.addHandlers(UPLOADER_PREFIX+"/", backendProxy.uploaderHandler)
-	backendProxy.addHandlers(MEDIA_PREFIX, backendProxy.mediaHandler)
-	backendProxy.addHandlers(MEDIA_PREFIX+"/", backendProxy.mediaHandler)
+	//backendProxy.addHandlers(API_PREFIX, backendProxy.listNodesOrNot(backendProxy.apiHandler))
+	//backendProxy.addHandlers(API_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.apiHandler))
+	//backendProxy.addHandlers(UPLOADER_PREFIX, backendProxy.uploaderHandler)
+	//backendProxy.addHandlers(UPLOADER_PREFIX+"/", backendProxy.uploaderHandler)
+	//backendProxy.addHandlers(MEDIA_PREFIX, backendProxy.mediaHandler)
+	//backendProxy.addHandlers(MEDIA_PREFIX+"/", backendProxy.mediaHandler)
 
 	proxy.Use(middleware.Recover())
 	proxy.Use(middleware.Logger())
@@ -152,23 +153,93 @@ func (p *BackendProxy) addHandlers(route string, handler GatewayHandler) {
 	}
 }
 
+func minWithNegativeOne(a, b int, aName, bName string) (int, string) {
+	if a == -1 && b == -1 {
+		return -1, ""
+	}
+
+	if a == -1 {
+		return b, bName
+	}
+	if b == -1 {
+		return a, aName
+	}
+
+	if a < b {
+		return a, aName
+	} else {
+		return b, bName
+	}
+}
+
 func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
+	klog.Infof("Request Headers: %+v", c.Request().Header)
+
 	node := c.Request().Header[NODE_HEADER]
 	path := c.Request().URL.Path
+	bfl := c.Request().Header[BFL_HEADER]
+	bflName := ""
+	if len(bfl) > 0 {
+		bflName = bfl[0]
+	}
+	klog.Info("BFL_NAME: ", bflName)
+
+	userPvc, err := appdata.GetAnnotation(p.mainCtx, p.k8sClient, "", "userspace_pvc", bflName)
+	if err != nil {
+		klog.Info(err)
+	} else {
+		klog.Info("user-space pvc: ", userPvc)
+	}
+
+	cachePvc, err := appdata.GetAnnotation(p.mainCtx, p.k8sClient, "", "appcache_pvc", bflName)
+	if err != nil {
+		klog.Info(err)
+	} else {
+		klog.Info("appcache pvc: ", cachePvc)
+	}
+
 	var host = ""
 	if len(node) > 0 {
+		klog.Info("Node: ", node[0])
+		if strings.HasPrefix(path, API_RESOURCES_PREFIX) {
+			pathSuffix := strings.TrimPrefix(path, API_RESOURCES_PREFIX)
+			c.Request().URL.Path = API_RESOURCES_PREFIX + "/" + cachePvc + pathSuffix
+		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
+			pathSuffix := strings.TrimPrefix(path, API_RAW_PREFIX)
+			c.Request().URL.Path = API_RAW_PREFIX + "/" + cachePvc + pathSuffix
+		}
 		host = appdata.GetAppDataServiceEndpoint(node[0])
+		klog.Info("host: ", host)
+		klog.Info("new path: ", c.Request().URL.Path)
 	} else {
+		klog.Info("Path: ", path)
 		if strings.HasPrefix(path, API_PREFIX) {
+			homeIndex := strings.Index(path, "/Home")
+			applicationIndex := strings.Index(path, "/Application")
+			splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
+			if splitIndex != -1 {
+				if splitName == "/Home" {
+					firstHalf := path[:splitIndex]
+					secondHalf := path[splitIndex:]
+					c.Request().URL.Path = firstHalf + "/" + userPvc + secondHalf
+				} else {
+					firstHalf := path[:splitIndex]
+					secondHalf := strings.TrimPrefix(path[splitIndex:], splitName)
+					c.Request().URL.Path = firstHalf + "/" + userPvc + "/Data" + secondHalf
+				}
+			}
 			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, UPLOADER_PREFIX) {
 			host = "127.0.0.1:40030"
 		} else if strings.HasPrefix(path, MEDIA_PREFIX) {
 			host = "127.0.0.1:9090"
 		}
+		klog.Info("host: ", host)
+		klog.Info("new path: ", c.Request().URL.Path)
 	}
 
 	url, _ := url.ParseRequestURI("http://" + host + "/")
+	klog.Info("Proxy URL: ", url)
 	return &middleware.ProxyTarget{URL: url}
 }
 
