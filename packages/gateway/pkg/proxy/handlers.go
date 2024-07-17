@@ -60,3 +60,53 @@ func (p *BackendProxy) apiHandler(c echo.Context) (bool, error) {
 	// 将响应内容写回给客户端
 	return false, c.Stream(resp.StatusCode, resp.Header.Get("Content-Type"), resp.Body)
 }
+
+func (p *BackendProxy) uploaderHandler(c echo.Context) (bool, error) {
+	req := c.Request()
+
+	// 创建新的 HTTP 请求
+	proxyReq, err := http.NewRequestWithContext(c.Request().Context(), req.Method, "http://127.0.0.1:40030"+req.RequestURI, req.Body)
+	if err != nil {
+		return false, err
+	}
+
+	// 复制请求头
+	for k, v := range req.Header {
+		proxyReq.Header[k] = v
+	}
+
+	// 执行代理请求
+	resp, err := http.DefaultClient.Do(proxyReq)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	// 将响应内容写回给客户端
+	return false, c.Stream(resp.StatusCode, resp.Header.Get("Content-Type"), resp.Body)
+}
+
+func (p *BackendProxy) mediaHandler(c echo.Context) (bool, error) {
+	req := c.Request()
+
+	// 创建新的 HTTP 请求
+	proxyReq, err := http.NewRequestWithContext(c.Request().Context(), req.Method, "http://127.0.0.1:9090"+req.RequestURI, req.Body)
+	if err != nil {
+		return false, err
+	}
+
+	// 复制请求头
+	for k, v := range req.Header {
+		proxyReq.Header[k] = v
+	}
+
+	// 执行代理请求
+	resp, err := http.DefaultClient.Do(proxyReq)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	// 将响应内容写回给客户端
+	return false, c.Stream(resp.StatusCode, resp.Header.Get("Content-Type"), resp.Body)
+}

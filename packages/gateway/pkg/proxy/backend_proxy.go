@@ -33,6 +33,8 @@ const (
 	API_RAW_PREFIX       = "/api/raw/AppData"
 	NODE_HEADER          = "X-Terminus-Node"
 	API_PREFIX           = "/api"
+	UPLOADER_PREFIX      = "/upload"
+	MEDIA_PREFIX         = "/videos"
 )
 
 type GatewayHandler func(c echo.Context) (next bool, err error)
@@ -69,6 +71,10 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	backendProxy.addHandlers(API_RAW_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_PREFIX, backendProxy.apiHandler)
 	backendProxy.addHandlers(API_PREFIX+"/", backendProxy.apiHandler)
+	backendProxy.addHandlers(UPLOADER_PREFIX, backendProxy.uploaderHandler)
+	backendProxy.addHandlers(UPLOADER_PREFIX+"/", backendProxy.uploaderHandler)
+	backendProxy.addHandlers(MEDIA_PREFIX, backendProxy.mediaHandler)
+	backendProxy.addHandlers(MEDIA_PREFIX+"/", backendProxy.mediaHandler)
 
 	proxy.Use(middleware.Recover())
 	proxy.Use(middleware.Logger())
@@ -99,24 +105,27 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		if !regexp.MustCompile("^"+API_RESOURCES_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_RAW_PREFIX+".*").Match([]byte(path)) &&
-			!regexp.MustCompile("^"+API_PREFIX+".*").Match([]byte(path)) {
+			!regexp.MustCompile("^"+API_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+UPLOADER_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+MEDIA_PREFIX+".*").Match([]byte(path)) {
 			klog.Error("unimplement api call, ", path)
 			return c.String(http.StatusNotImplemented, "api not found")
 		}
 
-		if strings.HasPrefix(path, API_PREFIX) &&
+		if (strings.HasPrefix(path, API_PREFIX) || strings.HasPrefix(path, UPLOADER_PREFIX) || strings.HasPrefix(path, MEDIA_PREFIX)) &&
 			!strings.HasPrefix(path, API_RESOURCES_PREFIX) &&
 			!strings.HasPrefix(path, API_RAW_PREFIX) {
-			// return next(c)
-		} else {
-			switch {
-			case path != API_RESOURCES_PREFIX && path != API_RAW_PREFIX:
-				if _, ok := c.Request().Header[NODE_HEADER]; !ok {
-					klog.Error("node info not found from header")
-					return c.String(http.StatusBadRequest, "node not found")
-				}
+			return next(c)
+		}
+
+		switch {
+		case path != API_RESOURCES_PREFIX && path != API_RAW_PREFIX:
+			if _, ok := c.Request().Header[NODE_HEADER]; !ok {
+				klog.Error("node info not found from header")
+				return c.String(http.StatusBadRequest, "node not found")
 			}
 		}
+
 		return next(c)
 	}
 }
@@ -145,11 +154,18 @@ func (p *BackendProxy) addHandlers(route string, handler GatewayHandler) {
 
 func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	node := c.Request().Header[NODE_HEADER]
+	path := c.Request().URL.Path
 	var host = ""
 	if len(node) > 0 {
 		host = appdata.GetAppDataServiceEndpoint(node[0])
 	} else {
-		host = "127.0.0.1:8110"
+		if strings.HasPrefix(path, API_PREFIX) {
+			host = "127.0.0.1:8110"
+		} else if strings.HasPrefix(path, UPLOADER_PREFIX) {
+			host = "127.0.0.1:40030"
+		} else if strings.HasPrefix(path, MEDIA_PREFIX) {
+			host = "127.0.0.1:9090"
+		}
 	}
 
 	url, _ := url.ParseRequestURI("http://" + host + "/")
