@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,7 +20,6 @@ import (
 	"github.com/filebrowser/filebrowser/v2/errors"
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/fileutils"
-	v "github.com/spf13/viper"
 )
 
 // func recursiveSize(file *files.FileInfo) {
@@ -39,6 +37,9 @@ import (
 // }
 
 var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	xBflUser := r.Header.Get("X-Bfl-User")
+	fmt.Println("X-Bfl-User: ", xBflUser)
+
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         d.user.Fs,
 		Path:       r.URL.Path,
@@ -74,10 +75,11 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 
 	if file.Type == "video" {
-		osSystemServer := v.Get("OS_SYSTEM_SERVER")
-		if osSystemServer == nil {
-			log.Println("need env OS_SYSTEM_SERVER")
-		}
+		osSystemServer := "system-server.user-system-" + xBflUser
+		//osSystemServer := v.Get("OS_SYSTEM_SERVER")
+		//if osSystemServer == nil {
+		//	log.Println("need env OS_SYSTEM_SERVER")
+		//}
 
 		/*
 				showLogUrl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", os.Getenv("OS_SYSTEM_SERVER"))
@@ -106,7 +108,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 			message = showLogBody
 		*/
 
-		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", os.Getenv("OS_SYSTEM_SERVER"))
+		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer) // os.Getenv("OS_SYSTEM_SERVER"))
 
 		fmt.Println("HTTP JSON POST URL:", httpposturl)
 

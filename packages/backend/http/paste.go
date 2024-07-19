@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -25,7 +24,6 @@ import (
 	"github.com/filebrowser/filebrowser/v2/errors"
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/spf13/afero"
-	v "github.com/spf13/viper"
 )
 
 func ioCopyFile(sourcePath, targetPath string) error {
@@ -49,13 +47,17 @@ func ioCopyFile(sourcePath, targetPath string) error {
 	return nil
 }
 
-func resourceDriveGetInfo(path string, d *data) (*files.FileInfo, int, error) {
+func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInfo, int, error) {
+	xBflUser := r.Header.Get("X-Bfl-User")
+	fmt.Println("X-Bfl-User: ", xBflUser)
+
 	d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
 	//fmt.Println(d.user.Fs)
 	//fmt.Println(path)
 	//fmt.Println(d.user.Perm.Modify)
 	//fmt.Println(d.server.TypeDetectionByHeader)
 	//fmt.Println(d)
+	fmt.Println("d.user.Username: ", d.user.Username)
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         d.user.Fs,
 		Path:       path, //r.URL.Path,
@@ -92,12 +94,13 @@ func resourceDriveGetInfo(path string, d *data) (*files.FileInfo, int, error) {
 	//}
 
 	if file.Type == "video" {
-		osSystemServer := v.Get("OS_SYSTEM_SERVER")
-		if osSystemServer == nil {
-			log.Println("need env OS_SYSTEM_SERVER")
-		}
+		osSystemServer := "system-server.user-system-" + xBflUser
+		//osSystemServer := v.Get("OS_SYSTEM_SERVER")
+		//if osSystemServer == nil {
+		//	log.Println("need env OS_SYSTEM_SERVER")
+		//}
 
-		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", os.Getenv("OS_SYSTEM_SERVER"))
+		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer) // os.Getenv("OS_SYSTEM_SERVER"))
 
 		//fmt.Println("HTTP JSON POST URL:", httpposturl)
 
@@ -1940,7 +1943,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 	var bufferPath string
 	// copy/move
 	if srcType == "drive" {
-		fileInfo, status, err := resourceDriveGetInfo(src, d)
+		fileInfo, status, err := resourceDriveGetInfo(src, r, d)
 		//fmt.Println(fileInfo, status, err)
 		if status != http.StatusOK {
 			return os.ErrInvalid
