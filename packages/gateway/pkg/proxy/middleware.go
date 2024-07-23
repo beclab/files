@@ -16,27 +16,9 @@ package proxy
 
 import (
 	"github.com/labstack/echo/v4"
-	"k8s.io/klog/v2"
-	"reflect"
-	"runtime"
 )
 
-func getFunctionName(f interface{}) string {
-	fptr, ok := f.(func())
-	if !ok {
-		return "Not a function"
-	}
-
-	funcsym := runtime.FuncForPC(reflect.ValueOf(fptr).Pointer())
-	if funcsym == nil {
-		return "Unknown"
-	}
-
-	return funcsym.Name()
-}
-
 func (p *BackendProxy) listNodesOrNot(listFunc GatewayHandler) GatewayHandler {
-	klog.Info("listNodesOrNot Func Name: ", getFunctionName(listFunc))
 	return func(c echo.Context) (next bool, err error) {
 		if _, ok := c.Request().Header[NODE_HEADER]; ok {
 			return true, nil

@@ -18,7 +18,6 @@ import (
 	"context"
 	"flag"
 
-	"github.com/Above-Os/files/gateway/pkg/operator"
 	"github.com/Above-Os/files/gateway/pkg/proxy"
 	"github.com/Above-Os/files/gateway/pkg/signals"
 	"k8s.io/klog/v2"
@@ -41,8 +40,8 @@ func main() {
 		KubeConfig: config,
 	}
 
-	nodeWatcher := operator.NewWatcher(ctx, config)
-	nodeWatcher.Start()
+	//nodeWatcher := operator.NewWatcher(ctx, config)
+	//nodeWatcher.Start()
 
 	proxy := builder.Build()
 

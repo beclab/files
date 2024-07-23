@@ -174,20 +174,33 @@ func minWithNegativeOne(a, b int, aName, bName string) (int, string) {
 	}
 }
 
-func rewriteUrl(path string, pvc string) string {
-	homeIndex := strings.Index(path, "/Home")
-	applicationIndex := strings.Index(path, "/Application")
-	splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
-	if splitIndex != -1 {
-		if splitName == "/Home" {
+func rewriteUrl(path string, pvc string, prefix string) string {
+	if prefix == "" {
+		homeIndex := strings.Index(path, "/Home")
+		applicationIndex := strings.Index(path, "/Application")
+		splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
+		if splitIndex != -1 {
 			firstHalf := path[:splitIndex]
 			secondHalf := path[splitIndex:]
-			return firstHalf + "/" + pvc + secondHalf
-		} else {
-			firstHalf := path[:splitIndex]
-			secondHalf := strings.TrimPrefix(path[splitIndex:], splitName)
-			return firstHalf + "/" + pvc + "/Data" + secondHalf
+			klog.Info("firstHalf=", firstHalf)
+			klog.Info("secondHalf=", secondHalf)
+
+			if strings.HasSuffix(firstHalf, pvc) {
+				return path
+			}
+			if splitName == "/Home" {
+				return firstHalf + "/" + pvc + secondHalf
+			} else {
+				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
+				return firstHalf + "/" + pvc + "/Data" + secondHalf
+			}
 		}
+	} else {
+		pathSuffix := strings.TrimPrefix(path, prefix)
+		if strings.HasPrefix(pathSuffix, "/"+pvc) {
+			return path
+		}
+		return prefix + "/" + pvc + pathSuffix
 	}
 	return path
 }
@@ -238,15 +251,22 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		fmt.Println("SRC_TYPE:", srcType)
 		fmt.Println("DST_TYPE:", dstType)
 
-		//if srcType != "sync" {
-		//	src = rewriteUrl(src, userPvc)
+		//if srcType != "sync" && dstType == "sync" {
+		//	src = rewriteUrl(src, userPvc, "")
 		//}
+
+		if srcType == "drive" {
+			src = rewriteUrl(src, userPvc, "")
+		} else if srcType == "cache" {
+			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
+		}
+
 		if dstType == "drive" {
-			dst = rewriteUrl(dst, userPvc)
+			dst = rewriteUrl(dst, userPvc, "")
 			query.Set("destination", dst)
-		} else if srcType == "cache" && dstType == "cache" {
-			pathSuffix := strings.TrimPrefix(dst, "/AppData")
-			query.Set("destination", "/AppData/"+cachePvc+pathSuffix)
+		} else if dstType == "cache" {
+			dst = rewriteUrl(dst, cachePvc, "/AppData")
+			query.Set("destination", dst)
 		}
 
 		newURL := fmt.Sprintf("%s?%s", src, query.Encode())
@@ -259,15 +279,17 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	if len(node) > 0 && !strings.HasPrefix(path, API_PASTE_PREFIX) {
 		klog.Info("Node: ", node[0])
 		if strings.HasPrefix(path, API_RESOURCES_PREFIX) {
-			pathSuffix := strings.TrimPrefix(path, API_RESOURCES_PREFIX)
-			c.Request().URL.Path = API_RESOURCES_PREFIX + "/" + cachePvc + pathSuffix
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX)
+			//pathSuffix := strings.TrimPrefix(path, API_RESOURCES_PREFIX)
+			//c.Request().URL.Path = API_RESOURCES_PREFIX + "/" + cachePvc + pathSuffix
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
-			pathSuffix := strings.TrimPrefix(path, API_RAW_PREFIX)
-			c.Request().URL.Path = API_RAW_PREFIX + "/" + cachePvc + pathSuffix
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX)
+			//pathSuffix := strings.TrimPrefix(path, API_RAW_PREFIX)
+			//c.Request().URL.Path = API_RAW_PREFIX + "/" + cachePvc + pathSuffix
 		}
 		//} else if strings.HasPrefix(path, API_PASTE_PREFIX) {
-		//pathSuffix := strings.TrimPrefix(path, API_PASTE_PREFIX+"/AppData")
-		//c.Request().URL.Path = API_PASTE_PREFIX + "/AppData/" + cachePvc + pathSuffix
+		//	pathSuffix := strings.TrimPrefix(path, API_PASTE_PREFIX+"/AppData")
+		//	c.Request().URL.Path = API_PASTE_PREFIX + "/AppData/" + cachePvc + pathSuffix
 		//}
 		host = appdata.GetAppDataServiceEndpoint(node[0])
 		klog.Info("host: ", host)
@@ -291,7 +313,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			//		c.Request().URL.Path = firstHalf + "/" + userPvc + "/Data" + secondHalf
 			//	}
 			//}
-			c.Request().URL.Path = rewriteUrl(path, userPvc)
+			c.Request().URL.Path = rewriteUrl(path, userPvc, "")
 			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, UPLOADER_PREFIX) {
 			host = "127.0.0.1:40030"
