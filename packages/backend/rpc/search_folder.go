@@ -3,6 +3,7 @@ package rpc
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -67,12 +68,70 @@ func isSubdir(subPath string, path string) bool {
 	return strings.HasPrefix(subPath, path) && strings.HasPrefix(strings.TrimPrefix(subPath, path), "/")
 }
 
+// 列出指定路径下的子文件夹
+func listDirectories(path string) ([]string, error) {
+	var dirs []string
+	err := filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() && p != "." && p != ".." {
+			dirs = append(dirs, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dirs, nil
+}
+
+// 列出指定路径下的文件
+func listFiles(path string) ([]string, error) {
+	var files []string
+	err := filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 func dedupArray(paths []string, prefix string) []string {
 	// 使用 map 实现去重
 	uniqueMap := make(map[string]bool)
 	for _, path := range paths {
 		if isInvalidDir(path) {
 			continue
+		}
+
+		// 列出子文件夹
+		dirs, err := listDirectories(path)
+		if err != nil {
+			fmt.Println("Error listing directories:", err)
+			continue
+		}
+		fmt.Println("Directories:")
+		for _, dir := range dirs {
+			fmt.Println(dir)
+		}
+
+		// 列出文件
+		files, err := listFiles(path)
+		if err != nil {
+			fmt.Println("Error listing files:", err)
+			continue
+		}
+		fmt.Println("\nFiles:")
+		for _, file := range files {
+			fmt.Println(file)
 		}
 
 		if prefix != "" && !isSubdir(path, prefix) {
