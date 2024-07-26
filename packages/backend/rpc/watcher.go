@@ -92,6 +92,7 @@ func WatchPath(addPaths []string, deletePaths []string) {
 	}
 
 	for _, path := range addPaths {
+		fmt.Println("dealing add path: ", path)
 		err = filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
 			if err != nil {
 				return err
