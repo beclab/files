@@ -305,6 +305,8 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			src = rewriteUrl(src, userPvc, "")
 		} else if srcType == "cache" {
 			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
+		} else if srcType == "sync" {
+			src = src
 		}
 
 		if dstType == "drive" {
@@ -313,6 +315,8 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		} else if dstType == "cache" {
 			dst = rewriteUrl(dst, cachePvc, "/AppData")
 			query.Set("destination", dst)
+		} else if dstType == "sync" {
+			dst = dst
 		}
 
 		newURL := fmt.Sprintf("%s?%s", src, query.Encode())
@@ -338,7 +342,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX)
 		}
-		host = appdata.GetAppDataServiceEndpoint(node[0])
+		host = appdata.GetAppDataServiceEndpoint(p.k8sClient, node[0])
 		klog.Info("host: ", host)
 		klog.Info("new path: ", c.Request().URL.Path)
 	} else {

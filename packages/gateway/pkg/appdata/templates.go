@@ -17,11 +17,12 @@ package appdata
 import (
 	"context"
 	"errors"
-	"k8s.io/client-go/kubernetes"
-	"os"
-
+	"fmt"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	"os"
+	"strings"
 )
 
 // import (
@@ -39,10 +40,10 @@ import (
 //	"k8s.io/klog/v2"
 //
 // )
-const (
-	UserAppDataDeployName    = "appdata-backend"
-	UserAppDataDeployService = "appdata-backend"
-)
+//const (
+//	UserAppDataDeployName    = "appdata-backend"
+//	UserAppDataDeployService = "appdata-backend"
+//)
 
 var (
 	Namespace = os.Getenv("NAMESPACE")
@@ -301,6 +302,85 @@ func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, key string
 //	func getMatchAppLabel(nodeName string) string {
 //		return UserAppDataDeployName + "-" + nodeName
 //	}
-func GetAppDataServiceEndpoint(nodeName string) string {
-	return UserAppDataDeployService + "-" + nodeName + "." + Namespace
+//func GetAppDataServiceEndpoint(nodeName string) string {
+//	return UserAppDataDeployService + "-" + nodeName + "." + Namespace
+//}
+
+func getPodIP(client *kubernetes.Clientset, prefix, serviceName, namespace, nodeName string) (string, error) {
+	// 列出所有Pod
+	pods, err := client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return "", fmt.Errorf("error listing pods: %w", err)
+	}
+
+	// 筛选出符合条件的Pod
+	var podIP string
+	for _, pod := range pods.Items {
+		if strings.HasPrefix(pod.GetName(), prefix) && pod.Spec.NodeName == nodeName {
+			podIP = pod.Status.PodIP
+			break
+		}
+	}
+
+	// 检查是否找到了符合条件的Pod
+	if podIP == "" {
+		return "", fmt.Errorf("no pod found with the specified prefix and node name")
+	}
+
+	return podIP, nil
+}
+
+func getPodDNSName(client *kubernetes.Clientset, prefix, serviceName, namespace, nodeName string) (string, error) {
+	// 列出所有Pod
+	pods, err := client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return "", fmt.Errorf("error listing pods: %w", err)
+	}
+
+	// 筛选出符合条件的Pod
+	var dnsName string
+	for _, pod := range pods.Items {
+		if strings.HasPrefix(pod.GetName(), prefix) && pod.Spec.NodeName == nodeName {
+			dnsName = fmt.Sprintf("%s.%s.%s.svc.cluster.local", pod.GetName(), serviceName, namespace)
+			break
+		}
+	}
+
+	// 检查是否找到了符合条件的Pod
+	if dnsName == "" {
+		return "", fmt.Errorf("no pod found with the specified prefix and node name")
+	}
+
+	return dnsName, nil
+}
+
+//const (
+//	UserAppDataDeployService = "appdata-backend-headless"
+//	PodPort                  = 8110
+//)
+//
+//var (
+//	Namespace = os.Getenv("NAMESPACE")
+//)
+
+func GetAppDataServiceEndpoint(client *kubernetes.Clientset, nodeName string) string {
+	prefix := "appdata-backend"
+	serviceName := "appdata-backend-headless"
+	namespace := "os-system"
+
+	dnsName, err := getPodIP(client, prefix, serviceName, namespace, nodeName)
+	if err != nil {
+		fmt.Printf("Error getting Pod DNS name: %s\n", err)
+		return ""
+	}
+
+	dnsName += ":8110"
+	fmt.Println("Pod DNS name: ", dnsName)
+	return dnsName
+
+	//// 构建无头服务的 Pod DNS 名称
+	//podDNSName := fmt.Sprintf("%s-%s.%s.svc.cluster.local", UserAppDataDeployService, nodeName, Namespace)
+	//// 构建 HTTP 访问点
+	//httpEndpoint := fmt.Sprintf("%s:%d", podDNSName, PodPort)
+	//return httpEndpoint
 }
