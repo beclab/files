@@ -1214,7 +1214,8 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			fmt.Println("Src and dst are of different arches!")
 		}
 		action := r.URL.Query().Get("action")
-		dst, err := url.QueryUnescape(dst)
+		src, err := url.QueryUnescape(src)
+		dst, err = url.QueryUnescape(dst)
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
 		}
