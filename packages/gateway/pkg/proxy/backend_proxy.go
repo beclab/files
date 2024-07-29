@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 const (
@@ -39,6 +40,8 @@ const (
 	MEDIA_PREFIX         = "/videos"
 	API_PASTE_PREFIX     = "/api/paste"
 )
+
+var PVCs *PVCCache = nil
 
 type GatewayHandler func(c echo.Context) (next bool, err error)
 
@@ -205,6 +208,53 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 	return path
 }
 
+type PVCCache struct {
+	proxy       *BackendProxy
+	userPvcMap  map[string]string
+	cachePvcMap map[string]string
+	mu          sync.Mutex
+}
+
+func NewPVCCache(proxy *BackendProxy) *PVCCache {
+	return &PVCCache{
+		proxy:       proxy,
+		userPvcMap:  make(map[string]string),
+		cachePvcMap: make(map[string]string),
+	}
+}
+
+func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if val, ok := p.userPvcMap[bflName]; ok {
+		return val, nil
+	}
+
+	userPvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "userspace_pvc", bflName)
+	if err != nil {
+		return "", err
+	}
+	p.userPvcMap[bflName] = userPvc
+	return userPvc, nil
+}
+
+func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if val, ok := p.cachePvcMap[bflName]; ok {
+		return val, nil
+	}
+
+	cachePvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "appcache_pvc", bflName)
+	if err != nil {
+		return "", err
+	}
+	p.cachePvcMap[bflName] = cachePvc
+	return cachePvc, nil
+}
+
 func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	klog.Infof("Request Headers: %+v", c.Request().Header)
 
@@ -217,14 +267,14 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	}
 	klog.Info("BFL_NAME: ", bflName)
 
-	userPvc, err := appdata.GetAnnotation(p.mainCtx, p.k8sClient, "", "userspace_pvc", bflName)
+	userPvc, err := PVCs.getUserPVCOrCache(bflName) // appdata.GetAnnotation(p.mainCtx, p.k8sClient, "userspace_pvc", bflName)
 	if err != nil {
 		klog.Info(err)
 	} else {
 		klog.Info("user-space pvc: ", userPvc)
 	}
 
-	cachePvc, err := appdata.GetAnnotation(p.mainCtx, p.k8sClient, "", "appcache_pvc", bflName)
+	cachePvc, err := PVCs.getCachePVCOrCache(bflName) // appdata.GetAnnotation(p.mainCtx, p.k8sClient, "appcache_pvc", bflName)
 	if err != nil {
 		klog.Info(err)
 	} else {

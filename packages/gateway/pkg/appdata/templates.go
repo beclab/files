@@ -177,7 +177,7 @@ var (
 //	FileImage = os.Getenv("FILE_IMAGE")
 //}
 
-func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, nodeName string, key string, bflName string) (string, error) {
+func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, key string, bflName string) (string, error) {
 	if bflName == "" {
 		klog.Error("get Annotation error, bfl-name is empty")
 		return "", errors.New("bfl-name is emtpty")

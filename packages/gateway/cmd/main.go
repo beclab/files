@@ -43,15 +43,16 @@ func main() {
 	//nodeWatcher := operator.NewWatcher(ctx, config)
 	//nodeWatcher.Start()
 
-	proxy := builder.Build()
+	backendProxy := builder.Build()
+	proxy.PVCs = proxy.NewPVCCache(backendProxy)
 
 	go func() {
 		<-ctx.Done()
-		proxy.Shutdown()
+		backendProxy.Shutdown()
 	}()
 
 	klog.Info("gateway start, listening on ", *addr)
-	if err := proxy.Start(); err != nil {
+	if err := backendProxy.Start(); err != nil {
 		cancel()
 	}
 }
