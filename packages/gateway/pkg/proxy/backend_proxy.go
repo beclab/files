@@ -39,6 +39,7 @@ const (
 	UPLOADER_PREFIX      = "/upload"
 	MEDIA_PREFIX         = "/videos"
 	API_PASTE_PREFIX     = "/api/paste"
+	API_CACHE_PREFIX     = "/api/cache"
 )
 
 var PVCs *PVCCache = nil
@@ -75,6 +76,8 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	backendProxy.addHandlers(API_RESOURCES_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_RAW_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_RAW_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	//backendProxy.addHandlers(API_PREFIX, backendProxy.listNodesOrNot(backendProxy.apiHandler))
 	//backendProxy.addHandlers(API_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.apiHandler))
 	//backendProxy.addHandlers(UPLOADER_PREFIX, backendProxy.uploaderHandler)
@@ -113,15 +116,33 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 			!regexp.MustCompile("^"+API_RAW_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+UPLOADER_PREFIX+".*").Match([]byte(path)) &&
-			!regexp.MustCompile("^"+MEDIA_PREFIX+".*").Match([]byte(path)) {
+			!regexp.MustCompile("^"+MEDIA_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+API_CACHE_PREFIX+".*").Match([]byte(path)) {
 			klog.Error("unimplement api call, ", path)
 			return c.String(http.StatusNotImplemented, "api not found")
 		}
 
 		if (strings.HasPrefix(path, API_PREFIX) || strings.HasPrefix(path, UPLOADER_PREFIX) || strings.HasPrefix(path, MEDIA_PREFIX)) &&
 			!strings.HasPrefix(path, API_RESOURCES_PREFIX) &&
-			!strings.HasPrefix(path, API_RAW_PREFIX) {
+			!strings.HasPrefix(path, API_RAW_PREFIX) &&
+			!strings.HasPrefix(path, API_CACHE_PREFIX) {
 			return next(c)
+		}
+
+		if strings.HasPrefix(path, API_CACHE_PREFIX) {
+			subPath := path[len(API_CACHE_PREFIX+"/"):]
+
+			firstSlashIndex := strings.Index(subPath, "/")
+			if firstSlashIndex != -1 {
+				part := subPath[:firstSlashIndex]
+				if strings.HasSuffix(part, "/") {
+					part = part[:len(part)-1]
+				}
+				c.Request().URL.Path = API_PREFIX + subPath[firstSlashIndex:]
+				c.Request().Header.Set(NODE_HEADER, part)
+				klog.Info("Cache URL: ", c.Request().URL.Path)
+				klog.Info("Cache Header: ", c.Request().Header.Get(NODE_HEADER))
+			}
 		}
 
 		switch {
