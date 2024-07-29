@@ -301,10 +301,6 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		fmt.Println("SRC_TYPE:", srcType)
 		fmt.Println("DST_TYPE:", dstType)
 
-		//if srcType != "sync" && dstType == "sync" {
-		//	src = rewriteUrl(src, userPvc, "")
-		//}
-
 		if srcType == "drive" {
 			src = rewriteUrl(src, userPvc, "")
 		} else if srcType == "cache" {
@@ -329,18 +325,19 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	if len(node) > 0 && !strings.HasPrefix(path, API_PASTE_PREFIX) {
 		klog.Info("Node: ", node[0])
 		if strings.HasPrefix(path, API_RESOURCES_PREFIX) {
+			query := c.Request().URL.Query()
+			dst := query.Get("destination")
+			if dst != "" {
+				dst = rewriteUrl(dst, cachePvc, "/AppData")
+				dst = strings.Replace(dst, "/"+node[0], "", 1)
+				query.Set("destination", dst)
+				c.Request().URL.RawQuery = query.Encode()
+			}
+
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX)
-			//pathSuffix := strings.TrimPrefix(path, API_RESOURCES_PREFIX)
-			//c.Request().URL.Path = API_RESOURCES_PREFIX + "/" + cachePvc + pathSuffix
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX)
-			//pathSuffix := strings.TrimPrefix(path, API_RAW_PREFIX)
-			//c.Request().URL.Path = API_RAW_PREFIX + "/" + cachePvc + pathSuffix
 		}
-		//} else if strings.HasPrefix(path, API_PASTE_PREFIX) {
-		//	pathSuffix := strings.TrimPrefix(path, API_PASTE_PREFIX+"/AppData")
-		//	c.Request().URL.Path = API_PASTE_PREFIX + "/AppData/" + cachePvc + pathSuffix
-		//}
 		host = appdata.GetAppDataServiceEndpoint(node[0])
 		klog.Info("host: ", host)
 		klog.Info("new path: ", c.Request().URL.Path)
@@ -349,20 +346,14 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		if strings.HasPrefix(path, API_PASTE_PREFIX) {
 			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, API_PREFIX) {
-			//homeIndex := strings.Index(path, "/Home")
-			//applicationIndex := strings.Index(path, "/Application")
-			//splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
-			//if splitIndex != -1 {
-			//	if splitName == "/Home" {
-			//		firstHalf := path[:splitIndex]
-			//		secondHalf := path[splitIndex:]
-			//		c.Request().URL.Path = firstHalf + "/" + userPvc + secondHalf
-			//	} else {
-			//		firstHalf := path[:splitIndex]
-			//		secondHalf := strings.TrimPrefix(path[splitIndex:], splitName)
-			//		c.Request().URL.Path = firstHalf + "/" + userPvc + "/Data" + secondHalf
-			//	}
-			//}
+			query := c.Request().URL.Query()
+			dst := query.Get("destination")
+			if dst != "" {
+				fmt.Println("DST:", dst)
+				dst = rewriteUrl(dst, userPvc, "")
+				query.Set("destination", dst)
+				c.Request().URL.RawQuery = query.Encode()
+			}
 			c.Request().URL.Path = rewriteUrl(path, userPvc, "")
 			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, UPLOADER_PREFIX) {
