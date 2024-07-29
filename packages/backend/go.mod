@@ -124,4 +124,4 @@ require (
 	k8s.io/klog/v2 v2.90.1 // indirect
 )
 
-replace bytetrade.io/web3os/fs-lib => github.com/beclab/fs-lib v0.0.1
+replace bytetrade.io/web3os/fs-lib => github.com/beclab/fs-lib v0.0.2
