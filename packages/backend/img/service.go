@@ -7,6 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 
 	"github.com/disintegration/imaging"
@@ -92,6 +95,9 @@ type ResizeMode int
 func (s *Service) FormatFromExtension(ext string) (Format, error) {
 	format, err := imaging.FormatFromExtension(ext)
 	if err != nil {
+		fmt.Println("Format From Extension Error as follows:")
+		fmt.Println(err)
+		fmt.Println("Format From Extension 1 Unspported Format")
 		return -1, ErrUnsupportedFormat
 	}
 	switch format {
@@ -106,6 +112,7 @@ func (s *Service) FormatFromExtension(ext string) (Format, error) {
 	case imaging.BMP:
 		return FormatBmp, nil
 	}
+	fmt.Println("Format From Extension 2 Unspported Format")
 	return -1, ErrUnsupportedFormat
 }
 
@@ -135,12 +142,25 @@ func WithQuality(quality Quality) Option {
 	}
 }
 
+// decodeImageWithXImage 使用 x/image 包来解码图像。
+func decodeImageWithXImage(r io.Reader) (image.Image, error) {
+	// image.Decode 会自动根据图像格式选择合适的解码器。
+	img, _, err := image.Decode(r)
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
 func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...Option) error {
+	fmt.Println("You see me, I'm going to resize the image.")
+	fmt.Println("Acquire")
 	if err := s.sem.Acquire(ctx, 1); err != nil {
 		return err
 	}
 	defer s.sem.Release(1)
 
+	fmt.Println("Detect Format")
 	format, wrappedReader, err := s.detectFormat(in)
 	if err != nil {
 		return err
@@ -155,6 +175,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		option(&config)
 	}
 
+	fmt.Println("Get Embedded Thumbnail")
 	if config.quality == QualityLow && format == FormatJpeg {
 		thm, newWrappedReader, errThm := getEmbeddedThumbnail(wrappedReader)
 		wrappedReader = newWrappedReader
@@ -166,11 +187,23 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		}
 	}
 
+	fmt.Println("Decode")
 	img, err := imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
 	if err != nil {
-		return err
+		fmt.Println("unexpected EOF while decoding image: ", err)
+		// 尝试使用备用解码器
+		img, err = decodeImageWithXImage(wrappedReader) // 假设这是使用x/image库的函数
+		if err != nil {
+			// 如果备用解码器也失败，返回错误
+			fmt.Println("unexpected EOF while decoding image with ximage: ", err)
+			return err
+		}
 	}
+	//if err != nil {
+	//	return err
+	//}
 
+	fmt.Println("Fill or fit")
 	switch config.resizeMode {
 	case ResizeModeFill:
 		img = imaging.Fill(img, width, height, imaging.Center, config.quality.resampleFilter())
@@ -180,6 +213,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		img = imaging.Fit(img, width, height, config.quality.resampleFilter())
 	}
 
+	fmt.Println("Encode")
 	return imaging.Encode(out, img, config.format.toImaging())
 }
 
@@ -189,11 +223,17 @@ func (s *Service) detectFormat(in io.Reader) (Format, io.Reader, error) {
 
 	_, imgFormat, err := image.DecodeConfig(r)
 	if err != nil {
+		fmt.Println("Decode Config Error as follows:")
+		fmt.Println(err)
+		fmt.Println("Decode Config Unspported Format")
 		return 0, nil, fmt.Errorf("%s: %w", err.Error(), ErrUnsupportedFormat)
 	}
 
 	format, err := ParseFormat(imgFormat)
 	if err != nil {
+		fmt.Println("Parse Format Error as follows:")
+		fmt.Println(err)
+		fmt.Println("Parse Format Unspported Format")
 		return 0, nil, ErrUnsupportedFormat
 	}
 

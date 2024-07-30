@@ -82,6 +82,7 @@ func handleImagePreview(
 		return rawFileHandler(w, r, file)
 	}
 
+	fmt.Println("Begin Format From Extension")
 	format, err := imgSvc.FormatFromExtension(file.Extension)
 	// Unsupported extensions directly return the raw data
 	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
@@ -91,18 +92,21 @@ func handleImagePreview(
 		return errToStatus(err), err
 	}
 
+	fmt.Println("Begin preview cache key")
 	cacheKey := previewCacheKey(file, previewSize)
 	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
 	if err != nil {
 		return errToStatus(err), err
 	}
 	if !ok {
+		fmt.Println("Begin create preview")
 		resizedImage, err = createPreview(imgSvc, fileCache, file, previewSize)
 		if err != nil {
 			return errToStatus(err), err
 		}
 	}
 
+	fmt.Println("Begin Serve Content")
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, file.ModTime, bytes.NewReader(resizedImage))
 
@@ -111,6 +115,7 @@ func handleImagePreview(
 
 func createPreview(imgSvc ImgService, fileCache FileCache,
 	file *files.FileInfo, previewSize PreviewSize) ([]byte, error) {
+	fmt.Println("Create Preview, open file")
 	fd, err := file.Fs.Open(file.Path)
 	if err != nil {
 		return nil, err
@@ -125,22 +130,27 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 
 	switch {
 	case previewSize == PreviewSizeBig:
+		fmt.Println("Create Preview PreviewSizeBig")
 		width = 1080
 		height = 1080
 		options = append(options, img.WithMode(img.ResizeModeFit), img.WithQuality(img.QualityMedium))
 	case previewSize == PreviewSizeThumb:
+		fmt.Println("Create Preview PreviewSizeThumb")
 		width = 256
 		height = 256
 		options = append(options, img.WithMode(img.ResizeModeFill), img.WithQuality(img.QualityLow), img.WithFormat(img.FormatJpeg))
 	default:
+		fmt.Println("Create Preview Unspported Format")
 		return nil, img.ErrUnsupportedFormat
 	}
 
+	fmt.Println("Create Preview Resize")
 	buf := &bytes.Buffer{}
 	if err := imgSvc.Resize(context.Background(), fd, width, height, buf, options...); err != nil {
 		return nil, err
 	}
 
+	fmt.Println("Create Preview Resize end")
 	go func() {
 		cacheKey := previewCacheKey(file, previewSize)
 		if err := fileCache.Store(context.Background(), cacheKey, buf.Bytes()); err != nil {
