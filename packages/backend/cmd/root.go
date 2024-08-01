@@ -156,6 +156,9 @@ user created with the credentials from options "username" and "password".`,
 		if watchDir == "" {
 			watchDir = "./Home/Documents"
 		}
+		if rpc.RootPrefix == "" {
+			rpc.RootPrefix = "/data"
+		}
 		port := os.Getenv("W_PORT")
 		if port == "" {
 			port = DefaultPort
@@ -173,7 +176,7 @@ user created with the credentials from options "username" and "password".`,
 		rpc.InitRpcService(url, port, username, password, map[string]string{})
 
 		if rpc.WatcherEnabled == "True" {
-			rpc.WatchPath([]string{watchDir}, nil)
+			rpc.WatchPath(rpc.ExpandPaths([]string{watchDir}), nil)
 		}
 
 		fmt.Println("RPCSERVER to start!")

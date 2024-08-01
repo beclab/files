@@ -4,7 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/elastic/go-elasticsearch/v8"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"os"
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	//"io/ioutil"
 	"log"
 	"net/http"
@@ -37,6 +41,8 @@ var KnowledgeBaseEnabled = os.Getenv("KNOWLEDGE_BASE_ENABLED")
 
 var PathPrefix = os.Getenv("PATH_PREFIX") // "/Home"
 
+var RootPrefix = os.Getenv("ROOT_PREFIX") // "/data"
+
 var BflName = os.Getenv("BFL_NAME")
 
 const DefaultMaxResult = 10
@@ -56,6 +62,8 @@ type Service struct {
 	context          context.Context
 	maxPendingLength int
 	CallbackGroup    *gin.RouterGroup
+	KubeConfig       *rest.Config
+	k8sClient        *kubernetes.Clientset
 }
 
 func InitRpcService(url, port, username, password string, bsModelConfig map[string]string) {
@@ -63,6 +71,9 @@ func InitRpcService(url, port, username, password string, bsModelConfig map[stri
 		//esClient, _ := InitES(url, username, password)
 		ctxTemp := context.WithValue(context.Background(), "Username", username)
 		ctx := context.WithValue(ctxTemp, "Password", password)
+
+		config := ctrl.GetConfigOrDie()
+		k8sClient := kubernetes.NewForConfigOrDie(config)
 
 		RpcServer = &Service{
 			port:     port,
@@ -72,7 +83,10 @@ func InitRpcService(url, port, username, password string, bsModelConfig map[stri
 			//esClient:         esClient,
 			context:          ctx,
 			maxPendingLength: maxPendingLength,
+			KubeConfig:       config,
+			k8sClient:        k8sClient,
 		}
+		PVCs = NewPVCCache(RpcServer)
 
 		//if ESEnabled == "True" {
 		//	if err := RpcServer.EsSetupIndex(); err != nil {

@@ -40,11 +40,9 @@ import (
 //}
 
 func isInvalidDir(dirPath string) bool {
-	// 使用 os.Stat 函数获取路径的文件信息
 	fileInfo, err := os.Stat(dirPath)
 
 	if err != nil {
-		// 如果出现错误，表示路径不存在或无法访问
 		if os.IsNotExist(err) {
 			fmt.Printf("目录 %s 不存在\n", dirPath)
 		} else {
@@ -53,7 +51,6 @@ func isInvalidDir(dirPath string) bool {
 		return true
 	}
 
-	// 检查路径是否为目录
 	if fileInfo.IsDir() {
 		fmt.Printf("%s 是一个目录\n", dirPath)
 		return false
@@ -68,7 +65,6 @@ func isSubdir(subPath string, path string) bool {
 }
 
 func dedupArray(paths []string, prefix string) []string {
-	// 使用 map 实现去重
 	uniqueMap := make(map[string]bool)
 	for _, path := range paths {
 		if isInvalidDir(path) {
@@ -81,7 +77,6 @@ func dedupArray(paths []string, prefix string) []string {
 		uniqueMap[path] = true
 	}
 
-	// 将 map 中的键转换回数组
 	uniquePaths := make([]string, 0, len(uniqueMap))
 	for path := range uniqueMap {
 		uniquePaths = append(uniquePaths, path)

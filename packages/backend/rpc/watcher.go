@@ -1,13 +1,22 @@
 package rpc
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
+	"github.com/filebrowser/filebrowser/v2/parser"
 	"io/fs"
+	"io/ioutil"
+	"k8s.io/klog/v2"
 	"math"
+	"os"
+	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"bytetrade.io/web3os/fs-lib/jfsnotify"
@@ -104,10 +113,18 @@ func WatchPath(addPaths []string, deletePaths []string) {
 					return err
 				}
 			} else {
+				bflName, err := PVCs.getBflForUserPVCOrCache(ExtractPvcFromURL(path))
+				if err != nil {
+					klog.Info(err)
+				} else {
+					klog.Info(path, ", bfl-name: ", bflName)
+				}
+
 				//err = updateOrInputDoc(path)
-				//if err != nil {
-				//	log.Error().Msgf("udpate or input doc err %v", err)
-				//}
+				err = updateOrInputDocSearch3(path, bflName)
+				if err != nil {
+					log.Error().Msgf("udpate or input doc err %v", err)
+				}
 			}
 			return nil
 		})
@@ -193,8 +210,22 @@ func dedupLoop(w *jfsnotify.Watcher) {
 }
 
 func handleEvent(e jfsnotify.Event) error {
+	bflName, err := PVCs.getBflForUserPVCOrCache(ExtractPvcFromURL(e.Name))
+	if err != nil {
+		klog.Info(err)
+	} else {
+		klog.Info(e.Name, ", bfl-name: ", bflName)
+	}
+
+	searchId, _, err := getSerachIdOrCache(e.Name, bflName, false)
+	if err != nil {
+		klog.Info(err)
+	} else {
+		klog.Info(e.Name, ", searchId: ", searchId)
+	}
+
 	if e.Has(jfsnotify.Remove) || e.Has(jfsnotify.Rename) {
-		//log.Info().Msgf("push indexer task delete %s", e.Name)
+		log.Info().Msgf("push indexer task delete %s", e.Name)
 		//res, err := RpcServer.EsQueryByPath(FileIndex, e.Name)
 		//if err != nil {
 		//	return err
@@ -210,11 +241,19 @@ func handleEvent(e jfsnotify.Event) error {
 		//	}
 		//	log.Debug().Msgf("delete doc id %s path %s", doc.DocId, e.Name)
 		//}
-		////return nil
+
+		if searchId != "" {
+			_, err = deleteDocumentSearch3(searchId, bflName)
+			if err != nil {
+				return err
+			}
+		}
+		//next line must be commented for rename
+		//return nil
 	}
 
 	if e.Has(jfsnotify.Create) { // || e.Has(jfsnotify.Write) || e.Has(jfsnotify.Chmod) {
-		err := filepath.Walk(e.Name, func(docPath string, info fs.FileInfo, err error) error {
+		err = filepath.Walk(e.Name, func(docPath string, info fs.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -225,11 +264,12 @@ func handleEvent(e jfsnotify.Event) error {
 					log.Error().Msgf("watcher add error:%v", err)
 				}
 			} else {
-				////input zinc file
+				//input zinc file
 				//err = updateOrInputDoc(docPath)
-				//if err != nil {
-				//	log.Error().Msgf("update or input doc error %v", err)
-				//}
+				err = updateOrInputDocSearch3(docPath, bflName)
+				if err != nil {
+					log.Error().Msgf("update or input doc error %v", err)
+				}
 			}
 			return nil
 		})
@@ -240,6 +280,7 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Write) { // || e.Has(notify.Chmod) {
+		return updateOrInputDocSearch3(e.Name, bflName)
 		//return updateOrInputDoc(e.Name)
 	}
 	return nil
@@ -343,4 +384,137 @@ func handleEvent(e jfsnotify.Event) error {
 
 func printTime(s string, args ...interface{}) {
 	log.Info().Msgf(time.Now().Format("15:04:05.0000")+" "+s+"\n", args...)
+}
+
+func getFileOwnerUID(filename string) (uint32, error) {
+	fileInfo, err := os.Stat(filename)
+	if err != nil {
+		return 0, err
+	}
+
+	statT, ok := fileInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, fmt.Errorf("unable to convert Sys() type to *syscall.Stat_t")
+	}
+
+	// 返回文件的UID
+	return statT.Uid, nil
+}
+
+func updateOrInputDocSearch3(filepath, bflName string) error {
+	log.Debug().Msg("try update or input" + filepath)
+	searchId, md5, err := getSerachIdOrCache(filepath, bflName, true)
+	if err != nil {
+		return err
+	}
+
+	// path exist update doc
+	if searchId != "" {
+		//log.Debug().Msgf("has doc %v", docs[0].Where)
+		////delete redundant docs
+		//if len(docs) > 1 {
+		//	for _, doc := range docs[1:] {
+		//		log.Debug().Msgf("delete redundant docid %s path %s", doc.DocId, doc.Where)
+		//		_, err := RpcServer.EsDelete(doc.DocId, FileIndex)
+		//		if err != nil {
+		//			log.Error().Msgf("zinc delete error %v", err)
+		//		}
+		//	}
+		//}
+		//update if doc changed
+		f, err := os.Open(filepath)
+		if err != nil {
+			return err
+		}
+		b, err := ioutil.ReadAll(f)
+		f.Close()
+		if err != nil {
+			return err
+		}
+		newMd5 := common.Md5File(bytes.NewReader(b))
+		if newMd5 != md5 {
+			size := 0
+			fileInfo, err := os.Stat(filepath)
+			if err == nil {
+				size = int(fileInfo.Size())
+			}
+			//doc changed
+			fileType := parser.GetTypeFromName(filepath)
+			if _, ok := parser.ParseAble[fileType]; ok {
+				log.Info().Msgf("push indexer task insert %s", filepath)
+				content, err := parser.ParseDoc(bytes.NewReader(b), filepath)
+				if err != nil {
+					return err
+				}
+				log.Debug().Msgf("update content from old search id %s path %s", searchId, filepath)
+				newDoc := map[string]interface{}{
+					"content": content,
+					"meta": map[string]interface{}{
+						"md5":     newMd5,
+						"size":    size,
+						"updated": time.Now().Unix(),
+					},
+				}
+				_, err = putDocumentSearch3(searchId, newDoc, bflName)
+				//_, err = RpcServer.EsUpdateFileContentFromOldDoc(FileIndex, content, newMd5, docs[0])
+				return err
+			}
+			log.Debug().Msgf("doc format not parsable %s", filepath)
+			return nil
+		}
+		log.Debug().Msgf("ignore file %s md5: %s ", filepath, newMd5)
+		return nil
+	}
+
+	log.Debug().Msgf("no history doc, add new")
+	//path not exist input doc
+	f, err := os.Open(filepath)
+	if err != nil {
+		return err
+	}
+	b, err := ioutil.ReadAll(f)
+	f.Close()
+	if err != nil {
+		return err
+	}
+	newMd5 := common.Md5File(bytes.NewReader(b))
+	fileType := parser.GetTypeFromName(filepath)
+	content := ""
+	if _, ok := parser.ParseAble[fileType]; ok {
+		log.Info().Msgf("push indexer task insert %s", filepath)
+		content, err = parser.ParseDoc(bytes.NewBuffer(b), filepath)
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Debug().Msgf("doc format not parsable %s", filepath)
+		return nil
+	}
+	filename := path.Base(filepath)
+	size := 0
+	fileInfo, err := os.Stat(filepath)
+	if err == nil {
+		size = int(fileInfo.Size())
+	}
+	ownerUID, err := getFileOwnerUID(filepath)
+	if err != nil {
+		return err
+	}
+	doc := map[string]interface{}{
+		"title":        filename,
+		"content":      content,
+		"owner_userid": strconv.Itoa(int(ownerUID)),
+		"resource_uri": filepath,
+		"service":      "files",
+		"meta": map[string]interface{}{
+			"md5":         newMd5,
+			"size":        size,
+			"created":     time.Now().Unix(),
+			"updated":     time.Now().Unix(),
+			"format_name": FormatFilename(filename),
+		},
+	}
+	id, err := postDocumentSearch3(doc, bflName)
+	log.Debug().Msgf("search3 input doc id %s path %s", id, filepath)
+	return err
 }
