@@ -43,6 +43,10 @@ var PathPrefix = os.Getenv("PATH_PREFIX") // "/Home"
 
 var RootPrefix = os.Getenv("ROOT_PREFIX") // "/data"
 
+var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
+
+var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
+
 var BflName = os.Getenv("BFL_NAME")
 
 const DefaultMaxResult = 10

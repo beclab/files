@@ -62,6 +62,17 @@ func (p *PVCCache) getBflForCachePVCOrCache(cachePvc string) (string, error) {
 	return bflName, nil
 }
 
+func (p *PVCCache) getBfl(pvc string) (string, error) {
+	bflName, err := p.getBflForUserPVCOrCache(pvc)
+	if bflName == "" || err != nil {
+		bflName, err = p.getBflForCachePVCOrCache(pvc)
+		if bflName == "" || err != nil {
+			return "", err
+		}
+	}
+	return bflName, nil
+}
+
 func FindStatefulSetByPVCAnnotation(ctx context.Context, client *kubernetes.Clientset, key string, pvcIdentifier string) (string, string, error) {
 	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -88,11 +99,16 @@ func FindStatefulSetByPVCAnnotation(ctx context.Context, client *kubernetes.Clie
 }
 
 func ExtractPvcFromURL(path string) string {
-	if !strings.HasPrefix(path, RootPrefix) {
+	splitPrefix := ""
+	if strings.HasPrefix(path, RootPrefix) {
+		splitPrefix = RootPrefix
+	} else if strings.HasPrefix(path, CacheRootPath) {
+		splitPrefix = CacheRootPath
+	} else {
 		return ""
 	}
 
-	trimmedPath := strings.TrimPrefix(path, RootPrefix)
+	trimmedPath := strings.TrimPrefix(path, splitPrefix)
 
 	firstSlash := strings.Index(trimmedPath, "/")
 	if firstSlash == -1 {
@@ -107,9 +123,9 @@ func ExtractPvcFromURL(path string) string {
 	return trimmedPath[firstSlash+1 : firstSlash+1+secondSlash]
 }
 
-func ExpandPaths(A []string) []string {
+func ExpandPaths(A []string, prefix string) []string {
 	var B []string
-	err := filepath.Walk(RootPrefix, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(prefix, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

@@ -113,7 +113,7 @@ func WatchPath(addPaths []string, deletePaths []string) {
 					return err
 				}
 			} else {
-				bflName, err := PVCs.getBflForUserPVCOrCache(ExtractPvcFromURL(path))
+				bflName, err := PVCs.getBfl(ExtractPvcFromURL(path))
 				if err != nil {
 					klog.Info(err)
 				} else {
@@ -210,7 +210,7 @@ func dedupLoop(w *jfsnotify.Watcher) {
 }
 
 func handleEvent(e jfsnotify.Event) error {
-	bflName, err := PVCs.getBflForUserPVCOrCache(ExtractPvcFromURL(e.Name))
+	bflName, err := PVCs.getBfl(ExtractPvcFromURL(e.Name))
 	if err != nil {
 		klog.Info(err)
 	} else {
@@ -401,6 +401,22 @@ func getFileOwnerUID(filename string) (uint32, error) {
 	return statT.Uid, nil
 }
 
+func checkPathPrefix(filepath, prefix string) bool {
+	parts := strings.Split(filepath, "/")
+
+	if len(parts) < 4 {
+		return false
+	}
+
+	remainingPath := "/" + strings.Join(parts[3:], "/")
+	//fmt.Println("remainingPath:", remainingPath)
+
+	if strings.HasPrefix(remainingPath, prefix) {
+		return true
+	}
+	return false
+}
+
 func updateOrInputDocSearch3(filepath, bflName string) error {
 	log.Debug().Msg("try update or input" + filepath)
 	searchId, md5, err := getSerachIdOrCache(filepath, bflName, true)
@@ -440,14 +456,26 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 			}
 			//doc changed
 			fileType := parser.GetTypeFromName(filepath)
-			if _, ok := parser.ParseAble[fileType]; ok {
-				log.Info().Msgf("push indexer task insert %s", filepath)
-				content, err := parser.ParseDoc(bytes.NewReader(b), filepath)
-				if err != nil {
-					return err
+			content := "-"
+			if checkPathPrefix(filepath, ContentPath) {
+				if _, ok := parser.ParseAble[fileType]; ok {
+					log.Info().Msgf("push indexer task insert %s", filepath)
+					content, err = parser.ParseDoc(bytes.NewReader(b), filepath)
+					//if len(content) > 100 {
+					//	log.Info().Msgf("parsed document content: %s", content[:100])
+					//} else {
+					//	log.Info().Msgf("parsed document content: %s", content)
+					//}
+					if err != nil {
+						log.Error().Msgf("parse doc error %v", err)
+						return err
+					}
+					log.Debug().Msgf("update content from old search id %s path %s", searchId, filepath)
 				}
-				log.Debug().Msgf("update content from old search id %s path %s", searchId, filepath)
-				newDoc := map[string]interface{}{
+			}
+			var newDoc map[string]interface{} = nil
+			if content != "" {
+				newDoc = map[string]interface{}{
 					"content": content,
 					"meta": map[string]interface{}{
 						"md5":     newMd5,
@@ -455,12 +483,21 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 						"updated": time.Now().Unix(),
 					},
 				}
-				_, err = putDocumentSearch3(searchId, newDoc, bflName)
-				//_, err = RpcServer.EsUpdateFileContentFromOldDoc(FileIndex, content, newMd5, docs[0])
-				return err
+			} else {
+				newDoc = map[string]interface{}{
+					"meta": map[string]interface{}{
+						"md5":     newMd5,
+						"size":    size,
+						"updated": time.Now().Unix(),
+					},
+				}
 			}
-			log.Debug().Msgf("doc format not parsable %s", filepath)
-			return nil
+			_, err = putDocumentSearch3(searchId, newDoc, bflName)
+			//_, err = RpcServer.EsUpdateFileContentFromOldDoc(FileIndex, content, newMd5, docs[0])
+			return err
+			//}
+			//log.Debug().Msgf("doc format not parsable %s", filepath)
+			//return nil
 		}
 		log.Debug().Msgf("ignore file %s md5: %s ", filepath, newMd5)
 		return nil
@@ -479,17 +516,26 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 	}
 	newMd5 := common.Md5File(bytes.NewReader(b))
 	fileType := parser.GetTypeFromName(filepath)
-	content := ""
-	if _, ok := parser.ParseAble[fileType]; ok {
-		log.Info().Msgf("push indexer task insert %s", filepath)
-		content, err = parser.ParseDoc(bytes.NewBuffer(b), filepath)
-		if err != nil {
-			return err
+	content := "-"
+	if checkPathPrefix(filepath, ContentPath) {
+		if _, ok := parser.ParseAble[fileType]; ok {
+			log.Info().Msgf("push indexer task insert %s", filepath)
+			content, err = parser.ParseDoc(bytes.NewBuffer(b), filepath)
+			//if len(content) > 100 {
+			//	log.Info().Msgf("parsed document content: %s", content[:100])
+			//} else {
+			//	log.Info().Msgf("parsed document content: %s", content)
+			//}
+			if err != nil {
+				log.Error().Msgf("parse doc error %v", err)
+				return err
+			}
 		}
-	} else {
-		log.Debug().Msgf("doc format not parsable %s", filepath)
-		return nil
 	}
+	//} else {
+	//	log.Debug().Msgf("doc format not parsable %s", filepath)
+	//	return nil
+	//}
 	filename := path.Base(filepath)
 	size := 0
 	fileInfo, err := os.Stat(filepath)
@@ -500,19 +546,36 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 	if err != nil {
 		return err
 	}
-	doc := map[string]interface{}{
-		"title":        filename,
-		"content":      content,
-		"owner_userid": strconv.Itoa(int(ownerUID)),
-		"resource_uri": filepath,
-		"service":      "files",
-		"meta": map[string]interface{}{
-			"md5":         newMd5,
-			"size":        size,
-			"created":     time.Now().Unix(),
-			"updated":     time.Now().Unix(),
-			"format_name": FormatFilename(filename),
-		},
+	var doc map[string]interface{} = nil
+	if content != "" {
+		doc = map[string]interface{}{
+			"title":        filename,
+			"content":      content,
+			"owner_userid": strconv.Itoa(int(ownerUID)),
+			"resource_uri": filepath,
+			"service":      "files",
+			"meta": map[string]interface{}{
+				"md5":         newMd5,
+				"size":        size,
+				"created":     time.Now().Unix(),
+				"updated":     time.Now().Unix(),
+				"format_name": FormatFilename(filename),
+			},
+		}
+	} else {
+		doc = map[string]interface{}{
+			"title":        filename,
+			"owner_userid": strconv.Itoa(int(ownerUID)),
+			"resource_uri": filepath,
+			"service":      "files",
+			"meta": map[string]interface{}{
+				"md5":         newMd5,
+				"size":        size,
+				"created":     time.Now().Unix(),
+				"updated":     time.Now().Unix(),
+				"format_name": FormatFilename(filename),
+			},
+		}
 	}
 	id, err := postDocumentSearch3(doc, bflName)
 	log.Debug().Msgf("search3 input doc id %s path %s", id, filepath)
