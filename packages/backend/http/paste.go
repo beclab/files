@@ -132,7 +132,7 @@ func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInf
 	return file, http.StatusOK, nil //renderJSON(w, r, file)
 }
 
-func generateBufferFileName(originalFilePath string) (string, error) {
+func generateBufferFileName(originalFilePath, bflName string) (string, error) {
 	// 获取当前时间戳
 	timestamp := time.Now().Unix()
 
@@ -144,7 +144,7 @@ func generateBufferFileName(originalFilePath string) (string, error) {
 
 	// 构建新的文件名
 	bufferFileName := fmt.Sprintf("%d_%s.bin", timestamp, originalFileName)
-	bufferFolderPath := "buffer"
+	bufferFolderPath := "/data/" + bflName + "/buffer"
 	err := os.MkdirAll(bufferFolderPath, 0755)
 	if err != nil {
 		return "", err
@@ -1941,6 +1941,10 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 // CopyFile copies a file from source to dest and returns
 // an error if any.
 func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.FileMode, diskSize int64, r *http.Request) error {
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return os.ErrPermission
+	}
 	var bufferPath string
 	// copy/move
 	if srcType == "drive" {
@@ -1959,7 +1963,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return e.New("file size exceeds 4GB") //os.ErrPermission
 		}
 		fmt.Println("Will reserve disk size: ", diskSize)
-		bufferPath, err = generateBufferFileName(src)
+		bufferPath, err = generateBufferFileName(src, bflName)
 		if err != nil {
 			return err
 		}
@@ -1979,7 +1983,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return e.New("file size exceeds 4GB") //os.ErrPermission
 		}
 		fmt.Println("Will reserve disk size: ", diskSize)
-		bufferPath, err = generateBufferFileName(src)
+		bufferPath, err = generateBufferFileName(src, bflName)
 		if err != nil {
 			return err
 		}
@@ -1999,7 +2003,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return e.New("file size exceeds 4GB") //os.ErrPermission
 		}
 		fmt.Println("Will reserve disk size: ", diskSize)
-		bufferPath, err = generateBufferFileName(src)
+		bufferPath, err = generateBufferFileName(src, bflName)
 		if err != nil {
 			return err
 		}
