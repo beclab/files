@@ -179,30 +179,49 @@ func (p *BackendProxy) addHandlers(route string, handler GatewayHandler) {
 	}
 }
 
-func minWithNegativeOne(a, b int, aName, bName string) (int, string) {
-	if a == -1 && b == -1 {
-		return -1, ""
+//func minWithNegativeOne(a, b int, aName, bName string) (int, string) {
+//	if a == -1 && b == -1 {
+//		return -1, ""
+//	}
+//
+//	if a == -1 {
+//		return b, bName
+//	}
+//	if b == -1 {
+//		return a, aName
+//	}
+//
+//	if a < b {
+//		return a, aName
+//	} else {
+//		return b, bName
+//	}
+//}
+
+func minWithNegativeOne(values []int, names []string) (int, string) {
+	minValue := -1
+	minName := ""
+
+	for i, value := range values {
+		if value != -1 {
+			if minValue == -1 || value < minValue {
+				minValue = value
+				minName = names[i]
+			}
+		}
 	}
 
-	if a == -1 {
-		return b, bName
-	}
-	if b == -1 {
-		return a, aName
-	}
-
-	if a < b {
-		return a, aName
-	} else {
-		return b, bName
-	}
+	return minValue, minName
 }
 
 func rewriteUrl(path string, pvc string, prefix string) string {
 	if prefix == "" {
 		homeIndex := strings.Index(path, "/Home")
 		applicationIndex := strings.Index(path, "/Application")
-		splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
+		externalIndex := strings.Index(path, "/external")
+		splitIndex, splitName := minWithNegativeOne(
+			[]int{homeIndex, applicationIndex, externalIndex},
+			[]string{"/Home", "/Application", "/external"})
 		if splitIndex != -1 {
 			firstHalf := path[:splitIndex]
 			secondHalf := path[splitIndex:]
@@ -214,9 +233,11 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 			}
 			if splitName == "/Home" {
 				return firstHalf + "/" + pvc + secondHalf
-			} else {
+			} else if splitName == "/Application" {
 				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
 				return firstHalf + "/" + pvc + "/Data" + secondHalf
+			} else if splitName == "/external" {
+				return firstHalf + secondHalf
 			}
 		}
 	} else {
