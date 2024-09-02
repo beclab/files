@@ -218,10 +218,10 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 	if prefix == "" {
 		homeIndex := strings.Index(path, "/Home")
 		applicationIndex := strings.Index(path, "/Application")
-		externalIndex := strings.Index(path, "/external")
+		externalIndex := strings.Index(path, "/External")
 		splitIndex, splitName := minWithNegativeOne(
 			[]int{homeIndex, applicationIndex, externalIndex},
-			[]string{"/Home", "/Application", "/external"})
+			[]string{"/Home", "/Application", "/External"})
 		if splitIndex != -1 {
 			firstHalf := path[:splitIndex]
 			secondHalf := path[splitIndex:]
@@ -236,7 +236,10 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 			} else if splitName == "/Application" {
 				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
 				return firstHalf + "/" + pvc + "/Data" + secondHalf
-			} else if splitName == "/external" {
+			} else if splitName == "/External" {
+				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
+				return firstHalf + "/external" + secondHalf
+			} else {
 				return firstHalf + secondHalf
 			}
 		}
