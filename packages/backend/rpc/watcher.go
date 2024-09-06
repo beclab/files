@@ -28,6 +28,11 @@ import (
 var watcher *jfsnotify.Watcher = nil
 
 func WatchPath(addPaths []string, deletePaths []string) {
+	fmt.Println("Begin watching path...")
+	//sleepDuration := 20 * time.Minute
+	//time.Sleep(sleepDuration)
+	//fmt.Println("20 minutes passed, continue watching path...")
+
 	// Create a new watcher.
 	var err error
 	if watcher == nil {

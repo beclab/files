@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -144,71 +145,78 @@ user created with the credentials from options "username" and "password".`,
 		my_redis.InitRedis()
 
 		// rpcServer for zinc
-		//url := os.Getenv("ZINC_URI")
-		zincHost := os.Getenv("ZINC_HOST")
-		zincPort := os.Getenv("ZINC_PORT")
-		url := "http://" + zincHost + ":" + zincPort
-		if zincHost == "" || zincPort == "" {
-			url = "http://localhost:4080"
-		}
-		url = "http://localhost:4080"
+		var wg sync.WaitGroup
 
-		watchDirStr := os.Getenv("WATCH_DIR")
-		var watchDirs []string
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-		if watchDirStr == "" {
-			watchDirs = append(watchDirs, "./Home/Documents")
-		} else {
-			watchDirs = strings.Split(watchDirStr, ",")
-			for i, dir := range watchDirs {
-				watchDirs[i] = strings.TrimSpace(dir)
+			//url := os.Getenv("ZINC_URI")
+			zincHost := os.Getenv("ZINC_HOST")
+			zincPort := os.Getenv("ZINC_PORT")
+			url := "http://" + zincHost + ":" + zincPort
+			if zincHost == "" || zincPort == "" {
+				url = "http://localhost:4080"
 			}
-		}
-		fmt.Println("original watchDirs = ", watchDirs)
+			url = "http://localhost:4080"
 
-		if rpc.RootPrefix == "" {
-			rpc.RootPrefix = "/data"
-		}
-		//if rpc.CacheRootPath == "" {
-		//	rpc.CacheRootPath = "/appcache"
-		//}
-		if rpc.ContentPath == "" {
-			rpc.ContentPath = "/Home/Documents"
-		}
+			watchDirStr := os.Getenv("WATCH_DIR")
+			var watchDirs []string
 
-		watchDirs = rpc.ExpandPaths(watchDirs, rpc.RootPrefix)
-		if rpc.CacheRootPath != "" {
-			watchDirs = append(watchDirs, rpc.CacheRootPath)
-		}
-		fmt.Println("expanded watchDirs = ", watchDirs)
+			if watchDirStr == "" {
+				watchDirs = append(watchDirs, "./Home/Documents")
+			} else {
+				watchDirs = strings.Split(watchDirStr, ",")
+				for i, dir := range watchDirs {
+					watchDirs[i] = strings.TrimSpace(dir)
+				}
+			}
+			fmt.Println("original watchDirs = ", watchDirs)
 
-		port := os.Getenv("W_PORT")
-		if port == "" {
-			port = DefaultPort
-		}
-		username := os.Getenv("ZINC_USER")
-		if username == "" {
-			username = "admin"
-		}
-		password := os.Getenv("ZINC_PASSWORD")
-		if password == "" {
-			password = "User#123"
-		}
+			if rpc.RootPrefix == "" {
+				rpc.RootPrefix = "/data"
+			}
+			//if rpc.CacheRootPath == "" {
+			//	rpc.CacheRootPath = "/appcache"
+			//}
+			if rpc.ContentPath == "" {
+				rpc.ContentPath = "/Home/Documents"
+			}
 
-		fmt.Println("Init RPCSERVER!")
-		rpc.InitRpcService(url, port, username, password, map[string]string{})
+			watchDirs = rpc.ExpandPaths(watchDirs, rpc.RootPrefix)
+			if rpc.CacheRootPath != "" {
+				watchDirs = append(watchDirs, rpc.CacheRootPath)
+			}
+			fmt.Println("expanded watchDirs = ", watchDirs)
 
-		if rpc.WatcherEnabled == "True" {
-			rpc.WatchPath(watchDirs, nil)
-		}
+			port := os.Getenv("W_PORT")
+			if port == "" {
+				port = DefaultPort
+			}
+			username := os.Getenv("ZINC_USER")
+			if username == "" {
+				username = "admin"
+			}
+			password := os.Getenv("ZINC_PASSWORD")
+			if password == "" {
+				password = "User#123"
+			}
 
-		fmt.Println("RPCSERVER to start!")
-		contx := context.Background()
-		rpcErr := rpc.RpcServer.Start(contx)
+			fmt.Println("Init RPCSERVER!")
+			rpc.InitRpcService(url, port, username, password, map[string]string{})
 
-		if rpcErr != nil {
-			panic(rpcErr)
-		}
+			if rpc.WatcherEnabled == "True" {
+				rpc.WatchPath(watchDirs, nil)
+			}
+
+			fmt.Println("RPCSERVER to start!")
+			contx := context.Background()
+			rpcErr := rpc.RpcServer.Start(contx)
+
+			if rpcErr != nil {
+				panic(rpcErr)
+			}
+		}()
 		// rpc server end
 
 		server := getRunParams(cmd.Flags(), d.store)
@@ -262,6 +270,8 @@ user created with the credentials from options "username" and "password".`,
 		if err := http.Serve(listener, handler); err != nil {
 			log.Fatal(err)
 		}
+
+		wg.Wait()
 	}, pythonConfig{allowNoDB: true}),
 }
 
