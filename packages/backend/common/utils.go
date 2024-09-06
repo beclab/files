@@ -15,3 +15,9 @@ func Md5File(f io.Reader) string {
 	}
 	return hex.EncodeToString(hasher.Sum(nil))
 }
+
+func Md5String(s string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(s))
+	return hex.EncodeToString(hasher.Sum(nil))
+}

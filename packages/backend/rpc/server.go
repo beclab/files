@@ -47,6 +47,8 @@ var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
 
 var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
 
+var PhotosPath = os.Getenv("PHOTOS_PATH") // "/Home/Pictures"
+
 var BflName = os.Getenv("BFL_NAME")
 
 const DefaultMaxResult = 10
@@ -91,6 +93,7 @@ func InitRpcService(url, port, username, password string, bsModelConfig map[stri
 			k8sClient:        k8sClient,
 		}
 		PVCs = NewPVCCache(RpcServer)
+		BflPVCs = NewBflPVCCache(RpcServer)
 
 		//if ESEnabled == "True" {
 		//	if err := RpcServer.EsSetupIndex(); err != nil {
@@ -140,6 +143,7 @@ func (c *Service) loadRoutes() error {
 		fmt.Println("You really see me")
 		c.String(http.StatusOK, "ok")
 	})
+	RpcEngine.POST("/api/photos/pre_check", c.preCheckHandler)
 
 	//RpcEngine.POST("/files/input", c.HandleInput)
 	//RpcEngine.POST("/files/delete", c.HandleDelete)

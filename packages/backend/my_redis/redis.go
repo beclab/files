@@ -45,6 +45,15 @@ func RedisSet(key string, value interface{}, expire time.Duration) {
 	}
 }
 
+func RedisHSet(key string, field string, value interface{}) {
+	// 设置键值对
+	err := redisClient.HSet(key, field, value).Err()
+	if err != nil {
+		fmt.Println("设置Hash表键值对失败:", err)
+		return
+	}
+}
+
 func RedisGet(key string) string {
 	// 获取键的值
 	value, err := redisClient.Get(key).Result()
@@ -57,6 +66,21 @@ func RedisGet(key string) string {
 		return ""
 	}
 	fmt.Println("键值:", value)
+	return value
+}
+
+func RedisHGet(key, field string) string {
+	// 获取键的值
+	value, err := redisClient.HGet(key, field).Result()
+	if err != nil {
+		if err != redis.Nil {
+			fmt.Println("获取Hash表键值失败:", err)
+			return ""
+		}
+		fmt.Println("Hash表", key, "和键", field, "不存在")
+		return ""
+	}
+	fmt.Println("值:", value)
 	return value
 }
 

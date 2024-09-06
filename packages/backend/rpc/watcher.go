@@ -253,6 +253,10 @@ func handleEvent(e jfsnotify.Event) error {
 				return err
 			}
 		}
+		err = checkOrUpdatePhotosRedis(e.Name, "", 3)
+		if err != nil {
+			log.Error().Msgf("check or update photos redis err %v", err)
+		}
 		//next line must be commented for rename
 		//return nil
 	}
@@ -274,6 +278,10 @@ func handleEvent(e jfsnotify.Event) error {
 				err = updateOrInputDocSearch3(docPath, bflName)
 				if err != nil {
 					log.Error().Msgf("update or input doc error %v", err)
+				}
+				err = checkOrUpdatePhotosRedis(docPath, "", 2)
+				if err != nil {
+					log.Error().Msgf("check or update photos redis err %v", err)
 				}
 			}
 			return nil

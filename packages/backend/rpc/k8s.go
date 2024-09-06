@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"sync"
 )
 
+// PVC->Bfl
 var PVCs *PVCCache = nil
 
 type PVCCache struct {
@@ -145,4 +147,72 @@ func ExpandPaths(A []string, prefix string) []string {
 	fmt.Println("Oringinal Paths: ", A)
 	fmt.Println("Expanded Paths: ", B)
 	return B
+}
+
+// Bfl->PVC
+var BflPVCs *BflPVCCache = nil
+
+type BflPVCCache struct {
+	service     *Service
+	userPvcMap  map[string]string
+	cachePvcMap map[string]string
+	mu          sync.Mutex
+}
+
+func NewBflPVCCache(service *Service) *BflPVCCache {
+	return &BflPVCCache{
+		service:     service,
+		userPvcMap:  make(map[string]string),
+		cachePvcMap: make(map[string]string),
+	}
+}
+
+func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, key string, bflName string) (string, error) {
+	if bflName == "" {
+		klog.Error("get Annotation error, bfl-name is empty")
+		return "", errors.New("bfl-name is emtpty")
+	}
+
+	namespace := "user-space-" + bflName
+
+	bfl, err := client.AppsV1().StatefulSets(namespace).Get(ctx, "bfl", metav1.GetOptions{})
+	if err != nil {
+		klog.Error("find user's bfl error, ", err, ", ", namespace)
+		return "", err
+	}
+
+	klog.Infof("bfl.Annotations: %+v", bfl.Annotations)
+	return bfl.Annotations[key], nil
+}
+
+func (p *BflPVCCache) getUserPVCOrCache(bflName string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if val, ok := p.userPvcMap[bflName]; ok {
+		return val, nil
+	}
+
+	userPvc, err := GetAnnotation(p.service.context, p.service.k8sClient, "userspace_pvc", bflName)
+	if err != nil {
+		return "", err
+	}
+	p.userPvcMap[bflName] = userPvc
+	return userPvc, nil
+}
+
+func (p *BflPVCCache) getCachePVCOrCache(bflName string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if val, ok := p.cachePvcMap[bflName]; ok {
+		return val, nil
+	}
+
+	cachePvc, err := GetAnnotation(p.service.context, p.service.k8sClient, "appcache_pvc", bflName)
+	if err != nil {
+		return "", err
+	}
+	p.cachePvcMap[bflName] = cachePvc
+	return cachePvc, nil
 }
