@@ -26,6 +26,63 @@ import (
 )
 
 var watcher *jfsnotify.Watcher = nil
+var (
+	entries    = make(map[string]time.Time)
+	mu         sync.Mutex
+	timer      *time.Timer
+	eventCount int64 = 0
+)
+
+func InitTimer() {
+	timer = time.NewTimer(1 * time.Second)
+	go func() {
+		for range timer.C {
+			fmt.Printf("EventCount of the second %v: %d\n", time.Now(), eventCount)
+			eventCount = 0
+			//cleanupEntries()
+			// 重置定时器
+			timer.Reset(1 * time.Second)
+		}
+	}()
+}
+
+func handleWrite(e jfsnotify.Event) {
+	mu.Lock()
+	defer mu.Unlock()
+	entries[e.Name] = time.Now()
+	//fmt.Printf("Write: %s at %v\n", e.Name, entries[e.Name])
+}
+
+func handleRenameOrRemove(e jfsnotify.Event) {
+	mu.Lock()
+	defer mu.Unlock()
+	delete(entries, e.Name)
+	fmt.Printf("Remove/Rename: %s\n", e.Name)
+}
+
+func cleanupEntries() {
+	mu.Lock()
+	defer mu.Unlock()
+	now := time.Now()
+	for name, t := range entries {
+		if now.Sub(t) > 2*time.Second {
+			fmt.Printf("Cleanup: %s (expired at %v)\n", name, t)
+			bflName, err := PVCs.getBfl(ExtractPvcFromURL(name))
+			if err != nil {
+				klog.Info(err)
+				continue
+			} else {
+				klog.Info(name, ", bfl-name: ", bflName)
+			}
+			err = updateOrInputDocSearch3(name, bflName)
+			if err != nil {
+				klog.Info(err)
+				continue
+			}
+			delete(entries, name)
+		}
+	}
+}
 
 func WatchPath(addPaths []string, deletePaths []string) {
 	fmt.Println("Begin watching path...")
@@ -179,7 +236,15 @@ func dedupLoop(w *jfsnotify.Watcher) {
 				log.Warn().Msg("watcher event channel closed")
 				return
 			}
+			mu.Lock()
+			eventCount = eventCount + 1
+			mu.Unlock()
 			if e.Has(jfsnotify.Chmod) {
+				continue
+			}
+			if e.Has(jfsnotify.Write) {
+				//log.Debug().Msgf("throwing event %v", e)
+				//handleWrite(e)
 				continue
 			}
 			log.Debug().Msgf("pending event %v", e)
@@ -247,6 +312,7 @@ func handleEvent(e jfsnotify.Event) error {
 		//	log.Debug().Msgf("delete doc id %s path %s", doc.DocId, e.Name)
 		//}
 
+		handleRenameOrRemove(e)
 		if searchId != "" {
 			_, err = deleteDocumentSearch3(searchId, bflName)
 			if err != nil {
@@ -293,7 +359,8 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Write) { // || e.Has(notify.Chmod) {
-		return updateOrInputDocSearch3(e.Name, bflName)
+		//handleWrite(e)
+		//return updateOrInputDocSearch3(e.Name, bflName)
 		//return updateOrInputDoc(e.Name)
 	}
 	return nil

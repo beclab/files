@@ -94,6 +94,7 @@ func InitRpcService(url, port, username, password string, bsModelConfig map[stri
 		}
 		PVCs = NewPVCCache(RpcServer)
 		BflPVCs = NewBflPVCCache(RpcServer)
+		InitTimer()
 
 		//if ESEnabled == "True" {
 		//	if err := RpcServer.EsSetupIndex(); err != nil {
