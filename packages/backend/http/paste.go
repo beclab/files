@@ -1185,6 +1185,241 @@ func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, r *http.R
 	return source
 }
 
+func testDriveLs(w http.ResponseWriter, r *http.Request) error {
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return os.ErrPermission
+	}
+
+	origin := r.Header.Get("Origin")
+	dstUrl := origin + "/api/resources%2FHome%2FDocuments%2F"
+	fmt.Println("dstUrl:", dstUrl)
+
+	req, err := http.NewRequest("GET", dstUrl, nil)
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return err
+	}
+
+	// 设置请求头
+	req.Header = r.Header.Clone()
+	req.Header.Set("Content-Type", "application/json")
+
+	// 遍历并打印所有的 header 字段和值
+	for name, values := range req.Header {
+		for _, value := range values {
+			fmt.Printf("%s: %s\n", name, value)
+		}
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error making request:", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	//// 读取响应体
+	//body, err := ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
+	//	return err
+	//}
+	//
+	//// 假设响应是UTF-8编码的文本（根据实际情况调整）
+	//// 如果Content-Type指明了其他编码，请相应地解码
+	//responseText := string(body) // 这里默认按UTF-8处理
+	//
+	//// 将响应文本写入ResponseWriter（确保设置了正确的Content-Type头）
+	//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // 或根据需要设置为其他MIME类型
+	//w.Write([]byte(responseText))
+	// 读取响应体
+	//body, err := ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
+	//	return err
+	//}
+	//
+	//// 解析JSON响应体
+	//var jsonResponse map[string]interface{}
+	//err = json.Unmarshal(body, &jsonResponse)
+	//if err != nil {
+	//	http.Error(w, "Error unmarshaling JSON response: "+err.Error(), http.StatusInternalServerError)
+	//	return err
+	//}
+	//
+	//// 将解析后的JSON响应体转换为字符串（格式化输出）
+	//responseText, err := json.MarshalIndent(jsonResponse, "", "  ")
+	//if err != nil {
+	//	http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
+	//	return err
+	//}
+	//
+	//// 设置响应头并写入响应体
+	//w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	//w.Write([]byte(responseText))
+
+	// 遍历并打印所有的 header 字段和值
+	fmt.Printf("Response Hedears:\n")
+	for name, values := range resp.Header {
+		for _, value := range values {
+			fmt.Printf("%s: %s\n", name, value)
+		}
+	}
+	// 检查Content-Type
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "application/json") {
+		fmt.Println("Response is not JSON format:", contentType)
+	}
+
+	// 读取响应体
+	var body []byte
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		// 如果响应体被gzip压缩
+		reader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			fmt.Println("Error creating gzip reader:", err)
+			return err
+		}
+		defer reader.Close()
+
+		body, err = ioutil.ReadAll(reader)
+		if err != nil {
+			fmt.Println("Error reading gzipped response body:", err)
+			return err
+		}
+	} else {
+		// 如果响应体没有被压缩
+		body, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println("Error reading response body:", err)
+			return err
+		}
+	}
+
+	// 解析JSON
+	var datas map[string]interface{}
+	err = json.Unmarshal(body, &datas)
+	if err != nil {
+		fmt.Println("Error unmarshaling JSON response:", err)
+		return err
+	}
+
+	// 打印解析后的数据
+	fmt.Println("Parsed JSON response:", datas)
+	// 将解析后的JSON响应体转换为字符串（格式化输出）
+	responseText, err := json.MarshalIndent(datas, "", "  ")
+	if err != nil {
+		http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	// 设置响应头并写入响应体
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Write([]byte(responseText))
+	return nil
+}
+
+func testDriveLs2(w http.ResponseWriter, r *http.Request) error {
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return os.ErrPermission
+	}
+
+	// dstUrl := "http://files-service.user-space-" + bflName + ":8181/ls"
+	origin := r.Header.Get("Origin")
+	dstUrl := origin + "/drive/ls"
+	fmt.Println("dstUrl:", dstUrl)
+
+	//payload := []byte(`{"path":"/","name":"wangrongxiang@bytetrade.io","drive":"google"}`)
+	type RequestPayload struct {
+		Path  string `json:"path"`
+		Name  string `json:"name"`
+		Drive string `json:"drive"`
+	}
+	payload := RequestPayload{
+		Path:  "/",
+		Name:  "wangrongxiang@bytetrade.io",
+		Drive: "google",
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+		return err
+	}
+
+	req, err := http.NewRequest("POST", dstUrl, bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return err
+	}
+
+	// 设置请求头
+	req.Header = r.Header.Clone()
+	req.Header.Set("Content-Type", "application/json")
+
+	// 遍历并打印所有的 header 字段和值
+	for name, values := range req.Header {
+		for _, value := range values {
+			fmt.Printf("%s: %s\n", name, value)
+		}
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error making request:", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	// 读取响应体
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	// 设置Content-Type头（根据实际情况调整）
+	w.Header().Set("Content-Type", "application/octet-stream") // 如果是文本，请使用"text/plain; charset=utf-8"或其他适当的MIME类型和字符集
+
+	// 将响应体写入ResponseWriter
+	_, err = w.Write(body)
+	if err != nil {
+		http.Error(w, "Error writing response body: "+err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	//body, err := ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	fmt.Println("Error reading response body:", err)
+	//	return err
+	//}
+
+	// Copy the response body directly to the http.ResponseWriter
+	//_, err = io.Copy(w, resp.Body)
+	//if err != nil {
+	//	http.Error(w, "Error copying response body", http.StatusInternalServerError)
+	//	return err
+	//}
+
+	//fmt.Println(string(body))
+	// Write the response body to the http.ResponseWriter
+	//w.Header().Set("Content-Type", "application/json")
+	//w.Write(body)
+	// Convert the response body to UTF-8 encoding
+	//bodyString := string(body)
+	//utf8Body := []byte(bodyString)
+	//
+	//// Set the Content-Type header to indicate JSON data
+	//w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	//w.Write(utf8Body)
+
+	return nil
+}
+
 func resourcePasteHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		// For this func, src starts with src type + /, dst start with dst type + /
@@ -1200,11 +1435,11 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			dstType = "drive"
 		}
 		fmt.Println(srcType, src, dstType, dst)
-		if srcType != "drive" && srcType != "sync" && srcType != "cache" {
+		if srcType != "drive" && srcType != "sync" && srcType != "cache" && srcType != "google" {
 			fmt.Println("Src type is invalid!")
 			return http.StatusForbidden, nil
 		}
-		if dstType != "drive" && dstType != "sync" && dstType != "cache" {
+		if dstType != "drive" && dstType != "sync" && dstType != "cache" && srcType != "google" {
 			fmt.Println("Dst type is invalid!")
 			return http.StatusForbidden, nil
 		}
@@ -1212,6 +1447,13 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			fmt.Println("Src and dst are of same arch!")
 		} else {
 			fmt.Println("Src and dst are of different arches!")
+		}
+		if srcType == "google" || dstType == "google" {
+			err := testDriveLs(w, r)
+			return errToStatus(err), err
+			//err = d.RunHook(func() error {
+			//	return testDriveLs(w, r)
+			//}, action, src, dst, d.user)
 		}
 		action := r.URL.Query().Get("action")
 		src, err := url.QueryUnescape(src)
