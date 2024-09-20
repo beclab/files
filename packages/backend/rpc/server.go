@@ -47,6 +47,8 @@ var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
 
 var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
 
+var PhotosEnabled = os.Getenv("PHOTOS_ENABLED")
+
 var PhotosPath = os.Getenv("PHOTOS_PATH") // "/Home/Pictures"
 
 var BflName = os.Getenv("BFL_NAME")

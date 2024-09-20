@@ -46,6 +46,10 @@ func extractSegment(filepath string, n int) (string, bool) {
 }
 
 func checkOrUpdatePhotosRedis(filepath, fileMd5 string, op int) error {
+	if PhotosEnabled != "True" {
+		return nil
+	}
+
 	// op: 1, add; 2, upload; 3, delete
 	if !isPhotoPath(filepath) {
 		log.Debug().Msg(filepath + " is not a photo. Skip it.")
