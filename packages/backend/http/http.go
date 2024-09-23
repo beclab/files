@@ -66,6 +66,7 @@ func NewHandler(
 	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler(fileCache), "/api/resources")).Methods("POST")
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")
 	api.PathPrefix("/resources").Handler(monkey(resourcePatchHandler(fileCache), "/api/resources")).Methods("PATCH")
+	api.PathPrefix("/unmount").Handler(monkey(resourceUnmountHandler(fileCache), "/api/unmount")).Methods("DELETE")
 	// Because /api/resources/AppData is proxied under current arch, new api must be of a different prefix,
 	// and try to access /api/resources/AppData in the handle func.
 	api.PathPrefix("/paste").Handler(monkey(resourcePasteHandler(fileCache), "/api/paste")).Methods("PATCH")

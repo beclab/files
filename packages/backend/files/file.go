@@ -1,13 +1,17 @@
 package files
 
 import (
+	"bytes"
 	"crypto/md5"  //nolint:gosec
 	"crypto/sha1" //nolint:gosec
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"hash"
 	"io"
+	"io/ioutil"
 	"log"
 	"mime"
 	"net/http"
@@ -26,21 +30,22 @@ import (
 // FileInfo describes a file.
 type FileInfo struct {
 	*Listing
-	Fs        afero.Fs          `json:"-"`
-	Path      string            `json:"path"`
-	Name      string            `json:"name"`
-	Size      int64             `json:"size"`
-	FileSize  int64             `json:"fileSize"`
-	Extension string            `json:"extension"`
-	ModTime   time.Time         `json:"modified"`
-	Mode      os.FileMode       `json:"mode"`
-	IsDir     bool              `json:"isDir"`
-	IsSymlink bool              `json:"isSymlink"`
-	Type      string            `json:"type"`
-	Subtitles []string          `json:"subtitles,omitempty"`
-	Content   string            `json:"content,omitempty"`
-	Checksums map[string]string `json:"checksums,omitempty"`
-	Token     string            `json:"token,omitempty"`
+	Fs           afero.Fs          `json:"-"`
+	Path         string            `json:"path"`
+	Name         string            `json:"name"`
+	Size         int64             `json:"size"`
+	FileSize     int64             `json:"fileSize"`
+	Extension    string            `json:"extension"`
+	ModTime      time.Time         `json:"modified"`
+	Mode         os.FileMode       `json:"mode"`
+	IsDir        bool              `json:"isDir"`
+	IsSymlink    bool              `json:"isSymlink"`
+	Type         string            `json:"type"`
+	Subtitles    []string          `json:"subtitles,omitempty"`
+	Content      string            `json:"content,omitempty"`
+	Checksums    map[string]string `json:"checksums,omitempty"`
+	Token        string            `json:"token,omitempty"`
+	ExternalType string            `json:"externalType,omitempty"`
 }
 
 // FileOptions are the options when getting a file info.
@@ -53,6 +58,153 @@ type FileOptions struct {
 	Token      string
 	Checker    rules.Checker
 	Content    bool
+}
+
+var TerminusdHost = os.Getenv("TERMINUSD_HOST")
+var ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
+
+func CheckPath(s, prefix, except string) bool {
+	// prefix := "/data/External/"
+
+	if prefix == "" || except == "" {
+		return false
+	}
+
+	if !strings.HasPrefix(s, prefix) {
+		return false
+	}
+
+	remaining := s[len(prefix):]
+
+	if strings.HasSuffix(remaining, except) {
+		remaining = remaining[:len(remaining)-len(except)]
+	}
+
+	return !strings.Contains(remaining, except) // "/")
+}
+
+type Response struct {
+	Code    int        `json:"code"`
+	Data    []DiskInfo `json:"data"`
+	Message string     `json:"message"`
+}
+
+type DiskInfo struct {
+	Path              string  `json:"path"`
+	Fstype            string  `json:"fstype"`
+	Total             int64   `json:"total"`
+	Free              int64   `json:"free"`
+	Used              int64   `json:"used"`
+	UsedPercent       float64 `json:"usedPercent"`
+	InodesTotal       int64   `json:"inodesTotal"`
+	InodesUsed        int64   `json:"inodesUsed"`
+	InodesFree        int64   `json:"inodesFree"`
+	InodesUsedPercent float64 `json:"inodesUsedPercent"`
+}
+
+func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	//for key, value := range header {
+	//	req.Header.Set(key, value)
+	//}
+	req.Header = header
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var response Response
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	if response.Code != 200 {
+		return nil, fmt.Errorf("error code received: %d", response.Code)
+	}
+
+	return response.Data, nil
+}
+
+func GetExternalType(filePath string, usbData []DiskInfo, hddData []DiskInfo) string {
+	fileName := strings.TrimPrefix(strings.TrimSuffix(filePath, "/"), "/")
+	lastSlashIndex := strings.LastIndex(fileName, "/")
+	if lastSlashIndex != -1 {
+		fileName = fileName[lastSlashIndex+1:]
+	}
+
+	for _, usb := range usbData {
+		if usb.Path == fileName {
+			return "mountable"
+		}
+	}
+
+	for _, hdd := range hddData {
+		if hdd.Path == fileName {
+			return "hdd"
+		}
+	}
+
+	return "others"
+}
+
+func UnmountUSBIncluster(r *http.Request, usbPath string) (map[string]interface{}, error) {
+	url := "http://" + TerminusdHost + "/command/umount-usb-incluster"
+
+	headers := r.Header.Clone()
+	headers.Set("Content-Type", "application/json")
+	headers.Set("X-Signature", "temp_signature")
+
+	mountPath := strings.TrimPrefix(strings.TrimSuffix(usbPath, "/"), "/")
+	lastSlashIndex := strings.LastIndex(mountPath, "/")
+	if lastSlashIndex != -1 {
+		mountPath = mountPath[lastSlashIndex+1:]
+	}
+
+	bodyData := map[string]string{
+		"path": mountPath,
+	}
+	fmt.Println("bodyData:", bodyData)
+	body, err := json.Marshal(bodyData)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("body (byte slice):", body)
+	fmt.Println("body (string):", string(body))
+
+	client := &http.Client{}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req.Header = headers
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var responseMap map[string]interface{}
+	err = json.Unmarshal(respBody, &responseMap)
+	if err != nil {
+		return nil, err
+	}
+
+	return responseMap, nil
 }
 
 // NewFileInfo creates a File object from a path and a given user. This File
@@ -71,6 +223,33 @@ func NewFileInfo(opts FileOptions) (*FileInfo, error) {
 	if opts.Expand {
 		if file.IsDir {
 			if err := file.readListing(opts.Checker, opts.ReadHeader); err != nil { //nolint:govet
+				return nil, err
+			}
+			return file, nil
+		}
+
+		err = file.detectType(opts.Modify, opts.Content, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return file, err
+}
+
+func NewFileInfoWithDiskInfo(opts FileOptions, usbData, hddData []DiskInfo) (*FileInfo, error) {
+	if !opts.Checker.Check(opts.Path) {
+		return nil, os.ErrPermission
+	}
+
+	file, err := stat(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.Expand {
+		if file.IsDir {
+			if err := file.readListingWithDiskInfo(opts.Checker, opts.ReadHeader, usbData, hddData); err != nil { //nolint:govet
 				return nil, err
 			}
 			return file, nil
@@ -439,7 +618,89 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 				}
 			}
 
-			listing.Size += file.Size // 累加文件的大小
+			listing.Size += file.Size
+			listing.FileSize += file.Size
+		}
+
+		listing.Items = append(listing.Items, file)
+	}
+
+	i.Listing = listing
+	return nil
+}
+
+func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader bool, usbData, hddData []DiskInfo) error {
+	afs := &afero.Afero{Fs: i.Fs}
+	dir, err := afs.ReadDir(i.Path)
+	if err != nil {
+		return err
+	}
+
+	listing := &Listing{
+		Items:         []*FileInfo{},
+		NumDirs:       0,
+		NumFiles:      0,
+		NumTotalFiles: 0,
+		Size:          0,
+		FileSize:      0,
+	}
+
+	for _, f := range dir {
+		name := f.Name()
+		fPath := path.Join(i.Path, name)
+
+		if !checker.Check(fPath) {
+			continue
+		}
+
+		isSymlink, isInvalidLink := false, false
+		if IsSymlink(f.Mode()) {
+			isSymlink = true
+			info, err := i.Fs.Stat(fPath)
+			if err == nil {
+				f = info
+			} else {
+				isInvalidLink = true
+			}
+		}
+
+		file := &FileInfo{
+			Fs:        i.Fs,
+			Name:      name,
+			Size:      f.Size(),
+			ModTime:   f.ModTime(),
+			Mode:      f.Mode(),
+			IsDir:     f.IsDir(),
+			IsSymlink: isSymlink,
+			Extension: filepath.Ext(name),
+			Path:      fPath,
+		}
+
+		if file.IsDir {
+			if CheckPath(file.Path, ExternalPrefix, "/") {
+				file.ExternalType = GetExternalType(file.Path, usbData, hddData)
+			}
+			// err := file.readListing(checker, readHeader)
+			// if err != nil {
+			// 	return err
+			// }
+			listing.NumDirs++
+			// listing.Size += file.Size + file.Listing.Size
+			// listing.NumTotalFiles += file.Listing.NumTotalFiles
+		} else {
+			listing.NumFiles++
+			// listing.NumTotalFiles++
+
+			if isInvalidLink {
+				file.Type = "invalid_link"
+			} else {
+				err := file.detectType(true, false, readHeader)
+				if err != nil {
+					return err
+				}
+			}
+
+			listing.Size += file.Size
 			listing.FileSize += file.Size
 		}
 

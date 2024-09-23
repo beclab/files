@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -40,23 +41,76 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	xBflUser := r.Header.Get("X-Bfl-User")
 	fmt.Println("X-Bfl-User: ", xBflUser)
 
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
-		Path:       r.URL.Path,
-		Modify:     d.user.Perm.Modify,
-		Expand:     true,
-		ReadHeader: d.server.TypeDetectionByHeader,
-		Checker:    d,
-		Content:    true,
-	})
-	if err != nil {
-		return errToStatus(err), err
+	var usbData []files.DiskInfo = nil
+	var hddData []files.DiskInfo = nil
+	if files.TerminusdHost != "" {
+		urls := []string{
+			"http://" + files.TerminusdHost + "/system/mounted-usb-incluster",
+			"http://" + files.TerminusdHost + "/system/mounted-hdd-incluster",
+		}
+
+		headers := r.Header.Clone()
+		headers.Set("Content-Type", "application/json")
+		headers.Set("X-Signature", "temp_signature")
+		//headers := map[string]string{
+		//	"X-Signature": "temp_signature",
+		//}
+
+		for _, url := range urls {
+			data, err := files.FetchDiskInfo(url, headers)
+			if err != nil {
+				log.Printf("Failed to fetch data from %s: %v", url, err)
+				continue
+			}
+
+			if url == urls[0] {
+				usbData = data
+			} else if url == urls[1] {
+				hddData = data
+			}
+		}
+
+		fmt.Println("USB Data:", usbData)
+		fmt.Println("HDD Data:", hddData)
+	}
+
+	var file *files.FileInfo
+	var err error
+	if usbData != nil || hddData != nil {
+		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
+			Fs:         d.user.Fs,
+			Path:       r.URL.Path,
+			Modify:     d.user.Perm.Modify,
+			Expand:     true,
+			ReadHeader: d.server.TypeDetectionByHeader,
+			Checker:    d,
+			Content:    true,
+		}, usbData, hddData)
+		if err != nil {
+			return errToStatus(err), err
+		}
+	} else {
+		file, err = files.NewFileInfo(files.FileOptions{
+			Fs:         d.user.Fs,
+			Path:       r.URL.Path,
+			Modify:     d.user.Perm.Modify,
+			Expand:     true,
+			ReadHeader: d.server.TypeDetectionByHeader,
+			Checker:    d,
+			Content:    true,
+		})
+		if err != nil {
+			return errToStatus(err), err
+		}
 	}
 
 	if file.IsDir {
 		// fmt.Println(file)
 		// file.Size = file.Listing.Size
 		// recursiveSize(file)
+		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
+			file.ExternalType = files.GetExternalType(file.Path, usbData, hddData)
+		}
 		file.Listing.Sorting = d.user.Sorting
 		file.Listing.ApplySort()
 		return renderJSON(w, r, file)
@@ -176,22 +230,57 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 	})
 }
 
+func resourceUnmountHandler(fileCache FileCache) handleFunc {
+	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		if r.URL.Path == "/" || !d.user.Perm.Delete {
+			return http.StatusForbidden, nil
+		}
+
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:         d.user.Fs,
+			Path:       r.URL.Path,
+			Modify:     d.user.Perm.Modify,
+			Expand:     false,
+			ReadHeader: d.server.TypeDetectionByHeader,
+			Checker:    d,
+		})
+		if err != nil {
+			return errToStatus(err), err
+		}
+
+		// delete thumbnails
+		//err = delThumbs(r.Context(), fileCache, file)
+		//if err != nil {
+		//	return errToStatus(err), err
+		//}
+
+		//err = d.RunHook(func() error {
+		//	return d.user.Fs.RemoveAll(r.URL.Path)
+		//}, "delete", r.URL.Path, "", d.user)
+
+		respJson, err := files.UnmountUSBIncluster(r, file.Path)
+		if err != nil {
+			return errToStatus(err), err
+		}
+
+		return renderJSON(w, r, respJson)
+		//return http.StatusOK, nil
+	})
+}
+
 func resourcePostHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
 		}
 
-		// 获取查询参数 mode 的值
 		modeParam := r.URL.Query().Get("mode")
 
-		// 解析 modeParam 的值为 os.FileMode 类型，如果解析失败或未提供值，则使用默认值 0775
 		mode, err := strconv.ParseUint(modeParam, 8, 32)
 		if err != nil || modeParam == "" {
 			mode = 0775
 		}
 
-		// 将 mode 转换为 os.FileMode 类型
 		fileMode := os.FileMode(mode)
 
 		// Directories creation on POST.
