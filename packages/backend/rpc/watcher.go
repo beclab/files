@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/common"
+	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"github.com/filebrowser/filebrowser/v2/parser"
 	"io/fs"
@@ -26,8 +27,52 @@ import (
 )
 
 var watcher *jfsnotify.Watcher = nil
+var WatchDirs []string     // focused dirs
+var BaseWatchDirs []string // like /data, /appcache
 
-func WatchPath(addPaths []string, deletePaths []string) {
+func checkString(s string) bool {
+	hasBase := false
+	for _, v := range BaseWatchDirs {
+		if strings.HasPrefix(s, v) {
+			hasBase = true
+			if v != RootPrefix {
+				return true
+			}
+		}
+	}
+	if !hasBase {
+		fmt.Println("!hasBase")
+		return false
+	}
+
+	if strings.HasPrefix(s+"/", RootPrefix+files.ExternalPrefix) {
+		fmt.Println(s+"/", RootPrefix+files.ExternalPrefix)
+		return false
+	}
+
+	slashCount := 0
+	for i, char := range s {
+		if char == '/' {
+			slashCount++
+			if slashCount == 3 {
+				remaining := s[i:]
+				for _, prefix := range WatchDirs {
+					if strings.HasPrefix(remaining, prefix) {
+						return true
+					}
+				}
+				return false
+			}
+		}
+	}
+	fmt.Println("slashCount=", slashCount)
+	if slashCount == 1 || slashCount == 2 {
+		return true
+	}
+	return false
+}
+
+func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 	fmt.Println("Begin watching path...")
 	//sleepDuration := 20 * time.Minute
 	//time.Sleep(sleepDuration)
@@ -111,11 +156,16 @@ func WatchPath(addPaths []string, deletePaths []string) {
 				return err
 			}
 			if info.IsDir() {
-				fmt.Println("Adding Path: ", info.Name())
-				err = watcher.Add(path)
-				if err != nil {
-					fmt.Println("watcher add error:", err)
-					return err
+				fmt.Println("Try to Add Path: ", path)
+				if checkString(path) {
+					fmt.Println("Adding Path: ", path)
+					err = watcher.Add(path)
+					if err != nil {
+						fmt.Println("watcher add error:", err)
+						return err
+					}
+				} else {
+					fmt.Println("Won't add path: ", path)
 				}
 			} else {
 				bflName, err := PVCs.getBfl(ExtractPvcFromURL(path))
@@ -126,9 +176,11 @@ func WatchPath(addPaths []string, deletePaths []string) {
 				}
 
 				//err = updateOrInputDoc(path)
-				err = updateOrInputDocSearch3(path, bflName)
-				if err != nil {
-					log.Error().Msgf("udpate or input doc err %v", err)
+				if checkString(path) {
+					err = updateOrInputDocSearch3(path, bflName)
+					if err != nil {
+						log.Error().Msgf("udpate or input doc err %v", err)
+					}
 				}
 			}
 			return nil
@@ -222,11 +274,14 @@ func handleEvent(e jfsnotify.Event) error {
 		klog.Info(e.Name, ", bfl-name: ", bflName)
 	}
 
-	searchId, _, err := getSerachIdOrCache(e.Name, bflName, false)
-	if err != nil {
-		klog.Info(err)
-	} else {
-		klog.Info(e.Name, ", searchId: ", searchId)
+	searchId := ""
+	if checkString(e.Name) {
+		searchId, _, err = getSerachIdOrCache(e.Name, bflName, false)
+		if err != nil {
+			klog.Info(err)
+		} else {
+			klog.Info(e.Name, ", searchId: ", searchId)
+		}
 	}
 
 	if e.Has(jfsnotify.Remove) || e.Has(jfsnotify.Rename) {
@@ -268,20 +323,28 @@ func handleEvent(e jfsnotify.Event) error {
 			}
 			if info.IsDir() {
 				//add dir to watch list
-				err = watcher.Add(docPath)
-				if err != nil {
-					log.Error().Msgf("watcher add error:%v", err)
+				fmt.Println("Try to Add Path: ", docPath)
+				if checkString(docPath) {
+					fmt.Println("Adding Path: ", docPath)
+					err = watcher.Add(docPath)
+					if err != nil {
+						log.Error().Msgf("watcher add error:%v", err)
+					}
+				} else {
+					fmt.Println("Won't add Path: ", docPath)
 				}
 			} else {
 				//input zinc file
 				//err = updateOrInputDoc(docPath)
-				err = updateOrInputDocSearch3(docPath, bflName)
-				if err != nil {
-					log.Error().Msgf("update or input doc error %v", err)
-				}
-				err = checkOrUpdatePhotosRedis(docPath, "", 2)
-				if err != nil {
-					log.Error().Msgf("check or update photos redis err %v", err)
+				if checkString(docPath) {
+					err = updateOrInputDocSearch3(docPath, bflName)
+					if err != nil {
+						log.Error().Msgf("update or input doc error %v", err)
+					}
+					err = checkOrUpdatePhotosRedis(docPath, "", 2)
+					if err != nil {
+						log.Error().Msgf("check or update photos redis err %v", err)
+					}
 				}
 			}
 			return nil
@@ -293,7 +356,9 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Write) { // || e.Has(notify.Chmod) {
-		return updateOrInputDocSearch3(e.Name, bflName)
+		if checkString(e.Name) {
+			return updateOrInputDocSearch3(e.Name, bflName)
+		}
 		//return updateOrInputDoc(e.Name)
 	}
 	return nil

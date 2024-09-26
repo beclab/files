@@ -161,17 +161,17 @@ user created with the credentials from options "username" and "password".`,
 			url = "http://localhost:4080"
 
 			watchDirStr := os.Getenv("WATCH_DIR")
-			var watchDirs []string
+			//var watchDirs []string
 
 			if watchDirStr == "" {
-				watchDirs = append(watchDirs, "./Home/Documents")
+				rpc.WatchDirs = append(rpc.WatchDirs, "./Home/Documents")
 			} else {
-				watchDirs = strings.Split(watchDirStr, ",")
-				for i, dir := range watchDirs {
-					watchDirs[i] = strings.TrimSpace(dir)
+				rpc.WatchDirs = strings.Split(watchDirStr, ",")
+				for i, dir := range rpc.WatchDirs {
+					rpc.WatchDirs[i] = strings.TrimSpace(dir)
 				}
 			}
-			fmt.Println("original watchDirs = ", watchDirs)
+			fmt.Println("original watchDirs = ", rpc.WatchDirs)
 
 			if rpc.RootPrefix == "" {
 				rpc.RootPrefix = "/data"
@@ -183,11 +183,15 @@ user created with the credentials from options "username" and "password".`,
 				rpc.ContentPath = "/Home/Documents"
 			}
 
-			watchDirs = rpc.ExpandPaths(watchDirs, rpc.RootPrefix)
+			//watchDirs = rpc.ExpandPaths(watchDirs, rpc.RootPrefix)
+			fmt.Println("focused watchDirs = ", rpc.WatchDirs)
+
+			rpc.BaseWatchDirs = []string{rpc.RootPrefix}
 			if rpc.CacheRootPath != "" {
-				watchDirs = append(watchDirs, rpc.CacheRootPath)
+				rpc.BaseWatchDirs = append(rpc.BaseWatchDirs, rpc.CacheRootPath)
 			}
-			fmt.Println("expanded watchDirs = ", watchDirs)
+
+			fmt.Println("baseWatchDirs = ", rpc.BaseWatchDirs)
 
 			port := os.Getenv("W_PORT")
 			if port == "" {
@@ -206,7 +210,7 @@ user created with the credentials from options "username" and "password".`,
 			rpc.InitRpcService(url, port, username, password, map[string]string{})
 
 			if rpc.WatcherEnabled == "True" {
-				rpc.WatchPath(watchDirs, nil)
+				rpc.WatchPath(rpc.BaseWatchDirs, nil, rpc.WatchDirs)
 			}
 
 			fmt.Println("RPCSERVER to start!")
