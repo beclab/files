@@ -2512,7 +2512,7 @@ func parsePath(path string) (drive, name, dir, filename string) {
 	}
 
 	// 提取 drive 和 name
-	drive = path[:slashes[1]]
+	drive = path[1:slashes[1]]
 	name = path[slashes[1]+1 : slashes[2]]
 
 	// 提取 dir 和 filename
