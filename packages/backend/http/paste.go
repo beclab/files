@@ -2573,7 +2573,9 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 
 			//dstDir, dstFilename := splitPath(dst)
 			srcDrive, srcName, srcDir, srcFilename := parsePath(src)
+			fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
 			_, _, dstDir, dstFilename := parsePath(dst)
+			fmt.Println("dstDir:", dstDir, "dstFilename:", dstFilename)
 			if dstDir == "" || dstFilename == "" {
 				fmt.Println("Dst parse failed.")
 				return nil
@@ -2593,6 +2595,7 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 				fmt.Println("Error marshalling JSON:", err)
 				return err
 			}
+			fmt.Println("Copy File Params:", string(jsonBody))
 			err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r)
 			if err != nil {
 				fmt.Println("Error calling drive/copy_file:", err)
