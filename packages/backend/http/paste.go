@@ -2583,7 +2583,7 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			// 填充数据
 			param := CopyFileParam{
 				CloudFilePath:     srcDir + "/" + srcFilename, // "path/to/cloud/file.txt",
-				NewCloudDirectory: dstDir,                     // "new/cloud/directory",
+				NewCloudDirectory: dstDir + "/",               // "new/cloud/directory",
 				NewCloudFileName:  dstFilename,                // "new_file_name.txt",
 				Drive:             srcDrive,                   // "my_drive",
 				Name:              srcName,                    // "file_name",
