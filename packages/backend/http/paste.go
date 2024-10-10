@@ -1551,10 +1551,10 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		} else {
 			fmt.Println("Src and dst are of different arches!")
 		}
-		if srcType == "google" || dstType == "google" {
-			err := GoogleDriveCall("/api/resources%2FHome%2FDocuments%2F", "GET", nil, w, r)
-			return errToStatus(err), err
-		}
+		//if srcType == "google" || dstType == "google" {
+		//	err := GoogleDriveCall("/api/resources%2FHome%2FDocuments%2F", "GET", nil, w, r)
+		//	return errToStatus(err), err
+		//}
 		action := r.URL.Query().Get("action")
 		src, err := url.QueryUnescape(src)
 		dst, err = url.QueryUnescape(dst)
@@ -1583,7 +1583,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		}
 		if srcType == dstType {
 			err = d.RunHook(func() error {
-				return pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, r)
+				return pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, w, r)
 			}, action, src, dst, d.user)
 		} else {
 			err = d.RunHook(func() error {
@@ -2474,7 +2474,62 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 	return os.ErrInvalid
 }
 
-func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *data, fileCache FileCache, override, rename bool, r *http.Request) error {
+func splitPath(path string) (directory, fileName string) {
+	// 找到最后一个 '/' 的索引
+	lastIndex := strings.LastIndex(path, "/")
+
+	// 检查是否找到了 '/'
+	if lastIndex == -1 {
+		// 如果没有找到 '/'，则整个字符串作为文件名，目录为空
+		return "", path
+	}
+
+	// 提取目录和文件名
+	directory = path[:lastIndex]
+	fileName = path[lastIndex+1:]
+
+	return directory, fileName
+}
+
+func parsePath(path string) (drive, name, dir, filename string) {
+	// 去掉开头的 "/Drive"
+	if strings.HasPrefix(path, "/Drive") {
+		path = path[6:]
+	}
+
+	// 查找每个 '/' 的位置
+	slashes := []int{}
+	for i, char := range path {
+		if char == '/' {
+			slashes = append(slashes, i)
+		}
+	}
+
+	// 检查是否有足够的 '/' 来提取所需的部分
+	if len(slashes) < 3 {
+		fmt.Println("Path does not contain enough slashes.")
+		return "", "", "", ""
+	}
+
+	// 提取 drive 和 name
+	drive = path[:slashes[1]]
+	name = path[slashes[1]+1 : slashes[2]]
+
+	// 提取 dir 和 filename
+	if len(slashes) == 3 && slashes[2] == len(path)-1 {
+		// 路径以 '/' 结尾，视为文件夹
+		dir = path[slashes[2]+1:]
+		filename = ""
+	} else {
+		// 路径不以 '/' 结尾，视为文件
+		dir = path[slashes[2]+1 : slashes[len(slashes)-1]]
+		filename = path[slashes[len(slashes)-1]+1:]
+	}
+
+	return drive, name, dir, filename
+}
+
+func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *data, fileCache FileCache, override, rename bool, w http.ResponseWriter, r *http.Request) error {
 	fmt.Println("Now deal with ", action, " for same arch ", dstType)
 	if srcType == "drive" || srcType == "cache" {
 		url := "http://127.0.0.1:80/api/resources/" + strings.TrimLeft(src, "/") + "?action=" + action + "&destination=" + url.QueryEscape(dst) + "&override=" + strconv.FormatBool(override) + "&rename=" + strconv.FormatBool(rename)
@@ -2503,12 +2558,49 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		}
 		fmt.Println(respBody)
 		return nil
-		//} else if srcType == "google" {
-		//	switch action {
-		//	case "copy":
-		//		// copy is complex, we have to copy files one by one for folders recusively
-		//	case "rename":
-		//	}
+	} else if srcType == "google" {
+		switch action {
+		case "copy":
+			// copy is complex, we have to copy files one by one for folders recusively
+			// we finish single file first
+			type CopyFileParam struct {
+				CloudFilePath     string `json:"cloud_file_path"`
+				NewCloudDirectory string `json:"new_cloud_directory"`
+				NewCloudFileName  string `json:"new_cloud_file_name"`
+				Drive             string `json:"drive"`
+				Name              string `json:"name"`
+			}
+
+			//dstDir, dstFilename := splitPath(dst)
+			srcDrive, srcName, srcDir, srcFilename := parsePath(src)
+			_, _, dstDir, dstFilename := parsePath(dst)
+			if dstDir == "" || dstFilename == "" {
+				fmt.Println("Dst parse failed.")
+				return nil
+			}
+			// 填充数据
+			param := CopyFileParam{
+				CloudFilePath:     srcDir + "/" + srcFilename, // "path/to/cloud/file.txt",
+				NewCloudDirectory: dstDir,                     // "new/cloud/directory",
+				NewCloudFileName:  dstFilename,                // "new_file_name.txt",
+				Drive:             srcDrive,                   // "my_drive",
+				Name:              srcName,                    // "file_name",
+			}
+
+			// 将数据序列化为 JSON
+			jsonBody, err := json.Marshal(param)
+			if err != nil {
+				fmt.Println("Error marshalling JSON:", err)
+				return err
+			}
+			err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r)
+			if err != nil {
+				fmt.Println("Error calling drive/copy_file:", err)
+				return err
+			}
+			return nil
+		case "rename":
+		}
 	} else if srcType == "sync" {
 		var apiName string
 		switch action {
