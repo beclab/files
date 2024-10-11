@@ -3,6 +3,7 @@ package files
 import (
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/maruel/natural"
 )
@@ -16,6 +17,7 @@ type Listing struct {
 	Sorting       Sorting     `json:"sorting"`
 	Size          int64       `json:"size"`
 	FileSize      int64       `json:"fileSize"`
+	sync.Mutex
 }
 
 // ApplySort applies the sort order using .Order and .Sort

@@ -563,6 +563,7 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 				}
 			} else {
 				newDoc = map[string]interface{}{
+					"content": "-",
 					"meta": map[string]interface{}{
 						"md5":     newMd5,
 						"size":    size,
@@ -643,6 +644,7 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 	} else {
 		doc = map[string]interface{}{
 			"title":        filename,
+			"content":      "-",
 			"owner_userid": strconv.Itoa(int(ownerUID)),
 			"resource_uri": filepath,
 			"service":      "files",

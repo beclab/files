@@ -38,6 +38,17 @@ import (
 // }
 
 var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	streamStr := r.URL.Query().Get("stream")
+	stream := 0
+	var err error
+	if streamStr != "" {
+		stream, err = strconv.Atoi(streamStr)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+	fmt.Println("stream: ", stream)
+
 	xBflUser := r.Header.Get("X-Bfl-User")
 	fmt.Println("X-Bfl-User: ", xBflUser)
 
@@ -75,7 +86,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 
 	var file *files.FileInfo
-	var err error
+	//var err error
 	if usbData != nil || hddData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
 			Fs:         d.user.Fs,
@@ -113,7 +124,14 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		}
 		file.Listing.Sorting = d.user.Sorting
 		file.Listing.ApplySort()
-		return renderJSON(w, r, file)
+		if stream == 1 {
+			//return streamJSON(w, r, file)
+			streamListingItems(w, r, file.Listing, d, usbData, hddData)
+			return 0, nil
+		} else {
+			return renderJSON(w, r, file)
+		}
+		//return renderJSON(w, r, file)
 	}
 
 	if checksum := r.URL.Query().Get("checksum"); checksum != "" {
@@ -190,7 +208,6 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		body, _ := ioutil.ReadAll(response.Body)
 		fmt.Println("response Body:", string(body))
 	}
-
 	return renderJSON(w, r, file)
 })
 
