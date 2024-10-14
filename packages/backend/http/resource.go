@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -37,9 +38,102 @@ import (
 // 	return
 // }
 
+func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
+	// src is like [repo-id]/path/filename
+	src := r.URL.Path
+	fmt.Println("src Path:", src)
+	src = strings.Trim(src, "/") + "/"
+	//if !strings.Contains(src, "/") {
+	//	err := e.New("invalid path format: path must contain at least one '/'")
+	//	fmt.Println("Error:", err)
+	//	return errToStatus(err), err
+	//}
+
+	firstSlashIdx := strings.Index(src, "/")
+
+	repoID := src[:firstSlashIdx]
+
+	lastSlashIdx := strings.LastIndex(src, "/")
+
+	// don't use, because this is only used for folders
+	filename := src[lastSlashIdx+1:]
+
+	prefix := ""
+	if firstSlashIdx != lastSlashIdx {
+		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
+	}
+	if prefix == "" {
+		prefix = "/"
+	}
+
+	fmt.Println("repo-id:", repoID)
+	fmt.Println("prefix:", prefix)
+	fmt.Println("filename:", filename)
+
+	url := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + prefix + "/&with_thumbnail=true"
+	fmt.Println(url)
+
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	request.Header = r.Header
+
+	client := http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return response.StatusCode, nil
+	}
+
+	// SSE
+	if stream == 1 {
+		var body []byte
+		if response.Header.Get("Content-Encoding") == "gzip" {
+			reader, err := gzip.NewReader(response.Body)
+			defer reader.Close()
+			if err != nil {
+				fmt.Println("Error creating gzip reader:", err)
+				return errToStatus(err), err
+			}
+
+			body, err = ioutil.ReadAll(reader)
+			if err != nil {
+				fmt.Println("Error reading gzipped response body:", err)
+				reader.Close()
+				return errToStatus(err), err
+			}
+		} else {
+			body, err = ioutil.ReadAll(response.Body)
+			if err != nil {
+				fmt.Println("Error reading response body:", err)
+				return errToStatus(err), err
+			}
+		}
+		//body, _ := ioutil.ReadAll(response.Body)
+		streamSyncDirents(w, r, body, repoID)
+		return 0, nil
+	}
+
+	// non-SSE
+	_, err = io.Copy(w, response.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return errToStatus(err), err
+	}
+
+	return 0, nil
+}
+
 var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	streamStr := r.URL.Query().Get("stream")
 	stream := 0
+
 	var err error
 	if streamStr != "" {
 		stream, err = strconv.Atoi(streamStr)
@@ -48,6 +142,11 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		}
 	}
 	fmt.Println("stream: ", stream)
+
+	srcType := r.URL.Query().Get("src")
+	if srcType == "sync" {
+		return resourceGetSync(w, r, stream)
+	}
 
 	xBflUser := r.Header.Get("X-Bfl-User")
 	fmt.Println("X-Bfl-User: ", xBflUser)
