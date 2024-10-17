@@ -564,7 +564,7 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	}
 
 	// 检查是否有足够的 '/' 来提取所需的部分
-	if len(slashes) < 3 {
+	if len(slashes) < 2 {
 		fmt.Println("Path does not contain enough slashes.")
 		return "", "", "", ""
 	}
@@ -573,14 +573,19 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	drive = path[1:slashes[1]]
 	name = path[slashes[1]+1 : slashes[2]]
 
+	if len(slashes) == 2 {
+		return drive, name, "/", ""
+	}
+
 	// 提取 dir 和 filename
-	if len(slashes) == 3 && slashes[2] == len(path)-1 {
+	// len(slashes) >= 3
+	if slashes[len(slashes)-1] == len(path)-1 {
 		// 路径以 '/' 结尾，视为文件夹
-		dir = path[slashes[2]+1:]
+		dir = path[slashes[2] : len(path)-1]
 		filename = ""
 	} else {
 		// 路径不以 '/' 结尾，视为文件
-		dir = path[slashes[2]+1 : slashes[len(slashes)-1]]
+		dir = path[slashes[2]:slashes[len(slashes)-1]]
 		filename = path[slashes[len(slashes)-1]+1:]
 	}
 
