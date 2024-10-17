@@ -436,6 +436,8 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 
 	host := r.Host
 	fmt.Println("*****Google Drive Call host: ", host)
+	host = r.URL.Host
+	fmt.Println("*****Google Drive Call URL host: ", host)
 	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
 	fmt.Println("dstUrl:", dstUrl)
 
