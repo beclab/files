@@ -49,7 +49,7 @@ func ioCopyFile(sourcePath, targetPath string) error {
 
 func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInfo, int, error) {
 	xBflUser := r.Header.Get("X-Bfl-User")
-	fmt.Println("X-Bfl-User: ", xBflUser)
+	fmt.Println("X-Bfl-GoogleDriveListResponseUser: ", xBflUser)
 
 	d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
 	//fmt.Println(d.user.Fs)
@@ -739,7 +739,7 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 		defer response.Body.Close()
 
 		// Handle the response as needed
-		fmt.Println("Response status:", response.Status)
+		fmt.Println("GoogleDriveListResponse status:", response.Status)
 		if response.StatusCode != 200 && response.StatusCode != 201 {
 			err = e.New("mkdir failed")
 			return err
@@ -1185,344 +1185,6 @@ func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, r *http.R
 	return source
 }
 
-func testDriveLs(w http.ResponseWriter, r *http.Request) error {
-	bflName := r.Header.Get("X-Bfl-User")
-	if bflName == "" {
-		return os.ErrPermission
-	}
-
-	origin := r.Header.Get("Origin")
-	dstUrl := origin + "/api/resources%2FHome%2FDocuments%2F"
-	fmt.Println("dstUrl:", dstUrl)
-
-	req, err := http.NewRequest("GET", dstUrl, nil)
-	if err != nil {
-		fmt.Println("Error creating request:", err)
-		return err
-	}
-
-	// 设置请求头
-	req.Header = r.Header.Clone()
-	req.Header.Set("Content-Type", "application/json")
-
-	// 遍历并打印所有的 header 字段和值
-	for name, values := range req.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Error making request:", err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	//// 读取响应体
-	//body, err := ioutil.ReadAll(resp.Body)
-	//if err != nil {
-	//	http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
-	//	return err
-	//}
-	//
-	//// 假设响应是UTF-8编码的文本（根据实际情况调整）
-	//// 如果Content-Type指明了其他编码，请相应地解码
-	//responseText := string(body) // 这里默认按UTF-8处理
-	//
-	//// 将响应文本写入ResponseWriter（确保设置了正确的Content-Type头）
-	//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // 或根据需要设置为其他MIME类型
-	//w.Write([]byte(responseText))
-	// 读取响应体
-	//body, err := ioutil.ReadAll(resp.Body)
-	//if err != nil {
-	//	http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
-	//	return err
-	//}
-	//
-	//// 解析JSON响应体
-	//var jsonResponse map[string]interface{}
-	//err = json.Unmarshal(body, &jsonResponse)
-	//if err != nil {
-	//	http.Error(w, "Error unmarshaling JSON response: "+err.Error(), http.StatusInternalServerError)
-	//	return err
-	//}
-	//
-	//// 将解析后的JSON响应体转换为字符串（格式化输出）
-	//responseText, err := json.MarshalIndent(jsonResponse, "", "  ")
-	//if err != nil {
-	//	http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
-	//	return err
-	//}
-	//
-	//// 设置响应头并写入响应体
-	//w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	//w.Write([]byte(responseText))
-
-	// 遍历并打印所有的 header 字段和值
-	fmt.Printf("Response Hedears:\n")
-	for name, values := range resp.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-	// 检查Content-Type
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "application/json") {
-		fmt.Println("Response is not JSON format:", contentType)
-	}
-
-	// 读取响应体
-	var body []byte
-	if resp.Header.Get("Content-Encoding") == "gzip" {
-		// 如果响应体被gzip压缩
-		reader, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			fmt.Println("Error creating gzip reader:", err)
-			return err
-		}
-		defer reader.Close()
-
-		body, err = ioutil.ReadAll(reader)
-		if err != nil {
-			fmt.Println("Error reading gzipped response body:", err)
-			return err
-		}
-	} else {
-		// 如果响应体没有被压缩
-		body, err = ioutil.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Error reading response body:", err)
-			return err
-		}
-	}
-
-	// 解析JSON
-	var datas map[string]interface{}
-	err = json.Unmarshal(body, &datas)
-	if err != nil {
-		fmt.Println("Error unmarshaling JSON response:", err)
-		return err
-	}
-
-	// 打印解析后的数据
-	fmt.Println("Parsed JSON response:", datas)
-	// 将解析后的JSON响应体转换为字符串（格式化输出）
-	responseText, err := json.MarshalIndent(datas, "", "  ")
-	if err != nil {
-		http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	// 设置响应头并写入响应体
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Write([]byte(responseText))
-	return nil
-}
-
-func testDriveLs2(w http.ResponseWriter, r *http.Request) error {
-	bflName := r.Header.Get("X-Bfl-User")
-	if bflName == "" {
-		return os.ErrPermission
-	}
-
-	// dstUrl := "http://files-service.user-space-" + bflName + ":8181/ls"
-	origin := r.Header.Get("Origin")
-	dstUrl := origin + "/drive/ls"
-	fmt.Println("dstUrl:", dstUrl)
-
-	//payload := []byte(`{"path":"/","name":"wangrongxiang@bytetrade.io","drive":"google"}`)
-	type RequestPayload struct {
-		Path  string `json:"path"`
-		Name  string `json:"name"`
-		Drive string `json:"drive"`
-	}
-	payload := RequestPayload{
-		Path:  "/",
-		Name:  "wangrongxiang@bytetrade.io",
-		Drive: "google",
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		fmt.Println("Error marshaling JSON:", err)
-		return err
-	}
-
-	req, err := http.NewRequest("POST", dstUrl, bytes.NewBuffer(jsonData))
-	if err != nil {
-		fmt.Println("Error creating request:", err)
-		return err
-	}
-
-	// 设置请求头
-	req.Header = r.Header.Clone()
-	req.Header.Set("Content-Type", "application/json")
-
-	// 遍历并打印所有的 header 字段和值
-	for name, values := range req.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Error making request:", err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	// 读取响应体
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	// 设置Content-Type头（根据实际情况调整）
-	w.Header().Set("Content-Type", "application/octet-stream") // 如果是文本，请使用"text/plain; charset=utf-8"或其他适当的MIME类型和字符集
-
-	// 将响应体写入ResponseWriter
-	_, err = w.Write(body)
-	if err != nil {
-		http.Error(w, "Error writing response body: "+err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	//body, err := ioutil.ReadAll(resp.Body)
-	//if err != nil {
-	//	fmt.Println("Error reading response body:", err)
-	//	return err
-	//}
-
-	// Copy the response body directly to the http.ResponseWriter
-	//_, err = io.Copy(w, resp.Body)
-	//if err != nil {
-	//	http.Error(w, "Error copying response body", http.StatusInternalServerError)
-	//	return err
-	//}
-
-	//fmt.Println(string(body))
-	// Write the response body to the http.ResponseWriter
-	//w.Header().Set("Content-Type", "application/json")
-	//w.Write(body)
-	// Convert the response body to UTF-8 encoding
-	//bodyString := string(body)
-	//utf8Body := []byte(bodyString)
-	//
-	//// Set the Content-Type header to indicate JSON data
-	//w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	//w.Write(utf8Body)
-
-	return nil
-}
-
-func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request) error {
-	bflName := r.Header.Get("X-Bfl-User")
-	if bflName == "" {
-		return os.ErrPermission
-	}
-
-	origin := r.Header.Get("Origin")
-	dstUrl := origin + dst // "/api/resources%2FHome%2FDocuments%2F"
-	fmt.Println("dstUrl:", dstUrl)
-
-	var req *http.Request
-	var err error
-	if reqBodyJson != nil {
-		req, err = http.NewRequest(method, dstUrl, bytes.NewBuffer(reqBodyJson))
-	} else {
-		req, err = http.NewRequest(method, dstUrl, nil)
-	}
-
-	if err != nil {
-		fmt.Println("Error creating request:", err)
-		return err
-	}
-
-	// 设置请求头
-	req.Header = r.Header.Clone()
-	req.Header.Set("Content-Type", "application/json")
-
-	// 遍历并打印所有的 header 字段和值
-	for name, values := range req.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Error making request:", err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	// 遍历并打印所有的 header 字段和值
-	fmt.Printf("Response Hedears:\n")
-	for name, values := range resp.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-	// 检查Content-Type
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "application/json") {
-		fmt.Println("Response is not JSON format:", contentType)
-	}
-
-	// 读取响应体
-	var body []byte
-	if resp.Header.Get("Content-Encoding") == "gzip" {
-		// 如果响应体被gzip压缩
-		reader, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			fmt.Println("Error creating gzip reader:", err)
-			return err
-		}
-		defer reader.Close()
-
-		body, err = ioutil.ReadAll(reader)
-		if err != nil {
-			fmt.Println("Error reading gzipped response body:", err)
-			return err
-		}
-	} else {
-		// 如果响应体没有被压缩
-		body, err = ioutil.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Error reading response body:", err)
-			return err
-		}
-	}
-
-	// 解析JSON
-	var datas map[string]interface{}
-	err = json.Unmarshal(body, &datas)
-	if err != nil {
-		fmt.Println("Error unmarshaling JSON response:", err)
-		return err
-	}
-
-	// 打印解析后的数据
-	fmt.Println("Parsed JSON response:", datas)
-	// 将解析后的JSON响应体转换为字符串（格式化输出）
-	responseText, err := json.MarshalIndent(datas, "", "  ")
-	if err != nil {
-		http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	// 设置响应头并写入响应体
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Write([]byte(responseText))
-	return nil
-}
-
 func resourcePasteHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		// For this func, src starts with src type + /, dst start with dst type + /
@@ -1908,7 +1570,7 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 			return nil, 0, 0, false, err
 		}
 
-		fmt.Println("User Perm:", dirResp.UserPerm)
+		fmt.Println("GoogleDriveListResponseUser Perm:", dirResp.UserPerm)
 		fmt.Println("Dir ID:", dirResp.DirID)
 		fmt.Println("Dirent List:")
 		var found = false
@@ -2474,61 +2136,6 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 	return os.ErrInvalid
 }
 
-func splitPath(path string) (directory, fileName string) {
-	// 找到最后一个 '/' 的索引
-	lastIndex := strings.LastIndex(path, "/")
-
-	// 检查是否找到了 '/'
-	if lastIndex == -1 {
-		// 如果没有找到 '/'，则整个字符串作为文件名，目录为空
-		return "", path
-	}
-
-	// 提取目录和文件名
-	directory = path[:lastIndex]
-	fileName = path[lastIndex+1:]
-
-	return directory, fileName
-}
-
-func parsePath(path string) (drive, name, dir, filename string) {
-	// 去掉开头的 "/Drive"
-	if strings.HasPrefix(path, "/Drive") {
-		path = path[6:]
-	}
-
-	// 查找每个 '/' 的位置
-	slashes := []int{}
-	for i, char := range path {
-		if char == '/' {
-			slashes = append(slashes, i)
-		}
-	}
-
-	// 检查是否有足够的 '/' 来提取所需的部分
-	if len(slashes) < 3 {
-		fmt.Println("Path does not contain enough slashes.")
-		return "", "", "", ""
-	}
-
-	// 提取 drive 和 name
-	drive = path[1:slashes[1]]
-	name = path[slashes[1]+1 : slashes[2]]
-
-	// 提取 dir 和 filename
-	if len(slashes) == 3 && slashes[2] == len(path)-1 {
-		// 路径以 '/' 结尾，视为文件夹
-		dir = path[slashes[2]+1:]
-		filename = ""
-	} else {
-		// 路径不以 '/' 结尾，视为文件
-		dir = path[slashes[2]+1 : slashes[len(slashes)-1]]
-		filename = path[slashes[len(slashes)-1]+1:]
-	}
-
-	return drive, name, dir, filename
-}
-
 func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *data, fileCache FileCache, override, rename bool, w http.ResponseWriter, r *http.Request) error {
 	fmt.Println("Now deal with ", action, " for same arch ", dstType)
 	if srcType == "drive" || srcType == "cache" {
@@ -2571,10 +2178,10 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 				Name              string `json:"name"`
 			}
 
-			//dstDir, dstFilename := splitPath(dst)
-			srcDrive, srcName, srcDir, srcFilename := parsePath(src)
+			//dstDir, dstFilename := splitGoogleDrivePath(dst)
+			srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
 			fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
-			_, _, dstDir, dstFilename := parsePath(dst)
+			_, _, dstDir, dstFilename := parseGoogleDrivePath(dst)
 			fmt.Println("dstDir:", dstDir, "dstFilename:", dstFilename)
 			if dstDir == "" || dstFilename == "" {
 				fmt.Println("Dst parse failed.")
@@ -2596,7 +2203,7 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 				return err
 			}
 			fmt.Println("Copy File Params:", string(jsonBody))
-			err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r)
+			_, err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r, false)
 			if err != nil {
 				fmt.Println("Error calling drive/copy_file:", err)
 				return err

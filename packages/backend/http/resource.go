@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -136,6 +137,70 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	return 0, nil
 }
 
+func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
+	// src is like [repo-id]/path/filename
+	src := r.URL.Path
+	fmt.Println("src Path:", src)
+	src = strings.Trim(src, "/") + "/"
+
+	pathId, srcDrive, srcName, err := GoogleDrivePathToId(src, w, r)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	param := GoogleDriveListParam{
+		Path:  pathId,
+		Drive: srcDrive, // "my_drive",
+		Name:  srcName,  // "file_name",
+	}
+
+	// 将数据序列化为 JSON
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return errToStatus(err), err
+	}
+	fmt.Println("Google Drive List Params:", string(jsonBody))
+	if stream == 1 {
+		return 0, nil
+	}
+	_, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, false)
+	if err != nil {
+		fmt.Println("Error calling drive/copy_file:", err)
+		return errToStatus(err), err
+	}
+	return 0, nil
+
+	// SSE
+	//if stream == 1 {
+	//	var body []byte
+	//	if response.Header.Get("Content-Encoding") == "gzip" {
+	//		reader, err := gzip.NewReader(response.Body)
+	//		defer reader.Close()
+	//		if err != nil {
+	//			fmt.Println("Error creating gzip reader:", err)
+	//			return errToStatus(err), err
+	//		}
+	//
+	//		body, err = ioutil.ReadAll(reader)
+	//		if err != nil {
+	//			fmt.Println("Error reading gzipped response body:", err)
+	//			reader.Close()
+	//			return errToStatus(err), err
+	//		}
+	//	} else {
+	//		body, err = ioutil.ReadAll(response.Body)
+	//		if err != nil {
+	//			fmt.Println("Error reading response body:", err)
+	//			return errToStatus(err), err
+	//		}
+	//	}
+	//	//body, _ := ioutil.ReadAll(response.Body)
+	//	streamSyncDirents(w, r, body, repoID)
+	//	return 0, nil
+	//}
+}
+
 var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	start := time.Now()
 	fmt.Println("Function resourceGetHandler starts at", start)
@@ -155,10 +220,12 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return resourceGetSync(w, r, stream)
+	} else if srcType == "google" {
+		return resourceGetGoogle(w, r, stream)
 	}
 
 	xBflUser := r.Header.Get("X-Bfl-User")
-	fmt.Println("X-Bfl-User: ", xBflUser)
+	fmt.Println("X-Bfl-GoogleDriveListResponseUser: ", xBflUser)
 
 	var usbData []files.DiskInfo = nil
 	var hddData []files.DiskInfo = nil
