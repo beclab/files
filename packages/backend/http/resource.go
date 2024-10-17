@@ -143,6 +143,8 @@ func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int,
 	fmt.Println("src Path:", src)
 	//src = strings.Trim(src, "/") + "/"
 
+	origin := r.Header.Get("Origin")
+	fmt.Println("*****resourceGetGoogle origin: ", origin)
 	pathId, srcDrive, srcName, err := GoogleDrivePathToId(src, w, r)
 	if err != nil {
 		return errToStatus(err), err
@@ -221,6 +223,8 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	if srcType == "sync" {
 		return resourceGetSync(w, r, stream)
 	} else if srcType == "google" {
+		origin := r.Header.Get("Origin")
+		fmt.Println("*****resourceGetHandler origin: ", origin)
 		return resourceGetGoogle(w, r, stream)
 	}
 
