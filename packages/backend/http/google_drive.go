@@ -163,8 +163,8 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 			return "", srcDrive, srcName, err
 		}
 		fmt.Println("Google Drive List Params:", string(jsonBody))
-		origin := r.Header.Get("Origin")
-		fmt.Println("*****Google Drive Path to ID origin: ", origin)
+		host := r.Host
+		fmt.Println("*****Google Drive Path to ID host: ", host)
 		responseStr, err := GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
 		if err != nil {
 			fmt.Println("Error calling drive/copy_file:", err)
@@ -434,9 +434,9 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 		return nil, os.ErrPermission
 	}
 
-	origin := r.Header.Get("Origin")
-	fmt.Println("*****Google Drive Call origin: ", origin)
-	dstUrl := origin + dst // "/api/resources%2FHome%2FDocuments%2F"
+	host := r.Host
+	fmt.Println("*****Google Drive Call host: ", host)
+	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
 	fmt.Println("dstUrl:", dstUrl)
 
 	var req *http.Request
