@@ -78,13 +78,13 @@ func withUser(fn handleFunc) handleFunc {
 	//	}
 	//
 	//	expired := !tk.VerifyExpiresAt(time.Now().Add(time.Hour), true)
-	//	updated := tk.IssuedAt != nil && tk.IssuedAt.Unix() < d.store.Users.LastUpdate(tk.User.ID)
+	//	updated := tk.IssuedAt != nil && tk.IssuedAt.Unix() < d.store.Users.LastUpdate(tk.GoogleDriveListResponseUser.ID)
 	//
 	//	if expired || updated {
 	//		w.Header().Add("X-Renew-Token", "true")
 	//	}
-	//	log.Println("withUser: start %u", tk.User.ID)
-	//	d.user, err = d.store.Users.Get(d.server.Root, tk.User.ID)
+	//	log.Println("withUser: start %u", tk.GoogleDriveListResponseUser.ID)
+	//	d.user, err = d.store.Users.Get(d.server.Root, tk.GoogleDriveListResponseUser.ID)
 	//	if err != nil {
 	//		return http.StatusInternalServerError, err
 	//	}
@@ -103,7 +103,7 @@ func withUser(fn handleFunc) handleFunc {
 		//}
 		//
 		//expired := !tk.VerifyExpiresAt(time.Now().Add(time.Hour), true)
-		//updated := tk.IssuedAt != nil && tk.IssuedAt.Unix() < d.store.Users.LastUpdate(tk.User.ID)
+		//updated := tk.IssuedAt != nil && tk.IssuedAt.Unix() < d.store.Users.LastUpdate(tk.GoogleDriveListResponseUser.ID)
 		//
 		//if expired || updated {
 		//	w.Header().Add("X-Renew-Token", "true")
