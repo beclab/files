@@ -167,7 +167,7 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 		return "/", srcDrive, srcName, nil
 	}
 
-	cacheKey := srcName + "/" + srcDir
+	cacheKey := srcName + srcDir
 	fmt.Println("cacheKey:", cacheKey)
 	if len(GoogleDrivePathIdCache) == 0 {
 		fmt.Println("GoogleDrivepathIdCache: empty!")
@@ -189,7 +189,7 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 			continue
 		}
 		currentPath += "/" + part
-		subCacheKey := srcName + "/" + currentPath
+		subCacheKey := srcName + currentPath
 		fmt.Println("subCacheKey:", subCacheKey)
 		if len(GoogleDrivePathIdCache) == 0 {
 			fmt.Println("GoogleDrivepathIdCache: empty!")
@@ -229,6 +229,7 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 
 		// Find the ID for the current path
 		for _, item := range response.Data {
+			fmt.Println("item.Path:", item.Path, " , currentPath:", currentPath)
 			if item.Path == currentPath {
 				pathId = item.Meta.ID
 				GoogleDrivePathIdCache[subCacheKey] = pathId
