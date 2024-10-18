@@ -134,12 +134,44 @@ type GoogleDriveListResponseLinkShareMetadata struct {
 	SecurityUpdateEnabled  bool `json:"securityUpdateEnabled"`
 }
 
+var GoogleDrivePathIdCache = make(map[string]string)
+
+func getHost(w http.ResponseWriter, r *http.Request) string {
+	referer := r.Header.Get("Referer")
+	if referer == "" {
+		fmt.Fprintf(w, "No Referer header found\n")
+		return ""
+	}
+
+	// 查找第三个/的位置
+	slashCount := 0
+	for i, char := range referer {
+		if char == '/' {
+			slashCount++
+			if slashCount == 3 {
+				basePart := referer[:i]
+				fmt.Fprintf(w, "Base part of Referer: %s\n", basePart)
+				return basePart
+			}
+		}
+	}
+
+	fmt.Fprintf(w, "Less than three slashes in Referer, using entire value: %s\n", referer)
+	return ""
+}
+
 func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (string, string, string, error) {
 	srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
 
 	if srcDir == "/" {
 		return "/", srcDrive, srcName, nil
+	}
+
+	cacheKey := srcName + "/" + srcDir
+	if cachedPathId, ok := GoogleDrivePathIdCache[cacheKey]; ok {
+		fmt.Println("Using cached pathId for", cacheKey, ":", cachedPathId)
+		return cachedPathId, srcDrive, srcName, nil
 	}
 
 	var pathId = "/"
@@ -151,6 +183,13 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 			continue
 		}
 		currentPath += "/" + part
+		subCacheKey := srcName + "/" + currentPath
+		if subCachePathId, ok := GoogleDrivePathIdCache[subCacheKey]; ok {
+			fmt.Println("Using cached pathId for", subCacheKey, ":", subCachePathId)
+			pathId = subCachePathId
+			continue
+		}
+
 		param := GoogleDriveListParam{
 			Path:  pathId,
 			Drive: srcDrive, // "my_drive",
@@ -163,8 +202,6 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 			return "", srcDrive, srcName, err
 		}
 		fmt.Println("Google Drive List Params:", string(jsonBody))
-		host := r.Host
-		fmt.Println("*****Google Drive Path to ID host: ", host)
 		responseStr, err := GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
 		if err != nil {
 			fmt.Println("Error calling drive/copy_file:", err)
@@ -181,6 +218,8 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 		for _, item := range response.Data {
 			if item.Path == currentPath {
 				pathId = item.Meta.ID
+				GoogleDrivePathIdCache[subCacheKey] = pathId
+				fmt.Println("Cached pathId for", subCacheKey, ":", pathId)
 				break
 			}
 		}
@@ -189,6 +228,10 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 			return "", srcDrive, srcName, fmt.Errorf("ID not found for path: %s", currentPath)
 		}
 	}
+
+	// 在找到完整的 pathId 后，更新缓存
+	//GoogleDrivePathIdCache[cacheKey] = pathId
+	//fmt.Println("Cached pathId for", cacheKey, ":", pathId)
 
 	return pathId, srcDrive, srcName, nil
 }
@@ -434,12 +477,8 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 		return nil, os.ErrPermission
 	}
 
-	host := r.Host
-	fmt.Println("*****Google Drive Call host: ", host)
-	host = r.URL.Host
-	fmt.Println("*****Google Drive Call URL host: ", host)
-	host = r.Header.Get("Origin")
-	fmt.Println("*****Google Drive Call URL origin:", host)
+	host := getHost(w, r) // r.Header.Get("Origin")
+	fmt.Println("*****Google Drive Call URL host:", host)
 	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
 
 	fmt.Println("dstUrl:", dstUrl)
