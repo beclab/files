@@ -497,6 +497,8 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 		return nil, os.ErrPermission
 	}
 
+	authority := r.Header.Get("Authority")
+	fmt.Println("*****Google Drive Call URL authority:", authority)
 	host := r.Header.Get("Origin")
 	if host == "" {
 		host = getHost(w, r) // r.Header.Get("Origin")
