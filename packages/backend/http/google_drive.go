@@ -139,7 +139,7 @@ var GoogleDrivePathIdCache = make(map[string]string)
 func getHost(w http.ResponseWriter, r *http.Request) string {
 	referer := r.Header.Get("Referer")
 	if referer == "" {
-		fmt.Fprintf(w, "No Referer header found\n")
+		//fmt.Fprintf(w, "No Referer header found\n")
 		return ""
 	}
 
@@ -149,7 +149,7 @@ func getHost(w http.ResponseWriter, r *http.Request) string {
 			slashCount++
 			if slashCount == 3 {
 				basePart := referer[:i]
-				fmt.Fprintf(w, "Base part of Referer: %s\n", basePart)
+				//fmt.Fprintf(w, "Base part of Referer: %s\n", basePart)
 				return basePart
 			}
 		}
