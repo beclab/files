@@ -143,7 +143,6 @@ func getHost(w http.ResponseWriter, r *http.Request) string {
 		return ""
 	}
 
-	// 查找第三个/的位置
 	slashCount := 0
 	for i, char := range referer {
 		if char == '/' {
@@ -156,7 +155,7 @@ func getHost(w http.ResponseWriter, r *http.Request) string {
 		}
 	}
 
-	fmt.Fprintf(w, "Less than three slashes in Referer, using entire value: %s\n", referer)
+	//fmt.Fprintf(w, "Less than three slashes in Referer, using entire value: %s\n", referer)
 	return ""
 }
 
@@ -169,6 +168,9 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 	}
 
 	cacheKey := srcName + "/" + srcDir
+	for key, value := range GoogleDrivePathIdCache {
+		fmt.Printf("Key: %s, Value: %s\n", key, value)
+	}
 	if cachedPathId, ok := GoogleDrivePathIdCache[cacheKey]; ok {
 		fmt.Println("Using cached pathId for", cacheKey, ":", cachedPathId)
 		return cachedPathId, srcDrive, srcName, nil
@@ -184,6 +186,9 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 		}
 		currentPath += "/" + part
 		subCacheKey := srcName + "/" + currentPath
+		for key, value := range GoogleDrivePathIdCache {
+			fmt.Printf("Key: %s, Value: %s\n", key, value)
+		}
 		if subCachePathId, ok := GoogleDrivePathIdCache[subCacheKey]; ok {
 			fmt.Println("Using cached pathId for", subCacheKey, ":", subCachePathId)
 			pathId = subCachePathId
@@ -477,7 +482,10 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 		return nil, os.ErrPermission
 	}
 
-	host := getHost(w, r) // r.Header.Get("Origin")
+	host := r.Header.Get("Origin")
+	if host == "" {
+		host = getHost(w, r) // r.Header.Get("Origin")
+	}
 	fmt.Println("*****Google Drive Call URL host:", host)
 	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
 
