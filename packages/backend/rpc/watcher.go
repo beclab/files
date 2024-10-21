@@ -156,6 +156,12 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 				return err
 			}
 			if info.IsDir() {
+				//fmt.Println("filepath.Base: ", filepath.Base(path))
+				if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
+					fmt.Println("We will skip the folder:", path)
+					return filepath.SkipDir
+				}
+
 				fmt.Println("Try to Add Path: ", path)
 				if checkString(path) {
 					fmt.Println("Adding Path: ", path)
@@ -168,15 +174,14 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 					fmt.Println("Won't add path: ", path)
 				}
 			} else {
-				bflName, err := PVCs.getBfl(ExtractPvcFromURL(path))
-				if err != nil {
-					klog.Info(err)
-				} else {
-					klog.Info(path, ", bfl-name: ", bflName)
-				}
-
-				//err = updateOrInputDoc(path)
 				if checkString(path) {
+					bflName, err := PVCs.getBfl(ExtractPvcFromURL(path))
+					if err != nil {
+						klog.Info(err)
+					} else {
+						klog.Info(path, ", bfl-name: ", bflName)
+					}
+					//err = updateOrInputDoc(path)
 					err = updateOrInputDocSearch3(path, bflName)
 					if err != nil {
 						log.Error().Msgf("udpate or input doc err %v", err)
@@ -267,21 +272,24 @@ func dedupLoop(w *jfsnotify.Watcher) {
 }
 
 func handleEvent(e jfsnotify.Event) error {
-	bflName, err := PVCs.getBfl(ExtractPvcFromURL(e.Name))
-	if err != nil {
-		klog.Info(err)
-	} else {
-		klog.Info(e.Name, ", bfl-name: ", bflName)
-	}
-
 	searchId := ""
+	var bflName string
+	var err error
 	if checkString(e.Name) {
+		bflName, err = PVCs.getBfl(ExtractPvcFromURL(e.Name))
+		if err != nil {
+			klog.Info(err)
+		} else {
+			klog.Info(e.Name, ", bfl-name: ", bflName)
+		}
 		searchId, _, err = getSerachIdOrCache(e.Name, bflName, false)
 		if err != nil {
 			klog.Info(err)
 		} else {
 			klog.Info(e.Name, ", searchId: ", searchId)
 		}
+	} else {
+		return nil
 	}
 
 	if e.Has(jfsnotify.Remove) || e.Has(jfsnotify.Rename) {
