@@ -392,14 +392,13 @@ func (i *FileInfo) detectType(modify, saveContent, readHeader bool) error {
 	// a 500 even though it doesn't matter. So we just log it.
 
 	mimetype := mime.TypeByExtension(i.Extension)
+	//fmt.Println("extension mimitype:", mimetype)
 
 	var buffer []byte
-	if readHeader {
+	if readHeader && mimetype == "" {
 		buffer = i.readFirstBytes()
-
-		if mimetype == "" {
-			mimetype = http.DetectContentType(buffer)
-		}
+		mimetype = http.DetectContentType(buffer)
+		fmt.Println("header mimitype:", mimetype)
 	}
 
 	switch {

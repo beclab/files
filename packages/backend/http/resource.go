@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/spf13/afero"
@@ -131,6 +132,9 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 }
 
 var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	start := time.Now()
+	fmt.Println("Function resourceGetHandler starts at", start)
+
 	streamStr := r.URL.Query().Get("stream")
 	stream := 0
 
@@ -226,8 +230,12 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		if stream == 1 {
 			//return streamJSON(w, r, file)
 			streamListingItems(w, r, file.Listing, d, usbData, hddData)
+			elapsed := time.Since(start)
+			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
 			return 0, nil
 		} else {
+			elapsed := time.Since(start)
+			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
 			return renderJSON(w, r, file)
 		}
 		//return renderJSON(w, r, file)
@@ -307,6 +315,8 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		body, _ := ioutil.ReadAll(response.Body)
 		fmt.Println("response Body:", string(body))
 	}
+	elapsed := time.Since(start)
+	fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
 	return renderJSON(w, r, file)
 })
 
