@@ -42,6 +42,10 @@ import (
 func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
 	// src is like [repo-id]/path/filename
 	src := r.URL.Path
+	src, err := url.QueryUnescape(src)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
 	fmt.Println("src Path:", src)
 	src = strings.Trim(src, "/") + "/"
 	//if !strings.Contains(src, "/") {
@@ -66,12 +70,13 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	if prefix == "" {
 		prefix = "/"
 	}
+	prefix = url.QueryEscape(prefix)
 
 	fmt.Println("repo-id:", repoID)
 	fmt.Println("prefix:", prefix)
 	fmt.Println("filename:", filename)
 
-	url := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + prefix + "/&with_thumbnail=true"
+	url := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + prefix + "&with_thumbnail=true"
 	fmt.Println(url)
 
 	request, err := http.NewRequest("GET", url, nil)
