@@ -269,9 +269,11 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 		return
 	}
 
-	var A []*GoogleDriveListResponseFileData
+	var A []GoogleDriveListResponseFileData
 	bodyJson.Lock()
-	A = append(A, bodyJson.Data...)
+	for _, datum := range bodyJson.Data {
+		A = append(A, *datum)
+	}
 	bodyJson.Unlock()
 
 	for {
@@ -311,7 +313,12 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 				return
 			}
 
-			A = append(firstBodyJson.Data, A[1:]...)
+			var temp = []GoogleDriveListResponseFileData{}
+			for _, datum := range firstBodyJson.Data {
+				temp = append(temp, *datum)
+			}
+
+			A = append(temp, A[1:]...)
 		} else {
 			dataChan <- formatSSEvent(firstItem)
 
