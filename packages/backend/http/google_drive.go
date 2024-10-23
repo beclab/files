@@ -71,7 +71,7 @@ type GoogleDriveListResponseFileMeta struct {
 	SHA256Checksum               *string                                   `json:"sha256Checksum,omitempty"`
 	Shared                       bool                                      `json:"shared"`
 	SharedWithMeTime             *time.Time                                `json:"sharedWithMeTime,omitempty"`
-	Size                         *int64                                    `json:"size,omitempty"`
+	Size                         *string                                   `json:"size,omitempty"`
 	Spaces                       []string                                  `json:"spaces"`
 	Starred                      bool                                      `json:"starred"`
 	ThumbnailLink                *string                                   `json:"thumbnailLink,omitempty"`
