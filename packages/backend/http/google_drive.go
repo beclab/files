@@ -282,7 +282,7 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 
 		if firstItem.IsDir {
 			path := firstItem.Path
-			path = strings.Trim(path, "/My Drive")
+			path = strings.TrimPrefix(path, "/My Drive")
 			if path != "/" {
 				path += "/"
 			}
