@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type GoogleDriveListResponse struct {
 	StatusCode string                             `json:"status_code"`
 	FailReason *string                            `json:"fail_reason,omitempty"`
 	Data       []*GoogleDriveListResponseFileData `json:"data,omitempty"`
+	sync.Mutex
 }
 
 // GoogleDriveListResponseFileData 定义了文件或文件夹数据的结构
@@ -256,6 +258,108 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 	//fmt.Println("Cached pathId for", cacheKey, ":", pathId)
 
 	return pathId, srcDrive, srcName, nil
+}
+
+func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataChan chan<- string, w http.ResponseWriter, r *http.Request, param GoogleDriveListParam) {
+	defer close(dataChan)
+
+	var bodyJson GoogleDriveListResponse
+	if err := json.Unmarshal(body, &bodyJson); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var A []*GoogleDriveListResponseFileData
+	bodyJson.Lock()
+	A = append(A, bodyJson.Data...)
+	bodyJson.Unlock()
+
+	for {
+		fmt.Println("len(A): ", len(A))
+		firstItem := A[0]
+		fmt.Println("firstItem Path: ", firstItem.Path)
+		fmt.Println("firstItem Name:", firstItem.Name)
+
+		if firstItem.IsDir {
+			path := firstItem.Path
+			path = strings.Trim(path, "/My Drive")
+			if path != "/" {
+				path += "/"
+			}
+			pathId, _, _, err := GoogleDrivePathToId("/Drive/"+param.Name+path, w, r)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			firstParam := GoogleDriveListParam{
+				Path:  pathId,
+				Drive: param.Drive,
+				Name:  param.Name,
+			}
+			firstJsonBody, err := json.Marshal(firstParam)
+			if err != nil {
+				fmt.Println("Error marshalling JSON:", err)
+				fmt.Println(err)
+				return
+			}
+			var firstRespBody []byte
+			firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
+
+			var firstBodyJson GoogleDriveListResponse
+			if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			A = append(firstBodyJson.Data, A[1:]...)
+		} else {
+			dataChan <- formatSSEvent(firstItem)
+
+			A = A[1:]
+		}
+
+		select {
+		case <-stopChan:
+			return
+		default:
+		}
+	}
+}
+
+func streamGoogleDriveFiles(w http.ResponseWriter, r *http.Request, body []byte, param GoogleDriveListParam) {
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	stopChan := make(chan struct{})
+	dataChan := make(chan string)
+
+	go generateGoogleDriveFilesData(body, stopChan, dataChan, w, r, param)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+		return
+	}
+
+	for {
+		select {
+		case event, ok := <-dataChan:
+			if !ok {
+				return
+			}
+			_, err := w.Write([]byte(event))
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			flusher.Flush()
+
+		case <-r.Context().Done():
+			close(stopChan)
+			return
+		}
+	}
 }
 
 func testDriveLs(w http.ResponseWriter, r *http.Request) error {

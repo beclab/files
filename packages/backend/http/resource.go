@@ -162,6 +162,9 @@ func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int,
 	}
 	fmt.Println("Google Drive List Params:", string(jsonBody))
 	if stream == 1 {
+		var body []byte
+		body, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+		streamGoogleDriveFiles(w, r, body, param)
 		return 0, nil
 	}
 	_, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, false)
