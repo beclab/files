@@ -291,11 +291,13 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 				fmt.Println(err)
 				return
 			}
+			fmt.Println("firstItem formed path: /Drive/" + param.Name + path)
 			firstParam := GoogleDriveListParam{
 				Path:  pathId,
 				Drive: param.Drive,
 				Name:  param.Name,
 			}
+			fmt.Println("firstParam pathId:", pathId)
 			firstJsonBody, err := json.Marshal(firstParam)
 			if err != nil {
 				fmt.Println("Error marshalling JSON:", err)
