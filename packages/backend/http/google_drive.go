@@ -797,6 +797,7 @@ func addGoogleDriveVersionSuffix(source string, w http.ResponseWriter, r *http.R
 		}
 		renamed := fmt.Sprintf("%s(%d)%s", base, counter, ext)
 		source = path.Join(dir, renamed)
+		fmt.Println("Renamed source: ", source)
 		counter++
 	}
 
