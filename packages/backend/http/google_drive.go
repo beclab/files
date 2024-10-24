@@ -161,12 +161,12 @@ func getHost(w http.ResponseWriter, r *http.Request) string {
 	return ""
 }
 
-func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (string, string, string, error) {
+func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (string, string, string, string, string, error) {
 	srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
 
 	if srcDir == "/" {
-		return "/", srcDrive, srcName, nil
+		return "/", srcDrive, srcName, "/", "", nil
 	}
 
 	cacheKey := srcName + srcDir
@@ -179,7 +179,7 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 	}
 	if cachedPathId, ok := GoogleDrivePathIdCache[cacheKey]; ok {
 		fmt.Println("Using cached pathId for", cacheKey, ":", cachedPathId)
-		return cachedPathId, srcDrive, srcName, nil
+		return cachedPathId, srcDrive, srcName, srcDir, srcFilename, nil
 	}
 
 	var pathId = "/"
@@ -214,19 +214,19 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 		jsonBody, err := json.Marshal(param)
 		if err != nil {
 			fmt.Println("Error marshalling JSON:", err)
-			return "", srcDrive, srcName, err
+			return "", srcDrive, srcName, srcDir, srcFilename, err
 		}
 		fmt.Println("Google Drive List Params:", string(jsonBody))
 		responseStr, err := GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
 		if err != nil {
 			fmt.Println("Error calling drive/copy_file:", err)
-			return "", srcDrive, srcName, err
+			return "", srcDrive, srcName, srcDir, srcFilename, err
 		}
 
 		var response GoogleDriveListResponse
 		err = json.Unmarshal([]byte(responseStr), &response)
 		if err != nil {
-			return "", srcDrive, srcName, err
+			return "", srcDrive, srcName, srcDir, srcFilename, err
 		}
 
 		// Find the ID for the current path
@@ -249,7 +249,7 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 		}
 
 		if pathId == "" {
-			return "", srcDrive, srcName, fmt.Errorf("ID not found for path: %s", currentPath)
+			return "", srcDrive, srcName, srcDir, srcFilename, fmt.Errorf("ID not found for path: %s", currentPath)
 		}
 	}
 
@@ -257,7 +257,7 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 	//GoogleDrivePathIdCache[cacheKey] = pathId
 	//fmt.Println("Cached pathId for", cacheKey, ":", pathId)
 
-	return pathId, srcDrive, srcName, nil
+	return pathId, srcDrive, srcName, srcDir, srcFilename, nil
 }
 
 func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataChan chan<- string, w http.ResponseWriter, r *http.Request, param GoogleDriveListParam) {
@@ -286,7 +286,7 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 			if path != "/" {
 				path += "/"
 			}
-			pathId, _, _, err := GoogleDrivePathToId("/Drive/"+param.Name+path, w, r)
+			pathId, _, _, _, _, err := GoogleDrivePathToId("/Drive/"+param.Name+path, w, r)
 			if err != nil {
 				fmt.Println(err)
 				return
