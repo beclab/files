@@ -2185,6 +2185,9 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			//	return errors.ErrExist
 			//}
 			//dstDir, dstFilename := splitGoogleDrivePath(dst)
+			if !strings.HasSuffix(src, "/") {
+				src += "/"
+			}
 			srcDrive, srcName, srcPathId, srcFilename := parseGoogleDrivePath(src)
 			//srcPathId, srcDrive, srcName, srcDir, srcFilename, err := GoogleDrivePathToId(src, w, r, false)
 			fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)

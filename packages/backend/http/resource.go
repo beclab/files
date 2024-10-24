@@ -141,6 +141,9 @@ func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int,
 	// src is like [repo-id]/path/filename
 	src := r.URL.Path
 	fmt.Println("src Path:", src)
+	if !strings.HasSuffix(src, "/") {
+		src += "/"
+	}
 	//src = strings.Trim(src, "/") + "/"
 
 	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
