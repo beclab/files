@@ -1236,7 +1236,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 				return http.StatusConflict, nil
 			}
 		}
-		if rename {
+		if rename && dstType != "google" {
 			dst = pasteAddVersionSuffix(dst, dstType, d.user.Fs, r)
 		}
 		// Permission for overwriting the file
