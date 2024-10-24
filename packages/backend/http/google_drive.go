@@ -634,11 +634,11 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 	req.Header.Set("Content-Type", "application/json")
 
 	// 遍历并打印所有的 header 字段和值
-	for name, values := range req.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
+	//for name, values := range req.Header {
+	//	for _, value := range values {
+	//		fmt.Printf("%s: %s\n", name, value)
+	//	}
+	//}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
