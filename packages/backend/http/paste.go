@@ -2178,12 +2178,17 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 				Name              string `json:"name"`
 			}
 
+			if rename {
+				addGoogleDriveVersionSuffix(dst, w, r)
+			} else if src == dst {
+				return errors.ErrExist
+			}
 			//dstDir, dstFilename := splitGoogleDrivePath(dst)
 			//srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
 			srcPathId, srcDrive, srcName, srcDir, srcFilename, err := GoogleDrivePathToId(src, w, r, false)
 			fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
 			//_, _, dstDir, dstFilename := parseGoogleDrivePath(dst)
-			dstPathId, dstDrive, dstName, dstDir, dstFilename, err := GoogleDrivePathToId(src, w, r, true)
+			dstPathId, dstDrive, dstName, dstDir, dstFilename, err := GoogleDrivePathToId(dst, w, r, true)
 			fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstDir:", dstDir, "dstFilename:", dstFilename)
 			if dstDir == "" || dstFilename == "" {
 				fmt.Println("Dst parse failed.")

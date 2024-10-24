@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -161,6 +163,7 @@ func getHost(w http.ResponseWriter, r *http.Request) string {
 	return ""
 }
 
+// isDir == true if and only if it is definitely dir
 func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request, isDir bool) (string, string, string, string, string, error) {
 	srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
@@ -779,4 +782,23 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	}
 
 	return drive, name, dir, filename
+}
+
+func addGoogleDriveVersionSuffix(source string, w http.ResponseWriter, r *http.Request) string {
+	counter := 1
+	dir, name := path.Split(source)
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+
+	for {
+		pathId, _, _, _, _, err := GoogleDrivePathToId(source, w, r, false)
+		if err != nil || pathId == "" {
+			break
+		}
+		renamed := fmt.Sprintf("%s(%d)%s", base, counter, ext)
+		source = path.Join(dir, renamed)
+		counter++
+	}
+
+	return source
 }
