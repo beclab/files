@@ -2190,11 +2190,11 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			}
 			// 填充数据
 			param := CopyFileParam{
-				CloudFilePath:     "/My Drive" + srcDir + "/" + srcFilename, // "path/to/cloud/file.txt",
-				NewCloudDirectory: pathId,                                   // dstDir + "/",               // "new/cloud/directory",
-				NewCloudFileName:  dstFilename,                              // "new_file_name.txt",
-				Drive:             dstDrive,                                 // "my_drive",
-				Name:              dstName,                                  // "file_name",
+				CloudFilePath:     "/My Drive/" + srcDir + "/" + srcFilename, // "path/to/cloud/file.txt",
+				NewCloudDirectory: pathId,                                    // dstDir + "/",               // "new/cloud/directory",
+				NewCloudFileName:  dstFilename,                               // "new_file_name.txt",
+				Drive:             dstDrive,                                  // "my_drive",
+				Name:              dstName,                                   // "file_name",
 			}
 
 			// 将数据序列化为 JSON
