@@ -163,6 +163,7 @@ func getHost(w http.ResponseWriter, r *http.Request) string {
 	return ""
 }
 
+// Deprecated
 // isDir == true if and only if it is definitely dir
 func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request, isDir bool) (string, string, string, string, string, error) {
 	srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
@@ -773,11 +774,11 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	// len(slashes) >= 3
 	if slashes[len(slashes)-1] == len(path)-1 {
 		// 路径以 '/' 结尾，视为文件夹
-		dir = path[slashes[1] : len(path)-1]
+		dir = path[slashes[1]+1 : len(path)-1]
 		filename = ""
 	} else {
 		// 路径不以 '/' 结尾，视为文件
-		dir = path[slashes[1]:slashes[len(slashes)-1]]
+		dir = path[slashes[1]+1 : slashes[len(slashes)-1]]
 		filename = path[slashes[len(slashes)-1]+1:]
 	}
 
