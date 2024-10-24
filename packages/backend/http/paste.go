@@ -2178,26 +2178,31 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 				Name              string `json:"name"`
 			}
 
-			if rename {
-				addGoogleDriveVersionSuffix(dst, w, r)
-			} else if src == dst {
-				return errors.ErrExist
-			}
+			// Google Drive supports files with same name in a folder
+			//if rename {
+			//	addGoogleDriveVersionSuffix(dst, w, r)
+			//} else if src == dst {
+			//	return errors.ErrExist
+			//}
 			//dstDir, dstFilename := splitGoogleDrivePath(dst)
-			//srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
-			srcPathId, srcDrive, srcName, srcDir, srcFilename, err := GoogleDrivePathToId(src, w, r, false)
-			fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
-			//_, _, dstDir, dstFilename := parseGoogleDrivePath(dst)
-			dstPathId, dstDrive, dstName, dstDir, dstFilename, err := GoogleDrivePathToId(dst, w, r, true)
-			fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstDir:", dstDir, "dstFilename:", dstFilename)
-			if dstDir == "" || dstFilename == "" {
+			srcDrive, srcName, srcPathId, srcFilename := parseGoogleDrivePath(src)
+			//srcPathId, srcDrive, srcName, srcDir, srcFilename, err := GoogleDrivePathToId(src, w, r, false)
+			fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
+			if srcPathId == "" {
+				fmt.Println("Src parse failed.")
+				return nil
+			}
+			dstDrive, dstName, dstPathId, dstFilename := parseGoogleDrivePath(dst)
+			//dstPathId, dstDrive, dstName, dstDir, dstFilename, err := GoogleDrivePathToId(dst, w, r, true)
+			fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
+			if dstPathId == "" || dstFilename == "" {
 				fmt.Println("Dst parse failed.")
 				return nil
 			}
 			// 填充数据
 			param := CopyFileParam{
-				CloudFilePath:     srcPathId,   //"/My Drive/" + srcDir + "/" + srcFilename, // "path/to/cloud/file.txt",
-				NewCloudDirectory: dstPathId,   // dstDir + "/",               // "new/cloud/directory",
+				CloudFilePath:     srcPathId,   // id of "path/to/cloud/file.txt",
+				NewCloudDirectory: dstPathId,   // id of "new/cloud/directory",
 				NewCloudFileName:  dstFilename, // "new_file_name.txt",
 				Drive:             dstDrive,    // "my_drive",
 				Name:              dstName,     // "file_name",

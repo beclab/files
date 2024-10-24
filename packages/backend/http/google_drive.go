@@ -786,6 +786,7 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	return drive, name, dir, filename
 }
 
+// deprecated
 func addGoogleDriveVersionSuffix(source string, w http.ResponseWriter, r *http.Request) string {
 	counter := 1
 	dir, name := path.Split(source)
