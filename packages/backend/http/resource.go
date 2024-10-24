@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -134,49 +133,6 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 		return errToStatus(err), err
 	}
 
-	return 0, nil
-}
-
-func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
-	// src is like [repo-id]/path/filename
-	src := r.URL.Path
-	fmt.Println("src Path:", src)
-	if !strings.HasSuffix(src, "/") {
-		src += "/"
-	}
-	//src = strings.Trim(src, "/") + "/"
-
-	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
-
-	//pathId, srcDrive, srcName, _, _, err := GoogleDrivePathToId(src, w, r, false)
-	//if err != nil {
-	//	return errToStatus(err), err
-	//}
-
-	param := GoogleDriveListParam{
-		Path:  pathId,
-		Drive: srcDrive, // "my_drive",
-		Name:  srcName,  // "file_name",
-	}
-
-	// 将数据序列化为 JSON
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		fmt.Println("Error marshalling JSON:", err)
-		return errToStatus(err), err
-	}
-	fmt.Println("Google Drive List Params:", string(jsonBody))
-	if stream == 1 {
-		var body []byte
-		body, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
-		streamGoogleDriveFiles(w, r, body, param)
-		return 0, nil
-	}
-	_, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, false)
-	if err != nil {
-		fmt.Println("Error calling drive/copy_file:", err)
-		return errToStatus(err), err
-	}
 	return 0, nil
 }
 
@@ -449,6 +405,11 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
+		}
+
+		srcType := r.URL.Query().Get("src")
+		if srcType == "google" {
+			return resourcePostGoogle(w, r)
 		}
 
 		modeParam := r.URL.Query().Get("mode")
