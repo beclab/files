@@ -143,10 +143,12 @@ func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int,
 	fmt.Println("src Path:", src)
 	//src = strings.Trim(src, "/") + "/"
 
-	pathId, srcDrive, srcName, _, _, err := GoogleDrivePathToId(src, w, r, false)
-	if err != nil {
-		return errToStatus(err), err
-	}
+	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
+
+	//pathId, srcDrive, srcName, _, _, err := GoogleDrivePathToId(src, w, r, false)
+	//if err != nil {
+	//	return errToStatus(err), err
+	//}
 
 	param := GoogleDriveListParam{
 		Path:  pathId,
@@ -173,35 +175,6 @@ func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int,
 		return errToStatus(err), err
 	}
 	return 0, nil
-
-	// SSE
-	//if stream == 1 {
-	//	var body []byte
-	//	if response.Header.Get("Content-Encoding") == "gzip" {
-	//		reader, err := gzip.NewReader(response.Body)
-	//		defer reader.Close()
-	//		if err != nil {
-	//			fmt.Println("Error creating gzip reader:", err)
-	//			return errToStatus(err), err
-	//		}
-	//
-	//		body, err = ioutil.ReadAll(reader)
-	//		if err != nil {
-	//			fmt.Println("Error reading gzipped response body:", err)
-	//			reader.Close()
-	//			return errToStatus(err), err
-	//		}
-	//	} else {
-	//		body, err = ioutil.ReadAll(response.Body)
-	//		if err != nil {
-	//			fmt.Println("Error reading response body:", err)
-	//			return errToStatus(err), err
-	//		}
-	//	}
-	//	//body, _ := ioutil.ReadAll(response.Body)
-	//	streamSyncDirents(w, r, body, repoID)
-	//	return 0, nil
-	//}
 }
 
 var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
