@@ -293,17 +293,18 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 		fmt.Println("firstItem Name:", firstItem.Name)
 
 		if firstItem.IsDir {
-			path := firstItem.Path
-			path = strings.TrimPrefix(path, "/My Drive")
-			if path != "/" {
-				path += "/"
-			}
-			pathId, _, _, _, _, err := GoogleDrivePathToId("/Drive/"+param.Name+path, w, r, true)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			fmt.Println("firstItem formed path: /Drive/" + param.Name + path)
+			//path := firstItem.Path
+			//path = strings.TrimPrefix(path, "/My Drive")
+			//if path != "/" {
+			//	path += "/"
+			//}
+			//pathId, _, _, _, _, err := GoogleDrivePathToId("/Drive/"+param.Name+path, w, r, true)
+			//if err != nil {
+			//	fmt.Println(err)
+			//	return
+			//}
+			//fmt.Println("firstItem formed path: /Drive/" + param.Name + path)
+			pathId := firstItem.Meta.ID
 			firstParam := GoogleDriveListParam{
 				Path:  pathId,
 				Drive: param.Drive,
