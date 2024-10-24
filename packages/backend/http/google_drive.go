@@ -161,7 +161,7 @@ func getHost(w http.ResponseWriter, r *http.Request) string {
 	return ""
 }
 
-func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (string, string, string, string, string, error) {
+func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request, isDir bool) (string, string, string, string, string, error) {
 	srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
 
@@ -169,7 +169,12 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 		return "/", srcDrive, srcName, "/", "", nil
 	}
 
-	cacheKey := srcName + srcDir
+	var cacheKey string
+	if srcFilename == "" || isDir {
+		cacheKey = srcName + srcDir
+	} else {
+		cacheKey = srcName + srcDir + "/" + srcFilename
+	}
 	fmt.Println("cacheKey:", cacheKey)
 	if len(GoogleDrivePathIdCache) == 0 {
 		fmt.Println("GoogleDrivepathIdCache: empty!")
@@ -184,6 +189,9 @@ func GoogleDrivePathToId(src string, w http.ResponseWriter, r *http.Request) (st
 
 	var pathId = "/"
 	parts := strings.Split(srcDir, "/")
+	if srcFilename != "" && !isDir {
+		parts = append(parts, srcFilename)
+	}
 	var currentPath = ""
 
 	for _, part := range parts {
@@ -286,7 +294,7 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 			if path != "/" {
 				path += "/"
 			}
-			pathId, _, _, _, _, err := GoogleDrivePathToId("/Drive/"+param.Name+path, w, r)
+			pathId, _, _, _, _, err := GoogleDrivePathToId("/Drive/"+param.Name+path, w, r, true)
 			if err != nil {
 				fmt.Println(err)
 				return
@@ -731,8 +739,8 @@ func splitGoogleDrivePath(path string) (directory, fileName string) {
 
 func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	// 去掉开头的 "/Drive"
-	if strings.HasPrefix(path, "/Drive") {
-		path = path[6:]
+	if strings.HasPrefix(path, "/Drive/google") {
+		path = path[13:]
 		drive = "google"
 	}
 

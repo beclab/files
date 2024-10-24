@@ -143,7 +143,7 @@ func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int,
 	fmt.Println("src Path:", src)
 	//src = strings.Trim(src, "/") + "/"
 
-	pathId, srcDrive, srcName, _, _, err := GoogleDrivePathToId(src, w, r)
+	pathId, srcDrive, srcName, _, _, err := GoogleDrivePathToId(src, w, r, false)
 	if err != nil {
 		return errToStatus(err), err
 	}

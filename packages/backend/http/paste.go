@@ -2179,10 +2179,11 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			}
 
 			//dstDir, dstFilename := splitGoogleDrivePath(dst)
-			srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
+			//srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
+			srcPathId, srcDrive, srcName, srcDir, srcFilename, err := GoogleDrivePathToId(src, w, r, false)
 			fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcDir:", srcDir, "srcFilename:", srcFilename)
 			//_, _, dstDir, dstFilename := parseGoogleDrivePath(dst)
-			pathId, dstDrive, dstName, dstDir, dstFilename, err := GoogleDrivePathToId(src, w, r)
+			dstPathId, dstDrive, dstName, dstDir, dstFilename, err := GoogleDrivePathToId(src, w, r, true)
 			fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstDir:", dstDir, "dstFilename:", dstFilename)
 			if dstDir == "" || dstFilename == "" {
 				fmt.Println("Dst parse failed.")
@@ -2190,11 +2191,11 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			}
 			// 填充数据
 			param := CopyFileParam{
-				CloudFilePath:     "/My Drive/" + srcDir + "/" + srcFilename, // "path/to/cloud/file.txt",
-				NewCloudDirectory: pathId,                                    // dstDir + "/",               // "new/cloud/directory",
-				NewCloudFileName:  dstFilename,                               // "new_file_name.txt",
-				Drive:             dstDrive,                                  // "my_drive",
-				Name:              dstName,                                   // "file_name",
+				CloudFilePath:     srcPathId,   //"/My Drive/" + srcDir + "/" + srcFilename, // "path/to/cloud/file.txt",
+				NewCloudDirectory: dstPathId,   // dstDir + "/",               // "new/cloud/directory",
+				NewCloudFileName:  dstFilename, // "new_file_name.txt",
+				Drive:             dstDrive,    // "my_drive",
+				Name:              dstName,     // "file_name",
 			}
 
 			// 将数据序列化为 JSON
