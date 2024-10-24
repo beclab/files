@@ -857,7 +857,7 @@ func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int) (int,
 	return 0, nil
 }
 
-func resourcePostGoogle(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
+func resourcePostGoogle(w http.ResponseWriter, r *http.Request) (int, error) {
 	src := r.URL.Path
 	fmt.Println("src Path:", src)
 	src = strings.TrimSuffix(src, "/")
