@@ -155,10 +155,21 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return resourceGetSync(w, r, stream)
+	} else if srcType == "google" {
+		metaStr := r.URL.Query().Get("meta")
+		meta := 0
+		if metaStr != "" {
+			meta, err = strconv.Atoi(metaStr)
+			if err != nil {
+				return http.StatusBadRequest, err
+			}
+		}
+		fmt.Println("meta: ", meta)
+		return resourceGetGoogle(w, r, stream, meta)
 	}
 
 	xBflUser := r.Header.Get("X-Bfl-User")
-	fmt.Println("X-Bfl-User: ", xBflUser)
+	fmt.Println("X-Bfl-GoogleDriveListResponseUser: ", xBflUser)
 
 	var usbData []files.DiskInfo = nil
 	var hddData []files.DiskInfo = nil
@@ -331,6 +342,12 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			return http.StatusForbidden, nil
 		}
 
+		srcType := r.URL.Query().Get("src")
+		if srcType == "google" {
+			_, status, err := resourceDeleteGoogle("", w, r, false)
+			return status, err
+		}
+
 		file, err := files.NewFileInfo(files.FileOptions{
 			Fs:         d.user.Fs,
 			Path:       r.URL.Path,
@@ -403,6 +420,12 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
+		}
+
+		srcType := r.URL.Query().Get("src")
+		if srcType == "google" {
+			_, status, err := resourcePostGoogle("", w, r, false)
+			return status, err
 		}
 
 		modeParam := r.URL.Query().Get("mode")
@@ -497,10 +520,16 @@ var resourcePutHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 
 func resourcePatchHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		srcType := r.URL.Query().Get("src")
+		if srcType == "google" {
+			return resourcePatchGoogle(w, r)
+		}
+
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		action := r.URL.Query().Get("action")
 		dst, err := url.QueryUnescape(dst)
+
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
 		}
