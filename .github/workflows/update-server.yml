@@ -81,4 +81,3 @@ jobs:
 #          tags: beclab/files-server:${{ github.event.inputs.tags }}
           tags: beclab/files-server:${{ steps.get-latest-tag.outputs.tag }}
           platforms: linux/amd64,linux/arm64
-                    

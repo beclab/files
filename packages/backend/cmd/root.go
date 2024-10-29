@@ -133,17 +133,20 @@ user created with the credentials from options "username" and "password".`,
 		imgSvc := img.New(workersCount)
 
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
-		cacheDir, err := cmd.Flags().GetString("cache-dir")
-		checkErr(err)
-		if cacheDir != "" {
-			if err := os.MkdirAll(cacheDir, 0700); err != nil { //nolint:govet,gomnd
-				log.Fatalf("can't make directory %s: %s", cacheDir, err)
+		// cacheDir, err := cmd.Flags().GetString("cache-dir")
+		//cacheDir := "/data/file_cache"
+		//checkErr(err)
+		if diskcache.CacheDir != "" {
+			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil { //nolint:govet,gomnd
+				log.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
 			}
-			fileCache = diskcache.New(afero.NewOsFs(), cacheDir)
+			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
 		}
 
 		// my_redis for watcher
 		my_redis.InitRedis()
+		my_redis.InitFolderAndRedis()
+		go my_redis.StartDailyCleanup()
 
 		// rpcServer for zinc
 		var wg sync.WaitGroup

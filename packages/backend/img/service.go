@@ -6,12 +6,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
-	"io"
-
 	"github.com/disintegration/imaging"
 	"github.com/dsoprea/go-exif/v3"
 	"github.com/marusama/semaphore/v2"
+	"github.com/nfnt/resize"
+	"golang.org/x/image/bmp"
+	"golang.org/x/image/tiff"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
+	_ "image/png"
+	"io"
 
 	exifcommon "github.com/dsoprea/go-exif/v3/common"
 )
@@ -135,7 +141,34 @@ func WithQuality(quality Quality) Option {
 	}
 }
 
-func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...Option) error {
+func decodeImageStandardLib(file io.Reader, format Format) (image.Image, error) {
+	//file, err := os.Open(filename)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//defer file.Close()
+
+	var img image.Image
+	var err error
+	if format == FormatJpeg {
+		img, err = jpeg.Decode(file)
+	} else if format == FormatPng {
+		img, err = png.Decode(file)
+	} else if format == FormatGif {
+		img, err = gif.Decode(file)
+	} else if format == FormatTiff {
+		img, err = tiff.Decode(file)
+	} else if format == FormatBmp {
+		img, err = bmp.Decode(file)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
+func (s *Service) Resize2(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...Option) error {
 	if err := s.sem.Acquire(ctx, 1); err != nil {
 		return err
 	}
@@ -143,6 +176,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 
 	format, wrappedReader, err := s.detectFormat(in)
 	if err != nil {
+		fmt.Println("Detect format:", err)
 		return err
 	}
 
@@ -151,6 +185,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		resizeMode: ResizeModeFit,
 		quality:    QualityMedium,
 	}
+	fmt.Println("format: ", format)
 	for _, option := range options {
 		option(&config)
 	}
@@ -159,6 +194,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		thm, newWrappedReader, errThm := getEmbeddedThumbnail(wrappedReader)
 		wrappedReader = newWrappedReader
 		if errThm == nil {
+			fmt.Println("Get Embedded Thumbnail: ", err)
 			_, err = out.Write(thm)
 			if err == nil {
 				return nil
@@ -166,8 +202,60 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		}
 	}
 
+	img, _, err := image.Decode(wrappedReader)
+	if err != nil {
+		fmt.Println("Decode:", err)
+		return err
+	}
+
+	resizedImg := resize.Resize(uint(width), uint(height), img, resize.Lanczos3)
+
+	return png.Encode(out, resizedImg)
+}
+
+func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...Option) error {
+	if err := s.sem.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	defer s.sem.Release(1)
+
+	format, wrappedReader, err := s.detectFormat(in)
+	if err != nil {
+		fmt.Println("Detect format:", err)
+		return err
+	}
+
+	config := resizeConfig{
+		format:     format,
+		resizeMode: ResizeModeFit,
+		quality:    QualityMedium,
+	}
+	fmt.Println("format: ", format)
+	for _, option := range options {
+		option(&config)
+	}
+
+	if config.quality == QualityLow && format == FormatJpeg {
+		thm, newWrappedReader, errThm := getEmbeddedThumbnail(wrappedReader)
+		wrappedReader = newWrappedReader
+		if errThm == nil {
+			fmt.Println("Get Embedded Thumbnail: ", err)
+			_, err = out.Write(thm)
+			if err == nil {
+				return nil
+			}
+		}
+	}
+
+	//img, err := decodeImageStandardLib(wrappedReader, format)
+	//if err != nil {
+	//	fmt.Println("Decode Standard:", err)
+	//	return err
+	//}
+
 	img, err := imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
 	if err != nil {
+		fmt.Println("Decode:", err)
 		return err
 	}
 

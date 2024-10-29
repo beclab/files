@@ -22,7 +22,7 @@ func NewHandler(
 	fileCache FileCache,
 	store *storage.Storage,
 	server *settings.Server,
-// assetsFs fs.FS,
+	// assetsFs fs.FS,
 ) (http.Handler, error) {
 	server.Clean()
 
@@ -88,8 +88,10 @@ func NewHandler(
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryPutHandler, "/api/smb_history")).Methods("PUT")
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryDeleteHandler, "/api/smb_history")).Methods("DELETE")
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryDeleteHandler, "/api/smb_history")).Methods("PATCH")
+
 	api.PathPrefix("/preview/{size}/{path:.*}").
 		Handler(monkey(previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
+
 	api.PathPrefix("/command").Handler(monkey(commandsHandler, "/api/command")).Methods("GET")
 	api.PathPrefix("/search").Handler(monkey(searchHandler, "/api/search")).Methods("GET")
 	//if rpc.KnowledgeBaseEnabled == "True" {
