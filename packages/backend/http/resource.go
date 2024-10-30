@@ -152,20 +152,23 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 	fmt.Println("stream: ", stream)
 
+	metaStr := r.URL.Query().Get("meta")
+	meta := 0
+	if metaStr != "" {
+		meta, err = strconv.Atoi(metaStr)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+	fmt.Println("meta: ", meta)
+
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return resourceGetSync(w, r, stream)
 	} else if srcType == "google" {
-		metaStr := r.URL.Query().Get("meta")
-		meta := 0
-		if metaStr != "" {
-			meta, err = strconv.Atoi(metaStr)
-			if err != nil {
-				return http.StatusBadRequest, err
-			}
-		}
-		fmt.Println("meta: ", meta)
 		return resourceGetGoogle(w, r, stream, meta)
+	} else if srcType == "awss3" {
+		return resourceGetAwss3(w, r, stream, meta)
 	}
 
 	xBflUser := r.Header.Get("X-Bfl-User")
@@ -200,8 +203,8 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 			}
 		}
 
-		fmt.Println("USB Data:", usbData)
-		fmt.Println("HDD Data:", hddData)
+		fmt.Println("USB Awss3MetaResponseData:", usbData)
+		fmt.Println("HDD Awss3MetaResponseData:", hddData)
 	}
 
 	var file *files.FileInfo
