@@ -732,7 +732,7 @@ func getGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http
 		fmt.Println("Error marshalling JSON:", err)
 		return
 	}
-	fmt.Println("Google Drive Meta Params:", string(jsonBody))
+	fmt.Println("Google Drive Awss3MetaResponseMeta Params:", string(jsonBody))
 	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
 	if err != nil {
 		fmt.Println("Error calling drive/get_file_meta_data:", err)
