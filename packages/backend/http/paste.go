@@ -191,7 +191,9 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	// 获得原始文件夹路径
 	originalPathName := filepath.Base(strings.TrimSuffix(originalFilePath, "/"))
 	extension := filepath.Ext(originalPathName)
-	originalPathName = strings.TrimSuffix(originalPathName, extension) + "_" + extension[1:]
+	if len(extension) > 0 {
+		originalPathName = strings.TrimSuffix(originalPathName, extension) + "_" + extension[1:]
+	}
 	originalPathName = url.QueryEscape(originalPathName)
 
 	// 构建新的文件名
@@ -205,7 +207,7 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	return bufferFolderPath, nil
 }
 
-func makeDiskBuffer(filePath string, bufferSize int64) error {
+func makeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
 	//filePath := "buffer.bin"
 	//bufferSize := int64(1024 * 1024) // 1 MB
 
@@ -228,6 +230,16 @@ func makeDiskBuffer(filePath string, bufferSize int64) error {
 		return err
 	}
 	fmt.Println("Buffer file size:", fileInfo.Size(), "bytes")
+
+	if delete {
+		err = os.Remove(filePath)
+		if err != nil {
+			fmt.Printf("Error removing test buffer: %v\n", err)
+			return err
+		}
+
+		fmt.Println("Test buffer removed successfully")
+	}
 	return nil
 }
 
@@ -1265,11 +1277,11 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			dstType = "drive"
 		}
 		fmt.Println(srcType, src, dstType, dst)
-		if srcType != "drive" && srcType != "sync" && srcType != "cache" && srcType != "google" {
+		if srcType != "drive" && srcType != "sync" && srcType != "cache" && srcType != "google" && srcType != "awss3" {
 			fmt.Println("Src type is invalid!")
 			return http.StatusForbidden, nil
 		}
-		if dstType != "drive" && dstType != "sync" && dstType != "cache" && dstType != "google" {
+		if dstType != "drive" && dstType != "sync" && dstType != "cache" && dstType != "google" && dstType != "awss3" {
 			fmt.Println("Dst type is invalid!")
 			return http.StatusForbidden, nil
 		}
@@ -1314,9 +1326,13 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		var srcName, dstName string
 		if srcType == "google" {
 			_, srcName, _, _ = parseGoogleDrivePath(src)
+		} else if srcType == "awss3" {
+			_, srcName, _ = parseAwss3Path(src)
 		}
 		if dstType == "google" {
 			_, dstName, _, _ = parseGoogleDrivePath(dst)
+		} else if srcType == "awss3" {
+			_, dstName, _ = parseAwss3Path(dst)
 		}
 		if srcName != dstName {
 			same = false
@@ -1450,7 +1466,14 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 		if err != nil {
 			return nil, 0, 0, false, err
 		}
-		return nil, metaInfo.Size, 0, metaInfo.IsDir, nil
+		return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
+	} else if srcType == "awss3" {
+		src = strings.TrimSuffix(src, "/")
+		metaInfo, err := getAwss3FocusedMetaInfos(src, w, r)
+		if err != nil {
+			return nil, 0, 0, false, err
+		}
+		return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
 	} else if srcType == "cache" {
 		//host := r.Host
 		//infoUrl := "http://" + host + "/api/resources" + src
@@ -1717,8 +1740,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			return err
 		}
 		mode = srcinfo.Mode()
-	} else if srcType == "google" {
-		mode = 0755
 	} else {
 		mode = fileMode
 	}
@@ -1740,6 +1761,8 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		if err != nil {
 			return err
 		}
+	} else if dstType == "awss3" {
+
 	} else if dstType == "cache" {
 		err := cacheMkdirAll(dst, fileMode, r)
 		if err != nil {
@@ -1827,6 +1850,53 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		for _, item := range bodyJson.Data {
 			//fsrc := filepath.Join(src, item.Name)
 			fsrc := filepath.Dir(strings.TrimSuffix(src, "/")) + "/" + item.Meta.ID
+			fdst := filepath.Join(fdstBase, item.Name)
+			fmt.Println(fsrc, fdst)
+			if item.IsDir {
+				// 创建子目录，递归处理
+				err = copyDir(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
+				if err != nil {
+					return err
+				}
+			} else {
+				// 执行文件复制
+				err = copyFile(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	} else if srcType == "awss3" {
+		src = strings.TrimSuffix(src, "/")
+
+		srcDrive, srcName, srcPath := parseAwss3Path(src)
+
+		param := Awss3ListParam{
+			Path:  srcPath,
+			Drive: srcDrive,
+			Name:  srcName,
+		}
+
+		// 将数据序列化为 JSON
+		jsonBody, err := json.Marshal(param)
+		if err != nil {
+			fmt.Println("Error marshalling JSON:", err)
+			return err
+		}
+		fmt.Println("Awss3 List Params:", string(jsonBody))
+		var respBody []byte
+		respBody, err = Awss3Call("/drive/ls", "POST", jsonBody, w, r, true)
+		if err != nil {
+			fmt.Println("Error calling drive/ls:", err)
+			return err
+		}
+		var bodyJson Awss3ListResponse
+		if err = json.Unmarshal(respBody, &bodyJson); err != nil {
+			fmt.Println(err)
+			return err
+		}
+		for _, item := range bodyJson.Data {
+			fsrc := filepath.Join(src, item.Name)
 			fdst := filepath.Join(fdstBase, item.Name)
 			fmt.Println(fsrc, fdst)
 			if item.IsDir {
@@ -2133,7 +2203,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		fmt.Println("Buffer file path: ", bufferPath)
-		err = makeDiskBuffer(bufferPath, diskSize)
+		err = makeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
 			return err
 		}
@@ -2156,14 +2226,37 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
 		fmt.Println("Buffer file path: ", bufferFilePath)
 		fmt.Println("Buffer path: ", bufferPath)
-		//err = makeDiskBuffer(bufferPath, diskSize)
-		//if err != nil {
-		//	return err
-		//}
+		err = makeDiskBuffer(bufferPath, diskSize, true)
+		if err != nil {
+			return err
+		}
 		_, err = googleFileToBuffer(src, bufferFilePath, w, r)
 		//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
 		//fmt.Println("Buffer file path: ", bufferFilePath)
 		//fmt.Println("Buffer path: ", bufferPath)
+		if err != nil {
+			return err
+		}
+	} else if srcType == "awss3" {
+		var err error
+		if diskSize >= 4*1024*1024*1024 {
+			fmt.Println("file size exceeds 4GB")
+			return e.New("file size exceeds 4GB") //os.ErrPermission
+		}
+		fmt.Println("Will reserve disk size: ", diskSize)
+		srcInfo, err := getAwss3FocusedMetaInfos(src, w, r)
+		bufferFilePath, err := generateBufferFolder(srcInfo.Path, bflName)
+		if err != nil {
+			return err
+		}
+		bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
+		fmt.Println("Buffer file path: ", bufferFilePath)
+		fmt.Println("Buffer path: ", bufferPath)
+		err = makeDiskBuffer(bufferPath, diskSize, true)
+		if err != nil {
+			return err
+		}
+		err = awss3FileToBuffer(src, bufferFilePath, w, r)
 		if err != nil {
 			return err
 		}
@@ -2179,7 +2272,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		fmt.Println("Buffer file path: ", bufferPath)
-		err = makeDiskBuffer(bufferPath, diskSize)
+		err = makeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
 			return err
 		}
@@ -2199,7 +2292,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		fmt.Println("Buffer file path: ", bufferPath)
-		err = makeDiskBuffer(bufferPath, diskSize)
+		err = makeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
 			return err
 		}
