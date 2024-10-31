@@ -251,7 +251,7 @@ func removeDiskBuffer(filePath string, srcType string) {
 		fmt.Println("Failed to delete buffer file:", err)
 		return
 	}
-	if srcType == "google" {
+	if srcType == "google" || srcType == "awss3" {
 		dir := filepath.Dir(filePath)
 		err = os.Remove(dir)
 		if err != nil {
