@@ -70,6 +70,7 @@ func NewHandler(
 	// Because /api/resources/AppData is proxied under current arch, new api must be of a different prefix,
 	// and try to access /api/resources/AppData in the handle func.
 	api.PathPrefix("/paste").Handler(monkey(resourcePasteHandler(fileCache), "/api/paste")).Methods("PATCH")
+	api.PathPrefix("/only_office_jwt").Handler(monkey(resourceOnlyOfficeJwtHandler, "/api/only_office_jwt")).Methods("GET")
 
 	api.PathPrefix("/usage").Handler(monkey(diskUsage, "/api/usage")).Methods("GET")
 
