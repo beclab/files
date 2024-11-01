@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -28,7 +29,7 @@ func getOnlyOfficeJwt(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 		fmt.Println("Error creating request:", err)
 		return nil, err
 	}
-	
+
 	req.Header = r.Header.Clone()
 	req.Header.Set("Content-Type", "application/json")
 
@@ -101,11 +102,52 @@ func getOnlyOfficeJwt(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 }
 
 var resourceOnlyOfficeJwtHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	respJson, err := getOnlyOfficeJwt(w, r)
-	if err != nil {
-		return errToStatus(err), err
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return http.StatusBadRequest, os.ErrPermission
 	}
 
-	return renderJSON(w, r, respJson)
+	dstUrl := "http://jwtgeter.onlyoffice-wangrongxiang2:3030/onlyoffice/jwt"
+
+	fmt.Println("dstUrl:", dstUrl)
+
+	req, err := http.NewRequest("GET", dstUrl, nil)
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return http.StatusInternalServerError, err
+	}
+
+	req.Header = r.Header.Clone()
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error making request:", err)
+		return http.StatusInternalServerError, err
+	}
+	defer resp.Body.Close()
+
+	// 复制响应头
+	for name, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(name, value)
+		}
+	}
+
+	// 设置响应状态码
+	w.WriteHeader(resp.StatusCode)
+
+	// 读取响应体并写入到原始的 HTTP 响应中
+	io.Copy(w, resp.Body)
+
+	return http.StatusOK, nil
+	//return getOnlyOfficeJwt(w, r)
+	//respJson, err := getOnlyOfficeJwt(w, r)
+	//if err != nil {
+	//	return errToStatus(err), err
+	//}
+	//
+	//return renderJSON(w, r, respJson)
 	//return http.StatusOK, nil
 })
