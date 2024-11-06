@@ -1764,7 +1764,7 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	//name = path[slashes[1]+1 : slashes[2]]
 
 	if len(slashes) == 2 {
-		return drive, name, "/", ""
+		return drive, name, "/", path[slashes[1]+1:]
 	}
 
 	// 提取 dir 和 filename
