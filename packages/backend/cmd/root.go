@@ -30,6 +30,7 @@ import (
 	//"github.com/filebrowser/filebrowser/v2/frontend"
 	fbhttp "github.com/filebrowser/filebrowser/v2/http"
 	"github.com/filebrowser/filebrowser/v2/img"
+	"github.com/filebrowser/filebrowser/v2/postgres"
 	"github.com/filebrowser/filebrowser/v2/rpc"
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
@@ -143,6 +144,9 @@ user created with the credentials from options "username" and "password".`,
 
 		// my_redis for watcher
 		my_redis.InitRedis()
+
+		// postgres for share
+		postgres.InitPostgres()
 
 		// rpcServer for zinc
 		var wg sync.WaitGroup

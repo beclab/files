@@ -2,6 +2,8 @@ package http
 
 import (
 	"compress/gzip"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -327,6 +329,57 @@ func streamSyncDirents(w http.ResponseWriter, r *http.Request, body []byte, repo
 			return
 		}
 	}
+}
+
+func outputHeader(r *http.Request) {
+	for name, values := range r.Header {
+		for _, value := range values {
+			fmt.Printf("%s: %s\n", name, value)
+		}
+	}
+	return
+}
+
+func getOwner(r *http.Request) (ownerID, ownerName string) {
+	BflName := r.Header.Get("X-Bfl-User")
+	rawURL := r.Header.Get("Referer")
+	if !strings.HasSuffix(rawURL, "/") {
+		rawURL += "/"
+	}
+
+	// initial return value
+	ownerName = BflName
+	ownerID = ownerName
+
+	indexName := strings.Index(rawURL, BflName)
+	if indexName == -1 {
+		fmt.Println("BflName not found in URL")
+		return
+	}
+
+	indexSlash := strings.Index(rawURL[indexName:], "/")
+	if indexSlash == -1 {
+		fmt.Println("No '/' found after BflName in URL")
+		return
+	}
+
+	domainStart := indexName + len(BflName) + 1
+	domainEnd := indexName + indexSlash
+	domain := rawURL[domainStart:domainEnd]
+
+	email := fmt.Sprintf("%s@%s", BflName, domain)
+	fmt.Println("Generated email:", email)
+	ownerID = email
+	return
+}
+
+func stringMD5(s string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(s))
+	hashBytes := hasher.Sum(nil)
+	hashString := hex.EncodeToString(hashBytes)
+	fmt.Printf("MD5 Hash of '%s': %s\n", s, hashString)
+	return hashString
 }
 
 func errToStatus(err error) int {
