@@ -73,6 +73,9 @@ func NewHandler(
 
 	api.PathPrefix("/usage").Handler(monkey(diskUsage, "/api/usage")).Methods("GET")
 
+	api.PathPrefix("/share/shareable").Handler(monkey(shareableGetHandler, "/api/share/shareable")).Methods("GET")
+	api.PathPrefix("/share/shareable").Handler(monkey(shareablePutHandler, "/api/share/shareable")).Methods("PUT")
+
 	api.Path("/shares").Handler(monkey(shareListHandler, "/api/shares")).Methods("GET")
 	api.PathPrefix("/share").Handler(monkey(shareGetsHandler, "/api/share")).Methods("GET")
 	api.PathPrefix("/share").Handler(monkey(sharePostHandler, "/api/share")).Methods("POST")
