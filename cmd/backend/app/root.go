@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"files/pkg/backend/common"
+	"files/pkg/backend/postgres"
 	"files/pkg/backend/redisutils"
 	"fmt"
 	"io"
@@ -143,6 +144,9 @@ user created with the credentials from options "username" and "password".`,
 			redisutils.InitFolderAndRedis()
 			go redisutils.StartDailyCleanup()
 		}
+
+		// postgres for share
+		postgres.InitPostgres()
 
 		// rpcServer for zinc
 		var wg sync.WaitGroup
