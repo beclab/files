@@ -205,9 +205,6 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 			Checker:    d,
 			Content:    true,
 		}, usbData, hddData)
-		if err != nil {
-			return errToStatus(err), err
-		}
 	} else {
 		file, err = files.NewFileInfo(files.FileOptions{
 			Fs:         d.user.Fs,
@@ -218,9 +215,38 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 			Checker:    d,
 			Content:    true,
 		})
-		if err != nil {
-			return errToStatus(err), err
+	}
+	if err != nil {
+		if errToStatus(err) == http.StatusNotFound && r.URL.Path == "/External/" {
+			listing := &files.Listing{
+				Items:         []*files.FileInfo{},
+				NumDirs:       0,
+				NumFiles:      0,
+				NumTotalFiles: 0,
+				Size:          0,
+				FileSize:      0,
+			}
+			file = &files.FileInfo{
+				Path:         "/External/",
+				Name:         "External",
+				Size:         0,
+				FileSize:     0,
+				Extension:    "",
+				ModTime:      time.Now(),
+				Mode:         os.FileMode(2147484141),
+				IsDir:        true,
+				IsSymlink:    false,
+				Type:         "",
+				ExternalType: "others",
+				Subtitles:    []string{},
+				Checksums:    make(map[string]string),
+				Listing:      listing,
+				Fs:           nil,
+			}
+
+			return renderJSON(w, r, file)
 		}
+		return errToStatus(err), err
 	}
 
 	if file.IsDir {
