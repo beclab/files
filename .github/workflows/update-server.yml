@@ -7,7 +7,7 @@ on:
     branches:
       - "main"
       - "dev_wrx"
-      - "external_404"
+      - "google_drive"
     tags:
       - 'v*'
 
@@ -40,7 +40,7 @@ jobs:
         uses: "WyriHaximus/github-action-get-previous-tag@v1"
         id: get-latest-tag
         with:
-          fallback: external
+          fallback: v-google-drive-test
 
 #      - name: Build
 #        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
