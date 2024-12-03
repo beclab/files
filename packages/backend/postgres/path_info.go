@@ -6,9 +6,13 @@ import (
 	"time"
 )
 
+var STATUS_PRIVATE = 0
+var STATUS_PUBLIC = 1
+var STATUS_DELETED = 2
+
 // PathInfo represents the structure of the file table in the database
 type PathInfo struct {
-	ID         uint      `gorm:"primaryKey;autoIncrement"`
+	ID         uint64    `gorm:"primaryKey;autoIncrement"`
 	Path       string    `gorm:"type:text;not null;index:idx_path_infos_path"`
 	SrcType    string    `gorm:"type:varchar(10);not null"`
 	MD5        string    `gorm:"type:varchar(32);not null;uniqueIndex:idx_path_infos_md5"`
@@ -37,20 +41,20 @@ func createPathInfoTable() {
 	log.Println("Database migration succeeded")
 }
 
-func QueryPathInfos(status *int, path *string, md5 *string, page, limit *int) ([]PathInfo, error) {
-	fmt.Println("status=", status, ", path=", *path, ", path == empty?", *path == "", ", md5=", *md5, ", page=", page, ", limit=", limit)
+func QueryPathInfos(status *int, path string, md5 string, page, limit *int) ([]PathInfo, error) {
+	fmt.Println("status=", status, ", path=", path, ", path == empty?", path == "", ", md5=", md5, ", page=", page, ", limit=", limit)
 
 	var pathInfos []PathInfo
-	query := DBServer.Model(&PathInfo{}).Where("true")
+	query := DBServer.Model(&PathInfo{})
 
 	if status != nil {
 		query = query.Where("status = ?", *status)
 	}
-	if path != nil && *path != "" {
-		query = query.Where("path = ?", *path)
+	if path != "" {
+		query = query.Where("path = ?", path)
 	}
-	if md5 != nil {
-		query = query.Where("md5 = ?", *md5)
+	if md5 != "" {
+		query = query.Where("md5 = ?", md5)
 	}
 
 	if limit != nil {
@@ -68,4 +72,18 @@ func QueryPathInfos(status *int, path *string, md5 *string, page, limit *int) ([
 	}
 
 	return pathInfos, nil
+}
+
+func GetPathMapFromDB() (map[string]PathInfo, error) {
+	var pathInfos []PathInfo
+	if err := DBServer.Find(&pathInfos).Error; err != nil {
+		return nil, err
+	}
+
+	pathMap := make(map[string]PathInfo)
+	for _, info := range pathInfos {
+		pathMap[info.Path] = info
+	}
+
+	return pathMap, nil
 }
