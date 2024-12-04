@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/gorilla/mux"
 
@@ -113,6 +114,9 @@ func handleImagePreview(
 
 func createPreview(imgSvc ImgService, fileCache FileCache,
 	file *files.FileInfo, previewSize PreviewSize) ([]byte, error) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	fmt.Println("!!!!CreatePreview:", previewSize)
 	fd, err := file.Fs.Open(file.Path)
 	if err != nil {
@@ -145,6 +149,7 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 	}
 
 	go func() {
+		defer wg.Done()
 		cacheKey := previewCacheKey(file, previewSize)
 		fmt.Println("Caching image with key:", cacheKey)
 		if err := fileCache.Store(context.Background(), cacheKey, buf.Bytes()); err != nil {
@@ -152,6 +157,7 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 		}
 	}()
 
+	wg.Wait()
 	return buf.Bytes(), nil
 }
 
