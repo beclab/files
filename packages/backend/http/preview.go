@@ -92,6 +92,8 @@ func handleImagePreview(
 	}
 
 	cacheKey := previewCacheKey(file, previewSize)
+	fmt.Println("cacheKey:", cacheKey)
+	fmt.Println("f.RealPath:", file.RealPath())
 	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
 	if err != nil {
 		return errToStatus(err), err
