@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/spf13/afero"
@@ -32,6 +33,10 @@ func New(fs afero.Fs, root string) *FileCache {
 }
 
 func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
+	if !strings.Contains(key, "/") {
+		key = "/data/filecache/" + key
+	}
+	
 	mu := f.getScopedLocks(key)
 	mu.Lock()
 	defer mu.Unlock()
