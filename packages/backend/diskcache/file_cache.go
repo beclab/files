@@ -37,7 +37,6 @@ func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
 	defer mu.Unlock()
 
 	fileName := f.getFileName(key)
-	fmt.Println("fileName=", fileName, "filePath=", filepath.Dir(fileName))
 	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil { //nolint:gomnd
 		return err
 	}

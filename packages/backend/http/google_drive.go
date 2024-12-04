@@ -3,9 +3,11 @@ package http
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	e "errors"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/img"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -1944,4 +1946,179 @@ func resourceDeleteGoogle(src string, w http.ResponseWriter, r *http.Request, re
 		return nil, errToStatus(err), err
 	}
 	return respBody, 0, nil
+}
+
+func setContentDispositionGoogle(w http.ResponseWriter, r *http.Request, fileName string) {
+	if r.URL.Query().Get("inline") == "true" {
+		w.Header().Set("Content-Disposition", "inline")
+	} else {
+		// As per RFC6266 section 4.3
+		w.Header().Set("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(fileName))
+	}
+}
+
+func previewCacheKeyGoogle(f GoogleDriveMetaData, previewSize PreviewSize) string {
+	return fmt.Sprintf("%x%x%x", f.Path, f.Modified.Unix(), previewSize)
+}
+
+func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, imgSvc ImgService, fileCache FileCache,
+	file GoogleDriveMetaData, previewSize PreviewSize, bflName string) ([]byte, error) {
+	fmt.Println("!!!!CreatePreview:", previewSize)
+
+	var err error
+	diskSize := file.Size
+	if diskSize >= 4*1024*1024*1024 {
+		fmt.Println("file size exceeds 4GB")
+		return nil, e.New("file size exceeds 4GB") //os.ErrPermission
+	}
+	fmt.Println("Will reserve disk size: ", diskSize)
+	bufferFilePath, err := generateBufferFolder(file.Path, bflName)
+	if err != nil {
+		return nil, err
+	}
+	bufferPath := filepath.Join(bufferFilePath, file.Name)
+	fmt.Println("Buffer file path: ", bufferFilePath)
+	fmt.Println("Buffer path: ", bufferPath)
+	err = makeDiskBuffer(bufferPath, diskSize, true)
+	if err != nil {
+		return nil, err
+	}
+	_, err = googleFileToBuffer(src, bufferFilePath, w, r)
+	//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
+	//fmt.Println("Buffer file path: ", bufferFilePath)
+	//fmt.Println("Buffer path: ", bufferPath)
+	if err != nil {
+		return nil, err
+	}
+
+	fd, err := os.Open(file.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer fd.Close()
+
+	var (
+		width   int
+		height  int
+		options []img.Option
+	)
+
+	switch {
+	case previewSize == PreviewSizeBig:
+		width = 1080
+		height = 1080
+		options = append(options, img.WithMode(img.ResizeModeFit), img.WithQuality(img.QualityMedium))
+	case previewSize == PreviewSizeThumb:
+		width = 256
+		height = 256
+		options = append(options, img.WithMode(img.ResizeModeFill), img.WithQuality(img.QualityLow), img.WithFormat(img.FormatJpeg))
+	default:
+		return nil, img.ErrUnsupportedFormat
+	}
+
+	buf := &bytes.Buffer{}
+	if err := imgSvc.Resize(context.Background(), fd, width, height, buf, options...); err != nil {
+		return nil, err
+	}
+
+	go func() {
+		cacheKey := previewCacheKeyGoogle(file, previewSize)
+		if err := fileCache.Store(context.Background(), cacheKey, buf.Bytes()); err != nil {
+			fmt.Printf("failed to cache resized image: %v", err)
+		}
+	}()
+
+	fmt.Println("Begin to remove buffer")
+	removeDiskBuffer(bufferPath, "google")
+	return buf.Bytes(), nil
+}
+
+func handleImagePreviewGoogle(
+	w http.ResponseWriter,
+	r *http.Request,
+	src string,
+	imgSvc ImgService,
+	fileCache FileCache,
+	file GoogleDriveMetaData,
+	previewSize PreviewSize,
+) (int, error) {
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return errToStatus(os.ErrPermission), os.ErrPermission
+	}
+
+	//TODO: RawFile
+	//if (previewSize == PreviewSizeBig && !resizePreview) ||
+	//	(previewSize == PreviewSizeThumb && !enableThumbnails) {
+	//	return rawFileHandler(w, r, file)
+	//}
+
+	//format, err := imgSvc.FormatFromExtension(file.Data.Extension)
+	//// Unsupported extensions directly return the raw data
+	//if err == img.ErrUnsupportedFormat || format == img.FormatGif {
+	//	return rawFileHandler(w, r, file)
+	//}
+	//if err != nil {
+	//	return errToStatus(err), err
+	//}
+
+	cacheKey := previewCacheKeyGoogle(file, previewSize)
+	fmt.Println("cacheKey:", cacheKey)
+	fmt.Println("f.RealPath:", file.Path)
+	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	if !ok {
+		resizedImage, err = createPreviewGoogle(w, r, src, imgSvc, fileCache, file, previewSize, bflName)
+		if err != nil {
+			return errToStatus(err), err
+		}
+	}
+
+	w.Header().Set("Cache-Control", "private")
+	http.ServeContent(w, r, file.Name, file.Modified, bytes.NewReader(resizedImage))
+
+	return 0, nil
+}
+
+func previewGetGoogle(w http.ResponseWriter, r *http.Request, previewSize PreviewSize, path string, imgSvc ImgService, fileCache FileCache) (int, error) {
+	src := path
+	if !strings.HasSuffix(src, "/") {
+		src += "/"
+	}
+
+	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
+
+	param := GoogleDriveListParam{
+		Path:  pathId,
+		Drive: srcDrive, // "my_drive",
+		Name:  srcName,  // "file_name",
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return errToStatus(err), err
+	}
+	fmt.Println("Google Drive List Params:", string(jsonBody))
+	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	if err != nil {
+		fmt.Println("Error calling drive/ls:", err)
+		return errToStatus(err), err
+	}
+
+	var bodyJson GoogleDriveMetaResponse
+	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
+		fmt.Println(err)
+		return errToStatus(err), err
+	}
+
+	setContentDispositionGoogle(w, r, bodyJson.Data.Name)
+
+	if strings.HasPrefix(bodyJson.Data.Type, "image") {
+		return handleImagePreviewGoogle(w, r, src, imgSvc, fileCache, bodyJson.Data, previewSize)
+	} else {
+		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", bodyJson.Data.Type)
+	}
 }

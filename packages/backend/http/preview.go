@@ -43,10 +43,20 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
+		path := "/" + vars["path"]
+
+		srcType := r.URL.Query().Get("src")
+		if srcType == "sync" {
+			return http.StatusNotImplemented, nil
+		} else if srcType == "google" {
+			return previewGetGoogle(w, r, previewSize, path, imgSvc, fileCache)
+		} else if srcType == "awss3" {
+			return http.StatusNotImplemented, nil
+		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
 			Fs:         d.user.Fs,
-			Path:       "/" + vars["path"],
+			Path:       path,
 			Modify:     d.user.Perm.Modify,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
@@ -145,7 +155,6 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 
 	go func() {
 		cacheKey := previewCacheKey(file, previewSize)
-		fmt.Println("Caching image with key:", cacheKey)
 		if err := fileCache.Store(context.Background(), cacheKey, buf.Bytes()); err != nil {
 			fmt.Printf("failed to cache resized image: %v", err)
 		}
@@ -155,6 +164,5 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 }
 
 func previewCacheKey(f *files.FileInfo, previewSize PreviewSize) string {
-	//return "/file_cache/" + fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
 	return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
 }
