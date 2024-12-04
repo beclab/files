@@ -2,6 +2,8 @@ package http
 
 import (
 	"compress/gzip"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -370,4 +372,16 @@ func stripPrefix(prefix string, h http.Handler) http.Handler {
 		r2.URL.RawPath = rp
 		h.ServeHTTP(w, r2)
 	})
+}
+
+func stringMD5(s string) string {
+	hasher := md5.New()
+
+	hasher.Write([]byte(s))
+
+	hashBytes := hasher.Sum(nil)
+
+	hashString := hex.EncodeToString(hashBytes)
+
+	return hashString
 }

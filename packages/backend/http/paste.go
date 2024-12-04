@@ -2426,7 +2426,7 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 		}
 		return nil
 	} else if srcType == "google" {
-		_, status, err := resourceDeleteGoogle(src, w, r, true)
+		_, status, err := resourceDeleteGoogle(fileCache, src, w, r, true)
 		if status != http.StatusOK && status != 0 {
 			return os.ErrInvalid
 		}

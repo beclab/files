@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"io"
 	"io/ioutil"
 	"log"
@@ -373,7 +374,7 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
-			_, status, err := resourceDeleteGoogle("", w, r, false)
+			_, status, err := resourceDeleteGoogle(fileCache, "", w, r, false)
 			return status, err
 		}
 
@@ -551,7 +552,7 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
-			return resourcePatchGoogle(w, r)
+			return resourcePatchGoogle(fileCache, w, r)
 		}
 
 		src := r.URL.Path
@@ -666,7 +667,12 @@ func writeFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 func delThumbs(ctx context.Context, fileCache FileCache, file *files.FileInfo) error {
 	for _, previewSizeName := range PreviewSizeNames() {
 		size, _ := ParsePreviewSize(previewSizeName)
-		if err := fileCache.Delete(ctx, previewCacheKey(file, size)); err != nil {
+		cacheKey := previewCacheKey(file, size)
+		if err := fileCache.Delete(ctx, cacheKey); err != nil {
+			return err
+		}
+		err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
+		if err != nil {
 			return err
 		}
 	}
