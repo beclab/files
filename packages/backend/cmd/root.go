@@ -132,7 +132,8 @@ user created with the credentials from options "username" and "password".`,
 		imgSvc := img.New(workersCount)
 
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
-		cacheDir, err := cmd.Flags().GetString("cache-dir")
+		// cacheDir, err := cmd.Flags().GetString("cache-dir")
+		cacheDir := "/data/file_cache"
 		checkErr(err)
 		if cacheDir != "" {
 			if err := os.MkdirAll(cacheDir, 0700); err != nil { //nolint:govet,gomnd
