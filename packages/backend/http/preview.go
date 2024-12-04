@@ -156,5 +156,5 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 
 func previewCacheKey(f *files.FileInfo, previewSize PreviewSize) string {
 	//return "/file_cache/" + fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
-	return fmt.Sprintf("%s%d%s", f.RealPath(), f.ModTime.Unix(), previewSize)
+	return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
 }
