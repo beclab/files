@@ -5,13 +5,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-
-	"github.com/gorilla/mux"
-
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/img"
+	"github.com/filebrowser/filebrowser/v2/my_redis"
+	"github.com/gorilla/mux"
+	"io"
+	"net/http"
 )
 
 /*
@@ -44,10 +43,20 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
+		path := "/" + vars["path"]
+
+		srcType := r.URL.Query().Get("src")
+		if srcType == "sync" {
+			return http.StatusNotImplemented, nil
+		} else if srcType == "google" {
+			return previewGetGoogle(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
+		} else if srcType == "awss3" {
+			return http.StatusNotImplemented, nil
+		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
 			Fs:         d.user.Fs,
-			Path:       "/" + vars["path"],
+			Path:       path,
 			Modify:     d.user.Perm.Modify,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
@@ -92,6 +101,8 @@ func handleImagePreview(
 	}
 
 	cacheKey := previewCacheKey(file, previewSize)
+	fmt.Println("cacheKey:", cacheKey)
+	fmt.Println("f.RealPath:", file.RealPath())
 	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
 	if err != nil {
 		return errToStatus(err), err
@@ -103,6 +114,8 @@ func handleImagePreview(
 		}
 	}
 
+	my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
+
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, file.ModTime, bytes.NewReader(resizedImage))
 
@@ -111,6 +124,7 @@ func handleImagePreview(
 
 func createPreview(imgSvc ImgService, fileCache FileCache,
 	file *files.FileInfo, previewSize PreviewSize) ([]byte, error) {
+	fmt.Println("!!!!CreatePreview:", previewSize)
 	fd, err := file.Fs.Open(file.Path)
 	if err != nil {
 		return nil, err
@@ -152,5 +166,6 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 }
 
 func previewCacheKey(f *files.FileInfo, previewSize PreviewSize) string {
+	//return stringMD5(fmt.Sprintf("%s%d%s", f.RealPath(), f.ModTime.Unix(), previewSize))
 	return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
 }
