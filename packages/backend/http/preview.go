@@ -146,6 +146,7 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 
 	go func() {
 		cacheKey := previewCacheKey(file, previewSize)
+		fmt.Println("Caching image with key:", cacheKey)
 		if err := fileCache.Store(context.Background(), cacheKey, buf.Bytes()); err != nil {
 			fmt.Printf("failed to cache resized image: %v", err)
 		}
