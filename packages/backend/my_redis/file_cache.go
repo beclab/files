@@ -33,14 +33,16 @@ func StartDailyCleanup() {
 
 	for range ticker.C {
 		cleanupMux.Lock()
-		CleanupOldFilesAndRedisEntries()
+		CleanupOldFilesAndRedisEntries(cycle)
 		cleanupMux.Unlock()
 	}
 }
 
 // 清理过期文件和Redis ZSET成员
-func CleanupOldFilesAndRedisEntries() {
-	cutoffTime := time.Now().Add(-7 * 24 * time.Hour).Unix()
+func CleanupOldFilesAndRedisEntries(duration time.Duration) {
+	fmt.Printf("Cleaning up old files at %d\n", time.Now().Unix())
+	cutoffTime := time.Now().Add(-duration).Unix()
+	//cutoffTime := time.Now().Add(-7 * 24 * time.Hour).Unix()
 	cutoffTimeStr := strconv.FormatInt(cutoffTime, 10)
 
 	// 获取所有成员及其分数
