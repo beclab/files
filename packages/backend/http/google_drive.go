@@ -1958,8 +1958,8 @@ func setContentDispositionGoogle(w http.ResponseWriter, r *http.Request, fileNam
 }
 
 func previewCacheKeyGoogle(f GoogleDriveMetaData, previewSize PreviewSize) string {
-	return stringMD5(fmt.Sprintf("%s%d%s", f.Path, f.Modified.Unix(), previewSize))
-	//return fmt.Sprintf("%x%x%x", f.Path, f.Modified.Unix(), previewSize)
+	//return stringMD5(fmt.Sprintf("%s%d%s", f.Path, f.Modified.Unix(), previewSize))
+	return fmt.Sprintf("%x%x%x", f.Path, f.Modified.Unix(), previewSize)
 }
 
 func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, imgSvc ImgService, fileCache FileCache,

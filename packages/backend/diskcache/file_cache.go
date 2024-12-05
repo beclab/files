@@ -107,5 +107,6 @@ func (f *FileCache) getFileName(key string) string {
 	hasher := sha1.New() //nolint:gosec
 	_, _ = hasher.Write([]byte(key))
 	hash := hex.EncodeToString(hasher.Sum(nil))
-	return fmt.Sprintf("%s/%s/%s", hash[:1], hash[1:3], hash)
+	//return fmt.Sprintf("%s/%s/%s", hash[:1], hash[1:3], hash)
+	return hash
 }
