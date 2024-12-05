@@ -133,7 +133,7 @@ func RedisDelKey(key string) {
 }
 
 // RedisZAdd 添加成员到有序集合
-func RedisZAdd(key string, members map[string]float64) {
+func RedisZAdd(key string, members map[string]float64) error {
 	// 将 map 转换为 []redis.Z
 	zMembers := make([]redis.Z, 0, len(members))
 	for member, score := range members {
@@ -144,13 +144,14 @@ func RedisZAdd(key string, members map[string]float64) {
 	err := redisClient.ZAdd(key, zMembers...).Err()
 	if err != nil {
 		fmt.Println("添加成员到有序集合失败:", err)
-		return
+		return err
 	}
 	fmt.Println("成员已成功添加到有序集合")
+	return nil
 }
 
 // ZScore 获取成员的分数
-func RedisZScore(key, member string) *float64 {
+func RedisZScore(key, member string) (*float64, error) {
 	score, err := redisClient.ZScore(key, member).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -158,10 +159,10 @@ func RedisZScore(key, member string) *float64 {
 		} else {
 			fmt.Println("获取成员分数失败:", err)
 		}
-		return nil
+		return nil, err
 	}
 	fmt.Println("成员", member, "的分数是:", score)
-	return &score
+	return &score, nil
 }
 
 // ZIncrBy 增加成员的分数
@@ -190,24 +191,25 @@ func RedisZRank(key, member string) *int64 {
 }
 
 // ZRem 删除有序集合中的成员
-func RedisZRem(key, member string) {
+func RedisZRem(key, member string) error {
 	err := redisClient.ZRem(key, member).Err()
 	if err != nil {
 		fmt.Println("删除有序集合中的成员失败:", err)
-		return
+		return err
 	}
 	fmt.Println("成员已成功删除")
+	return nil
 }
 
 // ZRange 获取有序集合中指定范围的成员（按分数从小到大）
-func RedisZRange(key string, start, stop int64) []string {
+func RedisZRange(key string, start, stop int64) ([]string, error) {
 	members, err := redisClient.ZRange(key, start, stop).Result()
 	if err != nil {
 		fmt.Println("获取有序集合中指定范围的成员失败:", err)
-		return nil
+		return nil, err
 	}
 	fmt.Println("有序集合中指定范围的成员是:", members)
-	return members
+	return members, nil
 }
 
 // ZCard 获取有序集合的基数（成员数量）

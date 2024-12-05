@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/img"
+	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"github.com/gorilla/mux"
 	"io"
 	"net/http"
@@ -112,6 +113,8 @@ func handleImagePreview(
 			return errToStatus(err), err
 		}
 	}
+
+	my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
 
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, file.ModTime, bytes.NewReader(resizedImage))

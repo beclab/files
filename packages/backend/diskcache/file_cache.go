@@ -6,13 +6,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/spf13/afero"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/spf13/afero"
 )
+
+var CacheDir = "/data/file_cache"
 
 type FileCache struct {
 	fs afero.Fs
