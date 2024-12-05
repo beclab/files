@@ -75,7 +75,7 @@ func GetFileName(key string) string {
 	_, _ = hasher.Write([]byte(key))
 	hash := hex.EncodeToString(hasher.Sum(nil))
 	//return fmt.Sprintf("%s/%s/%s", hash[:1], hash[1:3], hash)
-	return folderPath + "/" + hash
+	return hash
 }
 
 // 更新文件访问时间
