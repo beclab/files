@@ -1992,7 +1992,7 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 		return nil, err
 	}
 
-	fd, err := os.Open(bufferFilePath)
+	fd, err := os.Open(bufferPath)
 	if err != nil {
 		return nil, err
 	}
