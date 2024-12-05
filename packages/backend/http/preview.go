@@ -49,7 +49,7 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 		if srcType == "sync" {
 			return http.StatusNotImplemented, nil
 		} else if srcType == "google" {
-			return previewGetGoogle(w, r, previewSize, path, imgSvc, fileCache)
+			return previewGetGoogle(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
 		} else if srcType == "awss3" {
 			return http.StatusNotImplemented, nil
 		}

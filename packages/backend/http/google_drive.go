@@ -2077,6 +2077,49 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 	return buf.Bytes(), nil
 }
 
+func rawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, file *GoogleDriveMetaData, bflName string) (int, error) {
+	var err error
+	diskSize := file.Size
+	if diskSize >= 4*1024*1024*1024 {
+		fmt.Println("file size exceeds 4GB")
+		return http.StatusForbidden, e.New("file size exceeds 4GB") //os.ErrPermission
+	}
+	fmt.Println("Will reserve disk size: ", diskSize)
+	bufferFilePath, err := generateBufferFolder(file.Path, bflName)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	bufferPath := filepath.Join(bufferFilePath, file.Name)
+	fmt.Println("Buffer file path: ", bufferFilePath)
+	fmt.Println("Buffer path: ", bufferPath)
+	err = makeDiskBuffer(bufferPath, diskSize, true)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	_, err = googleFileToBuffer(src, bufferFilePath, w, r)
+	//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
+	//fmt.Println("Buffer file path: ", bufferFilePath)
+	//fmt.Println("Buffer path: ", bufferPath)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	fd, err := os.Open(bufferPath)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	defer fd.Close()
+
+	setContentDispositionGoogle(w, r, file.Name)
+
+	w.Header().Set("Cache-Control", "private")
+	http.ServeContent(w, r, file.Name, file.Modified, fd)
+
+	fmt.Println("Begin to remove buffer")
+	removeDiskBuffer(bufferPath, "google")
+	return 0, nil
+}
+
 func handleImagePreviewGoogle(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -2085,26 +2128,29 @@ func handleImagePreviewGoogle(
 	fileCache FileCache,
 	file *GoogleDriveMetaData,
 	previewSize PreviewSize,
+	enableThumbnails, resizePreview bool,
 ) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return errToStatus(os.ErrPermission), os.ErrPermission
 	}
 
-	//TODO: RawFile
-	//if (previewSize == PreviewSizeBig && !resizePreview) ||
-	//	(previewSize == PreviewSizeThumb && !enableThumbnails) {
-	//	return rawFileHandler(w, r, file)
-	//}
+	// for test
+	return rawFileHandlerGoogle(src, w, r, file, bflName)
 
-	//format, err := imgSvc.FormatFromExtension(file.Data.Extension)
-	//// Unsupported extensions directly return the raw data
-	//if err == img.ErrUnsupportedFormat || format == img.FormatGif {
-	//	return rawFileHandler(w, r, file)
-	//}
-	//if err != nil {
-	//	return errToStatus(err), err
-	//}
+	if (previewSize == PreviewSizeBig && !resizePreview) ||
+		(previewSize == PreviewSizeThumb && !enableThumbnails) {
+		return rawFileHandlerGoogle(src, w, r, file, bflName)
+	}
+
+	format, err := imgSvc.FormatFromExtension(file.Extension)
+	// Unsupported extensions directly return the raw data
+	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
+		return rawFileHandlerGoogle(src, w, r, file, bflName)
+	}
+	if err != nil {
+		return errToStatus(err), err
+	}
 
 	cacheKey := previewCacheKeyGoogle(file, previewSize)
 	fmt.Println("cacheKey:", cacheKey)
@@ -2120,7 +2166,10 @@ func handleImagePreviewGoogle(
 		}
 	}
 
-	my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
+	err = my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
+	if err != nil {
+		return errToStatus(err), err
+	}
 
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, file.Modified, bytes.NewReader(resizedImage))
@@ -2128,7 +2177,8 @@ func handleImagePreviewGoogle(
 	return 0, nil
 }
 
-func previewGetGoogle(w http.ResponseWriter, r *http.Request, previewSize PreviewSize, path string, imgSvc ImgService, fileCache FileCache) (int, error) {
+func previewGetGoogle(w http.ResponseWriter, r *http.Request, previewSize PreviewSize, path string,
+	imgSvc ImgService, fileCache FileCache, enableThumbnails, resizePreview bool) (int, error) {
 	src := path
 	if !strings.HasSuffix(src, "/") {
 		src += "/"
@@ -2143,7 +2193,7 @@ func previewGetGoogle(w http.ResponseWriter, r *http.Request, previewSize Previe
 	setContentDispositionGoogle(w, r, metaData.Name)
 
 	if strings.HasPrefix(metaData.Type, "image") {
-		return handleImagePreviewGoogle(w, r, src, imgSvc, fileCache, metaData, previewSize)
+		return handleImagePreviewGoogle(w, r, src, imgSvc, fileCache, metaData, previewSize, enableThumbnails, resizePreview)
 	} else {
 		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", metaData.Type)
 	}
