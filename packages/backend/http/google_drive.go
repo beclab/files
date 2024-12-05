@@ -2158,7 +2158,12 @@ func delThumbsGoogle(ctx context.Context, fileCache FileCache, src string, w htt
 
 	for _, previewSizeName := range PreviewSizeNames() {
 		size, _ := ParsePreviewSize(previewSizeName)
-		if err := fileCache.Delete(ctx, previewCacheKeyGoogle(metaData, size)); err != nil {
+		cacheKey := previewCacheKeyGoogle(metaData, size)
+		if err := fileCache.Delete(ctx, cacheKey); err != nil {
+			return err
+		}
+		err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
+		if err != nil {
 			return err
 		}
 	}

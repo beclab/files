@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"io"
 	"io/ioutil"
 	"log"
@@ -666,7 +667,12 @@ func writeFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 func delThumbs(ctx context.Context, fileCache FileCache, file *files.FileInfo) error {
 	for _, previewSizeName := range PreviewSizeNames() {
 		size, _ := ParsePreviewSize(previewSizeName)
-		if err := fileCache.Delete(ctx, previewCacheKey(file, size)); err != nil {
+		cacheKey := previewCacheKey(file, size)
+		if err := fileCache.Delete(ctx, cacheKey); err != nil {
+			return err
+		}
+		err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
+		if err != nil {
 			return err
 		}
 	}
