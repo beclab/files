@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"github.com/spf13/afero"
 	"io"
 	"os"
@@ -71,6 +72,10 @@ func (f *FileCache) Delete(ctx context.Context, key string) error {
 
 	fileName := f.getFileName(key)
 	if err := f.fs.Remove(fileName); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	err := my_redis.DelThumbRedisKey(fileName)
+	if err != nil {
 		return err
 	}
 	return nil

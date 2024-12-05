@@ -19,6 +19,18 @@ var (
 	cleanupMux sync.Mutex
 )
 
+func DelThumbRedisKey(key string) error {
+	cleanupMux.Lock()
+	defer cleanupMux.Unlock()
+
+	err := RedisZRem(zsetKey, key)
+	if err != nil {
+		fmt.Println("Error removing file from Redis:", err)
+		return err
+	}
+	return nil
+}
+
 // 每天定时清理过期文件和Redis ZSET成员
 func StartDailyCleanup() {
 	cycle := time.Minute * 5

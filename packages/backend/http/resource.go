@@ -373,7 +373,7 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
-			_, status, err := resourceDeleteGoogle("", w, r, false)
+			_, status, err := resourceDeleteGoogle(fileCache, "", w, r, false)
 			return status, err
 		}
 
@@ -551,7 +551,7 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
-			return resourcePatchGoogle(w, r)
+			return resourcePatchGoogle(fileCache, w, r)
 		}
 
 		src := r.URL.Path

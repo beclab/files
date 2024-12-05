@@ -701,6 +701,35 @@ func getGoogleDriveIdInfos(src string, w http.ResponseWriter, r *http.Request) (
 	return
 }
 
+func getGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*GoogleDriveMetaData, error) {
+	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
+
+	param := GoogleDriveListParam{
+		Path:  pathId,
+		Drive: srcDrive, // "my_drive",
+		Name:  srcName,  // "file_name",
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return nil, err
+	}
+	fmt.Println("Google Drive List Params:", string(jsonBody))
+	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	if err != nil {
+		fmt.Println("Error calling drive/ls:", err)
+		return nil, err
+	}
+
+	var bodyJson GoogleDriveMetaResponse
+	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	return &bodyJson.Data, nil
+}
+
 type GoogleDriveIdFocusedMetaInfos struct {
 	ID    string `json:"id"`
 	Path  string `json:"path"`
@@ -1867,7 +1896,7 @@ func resourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 	return respBody, 0, nil
 }
 
-func resourcePatchGoogle(w http.ResponseWriter, r *http.Request) (int, error) {
+func resourcePatchGoogle(fileCache FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
 	src := r.URL.Path
 	dst := r.URL.Query().Get("destination")
 	//action := r.URL.Query().Get("action")
@@ -1889,6 +1918,13 @@ func resourcePatchGoogle(w http.ResponseWriter, r *http.Request) (int, error) {
 		return errToStatus(err), err
 	}
 	fmt.Println("Google Drive Patch Params:", string(jsonBody))
+
+	// delete thumbnails
+	err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
 	_, err = GoogleDriveCall("/drive/rename", "POST", jsonBody, w, r, false)
 	if err != nil {
 		fmt.Println("Error calling drive/rename:", err)
@@ -1897,7 +1933,7 @@ func resourcePatchGoogle(w http.ResponseWriter, r *http.Request) (int, error) {
 	return 0, nil
 }
 
-func resourceDeleteGoogle(src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
+func resourceDeleteGoogle(fileCache FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
 	// src is like [repo-id]/path/filename
 	if src == "" {
 		src = r.URL.Path
@@ -1935,6 +1971,12 @@ func resourceDeleteGoogle(src string, w http.ResponseWriter, r *http.Request, re
 	//	return 0, nil
 	//}
 
+	// delete thumbnails
+	err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
+	if err != nil {
+		return nil, errToStatus(err), err
+	}
+
 	var respBody []byte = nil
 	if returnResp {
 		respBody, err = GoogleDriveCall("/drive/delete", "POST", jsonBody, w, r, true)
@@ -1958,13 +2000,13 @@ func setContentDispositionGoogle(w http.ResponseWriter, r *http.Request, fileNam
 	}
 }
 
-func previewCacheKeyGoogle(f GoogleDriveMetaData, previewSize PreviewSize) string {
+func previewCacheKeyGoogle(f *GoogleDriveMetaData, previewSize PreviewSize) string {
 	//return stringMD5(fmt.Sprintf("%s%d%s", f.Path, f.Modified.Unix(), previewSize))
 	return fmt.Sprintf("%x%x%x", f.Path, f.Modified.Unix(), previewSize)
 }
 
 func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, imgSvc ImgService, fileCache FileCache,
-	file GoogleDriveMetaData, previewSize PreviewSize, bflName string) ([]byte, error) {
+	file *GoogleDriveMetaData, previewSize PreviewSize, bflName string) ([]byte, error) {
 	fmt.Println("!!!!CreatePreview:", previewSize)
 
 	var err error
@@ -2041,7 +2083,7 @@ func handleImagePreviewGoogle(
 	src string,
 	imgSvc ImgService,
 	fileCache FileCache,
-	file GoogleDriveMetaData,
+	file *GoogleDriveMetaData,
 	previewSize PreviewSize,
 ) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
@@ -2092,37 +2134,34 @@ func previewGetGoogle(w http.ResponseWriter, r *http.Request, previewSize Previe
 		src += "/"
 	}
 
-	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
-
-	param := GoogleDriveListParam{
-		Path:  pathId,
-		Drive: srcDrive, // "my_drive",
-		Name:  srcName,  // "file_name",
-	}
-
-	jsonBody, err := json.Marshal(param)
+	metaData, err := getGoogleDriveMetadata(src, w, r)
 	if err != nil {
-		fmt.Println("Error marshalling JSON:", err)
-		return errToStatus(err), err
-	}
-	fmt.Println("Google Drive List Params:", string(jsonBody))
-	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
-	if err != nil {
-		fmt.Println("Error calling drive/ls:", err)
-		return errToStatus(err), err
-	}
-
-	var bodyJson GoogleDriveMetaResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
 		fmt.Println(err)
 		return errToStatus(err), err
 	}
 
-	setContentDispositionGoogle(w, r, bodyJson.Data.Name)
+	setContentDispositionGoogle(w, r, metaData.Name)
 
-	if strings.HasPrefix(bodyJson.Data.Type, "image") {
-		return handleImagePreviewGoogle(w, r, src, imgSvc, fileCache, bodyJson.Data, previewSize)
+	if strings.HasPrefix(metaData.Type, "image") {
+		return handleImagePreviewGoogle(w, r, src, imgSvc, fileCache, metaData, previewSize)
 	} else {
-		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", bodyJson.Data.Type)
+		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", metaData.Type)
 	}
+}
+
+func delThumbsGoogle(ctx context.Context, fileCache FileCache, src string, w http.ResponseWriter, r *http.Request) error {
+	metaData, err := getGoogleDriveMetadata(src, w, r)
+	if err != nil {
+		fmt.Println("Error calling drive/get_file_meta_data:", err)
+		return err
+	}
+
+	for _, previewSizeName := range PreviewSizeNames() {
+		size, _ := ParsePreviewSize(previewSizeName)
+		if err := fileCache.Delete(ctx, previewCacheKeyGoogle(metaData, size)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
