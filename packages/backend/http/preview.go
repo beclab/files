@@ -5,12 +5,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/files"
+	"github.com/filebrowser/filebrowser/v2/img"
 	"github.com/gorilla/mux"
 	"io"
 	"net/http"
-
-	"github.com/filebrowser/filebrowser/v2/files"
-	"github.com/filebrowser/filebrowser/v2/img"
 )
 
 /*
@@ -164,5 +163,6 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 }
 
 func previewCacheKey(f *files.FileInfo, previewSize PreviewSize) string {
-	return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
+	return stringMD5(fmt.Sprintf("%s%d%s", f.RealPath(), f.ModTime.Unix(), previewSize))
+	//return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
 }
