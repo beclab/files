@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/diskcache"
 	"github.com/go-redis/redis"
-	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -41,9 +41,10 @@ func StartDailyCleanup() {
 // 清理过期文件和Redis ZSET成员
 func CleanupOldFilesAndRedisEntries() {
 	cutoffTime := time.Now().Add(-7 * 24 * time.Hour).Unix()
+	cutoffTimeStr := strconv.FormatInt(cutoffTime, 10)
 
 	// 获取所有成员及其分数
-	results, err := RedisZRange(zsetKey, math.MinInt64, cutoffTime)
+	results, err := RedisZRangeByScore(zsetKey, "-inf", cutoffTimeStr, false)
 	if err != nil {
 		fmt.Println("Error fetching files from Redis:", err)
 		return
@@ -120,7 +121,7 @@ func InitFolderAndRedis() {
 		fmt.Println("Error initializing folder and Redis:", err)
 	}
 
-	results, err := RedisZRange(zsetKey, math.MinInt64, math.MaxInt64)
+	results, err := RedisZRange(zsetKey, 0, -1)
 	if err != nil {
 		fmt.Println("Error fetching files from Redis:", err)
 		return

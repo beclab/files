@@ -212,6 +212,46 @@ func RedisZRange(key string, start, stop int64) ([]string, error) {
 	return members, nil
 }
 
+func RedisZRangeByScore(key, minScore, maxScore string, withScores bool) ([]string, error) {
+	// 准备 ZRangeByScore 的选项
+	zRangeBy := redis.ZRangeBy{
+		Min:    minScore,
+		Max:    maxScore,
+		Offset: 0,
+		Count:  -1,
+	}
+
+	// 根据是否需要分数来调用 ZRangeByScore
+	var members []string
+	var err error
+	if withScores {
+		// 如果需要分数，我们将获取成员和分数的映射
+		memberScores, err := redisClient.ZRangeByScoreWithScores(key, zRangeBy).Result()
+		if err != nil {
+			fmt.Println("获取有序集合中指定分数范围的成员及其分数失败:", err)
+			return nil, err
+		}
+
+		// 只提取成员部分
+		for _, memberScore := range memberScores {
+			members = append(members, memberScore.Member.(string))
+		}
+	} else {
+		// 如果不需要分数，我们直接获取成员列表
+		members, err = redisClient.ZRangeByScore(key, zRangeBy).Result()
+		if err != nil {
+			fmt.Println("获取有序集合中指定分数范围的成员失败:", err)
+			return nil, err
+		}
+	}
+
+	// 打印获取到的成员列表（可选）
+	fmt.Println("有序集合中指定分数范围的成员是:", members)
+
+	// 返回成员列表和 nil 错误
+	return members, nil
+}
+
 // ZCard 获取有序集合的基数（成员数量）
 func RedisZCard(key string) int64 {
 	card, err := redisClient.ZCard(key).Result()
