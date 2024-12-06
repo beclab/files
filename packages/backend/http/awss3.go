@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Awss3ListParam struct {
@@ -83,6 +84,77 @@ type Awss3FocusedMetaInfos struct {
 	Name  string `json:"name"`
 	Size  int64  `json:"size"`
 	IsDir bool   `json:"is_dir"`
+}
+
+type Awss3PostParam struct {
+	ParentPath string `json:"parent_path"`
+	FolderName string `json:"folder_name"`
+	Drive      string `json:"drive"`
+	Name       string `json:"name"`
+}
+
+type Awss3PostResponseFileMeta struct {
+	Capabilities                 *bool       `json:"capabilities,omitempty"`
+	CopyRequiresWriterPermission *bool       `json:"copyRequiresWriterPermission,omitempty"`
+	CreatedTime                  *time.Time  `json:"createdTime,omitempty"`
+	ExplicitlyTrashed            *bool       `json:"explicitlyTrashed,omitempty"`
+	FileExtension                *string     `json:"fileExtension,omitempty"`
+	FullFileExtension            *string     `json:"fullFileExtension,omitempty"`
+	HasThumbnail                 *bool       `json:"hasThumbnail,omitempty"`
+	HeadRevisionId               *string     `json:"headRevisionId,omitempty"`
+	IconLink                     *string     `json:"iconLink,omitempty"`
+	ID                           string      `json:"id"`
+	IsAppAuthorized              *bool       `json:"isAppAuthorized,omitempty"`
+	Kind                         string      `json:"kind"`
+	LastModifyingUser            *struct{}   `json:"lastModifyingUser,omitempty"`
+	LinkShareMetadata            *struct{}   `json:"linkShareMetadata,omitempty"`
+	MD5Checksum                  *string     `json:"md5Checksum,omitempty"`
+	MimeType                     string      `json:"mimeType"`
+	ModifiedByMe                 *bool       `json:"modifiedByMe,omitempty"`
+	ModifiedTime                 *time.Time  `json:"modifiedTime,omitempty"`
+	Name                         string      `json:"name"`
+	OriginalFilename             *string     `json:"originalFilename,omitempty"`
+	OwnedByMe                    *bool       `json:"ownedByMe,omitempty"`
+	Owners                       []*struct{} `json:"owners,omitempty"`
+	QuotaBytesUsed               *int64      `json:"quotaBytesUsed,omitempty"`
+	SHA1Checksum                 *string     `json:"sha1Checksum,omitempty"`
+	SHA256Checksum               *string     `json:"sha256Checksum,omitempty"`
+	Shared                       *bool       `json:"shared,omitempty"`
+	SharedWithMeTime             *time.Time  `json:"sharedWithMeTime,omitempty"`
+	Size                         *int64      `json:"size,omitempty"`
+	Spaces                       *string     `json:"spaces,omitempty"`
+	Starred                      *bool       `json:"starred,omitempty"`
+	ThumbnailLink                *string     `json:"thumbnailLink,omitempty"`
+	ThumbnailVersion             *int64      `json:"thumbnailVersion,omitempty"`
+	Title                        *string     `json:"title,omitempty"`
+	Trashed                      *bool       `json:"trashed,omitempty"`
+	Version                      *int64      `json:"version,omitempty"`
+	ViewedByMe                   *bool       `json:"viewedByMe,omitempty"`
+	ViewedByMeTime               *time.Time  `json:"viewedByMeTime,omitempty"`
+	ViewersCanCopyContent        *bool       `json:"viewersCanCopyContent,omitempty"`
+	WebContentLink               *string     `json:"webContentLink,omitempty"`
+	WebViewLink                  *string     `json:"webViewLink,omitempty"`
+	WritersCanShare              *bool       `json:"writersCanShare,omitempty"`
+}
+
+type Awss3PostResponseFileData struct {
+	Extension string                          `json:"extension"`
+	FileSize  int64                           `json:"fileSize"`
+	IsDir     bool                            `json:"isDir"`
+	IsSymlink bool                            `json:"isSymlink"`
+	Meta      GoogleDrivePostResponseFileMeta `json:"meta"`
+	Mode      string                          `json:"mode"`
+	Modified  string                          `json:"modified"`
+	Name      string                          `json:"name"`
+	Path      string                          `json:"path"`
+	Size      int64                           `json:"size"`
+	Type      string                          `json:"type"`
+}
+
+type Awss3PostResponse struct {
+	Data       GoogleDrivePostResponseFileData `json:"data"`
+	FailReason *string                         `json:"fail_reason,omitempty"`
+	StatusCode string                          `json:"status_code"`
 }
 
 type Awss3DownloadFileSyncParam struct {
@@ -489,7 +561,7 @@ func splitPath(path string) (dir, name string) {
 	// 如果dir只有一个"/"，则表示根目录
 	if dir == "/" {
 		// 特殊处理根目录情况，此时name应为整个trimmedPath
-		name = trimmedPath
+		name = strings.TrimPrefix(trimmedPath, "/")
 		dir = "/"
 	}
 
@@ -503,9 +575,10 @@ func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, retur
 	fmt.Println("src Path:", src)
 
 	srcDrive, srcName, srcPath := parseAwss3Path(src)
+	fmt.Println("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
 	path, newName := splitPath(srcPath)
 
-	param := GoogleDrivePostParam{
+	param := Awss3PostParam{
 		ParentPath: path,
 		FolderName: newName,
 		Drive:      srcDrive, // "my_drive",
