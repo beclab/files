@@ -2135,9 +2135,6 @@ func handleImagePreviewGoogle(
 		return errToStatus(os.ErrPermission), os.ErrPermission
 	}
 
-	// for test
-	return rawFileHandlerGoogle(src, w, r, file, bflName)
-
 	if (previewSize == PreviewSizeBig && !resizePreview) ||
 		(previewSize == PreviewSizeThumb && !enableThumbnails) {
 		return rawFileHandlerGoogle(src, w, r, file, bflName)

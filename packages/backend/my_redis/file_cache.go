@@ -33,19 +33,19 @@ func DelThumbRedisKey(key string) error {
 
 // 每天定时清理过期文件和Redis ZSET成员
 func StartDailyCleanup() {
-	cycle := time.Minute * 5
+	cycle := time.Hour // time.Minute * 5
 	ticker := time.NewTicker(cycle)
 	defer ticker.Stop()
 
 	// 在下一次整点时触发
-	//now := time.Now()
-	//nextCleanupTime := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location()).Add(cycle)
-	//duration := nextCleanupTime.Sub(now)
-	//time.Sleep(duration)
+	now := time.Now()
+	nextCleanupTime := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location()).Add(cycle)
+	duration := nextCleanupTime.Sub(now)
+	time.Sleep(duration)
 
 	for range ticker.C {
 		cleanupMux.Lock()
-		CleanupOldFilesAndRedisEntries(cycle)
+		CleanupOldFilesAndRedisEntries(1 * cycle)
 		cleanupMux.Unlock()
 	}
 }
@@ -72,7 +72,8 @@ func CleanupOldFilesAndRedisEntries(duration time.Duration) {
 		err = os.Remove(filePath)
 		if err != nil {
 			fmt.Println("Error deleting file:", err)
-			continue
+			// if file delete failed, key will also be removed
+			//continue
 		}
 
 		// 从Redis ZSET中删除成员
