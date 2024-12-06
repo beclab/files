@@ -456,6 +456,9 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 		if srcType == "google" {
 			_, status, err := resourcePostGoogle("", w, r, false)
 			return status, err
+		} else if srcType == "awss3" {
+			_, status, err := resourcePostAwss3("", w, r, false)
+			return status, err
 		}
 
 		modeParam := r.URL.Query().Get("mode")

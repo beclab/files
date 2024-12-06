@@ -464,3 +464,69 @@ func resourceGetAwss3(w http.ResponseWriter, r *http.Request, stream int, meta i
 	}
 	return 0, nil
 }
+
+func splitPath(path string) (dir, name string) {
+	// 去掉结尾的"/"
+	trimmedPath := strings.TrimRight(path, "/")
+
+	// 查找最后一个"/"的位置
+	lastIndex := strings.LastIndex(trimmedPath, "/")
+
+	if lastIndex == -1 {
+		// 如果没有找到"/"，则dir为"/"，name为整个trimmedPath
+		return "/", trimmedPath
+	}
+
+	// 分割dir和name，注意这里dir不包括最后的"/"
+	dir = trimmedPath[:lastIndex+1] // 包括到最后一个"/"之前的部分
+	// 如果路径只有根目录和"/"，则name应为空
+	if lastIndex+1 == len(trimmedPath) {
+		name = ""
+	} else {
+		name = trimmedPath[lastIndex+1:]
+	}
+
+	// 如果dir只有一个"/"，则表示根目录
+	if dir == "/" {
+		// 特殊处理根目录情况，此时name应为整个trimmedPath
+		name = trimmedPath
+		dir = "/"
+	}
+
+	return dir, name
+}
+
+func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
+	if src == "" {
+		src = r.URL.Path
+	}
+	fmt.Println("src Path:", src)
+
+	srcDrive, srcName, srcPath := parseAwss3Path(src)
+	path, newName := splitPath(srcPath)
+
+	param := GoogleDrivePostParam{
+		ParentPath: path,
+		FolderName: newName,
+		Drive:      srcDrive, // "my_drive",
+		Name:       srcName,  // "file_name",
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return nil, errToStatus(err), err
+	}
+	fmt.Println("Awss3 Post Params:", string(jsonBody))
+	var respBody []byte = nil
+	if returnResp {
+		respBody, err = Awss3Call("/drive/create_folder", "POST", jsonBody, w, r, true)
+	} else {
+		_, err = Awss3Call("/drive/create_folder", "POST", jsonBody, w, r, false)
+	}
+	if err != nil {
+		fmt.Println("Error calling drive/create_folder:", err)
+		return respBody, errToStatus(err), err
+	}
+	return respBody, 0, nil
+}
