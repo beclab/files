@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -171,6 +172,21 @@ type Awss3DeleteParam struct {
 	Name  string `json:"name"`
 }
 
+type Awss3CopyFileParam struct {
+	CloudFilePath     string `json:"cloud_file_path"`
+	NewCloudDirectory string `json:"new_cloud_directory"`
+	NewCloudFileName  string `json:"new_cloud_file_name"`
+	Drive             string `json:"drive"`
+	Name              string `json:"name"`
+}
+
+type Awss3MoveFileParam struct {
+	CloudFilePath     string `json:"cloud_file_path"`
+	NewCloudDirectory string `json:"new_cloud_directory"`
+	Drive             string `json:"drive"`
+	Name              string `json:"name"`
+}
+
 type Awss3DownloadFileSyncParam struct {
 	LocalFolder   string `json:"local_folder"`
 	CloudFilePath string `json:"cloud_file_path"`
@@ -313,6 +329,44 @@ func streamAwss3Files(w http.ResponseWriter, r *http.Request, body []byte, param
 	}
 }
 
+func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request) error {
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
+	if srcPath == "" {
+		fmt.Println("Src parse failed.")
+		return nil
+	}
+	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
+	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
+	dstDir, dstFilename := path.Split(dstPath)
+	if dstDir == "" || dstFilename == "" {
+		fmt.Println("Dst parse failed.")
+		return nil
+	}
+	// 填充数据
+	param := Awss3CopyFileParam{
+		CloudFilePath:     srcPath,     // id of "path/to/cloud/file.txt",
+		NewCloudDirectory: dstDir,      // id of "new/cloud/directory",
+		NewCloudFileName:  dstFilename, // "new_file_name.txt",
+		Drive:             dstDrive,    // "my_drive",
+		Name:              dstName,     // "file_name",
+	}
+
+	// 将数据序列化为 JSON
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return err
+	}
+	fmt.Println("Copy File Params:", string(jsonBody))
+	_, err = Awss3Call("/drive/copy_file", "POST", jsonBody, w, r, true)
+	if err != nil {
+		fmt.Println("Error calling drive/copy_file:", err)
+		return err
+	}
+	return nil
+}
+
 func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimSuffix(src, "/")
 	if !strings.HasSuffix(bufferFilePath, "/") {
@@ -389,6 +443,31 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 	//		return e.New(taskRespJson.Data[0].Status)
 	//	}
 	//}
+}
+
+func moveAwss3FolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Request) error {
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	_, _, dstPath := parseAwss3Path(dst, true)
+
+	param := Awss3MoveFileParam{
+		CloudFilePath:     srcPath,
+		NewCloudDirectory: dstPath,
+		Drive:             srcDrive, // "my_drive",
+		Name:              srcName,  // "file_name",
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return err
+	}
+	fmt.Println("Awss3 Move File Params:", string(jsonBody))
+	_, err = Awss3Call("/drive/move_file", "POST", jsonBody, w, r, false)
+	if err != nil {
+		fmt.Println("Error calling drive/move_file:", err)
+		return err
+	}
+	return nil
 }
 
 func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, error) {
@@ -554,36 +633,36 @@ func resourceGetAwss3(w http.ResponseWriter, r *http.Request, stream int, meta i
 	return 0, nil
 }
 
-func splitPath(path string) (dir, name string) {
-	// 去掉结尾的"/"
-	trimmedPath := strings.TrimRight(path, "/")
-
-	// 查找最后一个"/"的位置
-	lastIndex := strings.LastIndex(trimmedPath, "/")
-
-	if lastIndex == -1 {
-		// 如果没有找到"/"，则dir为"/"，name为整个trimmedPath
-		return "/", trimmedPath
-	}
-
-	// 分割dir和name，注意这里dir不包括最后的"/"
-	dir = trimmedPath[:lastIndex+1] // 包括到最后一个"/"之前的部分
-	// 如果路径只有根目录和"/"，则name应为空
-	if lastIndex+1 == len(trimmedPath) {
-		name = ""
-	} else {
-		name = trimmedPath[lastIndex+1:]
-	}
-
-	// 如果dir只有一个"/"，则表示根目录
-	if dir == "/" {
-		// 特殊处理根目录情况，此时name应为整个trimmedPath
-		name = strings.TrimPrefix(trimmedPath, "/")
-		dir = "/"
-	}
-
-	return dir, name
-}
+//func splitPath(path string) (dir, name string) {
+//	// 去掉结尾的"/"
+//	trimmedPath := strings.TrimRight(path, "/")
+//
+//	// 查找最后一个"/"的位置
+//	lastIndex := strings.LastIndex(trimmedPath, "/")
+//
+//	if lastIndex == -1 {
+//		// 如果没有找到"/"，则dir为"/"，name为整个trimmedPath
+//		return "/", trimmedPath
+//	}
+//
+//	// 分割dir和name，注意这里dir不包括最后的"/"
+//	dir = trimmedPath[:lastIndex+1] // 包括到最后一个"/"之前的部分
+//	// 如果路径只有根目录和"/"，则name应为空
+//	if lastIndex+1 == len(trimmedPath) {
+//		name = ""
+//	} else {
+//		name = trimmedPath[lastIndex+1:]
+//	}
+//
+//	// 如果dir只有一个"/"，则表示根目录
+//	if dir == "/" {
+//		// 特殊处理根目录情况，此时name应为整个trimmedPath
+//		name = strings.TrimPrefix(trimmedPath, "/")
+//		dir = "/"
+//	}
+//
+//	return dir, name
+//}
 
 func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
 	if src == "" {
@@ -593,7 +672,7 @@ func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, retur
 
 	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 	fmt.Println("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
-	path, newName := splitPath(srcPath)
+	path, newName := path.Split(srcPath)
 
 	param := Awss3PostParam{
 		ParentPath: path,
@@ -629,7 +708,7 @@ func resourcePatchAwss3(fileCache FileCache, w http.ResponseWriter, r *http.Requ
 
 	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 	_, _, dstPath := parseAwss3Path(dst, true)
-	_, dstFilename := splitPath(dstPath)
+	_, dstFilename := path.Split(dstPath)
 
 	param := Awss3PatchParam{
 		Path:        srcPath,
