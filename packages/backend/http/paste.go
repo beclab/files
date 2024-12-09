@@ -1277,11 +1277,22 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			dstType = "drive"
 		}
 		fmt.Println(srcType, src, dstType, dst)
-		if srcType != "drive" && srcType != "sync" && srcType != "cache" && srcType != "google" && srcType != "awss3" {
+
+		validSrcTypes := map[string]bool{
+			"drive":   true,
+			"sync":    true,
+			"cache":   true,
+			"google":  true,
+			"awss3":   true,
+			"dropbox": true,
+			"tencent": true,
+		}
+
+		if !validSrcTypes[srcType] {
 			fmt.Println("Src type is invalid!")
 			return http.StatusForbidden, nil
 		}
-		if dstType != "drive" && dstType != "sync" && dstType != "cache" && dstType != "google" && dstType != "awss3" {
+		if !validSrcTypes[dstType] {
 			fmt.Println("Dst type is invalid!")
 			return http.StatusForbidden, nil
 		}
@@ -1322,7 +1333,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			return http.StatusForbidden, nil
 		}
 		var same = srcType == dstType
-		// google drive of two users must be seen as diff archs
+		// google drive, awss3 of two users must be seen as diff archs
 		var srcName, dstName string
 		if srcType == "google" {
 			_, srcName, _, _ = parseGoogleDrivePath(src)
@@ -1337,6 +1348,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		if srcName != dstName {
 			same = false
 		}
+
 		if same {
 			err = d.RunHook(func() error {
 				return pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, w, r)
@@ -2505,6 +2517,28 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 				src += "/"
 			}
 			return moveGoogleDriveFolderOrFiles(src, dst, w, r)
+		}
+	} else if srcType == "awss3" {
+		switch action {
+		case "copy":
+			if strings.HasSuffix(src, "/") {
+				src = strings.TrimSuffix(src, "/")
+			}
+			metaInfo, err := getAwss3FocusedMetaInfos(src, w, r)
+			if err != nil {
+				return err
+			}
+
+			if metaInfo.IsDir {
+				// TODO: should wait for creating folder function
+				// return copyAwss3Folder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
+			}
+			return copyAwss3SingleFile(src, dst, w, r)
+		case "rename":
+			if !strings.HasSuffix(src, "/") {
+				src += "/"
+			}
+			return moveAwss3FolderOrFiles(src, dst, w, r)
 		}
 	} else if srcType == "sync" {
 		var apiName string
