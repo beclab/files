@@ -556,6 +556,8 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
 			return resourcePatchGoogle(fileCache, w, r)
+		} else if srcType == "awss3" {
+			return resourcePatchAwss3(fileCache, w, r)
 		}
 
 		src := r.URL.Path

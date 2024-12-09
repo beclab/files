@@ -1327,12 +1327,12 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		if srcType == "google" {
 			_, srcName, _, _ = parseGoogleDrivePath(src)
 		} else if srcType == "awss3" {
-			_, srcName, _ = parseAwss3Path(src)
+			_, srcName, _ = parseAwss3Path(src, true)
 		}
 		if dstType == "google" {
 			_, dstName, _, _ = parseGoogleDrivePath(dst)
 		} else if srcType == "awss3" {
-			_, dstName, _ = parseAwss3Path(dst)
+			_, dstName, _ = parseAwss3Path(dst, true)
 		}
 		if srcName != dstName {
 			same = false
@@ -1869,7 +1869,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 	} else if srcType == "awss3" {
 		src = strings.TrimSuffix(src, "/")
 
-		srcDrive, srcName, srcPath := parseAwss3Path(src)
+		srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 
 		param := Awss3ListParam{
 			Path:  srcPath,
