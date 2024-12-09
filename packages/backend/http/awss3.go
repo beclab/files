@@ -737,3 +737,47 @@ func resourcePatchAwss3(fileCache FileCache, w http.ResponseWriter, r *http.Requ
 	}
 	return 0, nil
 }
+
+func resourceDeleteAwss3(fileCache FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
+	if src == "" {
+		src = r.URL.Path
+	}
+	fmt.Println("src Path:", src)
+	if strings.HasSuffix(src, "/") {
+		src = strings.TrimSuffix(src, "/")
+	}
+
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+
+	param := Awss3DeleteParam{
+		Path:  srcPath,
+		Drive: srcDrive, // "my_drive",
+		Name:  srcName,  // "file_name",
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return nil, errToStatus(err), err
+	}
+	fmt.Println("Awss3 Delete Params:", string(jsonBody))
+
+	// no thumbnails for awss3
+	//err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
+	//if err != nil {
+	//	return nil, errToStatus(err), err
+	//}
+
+	var respBody []byte = nil
+	if returnResp {
+		respBody, err = Awss3Call("/drive/delete", "POST", jsonBody, w, r, true)
+		fmt.Println(string(respBody))
+	} else {
+		_, err = Awss3Call("/drive/delete", "POST", jsonBody, w, r, false)
+	}
+	if err != nil {
+		fmt.Println("Error calling drive/delete:", err)
+		return nil, errToStatus(err), err
+	}
+	return respBody, 0, nil
+}

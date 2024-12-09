@@ -376,6 +376,9 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 		if srcType == "google" {
 			_, status, err := resourceDeleteGoogle(fileCache, "", w, r, false)
 			return status, err
+		} else if srcType == "awss3" {
+			_, status, err := resourceDeleteAwss3(fileCache, "", w, r, false)
+			return status, err
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
