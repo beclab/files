@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -157,6 +158,19 @@ type Awss3PostResponse struct {
 	StatusCode string                          `json:"status_code"`
 }
 
+type Awss3PatchParam struct {
+	Path        string `json:"path"`
+	NewFileName string `json:"new_file_name"`
+	Drive       string `json:"drive"`
+	Name        string `json:"name"`
+}
+
+type Awss3DeleteParam struct {
+	Path  string `json:"path"`
+	Drive string `json:"drive"`
+	Name  string `json:"name"`
+}
+
 type Awss3DownloadFileSyncParam struct {
 	LocalFolder   string `json:"local_folder"`
 	CloudFilePath string `json:"cloud_file_path"`
@@ -169,7 +183,7 @@ func getAwss3FocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request
 	info = nil
 	err = nil
 
-	srcDrive, srcName, srcPath := parseAwss3Path(src)
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 
 	param := Awss3ListParam{
 		Path:  srcPath,
@@ -304,7 +318,7 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 	if !strings.HasSuffix(bufferFilePath, "/") {
 		bufferFilePath += "/"
 	}
-	srcDrive, srcName, srcPath := parseAwss3Path(src)
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 	//srcPathId, srcDrive, srcName, srcDir, srcFilename, err := GoogleDrivePathToId(src, w, r, false)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
@@ -476,7 +490,7 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 	return nil, nil
 }
 
-func parseAwss3Path(src string) (drive, name, path string) {
+func parseAwss3Path(src string, trimSuffix bool) (drive, name, path string) {
 	if strings.HasPrefix(src, "/Drive/awss3") {
 		src = src[12:]
 		drive = "awss3"
@@ -496,6 +510,9 @@ func parseAwss3Path(src string) (drive, name, path string) {
 
 	name = src[1:slashes[1]]
 	path = src[slashes[1]:]
+	if trimSuffix {
+		path = strings.TrimSuffix(path, "/")
+	}
 	return drive, name, path
 }
 
@@ -503,7 +520,7 @@ func resourceGetAwss3(w http.ResponseWriter, r *http.Request, stream int, meta i
 	src := r.URL.Path
 	fmt.Println("src Path:", src)
 
-	srcDrive, srcName, srcPath := parseAwss3Path(src)
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 	fmt.Println("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
 
 	param := Awss3ListParam{
@@ -574,7 +591,7 @@ func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, retur
 	}
 	fmt.Println("src Path:", src)
 
-	srcDrive, srcName, srcPath := parseAwss3Path(src)
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 	fmt.Println("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
 	path, newName := splitPath(srcPath)
 
@@ -602,4 +619,42 @@ func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, retur
 		return respBody, errToStatus(err), err
 	}
 	return respBody, 0, nil
+}
+
+func resourcePatchAwss3(fileCache FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
+	src := r.URL.Path
+	dst := r.URL.Query().Get("destination")
+	//action := r.URL.Query().Get("action")
+	dst, err := url.QueryUnescape(dst)
+
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	_, _, dstPath := parseAwss3Path(dst, true)
+	_, dstFilename := splitPath(dstPath)
+
+	param := Awss3PatchParam{
+		Path:        srcPath,
+		NewFileName: dstFilename,
+		Drive:       srcDrive, // "my_drive",
+		Name:        srcName,  // "file_name",
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return errToStatus(err), err
+	}
+	fmt.Println("Awss3 Patch Params:", string(jsonBody))
+
+	// no thumbnails for awss3
+	//err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
+	//if err != nil {
+	//	return errToStatus(err), err
+	//}
+
+	_, err = Awss3Call("/drive/rename", "POST", jsonBody, w, r, false)
+	if err != nil {
+		fmt.Println("Error calling drive/rename:", err)
+		return errToStatus(err), err
+	}
+	return 0, nil
 }
