@@ -510,7 +510,7 @@ func parseAwss3Path(src string, trimSuffix bool) (drive, name, path string) {
 
 	name = src[1:slashes[1]]
 	path = src[slashes[1]:]
-	if trimSuffix {
+	if trimSuffix && path != "/" {
 		path = strings.TrimSuffix(path, "/")
 	}
 	return drive, name, path
