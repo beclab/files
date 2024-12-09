@@ -3,13 +3,18 @@ package http
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
+	e "errors"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/img"
+	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -140,23 +145,23 @@ type Awss3PostResponseFileMeta struct {
 }
 
 type Awss3PostResponseFileData struct {
-	Extension string                          `json:"extension"`
-	FileSize  int64                           `json:"fileSize"`
-	IsDir     bool                            `json:"isDir"`
-	IsSymlink bool                            `json:"isSymlink"`
-	Meta      GoogleDrivePostResponseFileMeta `json:"meta"`
-	Mode      string                          `json:"mode"`
-	Modified  string                          `json:"modified"`
-	Name      string                          `json:"name"`
-	Path      string                          `json:"path"`
-	Size      int64                           `json:"size"`
-	Type      string                          `json:"type"`
+	Extension string                    `json:"extension"`
+	FileSize  int64                     `json:"fileSize"`
+	IsDir     bool                      `json:"isDir"`
+	IsSymlink bool                      `json:"isSymlink"`
+	Meta      Awss3PostResponseFileMeta `json:"meta"`
+	Mode      string                    `json:"mode"`
+	Modified  string                    `json:"modified"`
+	Name      string                    `json:"name"`
+	Path      string                    `json:"path"`
+	Size      int64                     `json:"size"`
+	Type      string                    `json:"type"`
 }
 
 type Awss3PostResponse struct {
-	Data       GoogleDrivePostResponseFileData `json:"data"`
-	FailReason *string                         `json:"fail_reason,omitempty"`
-	StatusCode string                          `json:"status_code"`
+	Data       Awss3PostResponseFileData `json:"data"`
+	FailReason *string                   `json:"fail_reason,omitempty"`
+	StatusCode string                    `json:"status_code"`
 }
 
 type Awss3PatchParam struct {
@@ -192,6 +197,35 @@ type Awss3DownloadFileSyncParam struct {
 	CloudFilePath string `json:"cloud_file_path"`
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
+}
+
+func getAwss3Metadata(src string, w http.ResponseWriter, r *http.Request) (*Awss3MetaResponseData, error) {
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+
+	param := Awss3ListParam{
+		Path:  srcPath,
+		Drive: srcDrive, // "my_drive",
+		Name:  srcName,  // "file_name",
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return nil, err
+	}
+	fmt.Println("Awss3 List Params:", string(jsonBody))
+	respBody, err := Awss3Call("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	if err != nil {
+		fmt.Println("Error calling drive/ls:", err)
+		return nil, err
+	}
+
+	var bodyJson Awss3MetaResponse
+	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	return &bodyJson.Data, nil
 }
 
 func getAwss3FocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request) (info *Awss3FocusedMetaInfos, err error) {
@@ -724,11 +758,11 @@ func resourcePatchAwss3(fileCache FileCache, w http.ResponseWriter, r *http.Requ
 	}
 	fmt.Println("Awss3 Patch Params:", string(jsonBody))
 
-	// no thumbnails for awss3
-	//err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
-	//if err != nil {
-	//	return errToStatus(err), err
-	//}
+	// del thumbnails for awss3
+	err = delThumbsAwss3(r.Context(), fileCache, src, w, r)
+	if err != nil {
+		return errToStatus(err), err
+	}
 
 	_, err = Awss3Call("/drive/rename", "POST", jsonBody, w, r, false)
 	if err != nil {
@@ -762,11 +796,11 @@ func resourceDeleteAwss3(fileCache FileCache, src string, w http.ResponseWriter,
 	}
 	fmt.Println("Awss3 Delete Params:", string(jsonBody))
 
-	// no thumbnails for awss3
-	//err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
-	//if err != nil {
-	//	return nil, errToStatus(err), err
-	//}
+	// del thumbnails for awss3
+	err = delThumbsAwss3(r.Context(), fileCache, src, w, r)
+	if err != nil {
+		return nil, errToStatus(err), err
+	}
 
 	var respBody []byte = nil
 	if returnResp {
@@ -780,4 +814,243 @@ func resourceDeleteAwss3(fileCache FileCache, src string, w http.ResponseWriter,
 		return nil, errToStatus(err), err
 	}
 	return respBody, 0, nil
+}
+
+// TODO: can be one
+func setContentDispositionAwss3(w http.ResponseWriter, r *http.Request, fileName string) {
+	if r.URL.Query().Get("inline") == "true" {
+		w.Header().Set("Content-Disposition", "inline")
+	} else {
+		// As per RFC6266 section 4.3
+		w.Header().Set("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(fileName))
+	}
+}
+
+func ParseTimeString(s *string) time.Time {
+	if s == nil || *s == "" {
+		return time.Unix(0, 0)
+	}
+	parsed, err := time.Parse(time.RFC3339, *s)
+	if err != nil {
+		return time.Unix(0, 0)
+	}
+	return parsed
+}
+
+func previewCacheKeyAwss3(f *Awss3MetaResponseData, previewSize PreviewSize) string {
+	//return stringMD5(fmt.Sprintf("%s%d%s", f.Path, f.Modified.Unix(), previewSize))
+	return fmt.Sprintf("%x%x%x", f.Path, ParseTimeString(f.Modified).Unix(), previewSize)
+}
+
+func createPreviewAwss3(w http.ResponseWriter, r *http.Request, src string, imgSvc ImgService, fileCache FileCache,
+	file *Awss3MetaResponseData, previewSize PreviewSize, bflName string) ([]byte, error) {
+	fmt.Println("!!!!CreatePreview:", previewSize)
+
+	var err error
+	diskSize := file.Size
+	if diskSize >= 4*1024*1024*1024 {
+		fmt.Println("file size exceeds 4GB")
+		return nil, e.New("file size exceeds 4GB") //os.ErrPermission
+	}
+	fmt.Println("Will reserve disk size: ", diskSize)
+	bufferFilePath, err := generateBufferFolder(file.Path, bflName)
+	if err != nil {
+		return nil, err
+	}
+	bufferPath := filepath.Join(bufferFilePath, file.Name)
+	fmt.Println("Buffer file path: ", bufferFilePath)
+	fmt.Println("Buffer path: ", bufferPath)
+	err = makeDiskBuffer(bufferPath, diskSize, true)
+	if err != nil {
+		return nil, err
+	}
+	err = awss3FileToBuffer(src, bufferFilePath, w, r)
+	//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
+	//fmt.Println("Buffer file path: ", bufferFilePath)
+	//fmt.Println("Buffer path: ", bufferPath)
+	if err != nil {
+		return nil, err
+	}
+
+	fd, err := os.Open(bufferPath)
+	if err != nil {
+		return nil, err
+	}
+	defer fd.Close()
+
+	var (
+		width   int
+		height  int
+		options []img.Option
+	)
+
+	switch {
+	case previewSize == PreviewSizeBig:
+		width = 1080
+		height = 1080
+		options = append(options, img.WithMode(img.ResizeModeFit), img.WithQuality(img.QualityMedium))
+	case previewSize == PreviewSizeThumb:
+		width = 256
+		height = 256
+		options = append(options, img.WithMode(img.ResizeModeFill), img.WithQuality(img.QualityLow), img.WithFormat(img.FormatJpeg))
+	default:
+		return nil, img.ErrUnsupportedFormat
+	}
+
+	buf := &bytes.Buffer{}
+	if err := imgSvc.Resize(context.Background(), fd, width, height, buf, options...); err != nil {
+		return nil, err
+	}
+
+	go func() {
+		cacheKey := previewCacheKeyAwss3(file, previewSize)
+		if err := fileCache.Store(context.Background(), cacheKey, buf.Bytes()); err != nil {
+			fmt.Printf("failed to cache resized image: %v", err)
+		}
+	}()
+
+	fmt.Println("Begin to remove buffer")
+	removeDiskBuffer(bufferPath, "awss3")
+	return buf.Bytes(), nil
+}
+
+func rawFileHandlerAwss3(src string, w http.ResponseWriter, r *http.Request, file *Awss3MetaResponseData, bflName string) (int, error) {
+	var err error
+	diskSize := file.Size
+	if diskSize >= 4*1024*1024*1024 {
+		fmt.Println("file size exceeds 4GB")
+		return http.StatusForbidden, e.New("file size exceeds 4GB") //os.ErrPermission
+	}
+	fmt.Println("Will reserve disk size: ", diskSize)
+	bufferFilePath, err := generateBufferFolder(file.Path, bflName)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	bufferPath := filepath.Join(bufferFilePath, file.Name)
+	fmt.Println("Buffer file path: ", bufferFilePath)
+	fmt.Println("Buffer path: ", bufferPath)
+	err = makeDiskBuffer(bufferPath, diskSize, true)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	err = awss3FileToBuffer(src, bufferFilePath, w, r)
+	//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
+	//fmt.Println("Buffer file path: ", bufferFilePath)
+	//fmt.Println("Buffer path: ", bufferPath)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	fd, err := os.Open(bufferPath)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	defer fd.Close()
+
+	setContentDispositionAwss3(w, r, file.Name)
+
+	w.Header().Set("Cache-Control", "private")
+	http.ServeContent(w, r, file.Name, ParseTimeString(file.Modified), fd)
+
+	fmt.Println("Begin to remove buffer")
+	removeDiskBuffer(bufferPath, "awss3")
+	return 0, nil
+}
+
+func handleImagePreviewAwss3(
+	w http.ResponseWriter,
+	r *http.Request,
+	src string,
+	imgSvc ImgService,
+	fileCache FileCache,
+	file *Awss3MetaResponseData,
+	previewSize PreviewSize,
+	enableThumbnails, resizePreview bool,
+) (int, error) {
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return errToStatus(os.ErrPermission), os.ErrPermission
+	}
+
+	if (previewSize == PreviewSizeBig && !resizePreview) ||
+		(previewSize == PreviewSizeThumb && !enableThumbnails) {
+		return rawFileHandlerAwss3(src, w, r, file, bflName)
+	}
+
+	format, err := imgSvc.FormatFromExtension(file.Extension)
+	// Unsupported extensions directly return the raw data
+	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
+		return rawFileHandlerAwss3(src, w, r, file, bflName)
+	}
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	cacheKey := previewCacheKeyAwss3(file, previewSize)
+	fmt.Println("cacheKey:", cacheKey)
+	fmt.Println("f.RealPath:", file.Path)
+	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	if !ok {
+		resizedImage, err = createPreviewAwss3(w, r, src, imgSvc, fileCache, file, previewSize, bflName)
+		if err != nil {
+			return errToStatus(err), err
+		}
+	}
+
+	err = my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	w.Header().Set("Cache-Control", "private")
+	http.ServeContent(w, r, file.Name, ParseTimeString(file.Modified), bytes.NewReader(resizedImage))
+
+	return 0, nil
+}
+
+func previewGetAwss3(w http.ResponseWriter, r *http.Request, previewSize PreviewSize, path string,
+	imgSvc ImgService, fileCache FileCache, enableThumbnails, resizePreview bool) (int, error) {
+	src := path
+	if strings.HasSuffix(src, "/") {
+		src = strings.TrimSuffix(src, "/")
+	}
+
+	metaData, err := getAwss3Metadata(src, w, r)
+	if err != nil {
+		fmt.Println(err)
+		return errToStatus(err), err
+	}
+
+	setContentDispositionAwss3(w, r, metaData.Name)
+
+	if strings.HasPrefix(metaData.Type, "image") {
+		return handleImagePreviewAwss3(w, r, src, imgSvc, fileCache, metaData, previewSize, enableThumbnails, resizePreview)
+	} else {
+		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", metaData.Type)
+	}
+}
+
+func delThumbsAwss3(ctx context.Context, fileCache FileCache, src string, w http.ResponseWriter, r *http.Request) error {
+	metaData, err := getAwss3Metadata(src, w, r)
+	if err != nil {
+		fmt.Println("Error calling drive/get_file_meta_data:", err)
+		return err
+	}
+
+	for _, previewSizeName := range PreviewSizeNames() {
+		size, _ := ParsePreviewSize(previewSizeName)
+		cacheKey := previewCacheKeyAwss3(metaData, size)
+		if err := fileCache.Delete(ctx, cacheKey); err != nil {
+			return err
+		}
+		err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

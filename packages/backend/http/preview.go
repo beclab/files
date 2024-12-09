@@ -51,7 +51,7 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 		} else if srcType == "google" {
 			return previewGetGoogle(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
 		} else if srcType == "awss3" {
-			return http.StatusNotImplemented, nil
+			return previewGetAwss3(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
