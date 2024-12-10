@@ -1508,7 +1508,8 @@ func syncPermToMode(permStr string) os.FileMode {
 	} else if permStr == "x" {
 		perm = perm | 0111
 	} else if permStr == "rw" {
-		perm = perm | 0644
+		//perm = perm | 0644
+		perm = perm | 0666
 	} else if permStr == "rx" {
 		perm = perm | 0555
 	} else if permStr == "wx" {
