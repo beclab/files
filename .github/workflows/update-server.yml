@@ -7,7 +7,7 @@ on:
     branches:
       - "main"
       - "dev_wrx"
-      - "external_404"
+      - "copy_space_fix"
     tags:
       - 'v*'
 
@@ -15,6 +15,13 @@ jobs:
   update_server:
     runs-on: ubuntu-latest
     steps:
+      - name: PR Conventional Commit Validation
+        uses: ytanikin/PRConventionalCommits@1.1.0
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          task_types: '["feat","fix","docs","test","ci","refactor","perf","chore","revert","style"]'
+          add_label: 'true'
+
       - name: Check out the repo
         uses: actions/checkout@v3
         with:
@@ -40,7 +47,7 @@ jobs:
         uses: "WyriHaximus/github-action-get-previous-tag@v1"
         id: get-latest-tag
         with:
-          fallback: external
+          fallback: latest
 
 #      - name: Build
 #        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
