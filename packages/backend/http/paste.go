@@ -265,7 +265,7 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		//	fmt.Println(writeErr)
 		//	return writeErr
 		//}
-		err := ioCopyFile(bufferFilePath, "data"+targetPath)
+		err := ioCopyFile(bufferFilePath, "/data"+targetPath)
 		if err != nil {
 			fmt.Println(err)
 			return err
