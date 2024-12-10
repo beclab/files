@@ -1456,14 +1456,15 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			//}, action, src, dst, d.user)
 		}
 		action := r.URL.Query().Get("action")
-		src, err := url.QueryUnescape(src)
-		dst, err = url.QueryUnescape(dst)
+		var err error
+		//src, err = url.QueryUnescape(src)
+		//dst, err = url.QueryUnescape(dst)
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
 		}
-		if err != nil {
-			return errToStatus(err), err
-		}
+		//if err != nil {
+		//	return errToStatus(err), err
+		//}
 		if dst == "/" || src == "/" {
 			return http.StatusForbidden, nil
 		}
