@@ -670,7 +670,7 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 	prefixParts := strings.Split(prefix, "/")
 	for i := 0; i < len(prefixParts); i++ {
 		curPrefix := strings.Join(prefixParts[:i+1], "/")
-		curInfoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=/" + curPrefix + "&with_thumbnail=true"
+		curInfoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+curPrefix) + "&with_thumbnail=true"
 		fmt.Println("!!! Try to mkdir through: ", curInfoURL)
 		getRequest, err := http.NewRequest("GET", curInfoURL, nil)
 		if err != nil {
@@ -701,7 +701,7 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 			Operation string `json:"operation"`
 		}
 
-		curCreateURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=/" + curPrefix
+		curCreateURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+curPrefix)
 		fmt.Println(curCreateURL)
 
 		// 创建请求体
@@ -1457,14 +1457,14 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		}
 		action := r.URL.Query().Get("action")
 		var err error
-		//src, err = url.QueryUnescape(src)
-		//dst, err = url.QueryUnescape(dst)
+		src, err = url.QueryUnescape(src)
+		dst, err = url.QueryUnescape(dst)
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
 		}
-		//if err != nil {
-		//	return errToStatus(err), err
-		//}
+		if err != nil {
+			return errToStatus(err), err
+		}
 		if dst == "/" || src == "/" {
 			return http.StatusForbidden, nil
 		}
@@ -1717,7 +1717,7 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 		fmt.Println("prefix:", prefix)
 		fmt.Println("filename:", filename)
 
-		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=/" + prefix + "&with_thumbnail=true"
+		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+prefix) + "&with_thumbnail=true"
 		fmt.Println(infoURL)
 
 		client := &http.Client{}
@@ -2098,7 +2098,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		fmt.Println("prefix:", prefix)
 		fmt.Println("filename:", filename)
 
-		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=/" + prefix + "/" + filename + "&with_thumbnail=true"
+		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+prefix+"/"+filename) + "&with_thumbnail=true"
 		fmt.Println(infoURL)
 
 		client := &http.Client{}
