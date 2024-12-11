@@ -614,9 +614,9 @@ func parseAwss3Path(src string, trimSuffix bool) (drive, name, path string) {
 	}
 	parts := strings.SplitN(src, "/", 2)
 	drive = parts[0]
-	src = ""
+	src = "/"
 	if len(parts) > 1 {
-		src = parts[1]
+		src += parts[1]
 	}
 
 	slashes := []int{}
