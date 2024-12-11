@@ -192,11 +192,68 @@ type Awss3MoveFileParam struct {
 	Name              string `json:"name"`
 }
 
-type Awss3DownloadFileSyncParam struct {
+type Awss3DownloadFileParam struct {
 	LocalFolder   string `json:"local_folder"`
 	CloudFilePath string `json:"cloud_file_path"`
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
+}
+
+type Awss3UploadFileParam struct {
+	ParentPath    string `json:"parent_path"`
+	LocalFilePath string `json:"local_file_path"`
+	Drive         string `json:"drive"`
+	Name          string `json:"name"`
+}
+
+type Awss3TaskParameter struct {
+	Drive         string `json:"drive"`
+	LocalFilePath string `json:"local_file_path"`
+	Name          string `json:"name"`
+	ParentPath    string `json:"parent_path"`
+}
+
+type Awss3TaskPauseInfo struct {
+	FileSize  int64  `json:"file_size"`
+	Location  string `json:"location"`
+	NextStart int64  `json:"next_start"`
+}
+
+type Awss3TaskResultData struct {
+	FileInfo                 *Awss3ListResponseFileData `json:"file_info,omitempty"`
+	UploadFirstOperationTime int64                      `json:"upload_first_operation_time"`
+}
+
+type Awss3TaskData struct {
+	ID            string               `json:"id"`
+	TaskType      string               `json:"task_type"`
+	Status        string               `json:"status"`
+	Progress      float64              `json:"progress"`
+	TaskParameter Awss3TaskParameter   `json:"task_parameter"`
+	PauseInfo     *Awss3TaskPauseInfo  `json:"pause_info"`
+	ResultData    *Awss3TaskResultData `json:"result_data"`
+	UserName      string               `json:"user_name"`
+	DriverName    string               `json:"driver_name"`
+	FailedReason  string               `json:"failed_reason"`
+	WorkerName    string               `json:"worker_name"`
+	CreatedAt     int64                `json:"created_at"`
+	UpdatedAt     int64                `json:"updated_at"`
+}
+
+type Awss3TaskResponse struct {
+	StatusCode string        `json:"status_code"`
+	FailReason string        `json:"fail_reason"`
+	Data       Awss3TaskData `json:"data"`
+}
+
+type Awss3TaskQueryParam struct {
+	TaskIds []string `json:"task_ids"`
+}
+
+type Awss3TaskQueryResponse struct {
+	StatusCode string          `json:"status_code"`
+	FailReason string          `json:"fail_reason"`
+	Data       []Awss3TaskData `json:"data"`
 }
 
 func getAwss3Metadata(src string, w http.ResponseWriter, r *http.Request) (*Awss3MetaResponseData, error) {
@@ -401,28 +458,136 @@ func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request
 	return nil
 }
 
+func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, srcPath, srcPathName string) error {
+	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
+	if srcPath == "" {
+		fmt.Println("Src parse failed.")
+		return nil
+	}
+	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
+	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
+	dstDir, dstFilename := path.Split(dstPath)
+	if dstDir == "" || dstFilename == "" {
+		fmt.Println("Dst parse failed.")
+		return nil
+	}
+
+	var recursivePath = srcPath
+	var A []*Awss3ListResponseFileData
+	for {
+		fmt.Println("len(A): ", len(A))
+
+		var isDir = true
+		var firstItem *Awss3ListResponseFileData
+		if len(A) > 0 {
+			firstItem = A[0]
+			recursivePath = firstItem.Path
+			isDir = firstItem.IsDir
+		}
+
+		if isDir {
+			var parentPath string
+			var folderName string
+			if srcPath == recursivePath {
+				parentPath = dstPath
+				folderName = dstFilename
+			} else {
+				parentPath = filepath.Dir(firstItem.Path)
+				folderName = filepath.Base(firstItem.Path)
+			}
+			postParam := Awss3PostParam{
+				ParentPath: parentPath,
+				FolderName: folderName,
+				Drive:      srcDrive,
+				Name:       srcName,
+			}
+			postJsonBody, err := json.Marshal(postParam)
+			if err != nil {
+				fmt.Println("Error marshalling JSON:", err)
+				return err
+			}
+			fmt.Println("Google Drive Post Params:", string(postJsonBody))
+			var postRespBody []byte
+			postRespBody, err = Awss3Call("/drive/create_folder", "POST", postJsonBody, w, r, true)
+			if err != nil {
+				fmt.Println("Error calling drive/create_folder:", err)
+				return err
+			}
+			var postBodyJson Awss3PostResponse
+			if err = json.Unmarshal(postRespBody, &postBodyJson); err != nil {
+				fmt.Println(err)
+				return err
+			}
+
+			firstParam := Awss3ListParam{
+				Path:  recursivePath,
+				Drive: srcDrive,
+				Name:  srcName,
+			}
+
+			fmt.Println("firstParam path:", recursivePath)
+			var firstJsonBody []byte
+			firstJsonBody, err = json.Marshal(firstParam)
+			if err != nil {
+				fmt.Println("Error marshalling JSON:", err)
+				return err
+			}
+			var firstRespBody []byte
+			firstRespBody, err = Awss3Call("/drive/ls", "POST", firstJsonBody, w, r, true)
+
+			var firstBodyJson Awss3ListResponse
+			if err = json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
+				fmt.Println(err)
+				return err
+			}
+
+			if len(A) == 0 {
+				A = firstBodyJson.Data
+			} else {
+				A = append(firstBodyJson.Data, A[1:]...)
+			}
+		} else {
+			if len(A) > 0 {
+				//fmt.Println(CopyTempGoogleDrivePathIdCache)
+				copyPathPrefix := "/Drive/" + srcDrive + "/" + srcName + "/"
+				copySrc := copyPathPrefix + firstItem.Path + "/"
+				parentPath := filepath.Dir(firstItem.Path)
+				copyDst := copyPathPrefix + parentPath + "/" + firstItem.Name
+				fmt.Println("copySrc: ", copySrc)
+				fmt.Println("copyDst: ", copyDst)
+				err := copyAwss3SingleFile(copySrc, copyDst, w, r)
+				if err != nil {
+					return err
+				}
+				A = A[1:]
+			}
+		}
+		if len(A) == 0 {
+			return nil
+		}
+	}
+}
+
 func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimSuffix(src, "/")
 	if !strings.HasSuffix(bufferFilePath, "/") {
 		bufferFilePath += "/"
 	}
 	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
-	//srcPathId, srcDrive, srcName, srcDir, srcFilename, err := GoogleDrivePathToId(src, w, r, false)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
 		fmt.Println("Src parse failed.")
 		return nil
 	}
 
-	// 填充数据
-	param := Awss3DownloadFileSyncParam{
+	param := Awss3DownloadFileParam{
 		LocalFolder:   bufferFilePath,
 		CloudFilePath: srcPath,
-		Drive:         srcDrive, // "my_drive",
-		Name:          srcName,  // "file_name",
+		Drive:         srcDrive,
+		Name:          srcName,
 	}
 
-	// 将数据序列化为 JSON
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
 		fmt.Println("Error marshalling JSON:", err)
@@ -430,53 +595,123 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 	}
 	fmt.Println("Download File Params:", string(jsonBody))
 
-	//var respBody []byte
-	_, err = Awss3Call("/drive/download_sync", "POST", jsonBody, w, r, true)
+	var respBody []byte
+	_, err = Awss3Call("/drive/download_async", "POST", jsonBody, w, r, true)
 	if err != nil {
-		fmt.Println("Error calling drive/download_sync:", err)
+		fmt.Println("Error calling drive/download_async:", err)
 		return err
 	}
-	return nil
-	//var respJson GoogleDriveTaskResponse
-	//if err = json.Unmarshal(respBody, &respJson); err != nil {
-	//	fmt.Println(err)
-	//	return err
-	//}
-	//taskId := respJson.Data.ID
-	//taskParam := GoogleDriveTaskQueryParam{
-	//	TaskIds: []string{taskId},
-	//}
-	//// 将数据序列化为 JSON
-	//taskJsonBody, err := json.Marshal(taskParam)
-	//if err != nil {
-	//	fmt.Println("Error marshalling JSON:", err)
-	//	return err
-	//}
-	//fmt.Println("Task Params:", string(taskJsonBody))
-	//
-	//for {
-	//	time.Sleep(1000 * time.Millisecond)
-	//	var taskRespBody []byte
-	//	taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
-	//	if err != nil {
-	//		fmt.Println("Error calling drive/download_async:", err)
-	//		return err
-	//	}
-	//	var taskRespJson GoogleDriveTaskQueryResponse
-	//	if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
-	//		fmt.Println(err)
-	//		return err
-	//	}
-	//	if len(taskRespJson.Data) == 0 {
-	//		return e.New("Task Info Not Found")
-	//	}
-	//	if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-	//		if taskRespJson.Data[0].Status == "Completed" {
-	//			return nil
-	//		}
-	//		return e.New(taskRespJson.Data[0].Status)
-	//	}
-	//}
+
+	var respJson Awss3TaskResponse
+	if err = json.Unmarshal(respBody, &respJson); err != nil {
+		fmt.Println(err)
+		return err
+	}
+	taskId := respJson.Data.ID
+	taskParam := Awss3TaskQueryParam{
+		TaskIds: []string{taskId},
+	}
+	taskJsonBody, err := json.Marshal(taskParam)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return err
+	}
+	fmt.Println("Task Params:", string(taskJsonBody))
+
+	for {
+		time.Sleep(1000 * time.Millisecond)
+		var taskRespBody []byte
+		taskRespBody, err = Awss3Call("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
+		if err != nil {
+			fmt.Println("Error calling drive/download_async:", err)
+			return err
+		}
+		var taskRespJson Awss3TaskQueryResponse
+		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
+			fmt.Println(err)
+			return err
+		}
+		if len(taskRespJson.Data) == 0 {
+			return e.New("Task Info Not Found")
+		}
+		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
+			if taskRespJson.Data[0].Status == "Completed" {
+				return nil
+			}
+			return e.New(taskRespJson.Data[0].Status)
+		}
+	}
+}
+
+func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *http.Request) (int, error) {
+	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
+	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
+	if dstPath == "" {
+		fmt.Println("Src parse failed.")
+		return http.StatusBadRequest, nil
+	}
+
+	param := Awss3UploadFileParam{
+		ParentPath:    dstPath,
+		LocalFilePath: bufferFilePath,
+		Drive:         dstDrive,
+		Name:          dstName,
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return errToStatus(err), err
+	}
+	fmt.Println("Upload File Params:", string(jsonBody))
+
+	var respBody []byte
+	respBody, err = Awss3Call("/drive/upload_async", "POST", jsonBody, w, r, true)
+	if err != nil {
+		fmt.Println("Error calling drive/upload_async:", err)
+		return errToStatus(err), err
+	}
+	var respJson Awss3TaskResponse
+	if err = json.Unmarshal(respBody, &respJson); err != nil {
+		fmt.Println(err)
+		return errToStatus(err), err
+	}
+	taskId := respJson.Data.ID
+	taskParam := Awss3TaskQueryParam{
+		TaskIds: []string{taskId},
+	}
+	taskJsonBody, err := json.Marshal(taskParam)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return errToStatus(err), err
+	}
+	fmt.Println("Task Params:", string(taskJsonBody))
+
+	for {
+		time.Sleep(500 * time.Millisecond)
+		var taskRespBody []byte
+		taskRespBody, err = Awss3Call("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
+		if err != nil {
+			fmt.Println("Error calling drive/download_async:", err)
+			return errToStatus(err), err
+		}
+		var taskRespJson Awss3TaskQueryResponse
+		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
+			fmt.Println(err)
+			return errToStatus(err), err
+		}
+		if len(taskRespJson.Data) == 0 {
+			err = e.New("Task Info Not Found")
+			return errToStatus(err), err
+		}
+		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
+			if taskRespJson.Data[0].Status == "Completed" {
+				return http.StatusOK, nil
+			}
+			err = e.New(taskRespJson.Data[0].Status)
+			return errToStatus(err), err
+		}
+	}
 }
 
 func moveAwss3FolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Request) error {

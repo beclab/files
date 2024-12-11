@@ -1095,15 +1095,13 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 		return bufferFilename, nil
 	}
 
-	// 填充数据
 	param := GoogleDriveDownloadFileParam{
 		LocalFolder:   bufferFilePath,
 		CloudFilePath: srcPathId,
-		Drive:         srcDrive, // "my_drive",
-		Name:          srcName,  // "file_name",
+		Drive:         srcDrive,
+		Name:          srcName,
 	}
 
-	// 将数据序列化为 JSON
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
 		fmt.Println("Error marshalling JSON:", err)
@@ -1126,7 +1124,6 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 	taskParam := GoogleDriveTaskQueryParam{
 		TaskIds: []string{taskId},
 	}
-	// 将数据序列化为 JSON
 	taskJsonBody, err := json.Marshal(taskParam)
 	if err != nil {
 		fmt.Println("Error marshalling JSON:", err)
@@ -1178,21 +1175,19 @@ func googleBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *ht
 		return http.StatusBadRequest, nil
 	}
 
-	// 填充数据
 	param := GoogleDriveUploadFileParam{
 		ParentPath:    dstPathId,
 		LocalFilePath: bufferFilePath,
-		Drive:         dstDrive, // "my_drive",
-		Name:          dstName,  // "file_name",
+		Drive:         dstDrive,
+		Name:          dstName,
 	}
 
-	// 将数据序列化为 JSON
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
 		fmt.Println("Error marshalling JSON:", err)
 		return errToStatus(err), err
 	}
-	fmt.Println("Download File Params:", string(jsonBody))
+	fmt.Println("Upload File Params:", string(jsonBody))
 
 	var respBody []byte
 	respBody, err = GoogleDriveCall("/drive/upload_async", "POST", jsonBody, w, r, true)
@@ -1209,7 +1204,6 @@ func googleBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *ht
 	taskParam := GoogleDriveTaskQueryParam{
 		TaskIds: []string{taskId},
 	}
-	// 将数据序列化为 JSON
 	taskJsonBody, err := json.Marshal(taskParam)
 	if err != nil {
 		fmt.Println("Error marshalling JSON:", err)
