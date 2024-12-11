@@ -168,7 +168,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		return resourceGetSync(w, r, stream)
 	} else if srcType == "google" {
 		return resourceGetGoogle(w, r, stream, meta)
-	} else if srcType == "awss3" {
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		return resourceGetAwss3(w, r, stream, meta)
 	}
 
