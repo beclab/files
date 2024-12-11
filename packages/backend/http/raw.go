@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -77,6 +78,13 @@ func setContentDisposition(w http.ResponseWriter, r *http.Request, file *files.F
 }
 
 var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	// output all header values
+	for name, values := range r.Header {
+		for _, value := range values {
+			fmt.Printf("%s: %s\n", name, value)
+		}
+	}
+
 	if !d.user.Perm.Download {
 		return http.StatusAccepted, nil
 	}
