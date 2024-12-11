@@ -251,7 +251,7 @@ func removeDiskBuffer(filePath string, srcType string) {
 		fmt.Println("Failed to delete buffer file:", err)
 		return
 	}
-	if srcType == "google" || srcType == "awss3" {
+	if srcType == "google" || srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		dir := filepath.Dir(filePath)
 		err = os.Remove(dir)
 		if err != nil {
@@ -1773,8 +1773,11 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		if err != nil {
 			return err
 		}
-	} else if dstType == "awss3" {
-
+	} else if dstType == "awss3" || dstType == "tencent" || dstType == "dropbox" {
+		_, _, err := resourcePostAwss3(dst, w, r, false)
+		if err != nil {
+			return err
+		}
 	} else if dstType == "cache" {
 		err := cacheMkdirAll(dst, fileMode, r)
 		if err != nil {
@@ -1878,8 +1881,8 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 				}
 			}
 		}
-	} else if srcType == "awss3" {
-		src = strings.TrimSuffix(src, "/")
+	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+		//src = strings.TrimSuffix(src, "/")
 
 		srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 
@@ -1889,7 +1892,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			Name:  srcName,
 		}
 
-		// 将数据序列化为 JSON
 		jsonBody, err := json.Marshal(param)
 		if err != nil {
 			fmt.Println("Error marshalling JSON:", err)
@@ -1912,13 +1914,11 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fdst := filepath.Join(fdstBase, item.Name)
 			fmt.Println(fsrc, fdst)
 			if item.IsDir {
-				// 创建子目录，递归处理
 				err = copyDir(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
 				if err != nil {
 					return err
 				}
 			} else {
-				// 执行文件复制
 				err = copyFile(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
 				if err != nil {
 					return err
@@ -2249,7 +2249,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-	} else if srcType == "awss3" {
+	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		var err error
 		if diskSize >= 4*1024*1024*1024 {
 			fmt.Println("file size exceeds 4GB")
@@ -2355,6 +2355,18 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		}
 		fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath, srcType)
+	} else if dstType == "awss3" || dstType == "tencent" || dstType == "dropbox" {
+		fmt.Println("Begin to paste!")
+		fmt.Println("dst: ", dst)
+		status, err := awss3BufferToFile(bufferPath, dst, w, r)
+		if status != http.StatusOK {
+			return os.ErrInvalid
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Println("Begin to remove buffer")
+		removeDiskBuffer(bufferPath, srcType)
 	} else if dstType == "cache" {
 		fmt.Println("Begin to cache paste!")
 		status, err := cacheBufferToFile(bufferPath, dst, mode, d)
@@ -2446,6 +2458,15 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 			return err
 		}
 		return nil
+	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+		_, status, err := resourceDeleteAwss3(fileCache, src, w, r, true)
+		if status != http.StatusOK && status != 0 {
+			return os.ErrInvalid
+		}
+		if err != nil {
+			return err
+		}
+		return nil
 	} else if srcType == "cache" {
 		status, err := resourceCacheDelete(fileCache, src, ctx, d)
 		if status != http.StatusOK {
@@ -2518,7 +2539,7 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			}
 			return moveGoogleDriveFolderOrFiles(src, dst, w, r)
 		}
-	} else if srcType == "awss3" {
+	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		switch action {
 		case "copy":
 			if strings.HasSuffix(src, "/") {
@@ -2531,7 +2552,7 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 
 			if metaInfo.IsDir {
 				// TODO: should wait for creating folder function
-				// return copyAwss3Folder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
+				return copyAwss3Folder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
 			}
 			return copyAwss3SingleFile(src, dst, w, r)
 		case "rename":
