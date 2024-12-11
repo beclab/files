@@ -604,9 +604,19 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 }
 
 func parseAwss3Path(src string, trimSuffix bool) (drive, name, path string) {
-	if strings.HasPrefix(src, "/Drive/awss3") {
-		src = src[12:]
-		drive = "awss3"
+	//if strings.HasPrefix(src, "/Drive/awss3") {
+	//	src = src[12:]
+	//	drive = "awss3"
+	//}
+
+	if strings.HasPrefix(src, "/Drive/") {
+		src = src[7:]
+	}
+	parts := strings.SplitN(src, "/", 2)
+	drive = parts[0]
+	src = ""
+	if len(parts) > 1 {
+		src = parts[1]
 	}
 
 	slashes := []int{}
