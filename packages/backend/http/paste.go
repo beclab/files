@@ -1337,12 +1337,12 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		var srcName, dstName string
 		if srcType == "google" {
 			_, srcName, _, _ = parseGoogleDrivePath(src)
-		} else if srcType == "awss3" {
+		} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			_, srcName, _ = parseAwss3Path(src, true)
 		}
 		if dstType == "google" {
 			_, dstName, _, _ = parseGoogleDrivePath(dst)
-		} else if srcType == "awss3" {
+		} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			_, dstName, _ = parseAwss3Path(dst, true)
 		}
 		if srcName != dstName {
@@ -1479,7 +1479,7 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			return nil, 0, 0, false, err
 		}
 		return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
-	} else if srcType == "awss3" {
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		src = strings.TrimSuffix(src, "/")
 		metaInfo, err := getAwss3FocusedMetaInfos(src, w, r)
 		if err != nil {

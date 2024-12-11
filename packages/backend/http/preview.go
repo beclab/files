@@ -50,7 +50,7 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 			return http.StatusNotImplemented, nil
 		} else if srcType == "google" {
 			return previewGetGoogle(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
-		} else if srcType == "awss3" {
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			return previewGetAwss3(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
 		}
 
