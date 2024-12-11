@@ -376,7 +376,7 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 		if srcType == "google" {
 			_, status, err := resourceDeleteGoogle(fileCache, "", w, r, false)
 			return status, err
-		} else if srcType == "awss3" {
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			_, status, err := resourceDeleteAwss3(fileCache, "", w, r, false)
 			return status, err
 		}
@@ -459,7 +459,7 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 		if srcType == "google" {
 			_, status, err := resourcePostGoogle("", w, r, false)
 			return status, err
-		} else if srcType == "awss3" {
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			_, status, err := resourcePostAwss3("", w, r, false)
 			return status, err
 		}
@@ -559,7 +559,7 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
 			return resourcePatchGoogle(fileCache, w, r)
-		} else if srcType == "awss3" {
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			return resourcePatchAwss3(fileCache, w, r)
 		}
 
