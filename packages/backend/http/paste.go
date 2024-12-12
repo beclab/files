@@ -2191,7 +2191,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 	if bflName == "" {
 		return os.ErrPermission
 	}
-	extRemains := dstType == "google"
+	extRemains := dstType == "google" || dstType == "awss3" || dstType == "tencent" || dstType == "dropbox"
 	var bufferPath string
 	// copy/move
 	if srcType == "drive" {
