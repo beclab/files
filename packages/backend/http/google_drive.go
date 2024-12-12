@@ -418,27 +418,79 @@ type GoogleDriveTaskQueryResponse struct {
 var GoogleDrivePathIdCache = make(map[string]string)
 
 func getHost(w http.ResponseWriter, r *http.Request) string {
-	referer := r.Header.Get("Referer")
-	if referer == "" {
-		//fmt.Fprintf(w, "No Referer header found\n")
+	bflName := r.Header.Get("X-Bfl-User")
+	url := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
+
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Error making GET request:", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response body:", err)
 		return ""
 	}
 
-	slashCount := 0
-	for i, char := range referer {
-		if char == '/' {
-			slashCount++
-			if slashCount == 3 {
-				basePart := referer[:i]
-				//fmt.Fprintf(w, "Base part of Referer: %s\n", basePart)
-				return basePart
-			}
-		}
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Received non-200 response: %d\n", resp.StatusCode)
+		return ""
 	}
 
-	//fmt.Fprintf(w, "Less than three slashes in Referer, using entire value: %s\n", referer)
-	return ""
+	type BflResponse struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			TerminusName    string `json:"terminusName"`
+			WizardStatus    string `json:"wizardStatus"`
+			Selfhosted      bool   `json:"selfhosted"`
+			TailScaleEnable bool   `json:"tailScaleEnable"`
+			OsVersion       string `json:"osVersion"`
+			LoginBackground string `json:"loginBackground"`
+			Avatar          string `json:"avatar"`
+			TerminusId      string `json:"terminusId"`
+			Did             string `json:"did"`
+			ReverseProxy    string `json:"reverseProxy"`
+			Terminusd       string `json:"terminusd"`
+		} `json:"data"`
+	}
+
+	var responseObj BflResponse
+	err = json.Unmarshal(body, &responseObj)
+	if err != nil {
+		fmt.Println("Error unmarshaling JSON:", err)
+		return ""
+	}
+
+	modifiedTerminusName := strings.Replace(responseObj.Data.TerminusName, "@", ".", 1)
+	fmt.Println(modifiedTerminusName)
+	return "https://files." + modifiedTerminusName
 }
+
+//func getHost(w http.ResponseWriter, r *http.Request) string {
+//	referer := r.Header.Get("Referer")
+//	if referer == "" {
+//		//fmt.Fprintf(w, "No Referer header found\n")
+//		return ""
+//	}
+//
+//	slashCount := 0
+//	for i, char := range referer {
+//		if char == '/' {
+//			slashCount++
+//			if slashCount == 3 {
+//				basePart := referer[:i]
+//				//fmt.Fprintf(w, "Base part of Referer: %s\n", basePart)
+//				return basePart
+//			}
+//		}
+//	}
+//
+//	//fmt.Fprintf(w, "Less than three slashes in Referer, using entire value: %s\n", referer)
+//	return ""
+//}
 
 // Deprecated
 // isDir == true if and only if it is definitely dir
@@ -1652,17 +1704,18 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 		return nil, os.ErrPermission
 	}
 
-	authority := r.Header.Get("Authority")
-	fmt.Println("*****Google Drive Call URL authority:", authority)
-	host := r.Header.Get("Origin")
-	if host == "" {
-		host = getHost(w, r) // r.Header.Get("Origin")
-	}
-	fmt.Println("*****Google Drive Call URL referer:", host)
-	if host == "" {
-		host = "https://files." + bflName + ".olares.cn"
-	}
-	fmt.Println("*****Google Drive Call URL forced:", host)
+	//authority := r.Header.Get("Authority")
+	//fmt.Println("*****Google Drive Call URL authority:", authority)
+	//host := r.Header.Get("Origin")
+	//if host == "" {
+	//	host = getHost(w, r) // r.Header.Get("Origin")
+	//}
+	//fmt.Println("*****Google Drive Call URL referer:", host)
+	//if host == "" {
+	//	host = "https://files." + bflName + ".olares.cn"
+	//}
+	//fmt.Println("*****Google Drive Call URL forced:", host)
+	host := getHost(w, r)
 	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
 
 	fmt.Println("dstUrl:", dstUrl)
@@ -1709,7 +1762,7 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 	// 检查Content-Type
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
-		fmt.Println("GoogleDrive Call Response is not JSON format:", contentType)
+		fmt.Println("GoogleDrive Call BflResponse is not JSON format:", contentType)
 	}
 
 	// 读取响应体
