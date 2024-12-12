@@ -1663,6 +1663,9 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 
 	fmt.Println("dstUrl:", dstUrl)
 
+	dstUrl = "http://files-service.user-space-" + bflName + dst
+	fmt.Println("dstUrl:", dstUrl)
+
 	var req *http.Request
 	var err error
 	if reqBodyJson != nil {
