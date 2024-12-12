@@ -237,8 +237,8 @@ type Awss3TaskData struct {
 	DriverName    string               `json:"driver_name"`
 	FailedReason  *string              `json:"failed_reason,omitempty"`
 	WorkerName    *string              `json:"worker_name,omitempty"`
-	CreatedAt     *string              `json:"created_at,omitempty"`
-	UpdatedAt     *string              `json:"updated_at,omitempty"`
+	CreatedAt     *int64               `json:"created_at,omitempty"`
+	UpdatedAt     *int64               `json:"updated_at,omitempty"`
 }
 
 type Awss3TaskResponse struct {
