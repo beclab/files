@@ -757,7 +757,11 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 	if host == "" {
 		host = getHost(w, r) // r.Header.Get("Origin")
 	}
-	fmt.Println("*****Awss3 Call URL host:", host)
+	fmt.Println("*****Awss3 Call URL referer:", host)
+	if host == "" {
+		host = "https://files." + bflName + ".olares.cn"
+	}
+	fmt.Println("*****Awss3 Call URL forced:", host)
 	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
 
 	fmt.Println("dstUrl:", dstUrl)

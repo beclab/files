@@ -1658,12 +1658,13 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 	if host == "" {
 		host = getHost(w, r) // r.Header.Get("Origin")
 	}
-	fmt.Println("*****Google Drive Call URL host:", host)
+	fmt.Println("*****Google Drive Call URL referer:", host)
+	if host == "" {
+		host = "https://files." + bflName + ".olares.cn"
+	}
+	fmt.Println("*****Google Drive Call URL forced:", host)
 	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
 
-	fmt.Println("dstUrl:", dstUrl)
-
-	dstUrl = "http://files-service.user-space-" + bflName + dst
 	fmt.Println("dstUrl:", dstUrl)
 
 	var req *http.Request
