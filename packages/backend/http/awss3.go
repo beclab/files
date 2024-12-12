@@ -751,18 +751,19 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 		return nil, os.ErrPermission
 	}
 
-	authority := r.Header.Get("Authority")
-	fmt.Println("*****Awss3 Call URL authority:", authority)
-	host := r.Header.Get("Origin")
-	if host == "" {
-		host = getHost(w, r) // r.Header.Get("Origin")
-	}
-	fmt.Println("*****Awss3 Call URL referer:", host)
-	if host == "" {
-		host = "https://files." + bflName + ".olares.cn"
-	}
-	fmt.Println("*****Awss3 Call URL forced:", host)
-	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
+	//authority := r.Header.Get("Authority")
+	//fmt.Println("*****Awss3 Call URL authority:", authority)
+	//host := r.Header.Get("Origin")
+	//if host == "" {
+	//	host = getHost(w, r) // r.Header.Get("Origin")
+	//}
+	//fmt.Println("*****Awss3 Call URL referer:", host)
+	//if host == "" {
+	//	host = "https://files." + bflName + ".olares.cn"
+	//}
+	//fmt.Println("*****Awss3 Call URL forced:", host)
+	host := getHost(w, r)
+	dstUrl := host + dst
 
 	fmt.Println("dstUrl:", dstUrl)
 
@@ -794,7 +795,7 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 	// 检查Content-Type
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
-		fmt.Println("Awss3 Call Response is not JSON format:", contentType)
+		fmt.Println("Awss3 Call BflResponse is not JSON format:", contentType)
 	}
 
 	// 读取响应体
