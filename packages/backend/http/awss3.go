@@ -209,15 +209,15 @@ type Awss3UploadFileParam struct {
 
 type Awss3TaskParameter struct {
 	Drive         string `json:"drive"`
-	LocalFilePath string `json:"local_file_path"`
+	CloudFilePath string `json:"cloud_file_path"`
+	LocalFolder   string `json:"local_folder"`
 	Name          string `json:"name"`
-	ParentPath    string `json:"parent_path"`
 }
 
 type Awss3TaskPauseInfo struct {
-	FileSize  int64  `json:"file_size"`
-	Location  string `json:"location"`
-	NextStart int64  `json:"next_start"`
+	FileSize  int64  `json:"file_size,omitempty"`
+	Location  string `json:"location,omitempty"`
+	NextStart int64  `json:"next_start,omitempty"`
 }
 
 type Awss3TaskResultData struct {
@@ -231,19 +231,19 @@ type Awss3TaskData struct {
 	Status        string               `json:"status"`
 	Progress      float64              `json:"progress"`
 	TaskParameter Awss3TaskParameter   `json:"task_parameter"`
-	PauseInfo     *Awss3TaskPauseInfo  `json:"pause_info"`
-	ResultData    *Awss3TaskResultData `json:"result_data"`
+	PauseInfo     *Awss3TaskPauseInfo  `json:"pause_info,omitempty"`
+	ResultData    *Awss3TaskResultData `json:"result_data,omitempty"`
 	UserName      string               `json:"user_name"`
 	DriverName    string               `json:"driver_name"`
-	FailedReason  string               `json:"failed_reason"`
+	FailedReason  *string              `json:"failed_reason,omitempty"`
 	WorkerName    *string              `json:"worker_name,omitempty"`
-	CreatedAt     *int64               `json:"created_at,omitempty"`
-	UpdatedAt     *int64               `json:"updated_at,omitempty"`
+	CreatedAt     *time.Time           `json:"created_at,omitempty"`
+	UpdatedAt     *time.Time           `json:"updated_at,omitempty"`
 }
 
 type Awss3TaskResponse struct {
 	StatusCode string        `json:"status_code"`
-	FailReason string        `json:"fail_reason"`
+	FailReason *string       `json:"fail_reason,omitempty"`
 	Data       Awss3TaskData `json:"data"`
 }
 
