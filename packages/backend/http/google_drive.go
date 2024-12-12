@@ -1692,13 +1692,6 @@ func testDriveLs2(w http.ResponseWriter, r *http.Request) error {
 }
 
 func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, error) {
-	// 遍历并打印所有的 header 字段和值
-	for name, values := range r.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return nil, os.ErrPermission
