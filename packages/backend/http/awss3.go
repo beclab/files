@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/img"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
+	"github.com/filebrowser/filebrowser/v2/parser"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -1276,10 +1277,11 @@ func previewGetAwss3(w http.ResponseWriter, r *http.Request, previewSize Preview
 
 	setContentDispositionAwss3(w, r, metaData.Name)
 
-	if strings.HasPrefix(metaData.Type, "image") {
+	fileType := parser.MimeTypeByExtension(metaData.Name)
+	if strings.HasPrefix(fileType, "image") {
 		return handleImagePreviewAwss3(w, r, src, imgSvc, fileCache, metaData, previewSize, enableThumbnails, resizePreview)
 	} else {
-		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", metaData.Type)
+		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", fileType)
 	}
 }
 
