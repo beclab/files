@@ -662,9 +662,10 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 		fmt.Println("Src parse failed.")
 		return http.StatusBadRequest, nil
 	}
+	dstDir, _ := filepath.Split(dstPath)
 
 	param := Awss3UploadFileParam{
-		ParentPath:    dstPath,
+		ParentPath:    dstDir,
 		LocalFilePath: bufferFilePath,
 		Drive:         dstDrive,
 		Name:          dstName,
