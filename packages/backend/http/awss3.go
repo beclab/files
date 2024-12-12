@@ -257,6 +257,12 @@ type Awss3TaskQueryResponse struct {
 	Data       []Awss3TaskData `json:"data"`
 }
 
+type Awss3TaskIDResponse struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
 func getAwss3Metadata(src string, w http.ResponseWriter, r *http.Request) (*Awss3MetaResponseData, error) {
 	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 
@@ -608,7 +614,7 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 		return err
 	}
 
-	var respJson Awss3TaskResponse
+	var respJson Awss3TaskIDResponse
 	if err = json.Unmarshal(respBody, &respJson); err != nil {
 		fmt.Println(err)
 		return err
@@ -677,7 +683,7 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 		fmt.Println("Error calling drive/upload_async:", err)
 		return errToStatus(err), err
 	}
-	var respJson Awss3TaskResponse
+	var respJson Awss3TaskIDResponse
 	if err = json.Unmarshal(respBody, &respJson); err != nil {
 		fmt.Println(err)
 		return errToStatus(err), err
