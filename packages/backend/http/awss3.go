@@ -608,7 +608,7 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 	fmt.Println("Download File Params:", string(jsonBody))
 
 	var respBody []byte
-	_, err = Awss3Call("/drive/download_async", "POST", jsonBody, w, r, true)
+	respBody, err = Awss3Call("/drive/download_async", "POST", jsonBody, w, r, true)
 	if err != nil {
 		fmt.Println("Error calling drive/download_async:", err)
 		return err
