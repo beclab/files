@@ -236,7 +236,7 @@ type Awss3TaskData struct {
 	UserName      string               `json:"user_name"`
 	DriverName    string               `json:"driver_name"`
 	FailedReason  string               `json:"failed_reason"`
-	WorkerName    string               `json:"worker_name"`
+	WorkerName    *string              `json:"worker_name,omitempty"`
 	CreatedAt     *int64               `json:"created_at,omitempty"`
 	UpdatedAt     *int64               `json:"updated_at,omitempty"`
 }
