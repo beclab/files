@@ -317,6 +317,11 @@ func getAwss3FocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if bodyJson.StatusCode == "FAIL" {
+		err = e.New(*bodyJson.FailReason)
+		return
+	}
+
 	info = &Awss3FocusedMetaInfos{
 		Key:   bodyJson.Data.Meta.Key,
 		Path:  bodyJson.Data.Path,
@@ -692,7 +697,7 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 		var taskRespBody []byte
 		taskRespBody, err = Awss3Call("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
 		if err != nil {
-			fmt.Println("Error calling drive/download_async:", err)
+			fmt.Println("Error calling drive/upload_async:", err)
 			return errToStatus(err), err
 		}
 		var taskRespJson Awss3TaskQueryResponse

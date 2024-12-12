@@ -777,6 +777,11 @@ func getGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http
 		return
 	}
 
+	if bodyJson.StatusCode == "FAIL" {
+		err = e.New(*bodyJson.FailReason)
+		return
+	}
+
 	info = &GoogleDriveIdFocusedMetaInfos{
 		ID:    pathId,
 		Path:  bodyJson.Data.Path,
