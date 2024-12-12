@@ -2235,7 +2235,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
+		bufferPath = filepath.Join(bufferFilePath, url.QueryEscape(srcInfo.Name))
 		fmt.Println("Buffer file path: ", bufferFilePath)
 		fmt.Println("Buffer path: ", bufferPath)
 		err = makeDiskBuffer(bufferPath, diskSize, true)
