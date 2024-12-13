@@ -681,8 +681,13 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 	}
 	dstDir, _ := filepath.Split(dstPath)
 
+	trimmedDstDir := strings.TrimSuffix(dstDir, "/")
+	if trimmedDstDir == "" {
+		trimmedDstDir = "/"
+	}
+
 	param := Awss3UploadFileParam{
-		ParentPath:    dstDir,
+		ParentPath:    trimmedDstDir,
 		LocalFilePath: bufferFilePath,
 		Drive:         dstDrive,
 		Name:          dstName,
