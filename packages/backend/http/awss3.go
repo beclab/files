@@ -1263,7 +1263,7 @@ func handleImagePreviewAwss3(
 		return rawFileHandlerAwss3(src, w, r, file, bflName)
 	}
 
-	format, err := imgSvc.FormatFromExtension(file.Extension)
+	format, err := imgSvc.FormatFromExtension(path.Ext(file.Name))
 	// Unsupported extensions directly return the raw data
 	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
 		return rawFileHandlerAwss3(src, w, r, file, bflName)
