@@ -515,7 +515,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 				parentPath = dstDir
 				folderName = dstFilename
 			} else {
-				parentPath = dstDir + strings.TrimPrefix(filepath.Dir(firstItem.Path), srcPath)
+				parentPath = dstPath + strings.TrimPrefix(filepath.Dir(firstItem.Path), srcPath)
 				folderName = filepath.Base(firstItem.Path)
 			}
 			postParam := Awss3PostParam{
@@ -574,7 +574,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 				//fmt.Println(CopyTempGoogleDrivePathIdCache)
 				copyPathPrefix := "/Drive/" + srcDrive + "/" + srcName
 				copySrc := copyPathPrefix + firstItem.Path
-				parentPath := dstDir + strings.TrimPrefix(filepath.Dir(firstItem.Path), srcPath)
+				parentPath := dstPath + strings.TrimPrefix(filepath.Dir(firstItem.Path), srcPath)
 				copyDst := copyPathPrefix + parentPath + "/" + firstItem.Name
 				fmt.Println("copySrc: ", copySrc)
 				fmt.Println("copyDst: ", copyDst)
