@@ -446,13 +446,17 @@ func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request
 		fmt.Println("Dst parse failed.")
 		return nil
 	}
+	trimmedDstDir := strings.TrimSuffix(dstDir, "/")
+	if trimmedDstDir == "" {
+		trimmedDstDir = "/"
+	}
 	// 填充数据
 	param := Awss3CopyFileParam{
-		CloudFilePath:     srcPath,     // id of "path/to/cloud/file.txt",
-		NewCloudDirectory: dstDir,      // id of "new/cloud/directory",
-		NewCloudFileName:  dstFilename, // "new_file_name.txt",
-		Drive:             dstDrive,    // "my_drive",
-		Name:              dstName,     // "file_name",
+		CloudFilePath:     srcPath,       // id of "path/to/cloud/file.txt",
+		NewCloudDirectory: trimmedDstDir, // id of "new/cloud/directory",
+		NewCloudFileName:  dstFilename,   // "new_file_name.txt",
+		Drive:             dstDrive,      // "my_drive",
+		Name:              dstName,       // "file_name",
 	}
 
 	// 将数据序列化为 JSON
@@ -861,7 +865,7 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 		err = e.New("Calling " + dst + " got the status " + datas["status_code"].(string))
 		return nil, err
 	}
-	
+
 	// 将解析后的JSON响应体转换为字符串（格式化输出）
 	responseText, err := json.MarshalIndent(datas, "", "  ")
 	if err != nil {
