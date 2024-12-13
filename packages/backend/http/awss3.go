@@ -756,9 +756,11 @@ func moveAwss3FolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Requ
 	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 	_, _, dstPath := parseAwss3Path(dst, true)
 
+	dstDir, _ := filepath.Split(dstPath)
+
 	param := Awss3MoveFileParam{
 		CloudFilePath:     srcPath,
-		NewCloudDirectory: dstPath,
+		NewCloudDirectory: dstDir,
 		Drive:             srcDrive, // "my_drive",
 		Name:              srcName,  // "file_name",
 	}
