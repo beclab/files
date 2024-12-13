@@ -483,6 +483,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 		return nil
 	}
 
+	dst = addVersionSuffix(dst, nil)
 	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
 	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	if dstPath == "" {
@@ -851,6 +852,11 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 	err = json.Unmarshal(body, &datas)
 	if err != nil {
 		fmt.Println("Error unmarshaling JSON response:", err)
+		return nil, err
+	}
+
+	if datas["status_code"].(string) != "SUCCESS" {
+		err = e.New("Calling " + dst + " got the status " + datas["status_code"].(string))
 		return nil, err
 	}
 
