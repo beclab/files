@@ -510,7 +510,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 			}
 			postParam := Awss3PostParam{
 				ParentPath: parentPath,
-				FolderName: folderName,
+				FolderName: "/" + folderName,
 				Drive:      srcDrive,
 				Name:       srcName,
 			}
