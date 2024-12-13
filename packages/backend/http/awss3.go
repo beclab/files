@@ -439,6 +439,7 @@ func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request
 		fmt.Println("Src parse failed.")
 		return nil
 	}
+	dst = addVersionSuffix(dst, nil)
 	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
 	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	dstDir, dstFilename := path.Split(dstPath)
