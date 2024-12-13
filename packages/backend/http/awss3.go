@@ -477,8 +477,18 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 		fmt.Println("Src parse failed.")
 		return nil
 	}
+	srcDir, srcFilename := path.Split(srcPath)
+	if srcDir == "" || srcFilename == "" {
+		fmt.Println("Src parse failed.")
+		return nil
+	}
+
 	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
 	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
+	if dstPath == "" {
+		fmt.Println("Dst parse failed.")
+		return nil
+	}
 	dstDir, dstFilename := path.Split(dstPath)
 	if dstDir == "" || dstFilename == "" {
 		fmt.Println("Dst parse failed.")
@@ -510,7 +520,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 			}
 			postParam := Awss3PostParam{
 				ParentPath: parentPath,
-				FolderName: "/" + folderName,
+				FolderName: folderName,
 				Drive:      srcDrive,
 				Name:       srcName,
 			}
@@ -563,7 +573,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 			if len(A) > 0 {
 				//fmt.Println(CopyTempGoogleDrivePathIdCache)
 				copyPathPrefix := "/Drive/" + srcDrive + "/" + srcName + "/"
-				copySrc := copyPathPrefix + firstItem.Path + "/"
+				copySrc := copyPathPrefix + firstItem.Path
 				parentPath := filepath.Dir(firstItem.Path)
 				copyDst := copyPathPrefix + parentPath + "/" + firstItem.Name
 				fmt.Println("copySrc: ", copySrc)
