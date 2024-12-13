@@ -502,7 +502,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 			var parentPath string
 			var folderName string
 			if srcPath == recursivePath {
-				parentPath = dstPath
+				parentPath = dstDir
 				folderName = dstFilename
 			} else {
 				parentPath = filepath.Dir(firstItem.Path)
