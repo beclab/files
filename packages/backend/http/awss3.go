@@ -439,7 +439,6 @@ func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request
 		fmt.Println("Src parse failed.")
 		return nil
 	}
-	dst = addVersionSuffix(dst, nil)
 	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
 	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	dstDir, dstFilename := path.Split(dstPath)
@@ -484,7 +483,6 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 		return nil
 	}
 
-	dst = addVersionSuffix(dst, nil)
 	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
 	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	if dstPath == "" {
@@ -517,7 +515,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 				parentPath = dstDir
 				folderName = dstFilename
 			} else {
-				parentPath = filepath.Dir(firstItem.Path)
+				parentPath = dstDir + strings.TrimPrefix(filepath.Dir(firstItem.Path), srcPath)
 				folderName = filepath.Base(firstItem.Path)
 			}
 			postParam := Awss3PostParam{
