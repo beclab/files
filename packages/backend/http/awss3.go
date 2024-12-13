@@ -1043,11 +1043,13 @@ func resourcePatchAwss3(fileCache FileCache, w http.ResponseWriter, r *http.Requ
 
 	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 	_, _, dstPath := parseAwss3Path(dst, true)
-	//_, dstFilename := path.Split(dstPath)
+	fmt.Println("dstPath=", dstPath)
+	dstDir, dstFilename := path.Split(dstPath)
+	fmt.Println("dstDir=", dstDir, ", dstFilename=", dstFilename)
 
 	param := Awss3PatchParam{
 		Path:        srcPath,
-		NewFileName: dstPath,  //dstFilename,
+		NewFileName: dstFilename,
 		Drive:       srcDrive, // "my_drive",
 		Name:        srcName,  // "file_name",
 	}
