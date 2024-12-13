@@ -646,6 +646,9 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 		if len(taskRespJson.Data) == 0 {
 			return e.New("Task Info Not Found")
 		}
+		if *taskRespJson.Data[0].FailedReason == "Invalid task" && srcDrive == "tencent" {
+			return nil
+		}
 		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
 			if taskRespJson.Data[0].Status == "Completed" {
 				return nil
@@ -716,6 +719,9 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 		if len(taskRespJson.Data) == 0 {
 			err = e.New("Task Info Not Found")
 			return errToStatus(err), err
+		}
+		if *taskRespJson.Data[0].FailedReason == "Invalid task" && dstDrive == "tencent" {
+			return http.StatusOK, nil
 		}
 		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
 			if taskRespJson.Data[0].Status == "Completed" {
