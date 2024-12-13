@@ -1857,15 +1857,17 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 
 	// 提取 dir 和 filename
 	// len(slashes) >= 3
-	if slashes[len(slashes)-1] == len(path)-1 {
-		// 路径以 '/' 结尾，视为文件夹
-		dir = path[slashes[1]+1 : len(path)-1]
-		filename = ""
-	} else {
-		// 路径不以 '/' 结尾，视为文件
-		dir = path[slashes[1]+1 : slashes[len(slashes)-1]]
-		filename = path[slashes[len(slashes)-1]+1:]
-	}
+	//if slashes[len(slashes)-1] == len(path)-1 {
+	//	// 路径以 '/' 结尾，视为文件夹
+	//	dir = path[slashes[1]+1 : len(path)-1]
+	//	filename = ""
+	//} else {
+	//	// 路径不以 '/' 结尾，视为文件
+	//	dir = path[slashes[1]+1 : slashes[len(slashes)-1]]
+	//	filename = path[slashes[len(slashes)-1]+1:]
+	//}
+	dir = path[slashes[1]+1 : slashes[2]]
+	filename = strings.TrimPrefix(path[slashes[2]:], "/")
 
 	return drive, name, dir, filename
 }
