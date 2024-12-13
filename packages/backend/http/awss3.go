@@ -854,13 +854,14 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 		return nil, err
 	}
 
+	// 打印解析后的数据
+	fmt.Println("Parsed JSON response:", datas)
+
 	if datas["status_code"].(string) != "SUCCESS" {
 		err = e.New("Calling " + dst + " got the status " + datas["status_code"].(string))
 		return nil, err
 	}
-
-	// 打印解析后的数据
-	fmt.Println("Parsed JSON response:", datas)
+	
 	// 将解析后的JSON响应体转换为字符串（格式化输出）
 	responseText, err := json.MarshalIndent(datas, "", "  ")
 	if err != nil {
