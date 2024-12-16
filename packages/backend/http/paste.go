@@ -199,6 +199,7 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	// 构建新的文件名
 	bufferPathName := fmt.Sprintf("%d_%s", timestamp, originalPathName) // as parent folder
 	//bufferPathName := fmt.Sprintf("%d", timestamp)
+	bufferPathName = removeNonAlphanumericUnderscore(bufferPathName)
 	if len(bufferPathName) > 30 {
 		bufferPathName = bufferPathName[:30]
 	}
