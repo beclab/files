@@ -597,9 +597,9 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 
 func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimSuffix(src, "/")
-	if !strings.HasSuffix(bufferFilePath, "/") {
-		bufferFilePath += "/"
-	}
+	//if !strings.HasSuffix(bufferFilePath, "/") {
+	//	bufferFilePath += "/"
+	//}
 	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
