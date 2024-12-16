@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -384,4 +385,9 @@ func stringMD5(s string) string {
 	hashString := hex.EncodeToString(hashBytes)
 
 	return hashString
+}
+
+func removeNonAlphanumericUnderscore(s string) string {
+	re := regexp.MustCompile(`[^a-zA-Z0-9_]`)
+	return re.ReplaceAllString(s, "")
 }
