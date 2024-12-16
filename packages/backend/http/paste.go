@@ -1337,20 +1337,21 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		}
 		var same = srcType == dstType
 		// google drive, awss3 of two users must be seen as diff archs
-		var srcName, dstName, dstFilename string
+		var srcName, dstDrive, dstName, dstPathID, dstFilename string
 		if srcType == "google" {
 			_, srcName, _, _ = parseGoogleDrivePath(src)
 		} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			_, srcName, _ = parseAwss3Path(src, true)
 		}
 		if dstType == "google" {
-			_, dstName, _, dstFilename = parseGoogleDrivePath(dst)
+			dstDrive, dstName, dstPathID, dstFilename = parseGoogleDrivePath(dst)
 			if srcType != "google" && strings.Contains(dstFilename, "/") {
 				strings.Replace(dstFilename, "/", "-", -1)
 			}
 			if srcType != "google" && strings.Contains(dstFilename, "%2F") {
 				strings.Replace(dstFilename, "%2F", "-", -1)
 			}
+			dst = "/Drive/" + dstDrive + "/" + dstName + "/" + dstPathID + "/" + dstFilename
 		} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			_, dstName, _ = parseAwss3Path(dst, true)
 		}
