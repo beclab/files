@@ -1869,6 +1869,10 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	dir = path[slashes[1]+1 : slashes[2]]
 	filename = strings.TrimPrefix(path[slashes[2]:], "/")
 
+	if dir == "root" {
+		dir = "/"
+	}
+
 	return drive, name, dir, filename
 }
 
