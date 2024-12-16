@@ -1345,7 +1345,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		}
 		if dstType == "google" {
 			_, dstName, _, dstFilename = parseGoogleDrivePath(dst)
-			if strings.Contains(dstFilename, "/") {
+			if srcType != "google" && strings.Contains(dstFilename, "/") {
 				strings.Replace(dstFilename, "/", "-", -1)
 			}
 		} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
