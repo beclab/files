@@ -1348,6 +1348,9 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			if srcType != "google" && strings.Contains(dstFilename, "/") {
 				strings.Replace(dstFilename, "/", "-", -1)
 			}
+			if srcType != "google" && strings.Contains(dstFilename, "%2F") {
+				strings.Replace(dstFilename, "%2F", "-", -1)
+			}
 		} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 			_, dstName, _ = parseAwss3Path(dst, true)
 		}
