@@ -1141,9 +1141,9 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 	if !strings.HasSuffix(src, "/") {
 		src += "/"
 	}
-	//if !strings.HasSuffix(bufferFilePath, "/") {
-	//	bufferFilePath += "/"
-	//}
+	if !strings.HasSuffix(bufferFilePath, "/") {
+		bufferFilePath += "/"
+	}
 	srcDrive, srcName, srcPathId, srcFilename := parseGoogleDrivePath(src)
 	//srcPathId, srcDrive, srcName, srcDir, srcFilename, err := GoogleDrivePathToId(src, w, r, false)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
