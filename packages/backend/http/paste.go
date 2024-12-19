@@ -1329,6 +1329,16 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 				return http.StatusConflict, nil
 			}
 		}
+		if srcType == "google" && dstType != "google" {
+			//srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
+			srcInfo, err := getGoogleDriveIdFocusedMetaInfos(src, w, r)
+			if err != nil {
+				return http.StatusInternalServerError, err
+			}
+			srcName := srcInfo.Name
+			formattedSrcName := removeNonAlphanumericUnderscore(srcName)
+			dst = strings.ReplaceAll(dst, srcName, formattedSrcName)
+		}
 		if rename && dstType != "google" {
 			dst = pasteAddVersionSuffix(dst, dstType, d.user.Fs, w, r)
 		}
