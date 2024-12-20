@@ -417,58 +417,6 @@ type GoogleDriveTaskQueryResponse struct {
 
 var GoogleDrivePathIdCache = make(map[string]string)
 
-func getHost(w http.ResponseWriter, r *http.Request) string {
-	bflName := r.Header.Get("X-Bfl-User")
-	url := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
-
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Println("Error making GET request:", err)
-		return ""
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Error reading response body:", err)
-		return ""
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Received non-200 response: %d\n", resp.StatusCode)
-		return ""
-	}
-
-	type BflResponse struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Data    struct {
-			TerminusName    string `json:"terminusName"`
-			WizardStatus    string `json:"wizardStatus"`
-			Selfhosted      bool   `json:"selfhosted"`
-			TailScaleEnable bool   `json:"tailScaleEnable"`
-			OsVersion       string `json:"osVersion"`
-			LoginBackground string `json:"loginBackground"`
-			Avatar          string `json:"avatar"`
-			TerminusId      string `json:"terminusId"`
-			Did             string `json:"did"`
-			ReverseProxy    string `json:"reverseProxy"`
-			Terminusd       string `json:"terminusd"`
-		} `json:"data"`
-	}
-
-	var responseObj BflResponse
-	err = json.Unmarshal(body, &responseObj)
-	if err != nil {
-		fmt.Println("Error unmarshaling JSON:", err)
-		return ""
-	}
-
-	modifiedTerminusName := strings.Replace(responseObj.Data.TerminusName, "@", ".", 1)
-	fmt.Println(modifiedTerminusName)
-	return "https://files." + modifiedTerminusName
-}
-
 //func getHost(w http.ResponseWriter, r *http.Request) string {
 //	referer := r.Header.Get("Referer")
 //	if referer == "" {
@@ -1708,7 +1656,7 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 	//	host = "https://files." + bflName + ".olares.cn"
 	//}
 	//fmt.Println("*****Google Drive Call URL forced:", host)
-	host := getHost(w, r)
+	host := getHost(r)
 	dstUrl := host + dst // "/api/resources%2FHome%2FDocuments%2F"
 
 	fmt.Println("dstUrl:", dstUrl)
