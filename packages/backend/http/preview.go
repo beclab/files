@@ -110,7 +110,8 @@ func handleImagePreview(
 	if !ok {
 		resizedImage, err = createPreview(imgSvc, fileCache, file, previewSize)
 		if err != nil {
-			return errToStatus(err), err
+			return rawFileHandler(w, r, file)
+			//return errToStatus(err), err
 		}
 	}
 
@@ -152,6 +153,7 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 
 	buf := &bytes.Buffer{}
 	if err := imgSvc.Resize(context.Background(), fd, width, height, buf, options...); err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 

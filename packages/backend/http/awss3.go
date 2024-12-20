@@ -801,7 +801,7 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 	//	host = "https://files." + bflName + ".olares.cn"
 	//}
 	//fmt.Println("*****Awss3 Call URL forced:", host)
-	host := getHost(w, r)
+	host := getHost(r)
 	dstUrl := host + dst
 
 	fmt.Println("dstUrl:", dstUrl)
