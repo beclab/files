@@ -172,6 +172,12 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 	}
 	defer s.sem.Release(1)
 
+	img, err := decodeImageStandardLib(in, FormatPng)
+	if err != nil {
+		fmt.Println("Decode Standard:", err)
+		return err
+	}
+
 	format, wrappedReader, err := s.detectFormat(in)
 	if err != nil {
 		fmt.Println("Detect format:", err)
