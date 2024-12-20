@@ -136,6 +136,7 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 	if err != nil {
 		return nil, err
 	}
+	fd.Seek(0, 0)
 	defer fd.Close()
 
 	var (
