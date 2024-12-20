@@ -206,7 +206,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		}
 	}
 
-	img, err := decodeImageStandardLib(wrappedReader, format)
+	img, err = decodeImageStandardLib(wrappedReader, format)
 	if err != nil {
 		fmt.Println("Decode Standard:", err)
 		return err
