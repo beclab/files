@@ -183,6 +183,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		resizeMode: ResizeModeFit,
 		quality:    QualityMedium,
 	}
+	fmt.Println("config: ", config)
 	for _, option := range options {
 		option(&config)
 	}
@@ -202,22 +203,14 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 	img, err := decodeImageStandardLib(wrappedReader, format)
 	if err != nil {
 		fmt.Println("Decode Standard:", err)
-		//return err
+		return err
 	}
 
-	img, err = imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
-	if err != nil {
-		fmt.Println("Decode:", err)
-		img, err = imaging.Decode(in, imaging.AutoOrientation(true))
-		if err != nil {
-			fmt.Println("Decode in:", err)
-		}
-		img, err = imaging.Decode(wrappedReader, imaging.AutoOrientation(false))
-		if err != nil {
-			fmt.Println("Decode Unauto Orientation:", err)
-		}
-		//return err
-	}
+	//img, err = imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
+	//if err != nil {
+	//	fmt.Println("Decode:", err)
+	//	return err
+	//}
 
 	switch config.resizeMode {
 	case ResizeModeFill:
