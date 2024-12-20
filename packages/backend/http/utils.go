@@ -341,35 +341,54 @@ func outputHeader(r *http.Request) {
 }
 
 func getOwner(r *http.Request) (ownerID, ownerName string) {
-	BflName := r.Header.Get("X-Bfl-User")
-	rawURL := r.Header.Get("Referer")
-	if !strings.HasSuffix(rawURL, "/") {
-		rawURL += "/"
+	bflName := r.Header.Get("X-Bfl-User")
+	url := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
+
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Error making GET request:", err)
+		return
 	}
+	defer resp.Body.Close()
 
-	// initial return value
-	ownerName = BflName
-	ownerID = ownerName
-
-	indexName := strings.Index(rawURL, BflName)
-	if indexName == -1 {
-		fmt.Println("BflName not found in URL")
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response body:", err)
 		return
 	}
 
-	indexSlash := strings.Index(rawURL[indexName:], "/")
-	if indexSlash == -1 {
-		fmt.Println("No '/' found after BflName in URL")
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Received non-200 response: %d\n", resp.StatusCode)
 		return
 	}
 
-	domainStart := indexName + len(BflName) + 1
-	domainEnd := indexName + indexSlash
-	domain := rawURL[domainStart:domainEnd]
+	type BflResponse struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			TerminusName    string `json:"terminusName"`
+			WizardStatus    string `json:"wizardStatus"`
+			Selfhosted      bool   `json:"selfhosted"`
+			TailScaleEnable bool   `json:"tailScaleEnable"`
+			OsVersion       string `json:"osVersion"`
+			LoginBackground string `json:"loginBackground"`
+			Avatar          string `json:"avatar"`
+			TerminusId      string `json:"terminusId"`
+			Did             string `json:"did"`
+			ReverseProxy    string `json:"reverseProxy"`
+			Terminusd       string `json:"terminusd"`
+		} `json:"data"`
+	}
 
-	email := fmt.Sprintf("%s@%s", BflName, domain)
-	fmt.Println("Generated email:", email)
-	ownerID = email
+	var responseObj BflResponse
+	err = json.Unmarshal(body, &responseObj)
+	if err != nil {
+		fmt.Println("Error unmarshaling JSON:", err)
+		return
+	}
+
+	ownerID = responseObj.Data.TerminusId
+	ownerName = responseObj.Data.TerminusName
 	return
 }
 
@@ -423,4 +442,56 @@ func stripPrefix(prefix string, h http.Handler) http.Handler {
 		r2.URL.RawPath = rp
 		h.ServeHTTP(w, r2)
 	})
+}
+
+func getHost(r *http.Request) string {
+	bflName := r.Header.Get("X-Bfl-User")
+	url := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
+
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Error making GET request:", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response body:", err)
+		return ""
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Received non-200 response: %d\n", resp.StatusCode)
+		return ""
+	}
+
+	type BflResponse struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			TerminusName    string `json:"terminusName"`
+			WizardStatus    string `json:"wizardStatus"`
+			Selfhosted      bool   `json:"selfhosted"`
+			TailScaleEnable bool   `json:"tailScaleEnable"`
+			OsVersion       string `json:"osVersion"`
+			LoginBackground string `json:"loginBackground"`
+			Avatar          string `json:"avatar"`
+			TerminusId      string `json:"terminusId"`
+			Did             string `json:"did"`
+			ReverseProxy    string `json:"reverseProxy"`
+			Terminusd       string `json:"terminusd"`
+		} `json:"data"`
+	}
+
+	var responseObj BflResponse
+	err = json.Unmarshal(body, &responseObj)
+	if err != nil {
+		fmt.Println("Error unmarshaling JSON:", err)
+		return ""
+	}
+
+	modifiedTerminusName := strings.Replace(responseObj.Data.TerminusName, "@", ".", 1)
+	fmt.Println(modifiedTerminusName)
+	return "https://files." + modifiedTerminusName
 }

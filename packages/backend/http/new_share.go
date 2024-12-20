@@ -255,7 +255,7 @@ func checkPathAndConvertToPathID(path, ownerID string) (uint64, error) {
 var shareLinkPostHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	//outputHeader(r)
 
-	host := getHost(w, r)
+	host := getHost(r)
 	ownerID, ownerName := getOwner(r)
 
 	if !d.user.Perm.Modify || !d.Check(r.URL.Path) {
