@@ -143,6 +143,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 
 	format, wrappedReader, err := s.detectFormat(in)
 	if err != nil {
+		fmt.Println("Detect format:", err)
 		return err
 	}
 
@@ -159,6 +160,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		thm, newWrappedReader, errThm := getEmbeddedThumbnail(wrappedReader)
 		wrappedReader = newWrappedReader
 		if errThm == nil {
+			fmt.Println("Get Embedded Thumbnail: ", err)
 			_, err = out.Write(thm)
 			if err == nil {
 				return nil
@@ -168,6 +170,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 
 	img, err := imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
 	if err != nil {
+		fmt.Println("Decode:", err)
 		return err
 	}
 
