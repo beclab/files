@@ -24,6 +24,7 @@ type PreviewSize int
 type ImgService interface {
 	FormatFromExtension(ext string) (img.Format, error)
 	Resize(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...img.Option) error
+	Resize2(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...img.Option) error
 }
 
 type FileCache interface {
@@ -108,9 +109,14 @@ func handleImagePreview(
 		return errToStatus(err), err
 	}
 	if !ok {
-		resizedImage, err = createPreview(imgSvc, fileCache, file, previewSize)
+		resizedImage, err = createPreview(imgSvc, fileCache, file, previewSize, 1)
 		if err != nil {
-			return rawFileHandler(w, r, file)
+			fmt.Println("first method failed!")
+			resizedImage, err = createPreview(imgSvc, fileCache, file, previewSize, 2)
+			if err != nil {
+				fmt.Println("second method failed!")
+				return rawFileHandler(w, r, file)
+			}
 			//return errToStatus(err), err
 		}
 	}
@@ -124,7 +130,7 @@ func handleImagePreview(
 }
 
 func createPreview(imgSvc ImgService, fileCache FileCache,
-	file *files.FileInfo, previewSize PreviewSize) ([]byte, error) {
+	file *files.FileInfo, previewSize PreviewSize, method int) ([]byte, error) {
 	fmt.Println("!!!!CreatePreview:", previewSize)
 	fd, err := file.Fs.Open(file.Path)
 	if err != nil {
@@ -152,9 +158,16 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 	}
 
 	buf := &bytes.Buffer{}
-	if err := imgSvc.Resize(context.Background(), fd, width, height, buf, options...); err != nil {
-		fmt.Println(err)
-		return nil, err
+	if method == 1 {
+		if err := imgSvc.Resize(context.Background(), fd, width, height, buf, options...); err != nil {
+			fmt.Println(err)
+			return nil, err
+		}
+	} else if method == 2 {
+		if err := imgSvc.Resize2(context.Background(), fd, width, height, buf, options...); err != nil {
+			fmt.Println(err)
+			return nil, err
+		}
 	}
 
 	go func() {
