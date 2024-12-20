@@ -202,6 +202,10 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 	img, err := imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
 	if err != nil {
 		fmt.Println("Decode:", err)
+		img, err = imaging.Decode(in, imaging.AutoOrientation(true))
+		if err != nil {
+			fmt.Println("Decode in:", err)
+		}
 		img, err = imaging.Decode(wrappedReader, imaging.AutoOrientation(false))
 		if err != nil {
 			fmt.Println("Decode Unauto Orientation:", err)
