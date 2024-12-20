@@ -172,12 +172,6 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 	}
 	defer s.sem.Release(1)
 
-	img, err := decodeImageStandardLib(in, FormatPng)
-	if err != nil {
-		fmt.Println("Decode Standard:", err)
-		return err
-	}
-
 	format, wrappedReader, err := s.detectFormat(in)
 	if err != nil {
 		fmt.Println("Detect format:", err)
@@ -189,7 +183,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		resizeMode: ResizeModeFit,
 		quality:    QualityMedium,
 	}
-	fmt.Println("config: ", config)
+	fmt.Println("format: ", format)
 	for _, option := range options {
 		option(&config)
 	}
@@ -206,17 +200,17 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		}
 	}
 
-	img, err = decodeImageStandardLib(wrappedReader, format)
-	if err != nil {
-		fmt.Println("Decode Standard:", err)
-		return err
-	}
-
-	//img, err = imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
+	//img, err := decodeImageStandardLib(wrappedReader, format)
 	//if err != nil {
-	//	fmt.Println("Decode:", err)
+	//	fmt.Println("Decode Standard:", err)
 	//	return err
 	//}
+
+	img, err := imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
+	if err != nil {
+		fmt.Println("Decode:", err)
+		return err
+	}
 
 	switch config.resizeMode {
 	case ResizeModeFill:
