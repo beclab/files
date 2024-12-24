@@ -6,6 +6,7 @@ import (
 	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
+	"github.com/filebrowser/filebrowser/v2/nats"
 	"github.com/filebrowser/filebrowser/v2/parser"
 	"io/fs"
 	"io/ioutil"
@@ -293,6 +294,17 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Remove) || e.Has(jfsnotify.Rename) {
+		//var msg string
+		//if e.Has(jfsnotify.Remove) {
+		//	msg = "Remove event: " + e.Name
+		//} else if e.Has(jfsnotify.Rename) {
+		//	msg = "Rename event: " + e.Name
+		//}
+		//nats.SendMessage(msg)
+
+		fmt.Println("Add Remove or Rename Event: ", e.Name)
+		nats.AddEventToQueue(e)
+
 		log.Info().Msgf("push indexer task delete %s", e.Name)
 		//res, err := RpcServer.EsQueryByPath(FileIndex, e.Name)
 		//if err != nil {
@@ -325,6 +337,13 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Create) { // || e.Has(jfsnotify.Write) || e.Has(jfsnotify.Chmod) {
+		//var msg string
+		//msg = "Create event: " + e.Name
+		//nats.SendMessage(msg)
+
+		fmt.Println("Add Create Event: ", e.Name)
+		nats.AddEventToQueue(e)
+
 		err = filepath.Walk(e.Name, func(docPath string, info fs.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -364,6 +383,9 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Write) { // || e.Has(notify.Chmod) {
+		fmt.Println("Add Write Event: ", e.Name)
+		nats.AddEventToQueue(e)
+
 		if checkString(e.Name) {
 			return updateOrInputDocSearch3(e.Name, bflName)
 		}
