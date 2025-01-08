@@ -90,6 +90,7 @@ type Response struct {
 }
 
 type DiskInfo struct {
+	Type              string  `json:"type"`
 	Path              string  `json:"path"`
 	Fstype            string  `json:"fstype"`
 	Total             int64   `json:"total"`
@@ -138,40 +139,94 @@ func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
 	return response.Data, nil
 }
 
-func GetExternalType(filePath string, usbData []DiskInfo, hddData []DiskInfo) string {
+func GetExternalType(filePath string, mountedData []DiskInfo) string {
 	fileName := strings.TrimPrefix(strings.TrimSuffix(filePath, "/"), "/")
 	lastSlashIndex := strings.LastIndex(fileName, "/")
 	if lastSlashIndex != -1 {
 		fileName = fileName[lastSlashIndex+1:]
 	}
 
-	for _, usb := range usbData {
-		if usb.Path == fileName {
-			return "mountable"
-		}
-	}
-
-	for _, hdd := range hddData {
-		if hdd.Path == fileName {
-			return "hdd"
+	for _, mounted := range mountedData {
+		if mounted.Path == fileName {
+			return mounted.Type
 		}
 	}
 
 	return "others"
 }
 
-func UnmountUSBIncluster(r *http.Request, usbPath string) (map[string]interface{}, error) {
-	url := "http://" + TerminusdHost + "/command/umount-usb-incluster"
+func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
+	externalType := r.URL.Query().Get("external_type")
+	var url = ""
+	if externalType == "smb" {
+		url = "http://" + TerminusdHost + "/command/mount-samba"
+	} else {
+		return nil, fmt.Errorf("Unsupported external type: %s", externalType)
+	}
+
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	headers := r.Header.Clone()
 	headers.Set("Content-Type", "application/json")
 	headers.Set("X-Signature", "temp_signature")
 
-	mountPath := strings.TrimPrefix(strings.TrimSuffix(usbPath, "/"), "/")
+	client := &http.Client{}
+	req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, err
+	}
+	req.Header = headers
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var responseMap map[string]interface{}
+	err = json.Unmarshal(respBody, &responseMap)
+	if err != nil {
+		return nil, err
+	}
+
+	return responseMap, nil
+}
+
+func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{}, error) {
+	externalType := r.URL.Query().Get("external_type")
+	var url = ""
+	if externalType == "usb" {
+		url = "http://" + TerminusdHost + "/command/umount-usb-incluster"
+	} else if externalType == "smb" {
+		url = "http://" + TerminusdHost + "/command/umount-samba-incluster"
+	} else {
+		return nil, fmt.Errorf("Unsupported external type: %s", externalType)
+	}
+	fmt.Println("path:", path)
+	fmt.Println("externalTYpe:", externalType)
+	fmt.Println("url:", url)
+
+	headers := r.Header.Clone()
+	headers.Set("Content-Type", "application/json")
+	headers.Set("X-Signature", "temp_signature")
+
+	mountPath := strings.TrimPrefix(strings.TrimSuffix(path, "/"), "/")
 	lastSlashIndex := strings.LastIndex(mountPath, "/")
 	if lastSlashIndex != -1 {
 		mountPath = mountPath[lastSlashIndex+1:]
 	}
+	fmt.Println("mountPath:", mountPath)
 
 	bodyData := map[string]string{
 		"path": mountPath,
@@ -203,6 +258,7 @@ func UnmountUSBIncluster(r *http.Request, usbPath string) (map[string]interface{
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("responseMap:", responseMap)
 
 	return responseMap, nil
 }
@@ -237,7 +293,7 @@ func NewFileInfo(opts FileOptions) (*FileInfo, error) {
 	return file, err
 }
 
-func NewFileInfoWithDiskInfo(opts FileOptions, usbData, hddData []DiskInfo) (*FileInfo, error) {
+func NewFileInfoWithDiskInfo(opts FileOptions, mountedData []DiskInfo) (*FileInfo, error) {
 	if !opts.Checker.Check(opts.Path) {
 		return nil, os.ErrPermission
 	}
@@ -249,7 +305,7 @@ func NewFileInfoWithDiskInfo(opts FileOptions, usbData, hddData []DiskInfo) (*Fi
 
 	if opts.Expand {
 		if file.IsDir {
-			if err := file.readListingWithDiskInfo(opts.Checker, opts.ReadHeader, usbData, hddData); err != nil { //nolint:govet
+			if err := file.readListingWithDiskInfo(opts.Checker, opts.ReadHeader, mountedData); err != nil { //nolint:govet
 				return nil, err
 			}
 			return file, nil
@@ -628,7 +684,7 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 	return nil
 }
 
-func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader bool, usbData, hddData []DiskInfo) error {
+func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader bool, mountedData []DiskInfo) error {
 	afs := &afero.Afero{Fs: i.Fs}
 	dir, err := afs.ReadDir(i.Path)
 	if err != nil {
@@ -677,7 +733,7 @@ func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader boo
 
 		if file.IsDir {
 			if CheckPath(file.Path, ExternalPrefix, "/") {
-				file.ExternalType = GetExternalType(file.Path, usbData, hddData)
+				file.ExternalType = GetExternalType(file.Path, mountedData)
 			}
 			// err := file.readListing(checker, readHeader)
 			// if err != nil {

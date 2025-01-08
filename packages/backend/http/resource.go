@@ -160,13 +160,9 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	xBflUser := r.Header.Get("X-Bfl-User")
 	fmt.Println("X-Bfl-User: ", xBflUser)
 
-	var usbData []files.DiskInfo = nil
-	var hddData []files.DiskInfo = nil
+	var mountedData []files.DiskInfo = nil
 	if files.TerminusdHost != "" {
-		urls := []string{
-			"http://" + files.TerminusdHost + "/system/mounted-usb-incluster",
-			"http://" + files.TerminusdHost + "/system/mounted-hdd-incluster",
-		}
+		url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
 
 		headers := r.Header.Clone()
 		headers.Set("Content-Type", "application/json")
@@ -175,27 +171,32 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		//	"X-Signature": "temp_signature",
 		//}
 
-		for _, url := range urls {
-			data, err := files.FetchDiskInfo(url, headers)
-			if err != nil {
-				log.Printf("Failed to fetch data from %s: %v", url, err)
-				continue
-			}
+		mountedData, err = files.FetchDiskInfo(url, headers)
+		if err != nil {
+			log.Printf("Failed to fetch data from %s: %v", url, err)
+		}
 
-			if url == urls[0] {
-				usbData = data
-			} else if url == urls[1] {
-				hddData = data
-			}
+		fmt.Println("Mounted Data:", mountedData)
+
+		url = "http://" + files.TerminusdHost + "/system/mounted-usb-incluster"
+
+		headers = r.Header.Clone()
+		headers.Set("Content-Type", "application/json")
+		headers.Set("X-Signature", "temp_signature")
+		//headers := map[string]string{
+		//	"X-Signature": "temp_signature",
+		//}
+
+		usbData, err := files.FetchDiskInfo(url, headers)
+		if err != nil {
+			log.Printf("Failed to fetch data from %s: %v", url, err)
 		}
 
 		fmt.Println("USB Data:", usbData)
-		fmt.Println("HDD Data:", hddData)
 	}
 
 	var file *files.FileInfo
-	//var err error
-	if usbData != nil || hddData != nil {
+	if mountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
 			Fs:         d.user.Fs,
 			Path:       r.URL.Path,
@@ -204,7 +205,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,
 			Content:    true,
-		}, usbData, hddData)
+		}, mountedData)
 	} else {
 		file, err = files.NewFileInfo(files.FileOptions{
 			Fs:         d.user.Fs,
@@ -254,13 +255,13 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		// file.Size = file.Listing.Size
 		// recursiveSize(file)
 		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
-			file.ExternalType = files.GetExternalType(file.Path, usbData, hddData)
+			file.ExternalType = files.GetExternalType(file.Path, mountedData)
 		}
 		file.Listing.Sorting = d.user.Sorting
 		file.Listing.ApplySort()
 		if stream == 1 {
 			//return streamJSON(w, r, file)
-			streamListingItems(w, r, file.Listing, d, usbData, hddData)
+			streamListingItems(w, r, file.Listing, d, mountedData)
 			elapsed := time.Since(start)
 			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
 			return 0, nil
@@ -387,9 +388,25 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 	})
 }
 
+func resourceMountHandler(fileCache FileCache) handleFunc {
+	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		if !d.user.Perm.Create {
+			return http.StatusForbidden, nil
+		}
+
+		respJson, err := files.MountPathIncluster(r)
+		if err != nil {
+			return errToStatus(err), err
+		}
+
+		return renderJSON(w, r, respJson)
+		//return http.StatusOK, nil
+	})
+}
+
 func resourceUnmountHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if r.URL.Path == "/" || !d.user.Perm.Delete {
+		if !d.user.Perm.Delete {
 			return http.StatusForbidden, nil
 		}
 
@@ -415,7 +432,7 @@ func resourceUnmountHandler(fileCache FileCache) handleFunc {
 		//	return d.user.Fs.RemoveAll(r.URL.Path)
 		//}, "delete", r.URL.Path, "", d.user)
 
-		respJson, err := files.UnmountUSBIncluster(r, file.Path)
+		respJson, err := files.UnmountPathIncluster(r, file.Path)
 		if err != nil {
 			return errToStatus(err), err
 		}

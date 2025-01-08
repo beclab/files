@@ -63,7 +63,7 @@ func renderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, 
 //	}
 //}
 
-func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *data, usbData, hddData []files.DiskInfo) {
+func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *data, mountedData []files.DiskInfo) {
 	defer close(dataChan)
 
 	var A []*files.FileInfo
@@ -79,7 +79,7 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 		if firstItem.IsDir {
 			var file *files.FileInfo
 			var err error
-			if usbData != nil || hddData != nil {
+			if mountedData != nil {
 				file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
 					Fs:         d.user.Fs,
 					Path:       firstItem.Path, //r.URL.Path,
@@ -88,7 +88,7 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 					ReadHeader: d.server.TypeDetectionByHeader,
 					Checker:    d,
 					Content:    true,
-				}, usbData, hddData)
+				}, mountedData)
 			} else {
 				file, err = files.NewFileInfo(files.FileOptions{
 					Fs:         d.user.Fs,
@@ -132,7 +132,7 @@ func formatSSEvent(data interface{}) string {
 	return fmt.Sprintf("data: %s\n\n", jsonData)
 }
 
-func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.Listing, d *data, usbData, hddData []files.DiskInfo) {
+func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.Listing, d *data, mountedData []files.DiskInfo) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -140,7 +140,7 @@ func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.L
 	stopChan := make(chan struct{})
 	dataChan := make(chan string)
 
-	go generateListingData(listing, stopChan, dataChan, d, usbData, hddData)
+	go generateListingData(listing, stopChan, dataChan, d, mountedData)
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
