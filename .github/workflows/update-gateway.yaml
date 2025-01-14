@@ -8,7 +8,6 @@ on:
 #    push:
 #      branches:
 #        - "main"
-#        - "dev_wrx"
 
 jobs:
     update_dockerhub:

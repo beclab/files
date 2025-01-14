@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 func renderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, error) {
@@ -63,7 +65,7 @@ func renderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, 
 //	}
 //}
 
-func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *data, usbData, hddData []files.DiskInfo) {
+func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *data, mountedData []files.DiskInfo) {
 	defer close(dataChan)
 
 	var A []*files.FileInfo
@@ -79,7 +81,7 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 		if firstItem.IsDir {
 			var file *files.FileInfo
 			var err error
-			if usbData != nil || hddData != nil {
+			if mountedData != nil {
 				file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
 					Fs:         d.user.Fs,
 					Path:       firstItem.Path, //r.URL.Path,
@@ -88,7 +90,7 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 					ReadHeader: d.server.TypeDetectionByHeader,
 					Checker:    d,
 					Content:    true,
-				}, usbData, hddData)
+				}, mountedData)
 			} else {
 				file, err = files.NewFileInfo(files.FileOptions{
 					Fs:         d.user.Fs,
@@ -132,7 +134,7 @@ func formatSSEvent(data interface{}) string {
 	return fmt.Sprintf("data: %s\n\n", jsonData)
 }
 
-func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.Listing, d *data, usbData, hddData []files.DiskInfo) {
+func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.Listing, d *data, mountedData []files.DiskInfo) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -140,7 +142,7 @@ func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.L
 	stopChan := make(chan struct{})
 	dataChan := make(chan string)
 
-	go generateListingData(listing, stopChan, dataChan, d, usbData, hddData)
+	go generateListingData(listing, stopChan, dataChan, d, mountedData)
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -370,4 +372,97 @@ func stripPrefix(prefix string, h http.Handler) http.Handler {
 		r2.URL.RawPath = rp
 		h.ServeHTTP(w, r2)
 	})
+}
+
+const (
+	maxReasonableSpace = 1000 * 1e12 // 1000T
+)
+
+func checkDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
+	reservedSpaceStr := os.Getenv("RESERVED_SPACE") // env is MB, default is 10000MB
+	if reservedSpaceStr == "" {
+		reservedSpaceStr = "10000"
+	}
+	reservedSpace, err := strconv.ParseInt(reservedSpaceStr, 10, 64)
+	if err != nil {
+		return false, 0, 0, 0, fmt.Errorf("failed to parse reserved space: %w", err)
+	}
+	reservedSpace *= 1024 * 1024
+
+	var rootStat, dataStat syscall.Statfs_t
+
+	err = syscall.Statfs("/", &rootStat)
+	if err != nil {
+		return false, 0, 0, 0, fmt.Errorf("failed to get root file system stats: %w", err)
+	}
+	rootAvailableSpace := int64(rootStat.Bavail * uint64(rootStat.Bsize))
+
+	err = syscall.Statfs(filePath, &dataStat)
+	if err != nil {
+		fmt.Println(err)
+		return false, 0, 0, 0, fmt.Errorf("failed to get /data file system stats: %w", err)
+	}
+	dataAvailableSpace := int64(dataStat.Bavail * uint64(dataStat.Bsize))
+
+	availableSpace := int64(0)
+	if dataAvailableSpace >= maxReasonableSpace {
+		availableSpace = rootAvailableSpace - reservedSpace
+	} else {
+		availableSpace = dataAvailableSpace - reservedSpace
+	}
+
+	requiredSpace := newContentSize
+
+	if availableSpace >= requiredSpace {
+		return true, requiredSpace, availableSpace, reservedSpace, nil
+	}
+
+	return false, requiredSpace, availableSpace, reservedSpace, nil
+}
+
+func formatBytes(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	var result string
+	var value float64
+
+	if bytes >= GB {
+		value = float64(bytes) / GB
+		result = fmt.Sprintf("%.4fG", value)
+	} else if bytes >= MB {
+		value = float64(bytes) / MB
+		result = fmt.Sprintf("%.4fM", value)
+	} else if bytes >= KB {
+		value = float64(bytes) / KB
+		result = fmt.Sprintf("%.4fK", value)
+	} else {
+		result = strconv.FormatInt(bytes, 10) + "B"
+	}
+
+	return result
+}
+
+func checkBufferDiskSpace(diskSize int64) (bool, error) {
+	fmt.Println("*********Checking Buffer Disk Space***************")
+	spaceOk, needs, avails, reserved, err := checkDiskSpace("/data", diskSize)
+	if err != nil {
+		return false, err // errors.New("disk space check error")
+	}
+	needsStr := formatBytes(needs)
+	availsStr := formatBytes(avails)
+	reservedStr := formatBytes(reserved)
+	if spaceOk {
+		spaceMessage := fmt.Sprintf("Sufficient disk space available. This file still requires: %s, while %s is already available (with an additional %s reserved for the system).",
+			needsStr, availsStr, reservedStr)
+		fmt.Println(spaceMessage)
+		return true, nil
+	} else {
+		errorMessage := fmt.Sprintf("Insufficient disk space available. This file still requires: %s, but only %s is available (with an additional %s reserved for the system).",
+			needsStr, availsStr, reservedStr)
+		return false, errors.New(errorMessage)
+	}
 }

@@ -2,12 +2,13 @@ name: Update Server
 
 on:
   workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Release Tags'
 
   push:
-    branches:
-      - "main"
-      - "dev_wrx"
-      - "nats"
+#    branches:
+#      - "main"
     tags:
       - 'v*'
 
@@ -47,7 +48,7 @@ jobs:
         uses: "WyriHaximus/github-action-get-previous-tag@v1"
         id: get-latest-tag
         with:
-          fallback: nats-test
+          fallback: latest
 
 #      - name: Build
 #        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
@@ -72,6 +73,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
+#          tags: beclab/files-server:${{ github.event.inputs.tags }}
           tags: beclab/files-server:${{ steps.get-latest-tag.outputs.tag }}
           platforms: linux/amd64,linux/arm64
                     

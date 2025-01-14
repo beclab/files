@@ -48,7 +48,8 @@ func checkString(s string) bool {
 
 	if strings.HasPrefix(s+"/", RootPrefix+files.ExternalPrefix) {
 		fmt.Println(s+"/", RootPrefix+files.ExternalPrefix)
-		return false
+		//return false
+		return true // change to watching external
 	}
 
 	slashCount := 0
@@ -158,10 +159,10 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 			}
 			if info.IsDir() {
 				//fmt.Println("filepath.Base: ", filepath.Base(path))
-				if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
-					fmt.Println("We will skip the folder:", path)
-					return filepath.SkipDir
-				}
+				//if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
+				//	fmt.Println("We will skip the folder:", path)
+				//	return filepath.SkipDir
+				//}
 
 				fmt.Println("Try to Add Path: ", path)
 				if checkString(path) {

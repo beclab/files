@@ -28,18 +28,22 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
-	API_RESOURCES_PREFIX = "/api/resources/AppData"
-	API_RAW_PREFIX       = "/api/raw/AppData"
-	NODE_HEADER          = "X-Terminus-Node"
-	BFL_HEADER           = "X-Bfl-User"
-	API_PREFIX           = "/api"
-	UPLOADER_PREFIX      = "/upload"
-	MEDIA_PREFIX         = "/videos"
-	API_PASTE_PREFIX     = "/api/paste"
-	API_CACHE_PREFIX     = "/api/cache"
+	API_RESOURCES_PREFIX     = "/api/resources/AppData"
+	API_RAW_PREFIX           = "/api/raw/AppData"
+	API_MD5_PREFIX           = "/api/md5/AppData"
+	API_PREVIEW_THUMB_PREFIX = "/api/preview/thumb/AppData"
+	API_PREVIEW_BIG_PREFIX   = "/api/preview/big/AppData"
+	NODE_HEADER              = "X-Terminus-Node"
+	BFL_HEADER               = "X-Bfl-User"
+	API_PREFIX               = "/api"
+	UPLOADER_PREFIX          = "/upload"
+	MEDIA_PREFIX             = "/videos"
+	API_PASTE_PREFIX         = "/api/paste"
+	API_CACHE_PREFIX         = "/api/cache"
 )
 
 var PVCs *PVCCache = nil
@@ -76,6 +80,12 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	backendProxy.addHandlers(API_RESOURCES_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_RAW_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_RAW_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_MD5_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_MD5_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_THUMB_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_THUMB_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_BIG_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_BIG_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	//backendProxy.addHandlers(API_PREFIX, backendProxy.listNodesOrNot(backendProxy.apiHandler))
@@ -114,6 +124,9 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		if !regexp.MustCompile("^"+API_RESOURCES_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_RAW_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+API_MD5_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+API_PREVIEW_THUMB_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+API_PREVIEW_BIG_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+UPLOADER_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+MEDIA_PREFIX+".*").Match([]byte(path)) &&
@@ -125,6 +138,9 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 		if (strings.HasPrefix(path, API_PREFIX) || strings.HasPrefix(path, UPLOADER_PREFIX) || strings.HasPrefix(path, MEDIA_PREFIX)) &&
 			!strings.HasPrefix(path, API_RESOURCES_PREFIX) &&
 			!strings.HasPrefix(path, API_RAW_PREFIX) &&
+			!strings.HasPrefix(path, API_MD5_PREFIX) &&
+			!strings.HasPrefix(path, API_PREVIEW_THUMB_PREFIX) &&
+			!strings.HasPrefix(path, API_PREVIEW_BIG_PREFIX) &&
 			!strings.HasPrefix(path, API_CACHE_PREFIX) {
 			return next(c)
 		}
@@ -146,7 +162,8 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		switch {
-		case path != API_RESOURCES_PREFIX && path != API_RAW_PREFIX:
+		case path != API_RESOURCES_PREFIX && path != API_RAW_PREFIX && path != API_MD5_PREFIX &&
+			path != API_PREVIEW_THUMB_PREFIX && path != API_PREVIEW_BIG_PREFIX:
 			if _, ok := c.Request().Header[NODE_HEADER]; !ok {
 				klog.Error("node info not found from header")
 				return c.String(http.StatusBadRequest, "node not found")
@@ -230,17 +247,21 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 }
 
 type PVCCache struct {
-	proxy       *BackendProxy
-	userPvcMap  map[string]string
-	cachePvcMap map[string]string
-	mu          sync.Mutex
+	proxy        *BackendProxy
+	userPvcMap   map[string]string
+	userPvcTime  map[string]time.Time
+	cachePvcMap  map[string]string
+	cachePvcTime map[string]time.Time
+	mu           sync.Mutex
 }
 
 func NewPVCCache(proxy *BackendProxy) *PVCCache {
 	return &PVCCache{
-		proxy:       proxy,
-		userPvcMap:  make(map[string]string),
-		cachePvcMap: make(map[string]string),
+		proxy:        proxy,
+		userPvcMap:   make(map[string]string),
+		userPvcTime:  make(map[string]time.Time),
+		cachePvcMap:  make(map[string]string),
+		cachePvcTime: make(map[string]time.Time),
 	}
 }
 
@@ -249,7 +270,10 @@ func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
 	defer p.mu.Unlock()
 
 	if val, ok := p.userPvcMap[bflName]; ok {
-		return val, nil
+		if t, ok := p.userPvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+			p.userPvcTime[bflName] = time.Now()
+			return val, nil
+		}
 	}
 
 	userPvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "userspace_pvc", bflName)
@@ -257,6 +281,7 @@ func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
 		return "", err
 	}
 	p.userPvcMap[bflName] = userPvc
+	p.userPvcTime[bflName] = time.Now()
 	return userPvc, nil
 }
 
@@ -265,7 +290,10 @@ func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
 	defer p.mu.Unlock()
 
 	if val, ok := p.cachePvcMap[bflName]; ok {
-		return val, nil
+		if t, ok := p.cachePvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+			p.cachePvcTime[bflName] = time.Now()
+			return val, nil
+		}
 	}
 
 	cachePvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "appcache_pvc", bflName)
@@ -273,6 +301,7 @@ func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
 		return "", err
 	}
 	p.cachePvcMap[bflName] = cachePvc
+	p.cachePvcTime[bflName] = time.Now()
 	return cachePvc, nil
 }
 
@@ -362,6 +391,12 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX)
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX)
+		} else if strings.HasPrefix(path, API_MD5_PREFIX) {
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_MD5_PREFIX)
+		} else if strings.HasPrefix(path, API_PREVIEW_THUMB_PREFIX) {
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_THUMB_PREFIX)
+		} else if strings.HasPrefix(path, API_PREVIEW_BIG_PREFIX) {
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_BIG_PREFIX)
 		}
 		host = appdata.GetAppDataServiceEndpoint(p.k8sClient, node[0])
 		klog.Info("host: ", host)

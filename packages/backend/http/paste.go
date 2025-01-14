@@ -2197,6 +2197,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 	if bflName == "" {
 		return os.ErrPermission
 	}
+
 	var bufferPath string
 	// copy/move
 	if srcType == "drive" {
@@ -2209,17 +2210,23 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		diskSize = fileInfo.Size
-		// Won't deal a file which is bigger than 4G for the time being
-		if diskSize >= 4*1024*1024*1024 {
-			fmt.Println("file size exceeds 4GB")
-			return e.New("file size exceeds 4GB") //os.ErrPermission
+		_, err = checkBufferDiskSpace(diskSize)
+		if err != nil {
+			return err
 		}
-		fmt.Println("Will reserve disk size: ", diskSize)
+		fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
+		// Won't deal a file which is bigger than 4G for the time being
+		//if diskSize >= 4*1024*1024*1024 {
+		//	fmt.Println("file size exceeds 4GB")
+		//	return e.New("file size exceeds 4GB") //os.ErrPermission
+		//}
+		//fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src, bflName)
 		if err != nil {
 			return err
 		}
 		fmt.Println("Buffer file path: ", bufferPath)
+
 		err = makeDiskBuffer(bufferPath, diskSize)
 		if err != nil {
 			return err
@@ -2230,16 +2237,22 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		}
 	} else if srcType == "cache" {
 		var err error
-		if diskSize >= 4*1024*1024*1024 {
-			fmt.Println("file size exceeds 4GB")
-			return e.New("file size exceeds 4GB") //os.ErrPermission
+		_, err = checkBufferDiskSpace(diskSize)
+		if err != nil {
+			return err
 		}
-		fmt.Println("Will reserve disk size: ", diskSize)
+		fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
+		//if diskSize >= 4*1024*1024*1024 {
+		//	fmt.Println("file size exceeds 4GB")
+		//	return e.New("file size exceeds 4GB") //os.ErrPermission
+		//}
+		//fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src, bflName)
 		if err != nil {
 			return err
 		}
 		fmt.Println("Buffer file path: ", bufferPath)
+
 		err = makeDiskBuffer(bufferPath, diskSize)
 		if err != nil {
 			return err
@@ -2250,16 +2263,22 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		}
 	} else if srcType == "sync" {
 		var err error
-		if diskSize >= 4*1024*1024*1024 {
-			fmt.Println("file size exceeds 4GB")
-			return e.New("file size exceeds 4GB") //os.ErrPermission
+		_, err = checkBufferDiskSpace(diskSize)
+		if err != nil {
+			return err
 		}
-		fmt.Println("Will reserve disk size: ", diskSize)
+		fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
+		//if diskSize >= 4*1024*1024*1024 {
+		//	fmt.Println("file size exceeds 4GB")
+		//	return e.New("file size exceeds 4GB") //os.ErrPermission
+		//}
+		//fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src, bflName)
 		if err != nil {
 			return err
 		}
 		fmt.Println("Buffer file path: ", bufferPath)
+
 		err = makeDiskBuffer(bufferPath, diskSize)
 		if err != nil {
 			return err
