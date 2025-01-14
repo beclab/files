@@ -28,6 +28,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -230,17 +231,21 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 }
 
 type PVCCache struct {
-	proxy       *BackendProxy
-	userPvcMap  map[string]string
-	cachePvcMap map[string]string
-	mu          sync.Mutex
+	proxy        *BackendProxy
+	userPvcMap   map[string]string
+	userPvcTime  map[string]time.Time
+	cachePvcMap  map[string]string
+	cachePvcTime map[string]time.Time
+	mu           sync.Mutex
 }
 
 func NewPVCCache(proxy *BackendProxy) *PVCCache {
 	return &PVCCache{
-		proxy:       proxy,
-		userPvcMap:  make(map[string]string),
-		cachePvcMap: make(map[string]string),
+		proxy:        proxy,
+		userPvcMap:   make(map[string]string),
+		userPvcTime:  make(map[string]time.Time),
+		cachePvcMap:  make(map[string]string),
+		cachePvcTime: make(map[string]time.Time),
 	}
 }
 
@@ -249,7 +254,10 @@ func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
 	defer p.mu.Unlock()
 
 	if val, ok := p.userPvcMap[bflName]; ok {
-		return val, nil
+		if t, ok := p.userPvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+			p.userPvcTime[bflName] = time.Now()
+			return val, nil
+		}
 	}
 
 	userPvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "userspace_pvc", bflName)
@@ -257,6 +265,7 @@ func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
 		return "", err
 	}
 	p.userPvcMap[bflName] = userPvc
+	p.userPvcTime[bflName] = time.Now()
 	return userPvc, nil
 }
 
@@ -265,7 +274,10 @@ func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
 	defer p.mu.Unlock()
 
 	if val, ok := p.cachePvcMap[bflName]; ok {
-		return val, nil
+		if t, ok := p.cachePvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+			p.cachePvcTime[bflName] = time.Now()
+			return val, nil
+		}
 	}
 
 	cachePvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "appcache_pvc", bflName)
@@ -273,6 +285,7 @@ func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
 		return "", err
 	}
 	p.cachePvcMap[bflName] = cachePvc
+	p.cachePvcTime[bflName] = time.Now()
 	return cachePvc, nil
 }
 

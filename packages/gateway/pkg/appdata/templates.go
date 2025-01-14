@@ -23,6 +23,7 @@ import (
 	"k8s.io/klog/v2"
 	"os"
 	"strings"
+	"time"
 )
 
 // import (
@@ -193,6 +194,7 @@ func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, key string
 	}
 
 	klog.Infof("bfl.Annotations: %+v", bfl.Annotations)
+	klog.Infof("bfl.Annotations[%s]: %s at time %s", key, bfl.Annotations[key], time.Now().Format(time.RFC3339))
 	return bfl.Annotations[key], nil
 }
 

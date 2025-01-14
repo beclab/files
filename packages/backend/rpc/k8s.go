@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -18,17 +19,21 @@ import (
 var PVCs *PVCCache = nil
 
 type PVCCache struct {
-	service     *Service
-	userPvcMap  map[string]string
-	cachePvcMap map[string]string
-	mu          sync.Mutex
+	service      *Service
+	userPvcMap   map[string]string
+	userPvcTime  map[string]time.Time
+	cachePvcMap  map[string]string
+	cachePvcTime map[string]time.Time
+	mu           sync.Mutex
 }
 
 func NewPVCCache(service *Service) *PVCCache {
 	return &PVCCache{
-		service:     service,
-		userPvcMap:  make(map[string]string),
-		cachePvcMap: make(map[string]string),
+		service:      service,
+		userPvcMap:   make(map[string]string),
+		userPvcTime:  make(map[string]time.Time),
+		cachePvcMap:  make(map[string]string),
+		cachePvcTime: make(map[string]time.Time),
 	}
 }
 
@@ -37,7 +42,10 @@ func (p *PVCCache) getBflForUserPVCOrCache(userPvc string) (string, error) {
 	defer p.mu.Unlock()
 
 	if val, ok := p.userPvcMap[userPvc]; ok {
-		return val, nil
+		if t, ok := p.userPvcTime[userPvc]; ok && time.Since(t) <= 2*time.Minute {
+			p.userPvcTime[userPvc] = time.Now()
+			return val, nil
+		}
 	}
 
 	_, bflName, err := FindStatefulSetByPVCAnnotation(p.service.context, p.service.k8sClient, "userspace_pvc", userPvc)
@@ -45,6 +53,7 @@ func (p *PVCCache) getBflForUserPVCOrCache(userPvc string) (string, error) {
 		return "", err
 	}
 	p.userPvcMap[userPvc] = bflName
+	p.userPvcTime[userPvc] = time.Now()
 	return bflName, nil
 }
 
@@ -53,7 +62,10 @@ func (p *PVCCache) getBflForCachePVCOrCache(cachePvc string) (string, error) {
 	defer p.mu.Unlock()
 
 	if val, ok := p.cachePvcMap[cachePvc]; ok {
-		return val, nil
+		if t, ok := p.cachePvcTime[cachePvc]; ok && time.Since(t) <= 2*time.Minute {
+			p.cachePvcTime[cachePvc] = time.Now()
+			return val, nil
+		}
 	}
 
 	_, bflName, err := FindStatefulSetByPVCAnnotation(p.service.context, p.service.k8sClient, "appcache_pvc", cachePvc)
@@ -61,6 +73,7 @@ func (p *PVCCache) getBflForCachePVCOrCache(cachePvc string) (string, error) {
 		return "", err
 	}
 	p.cachePvcMap[cachePvc] = bflName
+	p.cachePvcTime[cachePvc] = time.Now()
 	return bflName, nil
 }
 
@@ -91,7 +104,7 @@ func FindStatefulSetByPVCAnnotation(ctx context.Context, client *kubernetes.Clie
 
 		for _, bfl := range statefulSets.Items {
 			if value, ok := bfl.Annotations[key]; ok && value == pvcIdentifier {
-				fmt.Println("userspace: ", ns.Name, "bfl_name: ", ns.Name[len("user-space-"):])
+				fmt.Println("userspace: ", ns.Name, "bfl_name: ", ns.Name[len("user-space-"):], "at time: ", time.Now().Format(time.RFC3339))
 				return ns.Name, ns.Name[len("user-space-"):], nil
 			}
 		}
@@ -153,17 +166,21 @@ func ExpandPaths(A []string, prefix string) []string {
 var BflPVCs *BflPVCCache = nil
 
 type BflPVCCache struct {
-	service     *Service
-	userPvcMap  map[string]string
-	cachePvcMap map[string]string
-	mu          sync.Mutex
+	service      *Service
+	userPvcMap   map[string]string
+	userPvcTime  map[string]time.Time
+	cachePvcMap  map[string]string
+	cachePvcTime map[string]time.Time
+	mu           sync.Mutex
 }
 
 func NewBflPVCCache(service *Service) *BflPVCCache {
 	return &BflPVCCache{
-		service:     service,
-		userPvcMap:  make(map[string]string),
-		cachePvcMap: make(map[string]string),
+		service:      service,
+		userPvcMap:   make(map[string]string),
+		userPvcTime:  make(map[string]time.Time),
+		cachePvcMap:  make(map[string]string),
+		cachePvcTime: make(map[string]time.Time),
 	}
 }
 
@@ -182,6 +199,7 @@ func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, key string
 	}
 
 	klog.Infof("bfl.Annotations: %+v", bfl.Annotations)
+	klog.Infof("bfl.Annotations[%s]: %s at time %s", key, bfl.Annotations[key], time.Now().Format(time.RFC3339))
 	return bfl.Annotations[key], nil
 }
 
@@ -190,7 +208,10 @@ func (p *BflPVCCache) getUserPVCOrCache(bflName string) (string, error) {
 	defer p.mu.Unlock()
 
 	if val, ok := p.userPvcMap[bflName]; ok {
-		return val, nil
+		if t, ok := p.userPvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+			p.userPvcTime[bflName] = time.Now()
+			return val, nil
+		}
 	}
 
 	userPvc, err := GetAnnotation(p.service.context, p.service.k8sClient, "userspace_pvc", bflName)
@@ -198,6 +219,7 @@ func (p *BflPVCCache) getUserPVCOrCache(bflName string) (string, error) {
 		return "", err
 	}
 	p.userPvcMap[bflName] = userPvc
+	p.userPvcTime[bflName] = time.Now()
 	return userPvc, nil
 }
 
@@ -206,7 +228,10 @@ func (p *BflPVCCache) getCachePVCOrCache(bflName string) (string, error) {
 	defer p.mu.Unlock()
 
 	if val, ok := p.cachePvcMap[bflName]; ok {
-		return val, nil
+		if t, ok := p.cachePvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+			p.cachePvcTime[bflName] = time.Now()
+			return val, nil
+		}
 	}
 
 	cachePvc, err := GetAnnotation(p.service.context, p.service.k8sClient, "appcache_pvc", bflName)
@@ -214,5 +239,6 @@ func (p *BflPVCCache) getCachePVCOrCache(bflName string) (string, error) {
 		return "", err
 	}
 	p.cachePvcMap[bflName] = cachePvc
+	p.cachePvcTime[bflName] = time.Now()
 	return cachePvc, nil
 }
