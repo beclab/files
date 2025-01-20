@@ -107,14 +107,18 @@ func md5Sync(w http.ResponseWriter, r *http.Request) (int, error) {
 }
 
 func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo) (int, error) {
-	fd, err := file.Fs.Open(file.Path)
+	//fd, err := file.Fs.Open(file.Path)
+	//if err != nil {
+	//	return http.StatusInternalServerError, err
+	//}
+	//defer fd.Close()
+
+	var err error
+	responseData := make(map[string]interface{})
+	responseData["md5"], err = common.Md5File(file.Path)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
-	defer fd.Close()
-
-	responseData := make(map[string]interface{})
-	responseData["md5"] = common.Md5File(fd)
 	return renderJSON(w, r, responseData)
 }
 

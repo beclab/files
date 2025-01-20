@@ -160,39 +160,79 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	xBflUser := r.Header.Get("X-Bfl-User")
 	fmt.Println("X-Bfl-User: ", xBflUser)
 
+	olaresVersion := os.Getenv("OLARES_VERSION")
+	if olaresVersion == "" {
+		olaresVersion = "1.11"
+	}
+
+	olaresVersionFloat, err := strconv.ParseFloat(olaresVersion, 64)
+	if err != nil {
+		fmt.Println("Error parsing version:", err)
+		return http.StatusBadRequest, err
+	}
+
 	var mountedData []files.DiskInfo = nil
 	if files.TerminusdHost != "" {
-		url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
+		if olaresVersionFloat >= 1.12 {
+			url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
 
-		headers := r.Header.Clone()
-		headers.Set("Content-Type", "application/json")
-		headers.Set("X-Signature", "temp_signature")
-		//headers := map[string]string{
-		//	"X-Signature": "temp_signature",
-		//}
+			headers := r.Header.Clone()
+			headers.Set("Content-Type", "application/json")
+			headers.Set("X-Signature", "temp_signature")
+			//headers := map[string]string{
+			//	"X-Signature": "temp_signature",
+			//}
 
-		mountedData, err = files.FetchDiskInfo(url, headers)
-		if err != nil {
-			log.Printf("Failed to fetch data from %s: %v", url, err)
+			mountedData, err = files.FetchDiskInfo(url, headers)
+			if err != nil {
+				log.Printf("Failed to fetch data from %s: %v", url, err)
+			}
+
+			fmt.Println("Mounted Data:", mountedData)
+		} else {
+			usbUrl := "http://" + files.TerminusdHost + "/system/mounted-usb-incluster"
+
+			usbHeaders := r.Header.Clone()
+			usbHeaders.Set("Content-Type", "application/json")
+			usbHeaders.Set("X-Signature", "temp_signature")
+			//headers := map[string]string{
+			//	"X-Signature": "temp_signature",
+			//}
+
+			usbData, err := files.FetchDiskInfo(usbUrl, usbHeaders)
+			if err != nil {
+				log.Printf("Failed to fetch data from %s: %v", usbUrl, err)
+			}
+
+			fmt.Println("USB Data:", usbData)
+
+			hddUrl := "http://" + files.TerminusdHost + "/system/mounted-hdd-incluster"
+
+			hddHeaders := r.Header.Clone()
+			hddHeaders.Set("Content-Type", "application/json")
+			hddHeaders.Set("X-Signature", "temp_signature")
+			//headers := map[string]string{
+			//	"X-Signature": "temp_signature",
+			//}
+
+			hddData, err := files.FetchDiskInfo(hddUrl, hddHeaders)
+			if err != nil {
+				log.Printf("Failed to fetch data from %s: %v", hddUrl, err)
+			}
+
+			fmt.Println("HDD Data:", hddData)
+
+			for _, item := range usbData {
+				item.Type = "usb"
+				mountedData = append(mountedData, item)
+			}
+
+			for _, item := range hddData {
+				item.Type = "hdd"
+				mountedData = append(mountedData, item)
+			}
+			fmt.Println("Mounted Data:", mountedData)
 		}
-
-		fmt.Println("Mounted Data:", mountedData)
-
-		url = "http://" + files.TerminusdHost + "/system/mounted-usb-incluster"
-
-		headers = r.Header.Clone()
-		headers.Set("Content-Type", "application/json")
-		headers.Set("X-Signature", "temp_signature")
-		//headers := map[string]string{
-		//	"X-Signature": "temp_signature",
-		//}
-
-		usbData, err := files.FetchDiskInfo(url, headers)
-		if err != nil {
-			log.Printf("Failed to fetch data from %s: %v", url, err)
-		}
-
-		fmt.Println("USB Data:", usbData)
 	}
 
 	var file *files.FileInfo

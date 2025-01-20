@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"io"
 	"log"
@@ -175,6 +176,9 @@ user created with the credentials from options "username" and "password".`,
 
 			if rpc.RootPrefix == "" {
 				rpc.RootPrefix = "/data"
+			}
+			if common.RootPrefix == "" {
+				common.RootPrefix = "/data"
 			}
 			//if rpc.CacheRootPath == "" {
 			//	rpc.CacheRootPath = "/appcache"

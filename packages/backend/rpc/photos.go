@@ -1,14 +1,12 @@
 package rpc
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -67,16 +65,21 @@ func checkOrUpdatePhotosRedis(filepath, fileMd5 string, op int) error {
 	filepathMd5 := common.Md5String(filepath)
 
 	if fileMd5 == "" {
-		f, err := os.Open(filepath)
+		//f, err := os.Open(filepath)
+		//if err != nil {
+		//	return err
+		//}
+		//b, err := ioutil.ReadAll(f)
+		//f.Close()
+		//if err != nil {
+		//	return err
+		//}
+		//fileMd5 = common.Md5File(bytes.NewReader(b))
+		var err error
+		fileMd5, err = common.Md5File(filepath)
 		if err != nil {
 			return err
 		}
-		b, err := ioutil.ReadAll(f)
-		f.Close()
-		if err != nil {
-			return err
-		}
-		fileMd5 = common.Md5File(bytes.NewReader(b))
 	}
 
 	var err error

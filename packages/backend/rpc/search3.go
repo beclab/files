@@ -85,12 +85,13 @@ func fetchDocumentByResourceUri(resourceUri, bflName string) (string, string, er
 	if response.StatusCode == "SUCCESS" && response.Data != nil {
 		searchId = fmt.Sprintf("%d", response.Data.ID)
 		//md5 = fmt.Sprintf("%d", response.Data.Meta.MD5)
-		for key, value := range response.Data.Meta {
-			fmt.Printf("Meta[%s] = %v\n", key, value)
-			if key == "md5" {
-				md5 = value.(string)
-			}
-		}
+		//for key, value := range response.Data.Meta {
+		//	fmt.Printf("Meta[%s] = %v\n", key, value)
+		//	if key == "md5" {
+		//		md5 = value.(string)
+		//	}
+		//}
+		md5 = ""
 	} else {
 		searchId = ""
 		md5 = ""

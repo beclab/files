@@ -28,32 +28,68 @@ func MoveFile(fs afero.Fs, src, dst string) error {
 	return nil
 }
 
+func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize int) error {
+	sourceFile, err := fs.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	err = fs.MkdirAll(filepath.Dir(targetPath), 0755)
+	if err != nil {
+		return err
+	}
+
+	targetFile, err := fs.OpenFile(targetPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)
+	if err != nil {
+		return err
+	}
+	defer targetFile.Close()
+
+	buf := make([]byte, bufferSize)
+	for {
+		n, err := sourceFile.Read(buf)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if n == 0 {
+			break
+		}
+		if _, err := targetFile.Write(buf[:n]); err != nil {
+			return err
+		}
+	}
+	
+	return targetFile.Sync()
+}
+
 // CopyFile copies a file from source to dest and returns
 // an error if any.
 func CopyFile(fs afero.Fs, source, dest string) error {
 	// Open the source file.
-	src, err := fs.Open(source)
-	if err != nil {
-		return err
-	}
-	defer src.Close()
+	//src, err := fs.Open(source)
+	//if err != nil {
+	//	return err
+	//}
+	//defer src.Close()
 
 	// Makes the directory needed to create the dst
 	// file.
-	err = fs.MkdirAll(filepath.Dir(dest), 0666) //nolint:gomnd
-	if err != nil {
-		return err
-	}
+	//err = fs.MkdirAll(filepath.Dir(dest), 0666) //nolint:gomnd
+	//if err != nil {
+	//	return err
+	//}
 
 	// Create the destination file.
-	dst, err := fs.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775) //nolint:gomnd
-	if err != nil {
-		return err
-	}
-	defer dst.Close()
+	//dst, err := fs.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775) //nolint:gomnd
+	//if err != nil {
+	//	return err
+	//}
+	//defer dst.Close()
 
 	// Copy the contents of the file.
-	_, err = io.Copy(dst, src)
+	//_, err = io.Copy(dst, src)
+	err := ioCopyFileWithBuffer(fs, source, dest, 8*1024*1024)
 	if err != nil {
 		return err
 	}

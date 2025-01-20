@@ -1,12 +1,11 @@
 package parser
 
 import (
-	"io"
-	"io/ioutil"
+	"bufio"
+	"code.sajari.com/docconv"
+	"os"
 	"path"
 	"strings"
-
-	"code.sajari.com/docconv"
 )
 
 var ParseAble = map[string]bool{
@@ -28,20 +27,62 @@ func GetTypeFromName(filename string) string {
 	return strings.ToLower(path.Ext(filename))
 }
 
-func ParseDoc(f io.Reader, filename string) (string, error) {
-	fileType := GetTypeFromName(filename)
+//func ParseDoc(f io.Reader, filename string) (string, error) {
+//	fileType := GetTypeFromName(filename)
+//	if _, ok := ParseAble[fileType]; !ok {
+//		return "", nil
+//	}
+//	if fileType == ".txt" || fileType == ".md" || fileType == ".markdown" {
+//		data, err := ioutil.ReadAll(f)
+//		if err != nil {
+//			return "", err
+//		}
+//		return string(data), nil
+//	}
+//	mimeType := MimeTypeByExtension(filename) // docconv.MimeTypeByExtension(filename)
+//	res, err := docconv.Convert(f, mimeType, true)
+//	if err != nil {
+//		return "", err
+//	}
+//	return res.Body, nil
+//}
+
+func ParseDoc(filepath string) (string, error) {
+	fileType := GetTypeFromName(filepath)
 	if _, ok := ParseAble[fileType]; !ok {
 		return "", nil
 	}
+
+	var result strings.Builder
+
 	if fileType == ".txt" || fileType == ".md" || fileType == ".markdown" {
-		data, err := ioutil.ReadAll(f)
+		file, err := os.Open(filepath)
 		if err != nil {
 			return "", err
 		}
-		return string(data), nil
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			result.WriteString(scanner.Text())
+			result.WriteString("\n")
+		}
+
+		if err := scanner.Err(); err != nil {
+			return "", err
+		}
+
+		return result.String(), nil
 	}
-	mimeType := MimeTypeByExtension(filename) // docconv.MimeTypeByExtension(filename)
-	res, err := docconv.Convert(f, mimeType, true)
+
+	file, err := os.Open(filepath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	mimeType := MimeTypeByExtension(filepath)
+	res, err := docconv.Convert(file, mimeType, true)
 	if err != nil {
 		return "", err
 	}

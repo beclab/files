@@ -1,17 +1,13 @@
 package rpc
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"github.com/filebrowser/filebrowser/v2/nats"
 	"github.com/filebrowser/filebrowser/v2/parser"
 	"io/fs"
-	"io/ioutil"
 	"k8s.io/klog/v2"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -158,11 +154,12 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 				return err
 			}
 			if info.IsDir() {
-				//fmt.Println("filepath.Base: ", filepath.Base(path))
+				fmt.Println("filepath.Base: ", filepath.Base(path))
 				//if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
-				//	fmt.Println("We will skip the folder:", path)
-				//	return filepath.SkipDir
-				//}
+				if filepath.Base(path) == strings.Trim(".uploadstemp", "/") {
+					fmt.Println("We will skip the folder:", path)
+					return filepath.SkipDir
+				}
 
 				fmt.Println("Try to Add Path: ", path)
 				if checkString(path) {
@@ -176,7 +173,12 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 					fmt.Println("Won't add path: ", path)
 				}
 			} else {
-				if checkString(path) {
+				var search3 bool = true
+				if strings.HasPrefix(path, RootPrefix+files.ExternalPrefix) {
+					fmt.Println(path, RootPrefix+files.ExternalPrefix)
+					search3 = false
+				}
+				if search3 && checkString(path) {
 					bflName, err := PVCs.getBfl(ExtractPvcFromURL(path))
 					if err != nil {
 						klog.Info(err)
@@ -204,76 +206,175 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 
 func dedupLoop(w *jfsnotify.Watcher) {
 	var (
-		// Wait 1000ms for new events; each new event resets the timer.
-		waitFor = 1000 * time.Millisecond
-
-		// Keep track of the timers, as path → timer.
+		waitFor      = 1000 * time.Millisecond
 		mu           sync.Mutex
 		timers       = make(map[string]*time.Timer)
 		pendingEvent = make(map[string]jfsnotify.Event)
-
-		// Callback we run.
-		printEvent = func(e jfsnotify.Event) {
+		printEvent   = func(e jfsnotify.Event) {
 			log.Info().Msgf("handle event %v %v", e.Op.String(), e.Name)
-
-			// Don't need to remove the timer if you don't have a lot of files.
-			mu.Lock()
-			delete(pendingEvent, e.Name)
-			delete(timers, e.Name)
-			mu.Unlock()
 		}
 	)
 
+	// 启动处理定时器触发的 goroutine
+	go func() {
+		for {
+			mu.Lock()
+			toProcess := make(map[string]*time.Timer)
+			for name, t := range timers {
+				toProcess[name] = t
+			}
+			mu.Unlock()
+
+			for name, t := range toProcess {
+				select {
+				case <-t.C:
+					mu.Lock()
+					if ev, ok := pendingEvent[name]; ok {
+						delete(pendingEvent, name)
+						delete(timers, name)
+						mu.Unlock()
+
+						printEvent(ev)
+						err := handleEvent(ev)
+						if err != nil {
+							log.Error().Msgf("handle watch file event error %s", err.Error())
+						}
+					} else {
+						mu.Unlock()
+					}
+				case <-time.After(waitFor):
+					continue
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+
 	for {
 		select {
-		// Read from Errors.
 		case err, ok := <-w.Errors:
-			if !ok { // Channel was closed (i.e. Watcher.Close() was called).
+			if !ok {
 				return
 			}
 			printTime("ERROR: %s", err)
-		// Read from Events.
+
 		case e, ok := <-w.Events:
-			if !ok { // Channel was closed (i.e. Watcher.Close() was called).
+			if !ok {
 				log.Warn().Msg("watcher event channel closed")
 				return
 			}
+
 			if e.Has(jfsnotify.Chmod) {
 				continue
 			}
-			log.Debug().Msgf("pending event %v", e)
-			// Get timer.
+
+			if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
+				fmt.Println("we won't add event for uploads temp dir")
+				continue
+			}
+
+			//log.Debug().Msgf("pending event %v", e)
+
 			mu.Lock()
 			pendingEvent[e.Name] = e
 			t, ok := timers[e.Name]
-			mu.Unlock()
-
-			// No timer yet, so create one.
 			if !ok {
-				t = time.AfterFunc(math.MaxInt64, func() {
-					mu.Lock()
-					ev := pendingEvent[e.Name]
-					mu.Unlock()
-					printEvent(ev)
-					err := handleEvent(ev)
-					if err != nil {
-						log.Error().Msgf("handle watch file event error %s", err.Error())
-					}
-				})
-				t.Stop()
-
-				mu.Lock()
+				t = time.NewTimer(waitFor)
 				timers[e.Name] = t
-				mu.Unlock()
+			} else {
+				t.Reset(waitFor)
 			}
-
-			// Reset the timer for this path, so it will start from 100ms again.
-			t.Reset(waitFor)
+			mu.Unlock()
 		}
 	}
 }
 
+//func dedupLoop(w *jfsnotify.Watcher) {
+//	var (
+//		// Wait 1000ms for new events; each new event resets the timer.
+//		waitFor = 1000 * time.Millisecond
+//
+//		// Keep track of the timers, as path → timer.
+//		mu           sync.Mutex
+//		timers       = make(map[string]*time.Timer)
+//		pendingEvent = make(map[string]jfsnotify.Event)
+//
+//		// Callback we run.
+//		printEvent = func(e jfsnotify.Event) {
+//			log.Info().Msgf("handle event %v %v", e.Op.String(), e.Name)
+//
+//			// Don't need to remove the timer if you don't have a lot of files.
+//			mu.Lock()
+//			delete(pendingEvent, e.Name)
+//			delete(timers, e.Name)
+//			mu.Unlock()
+//		}
+//	)
+//
+//	for {
+//		select {
+//		case err, ok := <-w.Errors:
+//			if !ok {
+//				return
+//			}
+//			printTime("ERROR: %s", err)
+//
+//		case e, ok := <-w.Events:
+//			if !ok {
+//				log.Warn().Msg("watcher event channel closed")
+//				return
+//			}
+//
+//			if e.Has(jfsnotify.Chmod) {
+//				continue
+//			}
+//
+//			if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
+//				fmt.Println("we won't add event for uploads temp dir")
+//				continue
+//			}
+//
+//			log.Debug().Msgf("pending event %v", e)
+//
+//			mu.Lock()
+//			pendingEvent[e.Name] = e
+//			t, ok := timers[e.Name]
+//			if !ok {
+//				t = time.NewTimer(waitFor) // 创建一个新的定时器
+//			} else {
+//				t.Reset(waitFor) // 重置现有定时器
+//			}
+//			timers[e.Name] = t
+//			mu.Unlock()
+//
+//			go func(t *time.Timer, eventName string) {
+//				<-t.C // 等待定时器触发
+//				mu.Lock()
+//				ev := pendingEvent[eventName]
+//				delete(pendingEvent, eventName) // 处理完后删除事件
+//				delete(timers, eventName)       // 删除定时器
+//				mu.Unlock()
+//				printEvent(ev)
+//				err := handleEvent(ev)
+//				if err != nil {
+//					log.Error().Msgf("handle watch file event error %s", err.Error())
+//				}
+//			}(t, e.Name)
+//		}
+//	}
+//}
+
 func handleEvent(e jfsnotify.Event) error {
+	if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
+		fmt.Println("we won't deal with uploads temp dir")
+		return nil
+	}
+	var search3 bool = true
+	if strings.HasPrefix(e.Name+"/", RootPrefix+files.ExternalPrefix) {
+		fmt.Println(e.Name+"/", RootPrefix+files.ExternalPrefix)
+		search3 = false
+	}
+
 	searchId := ""
 	var bflName string
 	var err error
@@ -284,11 +385,13 @@ func handleEvent(e jfsnotify.Event) error {
 		} else {
 			klog.Info(e.Name, ", bfl-name: ", bflName)
 		}
-		searchId, _, err = getSerachIdOrCache(e.Name, bflName, false)
-		if err != nil {
-			klog.Info(err)
-		} else {
-			klog.Info(e.Name, ", searchId: ", searchId)
+		if search3 {
+			searchId, _, err = getSerachIdOrCache(e.Name, bflName, false)
+			if err != nil {
+				klog.Info(err)
+			} else {
+				klog.Info(e.Name, ", searchId: ", searchId)
+			}
 		}
 	} else {
 		return nil
@@ -323,7 +426,7 @@ func handleEvent(e jfsnotify.Event) error {
 		//	log.Debug().Msgf("delete doc id %s path %s", doc.DocId, e.Name)
 		//}
 
-		if searchId != "" {
+		if search3 && searchId != "" {
 			_, err = deleteDocumentSearch3(searchId, bflName)
 			if err != nil {
 				return err
@@ -365,9 +468,11 @@ func handleEvent(e jfsnotify.Event) error {
 				//input zinc file
 				//err = updateOrInputDoc(docPath)
 				if checkString(docPath) {
-					err = updateOrInputDocSearch3(docPath, bflName)
-					if err != nil {
-						log.Error().Msgf("update or input doc error %v", err)
+					if search3 {
+						err = updateOrInputDocSearch3(docPath, bflName)
+						if err != nil {
+							log.Error().Msgf("update or input doc error %v", err)
+						}
 					}
 					err = checkOrUpdatePhotosRedis(docPath, "", 2)
 					if err != nil {
@@ -387,7 +492,7 @@ func handleEvent(e jfsnotify.Event) error {
 		fmt.Println("Add Write Event: ", e.Name)
 		nats.AddEventToQueue(e)
 
-		if checkString(e.Name) {
+		if search3 && checkString(e.Name) {
 			return updateOrInputDocSearch3(e.Name, bflName)
 		}
 		//return updateOrInputDoc(e.Name)
@@ -528,7 +633,8 @@ func checkPathPrefix(filepath, prefix string) bool {
 
 func updateOrInputDocSearch3(filepath, bflName string) error {
 	log.Debug().Msg("try update or input" + filepath)
-	searchId, md5, err := getSerachIdOrCache(filepath, bflName, true)
+	//searchId, md5, err := getSerachIdOrCache(filepath, bflName, true)
+	searchId, _, err := getSerachIdOrCache(filepath, bflName, true)
 	if err != nil {
 		return err
 	}
@@ -547,90 +653,105 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 		//	}
 		//}
 		//update if doc changed
-		f, err := os.Open(filepath)
-		if err != nil {
-			return err
+
+		// !! mem exploded
+		//f, err := os.Open(filepath)
+		//if err != nil {
+		//	return err
+		//}
+		//b, err := ioutil.ReadAll(f)
+		//f.Close()
+		//if err != nil {
+		//	return err
+		//}
+		//newMd5 := common.Md5File(bytes.NewReader(b))
+		//newMd5, err := common.Md5File(filepath)
+		//if err != nil {
+		//	return err
+		//}
+		//if newMd5 != md5 {
+		size := 0
+		fileInfo, err := os.Stat(filepath)
+		if err == nil {
+			size = int(fileInfo.Size())
 		}
-		b, err := ioutil.ReadAll(f)
-		f.Close()
-		if err != nil {
-			return err
+		//doc changed
+		fileType := parser.GetTypeFromName(filepath)
+		content := "-"
+		if checkPathPrefix(filepath, ContentPath) {
+			if _, ok := parser.ParseAble[fileType]; ok {
+				log.Info().Msgf("push indexer task insert %s", filepath)
+				content, err = parser.ParseDoc(filepath)
+				//content, err = parser.ParseDoc(bytes.NewReader(b), filepath)
+
+				//if len(content) > 100 {
+				//	log.Info().Msgf("parsed document content: %s", content[:100])
+				//} else {
+				//	log.Info().Msgf("parsed document content: %s", content)
+				//}
+				if err != nil {
+					log.Error().Msgf("parse doc error %v", err)
+					return err
+				}
+				log.Debug().Msgf("update content from old search id %s path %s", searchId, filepath)
+			}
 		}
-		newMd5 := common.Md5File(bytes.NewReader(b))
-		if newMd5 != md5 {
-			size := 0
-			fileInfo, err := os.Stat(filepath)
-			if err == nil {
-				size = int(fileInfo.Size())
+		var newDoc map[string]interface{} = nil
+		if content != "" {
+			newDoc = map[string]interface{}{
+				"content": content,
+				"meta": map[string]interface{}{
+					//"md5":     newMd5,
+					"size":    size,
+					"updated": time.Now().Unix(),
+				},
 			}
-			//doc changed
-			fileType := parser.GetTypeFromName(filepath)
-			content := "-"
-			if checkPathPrefix(filepath, ContentPath) {
-				if _, ok := parser.ParseAble[fileType]; ok {
-					log.Info().Msgf("push indexer task insert %s", filepath)
-					content, err = parser.ParseDoc(bytes.NewReader(b), filepath)
-					//if len(content) > 100 {
-					//	log.Info().Msgf("parsed document content: %s", content[:100])
-					//} else {
-					//	log.Info().Msgf("parsed document content: %s", content)
-					//}
-					if err != nil {
-						log.Error().Msgf("parse doc error %v", err)
-						return err
-					}
-					log.Debug().Msgf("update content from old search id %s path %s", searchId, filepath)
-				}
+		} else {
+			newDoc = map[string]interface{}{
+				"content": "-",
+				"meta": map[string]interface{}{
+					//"md5":     newMd5,
+					"size":    size,
+					"updated": time.Now().Unix(),
+				},
 			}
-			var newDoc map[string]interface{} = nil
-			if content != "" {
-				newDoc = map[string]interface{}{
-					"content": content,
-					"meta": map[string]interface{}{
-						"md5":     newMd5,
-						"size":    size,
-						"updated": time.Now().Unix(),
-					},
-				}
-			} else {
-				newDoc = map[string]interface{}{
-					"content": "-",
-					"meta": map[string]interface{}{
-						"md5":     newMd5,
-						"size":    size,
-						"updated": time.Now().Unix(),
-					},
-				}
-			}
-			_, err = putDocumentSearch3(searchId, newDoc, bflName)
-			//_, err = RpcServer.EsUpdateFileContentFromOldDoc(FileIndex, content, newMd5, docs[0])
-			return err
-			//}
-			//log.Debug().Msgf("doc format not parsable %s", filepath)
-			//return nil
 		}
-		log.Debug().Msgf("ignore file %s md5: %s ", filepath, newMd5)
+		_, err = putDocumentSearch3(searchId, newDoc, bflName)
+		//_, err = RpcServer.EsUpdateFileContentFromOldDoc(FileIndex, content, newMd5, docs[0])
+		return err
+		//}
+		//log.Debug().Msgf("doc format not parsable %s", filepath)
+		//return nil
+		//}
+		//log.Debug().Msgf("ignore file %s md5: %s ", filepath, newMd5)
+		log.Debug().Msgf("ignore file %s", filepath)
 		return nil
 	}
 
 	log.Debug().Msgf("no history doc, add new")
 	//path not exist input doc
-	f, err := os.Open(filepath)
-	if err != nil {
-		return err
-	}
-	b, err := ioutil.ReadAll(f)
-	f.Close()
-	if err != nil {
-		return err
-	}
-	newMd5 := common.Md5File(bytes.NewReader(b))
+	//f, err := os.Open(filepath)
+	//if err != nil {
+	//	return err
+	//}
+	//b, err := ioutil.ReadAll(f)
+	//f.Close()
+	//if err != nil {
+	//	return err
+	//}
+	//newMd5 := common.Md5File(bytes.NewReader(b))
+	//newMd5, err := common.Md5File(filepath)
+	//if err != nil {
+	//	return err
+	//}
 	fileType := parser.GetTypeFromName(filepath)
 	content := "-"
 	if checkPathPrefix(filepath, ContentPath) {
 		if _, ok := parser.ParseAble[fileType]; ok {
 			log.Info().Msgf("push indexer task insert %s", filepath)
-			content, err = parser.ParseDoc(bytes.NewBuffer(b), filepath)
+			content, err = parser.ParseDoc(filepath)
+
+			//content, err = parser.ParseDoc(bytes.NewBuffer(b), filepath)
 			//if len(content) > 100 {
 			//	log.Info().Msgf("parsed document content: %s", content[:100])
 			//} else {
@@ -665,7 +786,7 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 			"resource_uri": filepath,
 			"service":      "files",
 			"meta": map[string]interface{}{
-				"md5":         newMd5,
+				//"md5":         newMd5,
 				"size":        size,
 				"created":     time.Now().Unix(),
 				"updated":     time.Now().Unix(),
@@ -680,7 +801,7 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 			"resource_uri": filepath,
 			"service":      "files",
 			"meta": map[string]interface{}{
-				"md5":         newMd5,
+				//"md5":         newMd5,
 				"size":        size,
 				"created":     time.Now().Unix(),
 				"updated":     time.Now().Unix(),

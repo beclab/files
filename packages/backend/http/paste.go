@@ -26,26 +26,83 @@ import (
 	"github.com/spf13/afero"
 )
 
-func ioCopyFile(sourcePath, targetPath string) error {
+func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
 	sourceFile, err := os.Open(sourcePath)
 	if err != nil {
 		return err
 	}
 	defer sourceFile.Close()
 
-	targetFile, err := os.Create(targetPath)
+	targetFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
 	defer targetFile.Close()
 
-	_, err = io.Copy(targetFile, sourceFile)
-	if err != nil {
-		return err
+	buf := make([]byte, bufferSize)
+	for {
+		n, err := sourceFile.Read(buf)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if n == 0 {
+			break
+		}
+		if _, err := targetFile.Write(buf[:n]); err != nil {
+			return err
+		}
 	}
 
-	return nil
+	return targetFile.Sync()
 }
+
+//func ioCopyFile(sourcePath, targetPath string) error {
+//	sourceFile, err := os.Open(sourcePath)
+//	if err != nil {
+//		return err
+//	}
+//	defer sourceFile.Close()
+//
+//	// 使用 os.OpenFile 以确保文件被创建且可写
+//	targetFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+//	if err != nil {
+//		return err
+//	}
+//	defer targetFile.Close()
+//
+//	_, err = io.Copy(targetFile, sourceFile)
+//	if err != nil {
+//		return err
+//	}
+//
+//	err = targetFile.Sync()
+//	if err != nil {
+//		return err
+//	}
+//
+//	return nil
+//}
+
+//func ioCopyFile(sourcePath, targetPath string) error {
+//	sourceFile, err := os.Open(sourcePath)
+//	if err != nil {
+//		return err
+//	}
+//	defer sourceFile.Close()
+//
+//	targetFile, err := os.Create(targetPath)
+//	if err != nil {
+//		return err
+//	}
+//	defer targetFile.Close()
+//
+//	_, err = io.Copy(targetFile, sourceFile)
+//	if err != nil {
+//		return err
+//	}
+//
+//	return nil
+//}
 
 func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInfo, int, error) {
 	xBflUser := r.Header.Get("X-Bfl-User")
@@ -271,7 +328,7 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		//	fmt.Println(writeErr)
 		//	return writeErr
 		//}
-		err := ioCopyFile(bufferFilePath, "/data"+targetPath)
+		err := ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
 		if err != nil {
 			fmt.Println(err)
 			return err
@@ -501,7 +558,7 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	fmt.Println(newTargetPath)
 	//fmt.Println("Going to write file!")
 	err = d.RunHook(func() error {
-		err := ioCopyFile(bufferFilePath, newTargetPath)
+		err := ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
 		if err != nil {
 			fmt.Println(err)
 			return err
