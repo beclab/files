@@ -44,18 +44,18 @@ func isInvalidDir(dirPath string) bool {
 
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Printf("目录 %s 不存在\n", dirPath)
+			fmt.Printf("directory %s doesn't exist\n", dirPath)
 		} else {
-			fmt.Printf("无法访问目录 %s：%v\n", dirPath, err)
+			fmt.Printf("cannot access directory %s：%v\n", dirPath, err)
 		}
 		return true
 	}
 
 	if fileInfo.IsDir() {
-		fmt.Printf("%s 是一个目录\n", dirPath)
+		fmt.Printf("%s is a directory\n", dirPath)
 		return false
 	} else {
-		fmt.Printf("%s 不是一个目录\n", dirPath)
+		fmt.Printf("%s is not a directory\n", dirPath)
 		return true
 	}
 }

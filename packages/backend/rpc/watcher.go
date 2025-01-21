@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
-	"github.com/filebrowser/filebrowser/v2/nats"
 	"github.com/filebrowser/filebrowser/v2/parser"
 	"io/fs"
 	"k8s.io/klog/v2"
@@ -44,8 +43,8 @@ func checkString(s string) bool {
 
 	if strings.HasPrefix(s+"/", RootPrefix+files.ExternalPrefix) {
 		fmt.Println(s+"/", RootPrefix+files.ExternalPrefix)
-		//return false
-		return true // change to watching external
+		return false
+		//return true // change to watching external
 	}
 
 	slashCount := 0
@@ -155,13 +154,14 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 			}
 			if info.IsDir() {
 				fmt.Println("filepath.Base: ", filepath.Base(path))
-				//if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
-				if filepath.Base(path) == strings.Trim(".uploadstemp", "/") {
-					fmt.Println("We will skip the folder:", path)
+				// disable nats
+				if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
+					//if filepath.Base(path) == strings.Trim(".uploadstemp", "/") {
+					//fmt.Println("We will skip the folder:", path)
 					return filepath.SkipDir
 				}
 
-				fmt.Println("Try to Add Path: ", path)
+				//fmt.Println("Try to Add Path: ", path)
 				if checkString(path) {
 					fmt.Println("Adding Path: ", path)
 					err = watcher.Add(path)
@@ -170,7 +170,7 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 						return err
 					}
 				} else {
-					fmt.Println("Won't add path: ", path)
+					//fmt.Println("Won't add path: ", path)
 				}
 			} else {
 				var search3 bool = true
@@ -215,7 +215,6 @@ func dedupLoop(w *jfsnotify.Watcher) {
 		}
 	)
 
-	// 启动处理定时器触发的 goroutine
 	go func() {
 		for {
 			mu.Lock()
@@ -408,8 +407,9 @@ func handleEvent(e jfsnotify.Event) error {
 		//}
 		//nats.SendMessage(msg)
 
-		fmt.Println("Add Remove or Rename Event: ", e.Name)
-		nats.AddEventToQueue(e, true)
+		//disable nats
+		//fmt.Println("Add Remove or Rename Event: ", e.Name)
+		//nats.AddEventToQueue(e, true)
 
 		log.Info().Msgf("push indexer task delete %s", e.Name)
 		//res, err := RpcServer.EsQueryByPath(FileIndex, e.Name)
@@ -447,21 +447,22 @@ func handleEvent(e jfsnotify.Event) error {
 		//msg = "Create event: " + e.Name
 		//nats.SendMessage(msg)
 
-		fmt.Println("Add Create Event: ", e.Name)
-		//nats.AddEventToQueue(e)
-		var fileInfo fs.FileInfo
-		fileInfo, err = os.Stat(e.Name)
-		if err != nil {
-			log.Printf("Error stating file %s: %v\n", e.Name, err)
-			return err
-		}
-		if fileInfo.IsDir() {
-			nats.AddEventToQueue(e, true)
-			fmt.Println("Directory created: ", e.Name)
-		} else {
-			nats.AddEventToQueue(e, false)
-			fmt.Println("File created: ", e.Name)
-		}
+		//disable nats
+		//fmt.Println("Add Create Event: ", e.Name)
+		////nats.AddEventToQueue(e)
+		//var fileInfo fs.FileInfo
+		//fileInfo, err = os.Stat(e.Name)
+		//if err != nil {
+		//	log.Printf("Error stating file %s: %v\n", e.Name, err)
+		//	return err
+		//}
+		//if fileInfo.IsDir() {
+		//	nats.AddEventToQueue(e, true)
+		//	fmt.Println("Directory created: ", e.Name)
+		//} else {
+		//	nats.AddEventToQueue(e, false)
+		//	fmt.Println("File created: ", e.Name)
+		//}
 
 		err = filepath.Walk(e.Name, func(docPath string, info fs.FileInfo, err error) error {
 			if err != nil {
@@ -469,7 +470,7 @@ func handleEvent(e jfsnotify.Event) error {
 			}
 			if info.IsDir() {
 				//add dir to watch list
-				fmt.Println("Try to Add Path: ", docPath)
+				//fmt.Println("Try to Add Path: ", docPath)
 				if checkString(docPath) {
 					fmt.Println("Adding Path: ", docPath)
 					err = watcher.Add(docPath)
@@ -477,7 +478,7 @@ func handleEvent(e jfsnotify.Event) error {
 						log.Error().Msgf("watcher add error:%v", err)
 					}
 				} else {
-					fmt.Println("Won't add Path: ", docPath)
+					//fmt.Println("Won't add Path: ", docPath)
 				}
 			} else {
 				//input zinc file
@@ -504,8 +505,9 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Write) { // || e.Has(notify.Chmod) {
-		fmt.Println("Add Write Event: ", e.Name)
-		nats.AddEventToQueue(e, false)
+		//disable nats
+		//fmt.Println("Add Write Event: ", e.Name)
+		//nats.AddEventToQueue(e, false)
 
 		if search3 && checkString(e.Name) {
 			return updateOrInputDocSearch3(e.Name, bflName)
