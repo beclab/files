@@ -98,7 +98,7 @@ func fetchDocumentByResourceUri(resourceUri, bflName string) (string, string, er
 		log.Println("Failed to retrieve data or data is nil.")
 	}
 
-	fmt.Println("searchId: ", searchId, "; md5: ", md5)
+	//fmt.Println("searchId: ", searchId, "; md5: ", md5)
 
 	return searchId, md5, nil
 }
@@ -137,8 +137,8 @@ func postDocumentSearch3(doc map[string]interface{}, bflName string) (string, er
 		fmt.Println("Error marshaling doc to JSON:", err)
 		return "", err
 	}
-	fmt.Println("Doc content:")
-	fmt.Println(string(docBytes))
+	//fmt.Println("Doc content:")
+	//fmt.Println(string(docBytes))
 
 	url := "http://search3.os-system:80/document/add"
 	jsonStr := bytes.NewBuffer(docBytes)
@@ -165,8 +165,8 @@ func postDocumentSearch3(doc map[string]interface{}, bflName string) (string, er
 		return "", err
 	}
 
-	fmt.Println("Response from server:")
-	fmt.Println(string(body))
+	//fmt.Println("Response from server:")
+	//fmt.Println(string(body))
 
 	var response Response
 	err = json.Unmarshal(body, &response)
@@ -185,7 +185,7 @@ func postDocumentSearch3(doc map[string]interface{}, bflName string) (string, er
 		log.Println("Failed to retrieve data or data is nil.")
 	}
 
-	fmt.Println("searchId:", searchId)
+	//fmt.Println("searchId:", searchId)
 
 	SearchIdCacheLock.Lock()
 	defer SearchIdCacheLock.Unlock()
@@ -202,8 +202,8 @@ func putDocumentSearch3(searchId string, doc map[string]interface{}, bflName str
 		fmt.Println("Error marshaling doc to JSON:", err)
 		return "", err
 	}
-	fmt.Println("Doc content:")
-	fmt.Println(string(docBytes))
+	//fmt.Println("Doc content:")
+	//fmt.Println(string(docBytes))
 
 	url := "http://search3.os-system:80/document/update/" + searchId
 	jsonStr := bytes.NewBuffer(docBytes)
@@ -230,8 +230,8 @@ func putDocumentSearch3(searchId string, doc map[string]interface{}, bflName str
 		return "", err
 	}
 
-	fmt.Println("Response from server:")
-	fmt.Println(string(body))
+	//fmt.Println("Response from server:")
+	//fmt.Println(string(body))
 
 	var response Response
 	err = json.Unmarshal(body, &response)
@@ -250,7 +250,7 @@ func putDocumentSearch3(searchId string, doc map[string]interface{}, bflName str
 		log.Println("Failed to retrieve data or data is nil.")
 	}
 
-	fmt.Println("searchId:", respSearchId)
+	//fmt.Println("searchId:", respSearchId)
 
 	//SearchIdCacheLock.Lock()
 	//defer SearchIdCacheLock.Unlock()
@@ -286,8 +286,8 @@ func deleteDocumentSearch3(searchId string, bflName string) (string, error) {
 		return "", err
 	}
 
-	fmt.Println("Response from server:")
-	fmt.Println(string(body))
+	//fmt.Println("Response from server:")
+	//fmt.Println(string(body))
 
 	var response Response
 	err = json.Unmarshal(body, &response)
@@ -308,7 +308,7 @@ func deleteDocumentSearch3(searchId string, bflName string) (string, error) {
 		log.Println("Failed to retrieve data or data is nil.")
 	}
 
-	fmt.Println("searchId:", respSearchId)
+	//fmt.Println("searchId:", respSearchId)
 
 	SearchIdCacheLock.Lock()
 	defer SearchIdCacheLock.Unlock()
