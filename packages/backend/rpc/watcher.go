@@ -269,7 +269,7 @@ func dedupLoop(w *jfsnotify.Watcher) {
 			}
 
 			if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
-				fmt.Println("we won't add event for uploads temp dir")
+				//fmt.Println("we won't add event for uploads temp dir")
 				continue
 			}
 
@@ -366,9 +366,11 @@ func dedupLoop(w *jfsnotify.Watcher) {
 
 func handleEvent(e jfsnotify.Event) error {
 	if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
-		fmt.Println("we won't deal with uploads temp dir")
+		//fmt.Println("we won't deal with uploads temp dir")
 		return nil
 	}
+
+	// temporarily disable search3 for external
 	var search3 bool = true
 	if strings.HasPrefix(e.Name+"/", RootPrefix+files.ExternalPrefix) {
 		fmt.Println(e.Name+"/", RootPrefix+files.ExternalPrefix)
@@ -407,7 +409,7 @@ func handleEvent(e jfsnotify.Event) error {
 		//nats.SendMessage(msg)
 
 		fmt.Println("Add Remove or Rename Event: ", e.Name)
-		nats.AddEventToQueue(e)
+		nats.AddEventToQueue(e, true)
 
 		log.Info().Msgf("push indexer task delete %s", e.Name)
 		//res, err := RpcServer.EsQueryByPath(FileIndex, e.Name)
@@ -446,7 +448,20 @@ func handleEvent(e jfsnotify.Event) error {
 		//nats.SendMessage(msg)
 
 		fmt.Println("Add Create Event: ", e.Name)
-		nats.AddEventToQueue(e)
+		//nats.AddEventToQueue(e)
+		var fileInfo fs.FileInfo
+		fileInfo, err = os.Stat(e.Name)
+		if err != nil {
+			log.Printf("Error stating file %s: %v\n", e.Name, err)
+			return err
+		}
+		if fileInfo.IsDir() {
+			nats.AddEventToQueue(e, true)
+			fmt.Println("Directory created: ", e.Name)
+		} else {
+			nats.AddEventToQueue(e, false)
+			fmt.Println("File created: ", e.Name)
+		}
 
 		err = filepath.Walk(e.Name, func(docPath string, info fs.FileInfo, err error) error {
 			if err != nil {
@@ -490,7 +505,7 @@ func handleEvent(e jfsnotify.Event) error {
 
 	if e.Has(jfsnotify.Write) { // || e.Has(notify.Chmod) {
 		fmt.Println("Add Write Event: ", e.Name)
-		nats.AddEventToQueue(e)
+		nats.AddEventToQueue(e, false)
 
 		if search3 && checkString(e.Name) {
 			return updateOrInputDocSearch3(e.Name, bflName)

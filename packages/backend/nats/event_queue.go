@@ -23,11 +23,15 @@ var (
 	emptyEvent    = EventWrapper{Event: jfsnotify.Event{}}
 )
 
-func AddEventToQueue(e jfsnotify.Event) {
-	//if e.Has(jfsnotify.Remove) || e.Has(jfsnotify.Rename) || e.Has(jfsnotify.Create) {
-	fmt.Println("event Queue get event: ", e.Name, " at time ", time.Now())
-	eventQueue <- EventWrapper{Event: e, Time: time.Now()}
-	//}
+func AddEventToQueue(e jfsnotify.Event, immediate bool) {
+	if immediate {
+		fmt.Println("event Queue immediately send event: ", e.Name, " at time ", time.Now())
+		sendEvent(EventWrapper{Event: e, Time: time.Now()})
+		resetTimer()
+	} else {
+		fmt.Println("event Queue get event: ", e.Name, " at time ", time.Now())
+		eventQueue <- EventWrapper{Event: e, Time: time.Now()}
+	}
 }
 
 func checkEventQueue() {
@@ -66,6 +70,7 @@ func sendEvent(ew EventWrapper) {
 }
 
 func resetTimer() {
-	ticker.Stop()
-	ticker = time.NewTicker(timeout)
+	//ticker.Stop()
+	//ticker = time.NewTicker(timeout)
+	ticker.Reset(timeout)
 }
