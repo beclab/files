@@ -177,9 +177,9 @@ func postDocumentSearch3(doc map[string]interface{}, bflName string) (string, er
 	var searchId string
 	if response.StatusCode == "SUCCESS" && response.Data != nil {
 		searchId = fmt.Sprintf("%d", response.Data.ID)
-		for key, value := range response.Data.Meta {
-			fmt.Printf("Meta[%s] = %v\n", key, value)
-		}
+		//for key, value := range response.Data.Meta {
+		//	fmt.Printf("Meta[%s] = %v\n", key, value)
+		//}
 	} else {
 		searchId = ""
 		log.Println("Failed to retrieve data or data is nil.")
@@ -242,9 +242,9 @@ func putDocumentSearch3(searchId string, doc map[string]interface{}, bflName str
 	var respSearchId string
 	if response.StatusCode == "SUCCESS" && response.Data != nil {
 		respSearchId = fmt.Sprintf("%d", response.Data.ID)
-		for key, value := range response.Data.Meta {
-			fmt.Printf("Meta[%s] = %v\n", key, value)
-		}
+		//for key, value := range response.Data.Meta {
+		//	fmt.Printf("Meta[%s] = %v\n", key, value)
+		//}
 	} else {
 		respSearchId = ""
 		log.Println("Failed to retrieve data or data is nil.")
@@ -300,9 +300,9 @@ func deleteDocumentSearch3(searchId string, bflName string) (string, error) {
 	if response.StatusCode == "SUCCESS" && response.Data != nil {
 		respSearchId = fmt.Sprintf("%d", response.Data.ID)
 		respResourceUri = fmt.Sprintf("%d", response.Data.ResourceURI)
-		for key, value := range response.Data.Meta {
-			fmt.Printf("Meta[%s] = %v\n", key, value)
-		}
+		//for key, value := range response.Data.Meta {
+		//	fmt.Printf("Meta[%s] = %v\n", key, value)
+		//}
 	} else {
 		respSearchId = ""
 		log.Println("Failed to retrieve data or data is nil.")

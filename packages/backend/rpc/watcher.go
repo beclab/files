@@ -202,6 +202,8 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 	}
 	my_redis.RedisSet("indexing_error", false, time.Duration(0))
 	my_redis.RedisAddInt("indexing_status", -1, time.Duration(0))
+
+	fmt.Println("Finished watching path setup.")
 }
 
 func dedupLoop(w *jfsnotify.Watcher) {
@@ -649,7 +651,7 @@ func checkPathPrefix(filepath, prefix string) bool {
 }
 
 func updateOrInputDocSearch3(filepath, bflName string) error {
-	log.Debug().Msg("try update or input" + filepath)
+	//log.Debug().Msg("try update or input" + filepath)
 	//searchId, md5, err := getSerachIdOrCache(filepath, bflName, true)
 	searchId, _, err := getSerachIdOrCache(filepath, bflName, true)
 	if err != nil {

@@ -447,7 +447,7 @@ func formatBytes(bytes int64) string {
 }
 
 func checkBufferDiskSpace(diskSize int64) (bool, error) {
-	fmt.Println("*********Checking Buffer Disk Space***************")
+	//fmt.Println("*********Checking Buffer Disk Space***************")
 	spaceOk, needs, avails, reserved, err := checkDiskSpace("/data", diskSize)
 	if err != nil {
 		return false, err // errors.New("disk space check error")
@@ -456,9 +456,9 @@ func checkBufferDiskSpace(diskSize int64) (bool, error) {
 	availsStr := formatBytes(avails)
 	reservedStr := formatBytes(reserved)
 	if spaceOk {
-		spaceMessage := fmt.Sprintf("Sufficient disk space available. This file still requires: %s, while %s is already available (with an additional %s reserved for the system).",
-			needsStr, availsStr, reservedStr)
-		fmt.Println(spaceMessage)
+		//spaceMessage := fmt.Sprintf("Sufficient disk space available. This file still requires: %s, while %s is already available (with an additional %s reserved for the system).",
+		//	needsStr, availsStr, reservedStr)
+		//fmt.Println(spaceMessage)
 		return true, nil
 	} else {
 		errorMessage := fmt.Sprintf("Insufficient disk space available. This file still requires: %s, but only %s is available (with an additional %s reserved for the system).",

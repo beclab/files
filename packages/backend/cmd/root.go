@@ -214,7 +214,7 @@ user created with the credentials from options "username" and "password".`,
 			rpc.InitRpcService(url, port, username, password, map[string]string{})
 
 			if rpc.WatcherEnabled == "True" {
-				rpc.WatchPath(rpc.BaseWatchDirs, nil, rpc.WatchDirs)
+				go rpc.WatchPath(rpc.BaseWatchDirs, nil, rpc.WatchDirs)
 			}
 
 			fmt.Println("RPCSERVER to start!")

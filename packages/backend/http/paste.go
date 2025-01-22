@@ -387,17 +387,14 @@ func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	targetURL := "http://127.0.0.1:80/api/resources" + dst + "/?mode=" + mode.String() //strconv.FormatUint(uint64(mode), 10)
 	//fmt.Println(targetURL)
 
-	// 创建一个 POST 请求
 	request, err := http.NewRequest("POST", targetURL, nil)
 	if err != nil {
 		return err
 	}
 
-	// 设置请求的 Content-Type
 	request.Header = r.Header
 	request.Header.Set("Content-Type", "application/octet-stream")
 
-	// 发送请求
 	client := http.Client{}
 	response, err := client.Do(request)
 	if err != nil {
@@ -405,7 +402,6 @@ func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	}
 	defer response.Body.Close()
 
-	// 检查响应状态码
 	if response.StatusCode != http.StatusOK {
 		//fmt.Println(response.StatusCode)
 		return fmt.Errorf("file upload failed with status: %d", response.StatusCode)
@@ -422,7 +418,7 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 	//defer fd.Close()
 
 	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
-	fmt.Println(newSrc)
+	//fmt.Println(newSrc)
 	fd, err := os.Open(newSrc)
 	if err != nil {
 		return err
@@ -452,7 +448,6 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 //		return err
 //	}
 //
-//	// 设置请求头
 //	request.Header = r.Header
 //
 //	client := http.Client{}
@@ -463,21 +458,20 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 //	defer response.Body.Close()
 //
 //	if response.StatusCode != http.StatusOK {
-//		return fmt.Errorf("请求失败，状态码：%d", response.StatusCode)
+//		return fmt.Errorf("request failed，status code：%d", response.StatusCode)
 //	}
 //
 //	contentDisposition := response.Header.Get("Content-Disposition")
 //	if contentDisposition == "" {
-//		return fmt.Errorf("无法识别的响应格式")
+//		return fmt.Errorf("unrecognizable response format")
 //	}
 //
-//	// 从Content-Disposition头中获取文件名
 //	_, params, err := mime.ParseMediaType(contentDisposition)
 //	if err != nil {
 //		return err
 //	}
 //	filename := params["filename"]
-//	fmt.Println("下载的文件名: ", filename)
+//	fmt.Println("download filename: ", filename)
 //
 //	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
 //	if err != nil {
@@ -485,39 +479,32 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 //	}
 //	defer bufferFile.Close()
 //
-//	// 检查Content-Encoding是否为gzip
 //	if response.Header.Get("Content-Encoding") == "gzip" {
-//		// 创建gzip Reader
 //		gzipReader, err := gzip.NewReader(response.Body)
 //		if err != nil {
 //			return err
 //		}
 //		defer gzipReader.Close()
 //
-//		// 将解压缩后的响应体写入文件
 //		_, err = io.Copy(bufferFile, gzipReader)
 //		if err != nil {
 //			return err
 //		}
 //	} else {
-//		// 读取整个响应体
 //		bodyBytes, err := ioutil.ReadAll(response.Body)
 //		if err != nil {
 //			return err
 //		}
 //
-//		// 将响应体写入文件
 //		_, err = io.Copy(bufferFile, bytes.NewReader(bodyBytes))
 //		if err != nil {
 //			return err
 //		}
 //	}
 //
-//	// 打印状态码
-//	//fmt.Println("状态码:", response.StatusCode)
+//	//fmt.Println("status code:", response.StatusCode)
 //
-//	// 打印响应头
-//	//fmt.Println("响应头:")
+//	//fmt.Println("response headers:")
 //	//for key, values := range response.Header {
 //	//	for _, value := range values {
 //	//		fmt.Printf("%s: %s\n", key, value)
@@ -555,7 +542,7 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	}
 
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
-	fmt.Println(newTargetPath)
+	//fmt.Println(newTargetPath)
 	//fmt.Println("Going to write file!")
 	err = d.RunHook(func() error {
 		err := ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
@@ -587,17 +574,14 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 //	}
 //	defer bufferFile.Close()
 //
-//	// 创建一个 POST 请求
 //	request, err := http.NewRequest("POST", targetURL, bufferFile)
 //	if err != nil {
 //		return http.StatusInternalServerError, err
 //	}
 //
-//	// 设置请求的 Content-Type
 //	request.Header = r.Header
 //	request.Header.Set("Content-Type", "application/octet-stream")
 //
-//	// 发送请求
 //	client := http.Client{}
 //	response, err := client.Do(request)
 //	if err != nil {
@@ -605,7 +589,6 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 //	}
 //	defer response.Body.Close()
 //
-//	// 检查响应状态码
 //	if response.StatusCode != http.StatusOK {
 //		//fmt.Println(response.StatusCode)
 //		return response.StatusCode, fmt.Errorf("file upload failed with status: %d", response.StatusCode)
@@ -642,7 +625,7 @@ func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, 
 
 	err := d.RunHook(func() error {
 		newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
-		fmt.Println(newTargetPath)
+		//fmt.Println(newTargetPath)
 		return os.RemoveAll(newTargetPath)
 		//return d.user.Fs.RemoveAll(path)
 	}, "delete", path, "", d.user)
@@ -657,28 +640,23 @@ func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, 
 //func resourceCacheDelete(path string, r *http.Request) (int, error) {
 //	targetURL := "http://127.0.0.1:80/api/resources" + path
 //
-//	// 创建一个带超时的 HTTP 客户端
 //	client := http.Client{
 //		Timeout: time.Second * 10,
 //	}
 //
-//	// 创建 DELETE 请求
 //	request, err := http.NewRequest("DELETE", targetURL, nil)
 //	if err != nil {
 //		return http.StatusInternalServerError, err
 //	}
 //
-//	// 设置请求头，仅包含必要的信息
 //	request.Header = r.Header
 //
-//	// 发送请求
 //	response, err := client.Do(request)
 //	if err != nil {
 //		return http.StatusInternalServerError, err
 //	}
 //	defer response.Body.Close()
 //
-//	// 检查响应状态码
 //	if response.StatusCode != http.StatusOK {
 //		return response.StatusCode, fmt.Errorf("file delete failed with status: %d", response.StatusCode)
 //	}
@@ -687,42 +665,35 @@ func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, 
 //}
 
 func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) error {
-	// 去除路径开头和结尾的斜杠
 	dst = strings.Trim(dst, "/")
-	// 检查路径中是否包含斜杠
 	if !strings.Contains(dst, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
 		fmt.Println("Error:", err)
 		return err
 	}
 
-	// 获取第一个斜杠的索引
 	firstSlashIdx := strings.Index(dst, "/")
 
-	// 获取repo-id
 	repoID := dst[:firstSlashIdx]
 
-	// 获取最后一个斜杠的索引
 	lastSlashIdx := strings.LastIndex(dst, "/")
 
-	filename := ""
+	//filename := ""
 	prefix := ""
 	if isDir {
 		prefix = dst[firstSlashIdx+1:]
 
 	} else {
-		// 获取filename
-		filename = dst[lastSlashIdx+1:]
+		//filename = dst[lastSlashIdx+1:]
 
-		// 获取prefix
 		if firstSlashIdx != lastSlashIdx {
 			prefix = dst[firstSlashIdx+1 : lastSlashIdx+1]
 		}
 	}
 
-	fmt.Println("repo-id:", repoID)
-	fmt.Println("prefix:", prefix)
-	fmt.Println("filename:", filename)
+	//fmt.Println("repo-id:", repoID)
+	//fmt.Println("prefix:", prefix)
+	//fmt.Println("filename:", filename)
 
 	//infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=/"
 	//fmt.Println(infoURL)
@@ -734,14 +705,14 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 	for i := 0; i < len(prefixParts); i++ {
 		curPrefix := strings.Join(prefixParts[:i+1], "/")
 		curInfoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+curPrefix) + "&with_thumbnail=true"
-		fmt.Println("!!! Try to mkdir through: ", curInfoURL)
+		//fmt.Println("!!! Try to mkdir through: ", curInfoURL)
 		getRequest, err := http.NewRequest("GET", curInfoURL, nil)
 		if err != nil {
-			fmt.Printf("创建请求失败: %v\n", err)
+			fmt.Printf("create request failed: %v\n", err)
 			return err
 		}
 		getRequest.Header = r.Header
-		//fmt.Println("请求头:")
+		//fmt.Println("request headers:")
 		//for key, values := range getRequest.Header {
 		//	for _, value := range values {
 		//		fmt.Printf("%s: %s\n", key, value)
@@ -749,12 +720,12 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 		//}
 		getResponse, err := client.Do(getRequest)
 		if err != nil {
-			fmt.Printf("请求失败: %v\n", err)
+			fmt.Printf("request failed: %v\n", err)
 			return err
 		}
 		defer getResponse.Body.Close()
 		if getResponse.StatusCode == 200 {
-			fmt.Println(curPrefix, " already exist! Don't need to create!")
+			//fmt.Println(curPrefix, " already exist! Don't need to create!")
 			continue
 		} else {
 			fmt.Println(getResponse.Status)
@@ -765,29 +736,27 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 		}
 
 		curCreateURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+curPrefix)
-		fmt.Println(curCreateURL)
+		//fmt.Println(curCreateURL)
 
-		// 创建请求体
 		createDirReq := CreateDirRequest{
 			Operation: "mkdir",
 		}
 		jsonBody, err := json.Marshal(createDirReq)
 		if err != nil {
-			fmt.Printf("序列化请求体失败: %v\n", err)
+			fmt.Printf("failed to serialize the request body: %v\n", err)
 			return err
 		}
 
 		request, err := http.NewRequest("POST", curCreateURL, bytes.NewBuffer(jsonBody))
 		if err != nil {
-			fmt.Printf("创建请求失败: %v\n", err)
+			fmt.Printf("create request failed: %v\n", err)
 			return err
 		}
 
-		// 设置请求头
 		request.Header = r.Header
 		request.Header.Set("Content-Type", "application/json")
 
-		//fmt.Println("请求头:")
+		//fmt.Println("request headers:")
 		//for key, values := range request.Header {
 		//	for _, value := range values {
 		//		fmt.Printf("%s: %s\n", key, value)
@@ -796,13 +765,13 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 
 		response, err := client.Do(request)
 		if err != nil {
-			fmt.Printf("请求失败: %v\n", err)
+			fmt.Printf("request failed: %v\n", err)
 			return err
 		}
 		defer response.Body.Close()
 
 		// Handle the response as needed
-		fmt.Println("Response status:", response.Status)
+		//fmt.Println("Response status:", response.Status)
 		if response.StatusCode != 200 && response.StatusCode != 201 {
 			err = e.New("mkdir failed")
 			return err
@@ -813,46 +782,38 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 
 func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error {
 	// src is like [repo-id]/path/filename
-	// 去除路径开头和结尾的斜杠
 	src = strings.Trim(src, "/")
-	// 检查路径中是否包含斜杠
 	if !strings.Contains(src, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
 		fmt.Println("Error:", err)
 		return err
 	}
 
-	// 获取第一个斜杠的索引
 	firstSlashIdx := strings.Index(src, "/")
 
-	// 获取repo-id
 	repoID := src[:firstSlashIdx]
 
-	// 获取最后一个斜杠的索引
 	lastSlashIdx := strings.LastIndex(src, "/")
 
-	// 获取filename
 	filename := src[lastSlashIdx+1:]
 
-	// 获取prefix
 	prefix := ""
 	if firstSlashIdx != lastSlashIdx {
 		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
 	}
 
-	fmt.Println("repo-id:", repoID)
-	fmt.Println("prefix:", prefix)
-	fmt.Println("filename:", filename)
+	//fmt.Println("repo-id:", repoID)
+	//fmt.Println("prefix:", prefix)
+	//fmt.Println("filename:", filename)
 
-	url := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + prefix + filename + "/" + "?dl=1"
-	fmt.Println(url)
+	dlUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + prefix + filename + "/" + "?dl=1"
+	//fmt.Println(url)
 
-	request, err := http.NewRequest("GET", url, nil)
+	request, err := http.NewRequest("GET", dlUrl, nil)
 	if err != nil {
 		return err
 	}
 
-	// 设置请求头
 	request.Header = r.Header
 
 	client := http.Client{}
@@ -863,21 +824,20 @@ func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("请求失败，状态码：%d", response.StatusCode)
+		return fmt.Errorf("request failed，status code：%d", response.StatusCode)
 	}
 
 	contentDisposition := response.Header.Get("Content-Disposition")
 	if contentDisposition == "" {
-		return fmt.Errorf("无法识别的响应格式")
+		return fmt.Errorf("unrecognizable response format")
 	}
 
-	// 从Content-Disposition头中获取文件名
 	_, params, err := mime.ParseMediaType(contentDisposition)
 	if err != nil {
 		return err
 	}
 	filename = params["filename"]
-	fmt.Println("下载的文件名: ", filename)
+	//fmt.Println("download filename: ", filename)
 
 	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
 	if err != nil {
@@ -885,39 +845,32 @@ func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 	}
 	defer bufferFile.Close()
 
-	// 检查Content-Encoding是否为gzip
 	if response.Header.Get("Content-Encoding") == "gzip" {
-		// 创建gzip Reader
 		gzipReader, err := gzip.NewReader(response.Body)
 		if err != nil {
 			return err
 		}
 		defer gzipReader.Close()
 
-		// 将解压缩后的响应体写入文件
 		_, err = io.Copy(bufferFile, gzipReader)
 		if err != nil {
 			return err
 		}
 	} else {
-		// 读取整个响应体
 		bodyBytes, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			return err
 		}
 
-		// 将响应体写入文件
 		_, err = io.Copy(bufferFile, bytes.NewReader(bodyBytes))
 		if err != nil {
 			return err
 		}
 	}
 
-	// 打印状态码
-	//fmt.Println("状态码:", response.StatusCode)
+	//fmt.Println("statud code:", response.StatusCode)
 
-	// 打印响应头
-	//fmt.Println("响应头:")
+	//fmt.Println("response header:")
 	//for key, values := range response.Header {
 	//	for _, value := range values {
 	//		fmt.Printf("%s: %s\n", key, value)
@@ -946,57 +899,49 @@ func getFileExtension(filename string) string {
 
 func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Request) (int, error) {
 	// Step1: deal with URL
-	// 去除路径开头和结尾的斜杠
 	dst = strings.Trim(dst, "/")
-	// 检查路径中是否包含斜杠
 	if !strings.Contains(dst, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
 		fmt.Println("Error:", err)
 		return errToStatus(err), err
 	}
 
-	// 获取第一个斜杠的索引
 	firstSlashIdx := strings.Index(dst, "/")
 
-	// 获取repo-id
 	repoID := dst[:firstSlashIdx]
 
-	// 获取最后一个斜杠的索引
 	lastSlashIdx := strings.LastIndex(dst, "/")
 
-	// 获取filename
 	filename := dst[lastSlashIdx+1:]
 	//filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
 
-	// 获取prefix
 	prefix := ""
 	if firstSlashIdx != lastSlashIdx {
 		prefix = dst[firstSlashIdx+1 : lastSlashIdx+1]
 	}
 
-	fmt.Println("repo-id:", repoID)
-	fmt.Println("prefix:", prefix)
-	fmt.Println("filename:", filename)
+	//fmt.Println("repo-id:", repoID)
+	//fmt.Println("prefix:", prefix)
+	//fmt.Println("filename:", filename)
 
 	extension := getFileExtension(filename)
-	fmt.Println("extension:", extension)
+	//fmt.Println("extension:", extension)
 	mimeType := "application/octet-stream"
 	if extension != "" {
 		mimeType = mime.TypeByExtension(extension)
 	}
-	fmt.Println("MIME Type:", mimeType)
+	//fmt.Println("MIME Type:", mimeType)
 
 	// step2: GET upload URL
 	//getUrl := "http://seafile/api2/repos/" + repoID + "/upload-link/?p=/" + prefix //+ "&from=web"
 	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + url.QueryEscape("/"+prefix) + "&from=api"
-	fmt.Println(getUrl)
+	//fmt.Println(getUrl)
 
 	getRequest, err := http.NewRequest("GET", getUrl, nil)
 	if err != nil {
 		return errToStatus(err), err
 	}
 
-	// 设置请求头
 	getRequest.Header = r.Header
 
 	getClient := http.Client{}
@@ -1007,7 +952,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	defer getResponse.Body.Close()
 
 	if getResponse.StatusCode != http.StatusOK {
-		err = fmt.Errorf("请求失败，状态码：%d", getResponse.StatusCode)
+		err = fmt.Errorf("request failed，status code：%d", getResponse.StatusCode)
 		return errToStatus(err), err
 	}
 
@@ -1020,14 +965,13 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	uploadLink = strings.Trim(uploadLink, "\"")
 
 	// Now you can use the 'uploadLink' variable for further processing
-	fmt.Println("Upload link:", uploadLink)
+	//fmt.Println("Upload link:", uploadLink)
 
 	// step3: deal with upload URL
 	//targetURL := "http://seafile:8082" + uploadLink[9:] + "?ret-json=1"
 	targetURL := "http://127.0.0.1:80" + uploadLink + "?ret-json=1"
-	fmt.Println(targetURL)
+	//fmt.Println(targetURL)
 
-	// 打开要上传的文件
 	bufferFile, err := os.Open(bufferFilePath)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -1046,7 +990,6 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 
 	var chunkStart int64 = 0
 	for chunkNumber := int64(1); chunkNumber <= totalChunks; chunkNumber++ {
-		// 读取当前分片的数据
 		offset := (chunkNumber - 1) * chunkSize
 		chunkData := make([]byte, chunkSize)
 		bytesRead, err := bufferFile.ReadAt(chunkData, offset)
@@ -1054,21 +997,19 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 			return http.StatusInternalServerError, err
 		}
 
-		// 创建一个新的多部分表单数据请求
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
 
-		// 添加表单字段
-		fmt.Println("Identifier: ", identifier)
-		fmt.Println("Parent Dir: ", "/"+prefix)
-		fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
-		fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
-		fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
-		fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
-		fmt.Println("resumableType", mimeType)
-		fmt.Println("resumableFilename", filename)     // "response")
-		fmt.Println("resumableRelativePath", filename) // "response")
-		fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
+		//fmt.Println("Identifier: ", identifier)
+		//fmt.Println("Parent Dir: ", "/"+prefix)
+		//fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
+		//fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
+		//fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
+		//fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
+		//fmt.Println("resumableType", mimeType)
+		//fmt.Println("resumableFilename", filename)     // "response")
+		//fmt.Println("resumableRelativePath", filename) // "response")
+		//fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
 
 		writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
 		writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
@@ -1081,11 +1022,9 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
 		writer.WriteField("parent_dir", "/"+prefix) //+"//")
 
-		// 将缓冲区内容作为字符串输出
-		content := body.String()
-		fmt.Println(content)
+		//content := body.String()
+		//fmt.Println(content)
 
-		// 将文件分片添加到表单
 		part, err := writer.CreateFormFile("file", filename)
 		if err != nil {
 			return http.StatusInternalServerError, err
@@ -1095,19 +1034,16 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 			return http.StatusInternalServerError, err
 		}
 
-		// 关闭表单写入器
 		err = writer.Close()
 		if err != nil {
 			return http.StatusInternalServerError, err
 		}
 
-		// 创建 HTTP 请求
 		request, err := http.NewRequest("POST", targetURL, body)
 		if err != nil {
 			return http.StatusInternalServerError, err
 		}
 
-		// 设置请求头
 		request.Header = r.Header
 		request.Header.Set("Content-Type", writer.FormDataContentType())
 		//Content-Disposition:attachment; filename="2022.zip"
@@ -1124,7 +1060,6 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		//	}
 		//}
 
-		// 发送请求
 		client := http.Client{}
 		response, err := client.Do(request)
 		if err != nil {
@@ -1133,44 +1068,37 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		defer response.Body.Close()
 
 		// Read the response body as a string
-		postBody, err := io.ReadAll(response.Body)
+		//postBody, err := io.ReadAll(response.Body)
+		_, err = io.ReadAll(response.Body)
 		if err != nil {
 			return errToStatus(err), err
 		}
 
-		// 检查响应状态码
 		if response.StatusCode != http.StatusOK {
-			fmt.Println(string(postBody))
-			return response.StatusCode, fmt.Errorf("文件上传失败,状态码: %d", response.StatusCode)
+			//fmt.Println(string(postBody))
+			return response.StatusCode, fmt.Errorf("file upload failed, status code: %d", response.StatusCode)
 		}
 	}
 	return http.StatusOK, nil
 }
 
 func resourceSyncDelete(path string, r *http.Request) (int, error) {
-	// 去除路径开头和结尾的斜杠
 	path = strings.Trim(path, "/")
-	// 检查路径中是否包含斜杠
 	if !strings.Contains(path, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
 		fmt.Println("Error:", err)
 		return errToStatus(err), err
 	}
 
-	// 获取第一个斜杠的索引
 	firstSlashIdx := strings.Index(path, "/")
 
-	// 获取repo-id
 	repoID := path[:firstSlashIdx]
 
-	// 获取最后一个斜杠的索引
 	lastSlashIdx := strings.LastIndex(path, "/")
 
-	// 获取filename
 	filename := path[lastSlashIdx+1:]
 	//filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
 
-	// 获取prefix
 	prefix := ""
 	if firstSlashIdx != lastSlashIdx {
 		prefix = path[firstSlashIdx+1 : lastSlashIdx+1]
@@ -1182,12 +1110,11 @@ func resourceSyncDelete(path string, r *http.Request) (int, error) {
 		prefix = "/"
 	}
 
-	fmt.Println("repo-id:", repoID)
-	fmt.Println("prefix:", prefix)
-	fmt.Println("filename:", filename)
+	//fmt.Println("repo-id:", repoID)
+	//fmt.Println("prefix:", prefix)
+	//fmt.Println("filename:", filename)
 
 	targetURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/batch-delete-item/"
-	// 创建请求体
 	requestBody := map[string]interface{}{
 		"dirents":    []string{filename}, // 将 filename 放入数组中
 		"parent_dir": prefix,
@@ -1197,31 +1124,26 @@ func resourceSyncDelete(path string, r *http.Request) (int, error) {
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
-	fmt.Println(jsonBody)
+	//fmt.Println(jsonBody)
 
-	// 创建 HTTP 请求
 	request, err := http.NewRequest("DELETE", targetURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
-	// 设置请求头
 	request.Header = r.Header
 	request.Header.Set("Content-Type", "application/json")
 
-	// 创建 HTTP 客户端
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
-	// 发送请求
 	response, err := client.Do(request)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 	defer response.Body.Close()
 
-	// 检查响应状态码
 	if response.StatusCode != http.StatusOK {
 		return response.StatusCode, fmt.Errorf("file delete failed with status: %d", response.StatusCode)
 	}
@@ -1256,7 +1178,7 @@ func testDriveLs(w http.ResponseWriter, r *http.Request) error {
 
 	origin := r.Header.Get("Origin")
 	dstUrl := origin + "/api/resources%2FHome%2FDocuments%2F"
-	fmt.Println("dstUrl:", dstUrl)
+	//fmt.Println("dstUrl:", dstUrl)
 
 	req, err := http.NewRequest("GET", dstUrl, nil)
 	if err != nil {
@@ -1264,11 +1186,9 @@ func testDriveLs(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// 设置请求头
 	req.Header = r.Header.Clone()
 	req.Header.Set("Content-Type", "application/json")
 
-	// 遍历并打印所有的 header 字段和值
 	for name, values := range req.Header {
 		for _, value := range values {
 			fmt.Printf("%s: %s\n", name, value)
@@ -1283,28 +1203,24 @@ func testDriveLs(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer resp.Body.Close()
 
-	//// 读取响应体
 	//body, err := ioutil.ReadAll(resp.Body)
 	//if err != nil {
 	//	http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
 	//	return err
 	//}
 	//
-	//// 假设响应是UTF-8编码的文本（根据实际情况调整）
-	//// 如果Content-Type指明了其他编码，请相应地解码
-	//responseText := string(body) // 这里默认按UTF-8处理
+	//responseText := string(body)
 	//
-	//// 将响应文本写入ResponseWriter（确保设置了正确的Content-Type头）
-	//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // 或根据需要设置为其他MIME类型
+	//w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	//w.Write([]byte(responseText))
-	// 读取响应体
+
 	//body, err := ioutil.ReadAll(resp.Body)
 	//if err != nil {
 	//	http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
 	//	return err
 	//}
 	//
-	//// 解析JSON响应体
+
 	//var jsonResponse map[string]interface{}
 	//err = json.Unmarshal(body, &jsonResponse)
 	//if err != nil {
@@ -1312,34 +1228,31 @@ func testDriveLs(w http.ResponseWriter, r *http.Request) error {
 	//	return err
 	//}
 	//
-	//// 将解析后的JSON响应体转换为字符串（格式化输出）
+
 	//responseText, err := json.MarshalIndent(jsonResponse, "", "  ")
 	//if err != nil {
 	//	http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
 	//	return err
 	//}
 	//
-	//// 设置响应头并写入响应体
+
 	//w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	//w.Write([]byte(responseText))
 
-	// 遍历并打印所有的 header 字段和值
-	fmt.Printf("Response Hedears:\n")
-	for name, values := range resp.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-	// 检查Content-Type
+	//fmt.Printf("Response Hedears:\n")
+	//for name, values := range resp.Header {
+	//	for _, value := range values {
+	//		fmt.Printf("%s: %s\n", name, value)
+	//	}
+	//}
+
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
 		fmt.Println("Response is not JSON format:", contentType)
 	}
 
-	// 读取响应体
 	var body []byte
 	if resp.Header.Get("Content-Encoding") == "gzip" {
-		// 如果响应体被gzip压缩
 		reader, err := gzip.NewReader(resp.Body)
 		if err != nil {
 			fmt.Println("Error creating gzip reader:", err)
@@ -1353,7 +1266,6 @@ func testDriveLs(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	} else {
-		// 如果响应体没有被压缩
 		body, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
 			fmt.Println("Error reading response body:", err)
@@ -1361,7 +1273,6 @@ func testDriveLs(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	// 解析JSON
 	var datas map[string]interface{}
 	err = json.Unmarshal(body, &datas)
 	if err != nil {
@@ -1369,16 +1280,13 @@ func testDriveLs(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// 打印解析后的数据
-	fmt.Println("Parsed JSON response:", datas)
-	// 将解析后的JSON响应体转换为字符串（格式化输出）
+	//fmt.Println("Parsed JSON response:", datas)
 	responseText, err := json.MarshalIndent(datas, "", "  ")
 	if err != nil {
 		http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
 		return err
 	}
 
-	// 设置响应头并写入响应体
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Write([]byte(responseText))
 	return nil
@@ -1393,7 +1301,7 @@ func testDriveLs2(w http.ResponseWriter, r *http.Request) error {
 	// dstUrl := "http://files-service.user-space-" + bflName + ":8181/ls"
 	origin := r.Header.Get("Origin")
 	dstUrl := origin + "/drive/ls"
-	fmt.Println("dstUrl:", dstUrl)
+	//fmt.Println("dstUrl:", dstUrl)
 
 	//payload := []byte(`{"path":"/","name":"wangrongxiang@bytetrade.io","drive":"google"}`)
 	type RequestPayload struct {
@@ -1419,16 +1327,14 @@ func testDriveLs2(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// 设置请求头
 	req.Header = r.Header.Clone()
 	req.Header.Set("Content-Type", "application/json")
 
-	// 遍历并打印所有的 header 字段和值
-	for name, values := range req.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
+	//for name, values := range req.Header {
+	//	for _, value := range values {
+	//		fmt.Printf("%s: %s\n", name, value)
+	//	}
+	//}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -1438,17 +1344,14 @@ func testDriveLs2(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer resp.Body.Close()
 
-	// 读取响应体
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, "Error reading response body: "+err.Error(), http.StatusInternalServerError)
 		return err
 	}
 
-	// 设置Content-Type头（根据实际情况调整）
-	w.Header().Set("Content-Type", "application/octet-stream") // 如果是文本，请使用"text/plain; charset=utf-8"或其他适当的MIME类型和字符集
+	w.Header().Set("Content-Type", "application/octet-stream")
 
-	// 将响应体写入ResponseWriter
 	_, err = w.Write(body)
 	if err != nil {
 		http.Error(w, "Error writing response body: "+err.Error(), http.StatusInternalServerError)
@@ -1497,7 +1400,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		if dstType == "" {
 			dstType = "drive"
 		}
-		fmt.Println(srcType, src, dstType, dst)
+		//fmt.Println(srcType, src, dstType, dst)
 		if srcType != "drive" && srcType != "sync" && srcType != "cache" && srcType != "google" {
 			fmt.Println("Src type is invalid!")
 			return http.StatusForbidden, nil
@@ -1562,7 +1465,6 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 }
 
 func syncPermToMode(permStr string) os.FileMode {
-	// 将字符串权限转换为 os.FileMode
 	perm := os.FileMode(0)
 	if permStr == "r" {
 		//perm = perm | 0444
@@ -1582,11 +1484,11 @@ func syncPermToMode(permStr string) os.FileMode {
 	} else if permStr == "rwx" {
 		perm = perm | 0755
 	} else {
-		fmt.Println("无效的权限字符串")
+		fmt.Println("invalid permission string")
 		return 0
 	}
 
-	fmt.Println("转换后的权限:", perm)
+	//fmt.Println("transferred permission:", perm)
 	return perm
 }
 
@@ -1594,14 +1496,11 @@ func syncModeToPermString(fileMode os.FileMode) string {
 	permStr := ""
 
 	//if fileMode&os.ModeDir != 0 {
-	//	// 目录权限
 	//	permStr += "d"
 	//} else {
-	//	// 文件权限
 	//	permStr += "-"
 	//}
 
-	// 所有者权限
 	if fileMode&0400 != 0 {
 		permStr += "r"
 	}
@@ -1621,7 +1520,6 @@ func syncModeToPermString(fileMode os.FileMode) string {
 	//	permStr += "-"
 	//}
 
-	// 所属组权限
 	//if fileMode&040 != 0 {
 	//	permStr += "r"
 	//} else {
@@ -1638,7 +1536,6 @@ func syncModeToPermString(fileMode os.FileMode) string {
 	//	permStr += "-"
 	//}
 
-	// 其他用户权限
 	//if fileMode&04 != 0 {
 	//	permStr += "r"
 	//} else {
@@ -1670,17 +1567,17 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 		//host := r.Host
 		//infoUrl := "http://" + host + "/api/resources" + src
 		infoURL := "http://127.0.0.1:80/api/resources" + src
-		fmt.Println(infoURL)
+		//fmt.Println(infoURL)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
 		if err != nil {
-			fmt.Printf("创建请求失败: %v\n", err)
+			fmt.Printf("create request failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
 
 		request.Header = r.Header
-		//fmt.Println("请求头:")
+		//fmt.Println("request headers:")
 		//for key, values := range request.Header {
 		//	for _, value := range values {
 		//		fmt.Printf("%s: %s\n", key, value)
@@ -1689,12 +1586,12 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 
 		response, err := client.Do(request)
 		if err != nil {
-			fmt.Printf("请求失败: %v\n", err)
+			fmt.Printf("request failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
 		defer response.Body.Close()
 
-		//fmt.Println("响应头:")
+		//fmt.Println("response haeders:")
 		//for key, values := range response.Header {
 		//	for _, value := range values {
 		//		fmt.Printf("%s: %s\n", key, value)
@@ -1703,12 +1600,10 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 
 		var bodyReader io.Reader = response.Body
 
-		// 检查Content-Encoding是否为gzip
 		if response.Header.Get("Content-Encoding") == "gzip" {
-			// 创建gzip Reader
 			gzipReader, err := gzip.NewReader(response.Body)
 			if err != nil {
-				fmt.Printf("解压缩响应失败: %v\n", err)
+				fmt.Printf("unzip response failed: %v\n", err)
 				return nil, 0, 0, false, err
 			}
 			defer gzipReader.Close()
@@ -1718,14 +1613,14 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 
 		body, err := ioutil.ReadAll(bodyReader)
 		if err != nil {
-			fmt.Printf("读取响应失败: %v\n", err)
+			fmt.Printf("read response failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
 
-		//fmt.Println("请求URL:", infoURL)
-		//fmt.Println("请求头:", request.Header)
-		//fmt.Println("响应状态码:", response.StatusCode)
-		//fmt.Println("响应内容:", string(body))
+		//fmt.Println("request URL:", infoURL)
+		//fmt.Println("request headers:", request.Header)
+		//fmt.Println("response status code:", response.StatusCode)
+		//fmt.Println("response body:", string(body))
 
 		var fileInfo struct {
 			Size  int64       `json:"size"`
@@ -1738,7 +1633,7 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 
 		err = json.Unmarshal(body, &fileInfo)
 		if err != nil {
-			fmt.Printf("解析响应失败: %v\n", err)
+			fmt.Printf("parse response failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
 
@@ -1752,49 +1647,42 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 		return nil, fileInfo.Size, fileInfo.Mode, fileInfo.IsDir, nil
 	} else if srcType == "sync" {
 		// src is like [repo-id]/path/filename
-		// 去除路径开头和结尾的斜杠
 		src = strings.Trim(src, "/")
-		// 检查路径中是否包含斜杠
 		if !strings.Contains(src, "/") {
 			err := e.New("invalid path format: path must contain at least one '/'")
 			fmt.Println("Error:", err)
 			return nil, 0, 0, false, err
 		}
 
-		// 获取第一个斜杠的索引
 		firstSlashIdx := strings.Index(src, "/")
 
-		// 获取repo-id
 		repoID := src[:firstSlashIdx]
 
-		// 获取最后一个斜杠的索引
 		lastSlashIdx := strings.LastIndex(src, "/")
 
-		// 获取filename
 		filename := src[lastSlashIdx+1:]
 
-		// 获取prefix
 		prefix := ""
 		if firstSlashIdx != lastSlashIdx {
 			prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
 		}
 
-		fmt.Println("repo-id:", repoID)
-		fmt.Println("prefix:", prefix)
-		fmt.Println("filename:", filename)
+		//fmt.Println("repo-id:", repoID)
+		//fmt.Println("prefix:", prefix)
+		//fmt.Println("filename:", filename)
 
 		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+prefix) + "&with_thumbnail=true"
-		fmt.Println(infoURL)
+		//fmt.Println(infoURL)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
 		if err != nil {
-			fmt.Printf("创建请求失败: %v\n", err)
+			fmt.Printf("create request failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
 
 		request.Header = r.Header
-		//fmt.Println("请求头:")
+		//fmt.Println("request headers:")
 		//for key, values := range request.Header {
 		//	for _, value := range values {
 		//		fmt.Printf("%s: %s\n", key, value)
@@ -1803,12 +1691,12 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 
 		response, err := client.Do(request)
 		if err != nil {
-			fmt.Printf("请求失败: %v\n", err)
+			fmt.Printf("request failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
 		defer response.Body.Close()
 
-		//fmt.Println("响应头:")
+		//fmt.Println("response headers:")
 		//for key, values := range response.Header {
 		//	for _, value := range values {
 		//		fmt.Printf("%s: %s\n", key, value)
@@ -1817,12 +1705,10 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 
 		var bodyReader io.Reader = response.Body
 
-		// 检查Content-Encoding是否为gzip
 		if response.Header.Get("Content-Encoding") == "gzip" {
-			// 创建gzip Reader
 			gzipReader, err := gzip.NewReader(response.Body)
 			if err != nil {
-				fmt.Printf("解压缩响应失败: %v\n", err)
+				fmt.Printf("unzip response failed: %v\n", err)
 				return nil, 0, 0, false, err
 			}
 			defer gzipReader.Close()
@@ -1832,14 +1718,14 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 
 		body, err := ioutil.ReadAll(bodyReader)
 		if err != nil {
-			fmt.Printf("读取响应失败: %v\n", err)
+			fmt.Printf("read response failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
 
-		//fmt.Println("请求URL:", infoURL)
-		//fmt.Println("请求头:", request.Header)
-		//fmt.Println("响应状态码:", response.StatusCode)
-		//fmt.Println("响应内容:", string(body))
+		//fmt.Println("request URL:", infoURL)
+		//fmt.Println("request header:", request.Header)
+		//fmt.Println("response status code:", response.StatusCode)
+		//fmt.Println("response body:", string(body))
 
 		type Dirent struct {
 			Type                 string `json:"type"`
@@ -1871,34 +1757,34 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 
 		err = json.Unmarshal(body, &dirResp)
 		if err != nil {
-			fmt.Printf("解析响应失败: %v\n", err)
+			fmt.Printf("parse response failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
 
-		fmt.Println("User Perm:", dirResp.UserPerm)
-		fmt.Println("Dir ID:", dirResp.DirID)
-		fmt.Println("Dirent List:")
+		//fmt.Println("User Perm:", dirResp.UserPerm)
+		//fmt.Println("Dir ID:", dirResp.DirID)
+		//fmt.Println("Dirent List:")
 		var found = false
 		for _, dirent := range dirResp.DirentList {
 			if dirent.Name == filename {
 				fileInfo = dirent
-				fmt.Println("Type:", dirent.Type)
-				fmt.Println("ID:", dirent.ID)
-				fmt.Println("Name:", dirent.Name)
-				fmt.Println("Mtime:", dirent.Mtime)
-				fmt.Println("Permission:", dirent.Permission)
-				fmt.Println("Parent Dir:", dirent.ParentDir)
-				fmt.Println("Starred:", dirent.Starred)
-				fmt.Println("Size:", dirent.Size)
-				fmt.Println("FileSize:", dirent.FileSize)
-				fmt.Println("NumTotalFiles:", dirent.NumTotalFiles)
-				fmt.Println("NumFiles:", dirent.NumFiles)
-				fmt.Println("NumDirs:", dirent.NumDirs)
-				fmt.Println("Path:", dirent.Path)
-				fmt.Println("Modifier Email:", dirent.ModifierEmail)
-				fmt.Println("Modifier Name:", dirent.ModifierName)
-				fmt.Println("Modifier Contact Email:", dirent.ModifierContactEmail)
-				fmt.Println()
+				//fmt.Println("Type:", dirent.Type)
+				//fmt.Println("ID:", dirent.ID)
+				//fmt.Println("Name:", dirent.Name)
+				//fmt.Println("Mtime:", dirent.Mtime)
+				//fmt.Println("Permission:", dirent.Permission)
+				//fmt.Println("Parent Dir:", dirent.ParentDir)
+				//fmt.Println("Starred:", dirent.Starred)
+				//fmt.Println("Size:", dirent.Size)
+				//fmt.Println("FileSize:", dirent.FileSize)
+				//fmt.Println("NumTotalFiles:", dirent.NumTotalFiles)
+				//fmt.Println("NumFiles:", dirent.NumFiles)
+				//fmt.Println("NumDirs:", dirent.NumDirs)
+				//fmt.Println("Path:", dirent.Path)
+				//fmt.Println("Modifier Email:", dirent.ModifierEmail)
+				//fmt.Println("Modifier Name:", dirent.ModifierName)
+				//fmt.Println("Modifier Contact Email:", dirent.ModifierContactEmail)
+				//fmt.Println()
 				found = true
 				break
 			}
@@ -1966,7 +1852,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fsrc := src + "/" + obj.Name()
 			fdst := dst + "/" + obj.Name()
 
-			fmt.Println(fsrc, fdst)
+			//fmt.Println(fsrc, fdst)
 			if obj.IsDir() {
 				// Create sub-directories, recursively.
 				err = copyDir(fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), r)
@@ -2022,17 +1908,17 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		}
 
 		infoURL := "http://127.0.0.1:80/api/resources" + src
-		fmt.Println(infoURL)
+		//fmt.Println(infoURL)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
 		if err != nil {
-			fmt.Printf("创建请求失败: %v\n", err)
+			fmt.Printf("create request failed: %v\n", err)
 			return err
 		}
 
 		request.Header = r.Header
-		//fmt.Println("请求头:")
+		//fmt.Println("request headers:")
 		//for key, values := range request.Header {
 		//	for _, value := range values {
 		//		fmt.Printf("%s: %s\n", key, value)
@@ -2041,12 +1927,12 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 
 		response, err := client.Do(request)
 		if err != nil {
-			fmt.Printf("请求失败: %v\n", err)
+			fmt.Printf("request failed: %v\n", err)
 			return err
 		}
 		defer response.Body.Close()
 
-		//fmt.Println("响应头:")
+		//fmt.Println("response headers:")
 		//for key, values := range response.Header {
 		//	for _, value := range values {
 		//		fmt.Printf("%s: %s\n", key, value)
@@ -2055,12 +1941,10 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 
 		var bodyReader io.Reader = response.Body
 
-		// 检查Content-Encoding是否为gzip
 		if response.Header.Get("Content-Encoding") == "gzip" {
-			// 创建gzip Reader
 			gzipReader, err := gzip.NewReader(response.Body)
 			if err != nil {
-				fmt.Printf("解压缩响应失败: %v\n", err)
+				fmt.Printf("unzip response failed: %v\n", err)
 				return err
 			}
 			defer gzipReader.Close()
@@ -2070,14 +1954,14 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 
 		body, err := ioutil.ReadAll(bodyReader)
 		if err != nil {
-			fmt.Printf("读取响应失败: %v\n", err)
+			fmt.Printf("read response failed: %v\n", err)
 			return err
 		}
 
-		//fmt.Println("请求URL:", infoURL)
-		//fmt.Println("请求头:", request.Header)
-		//fmt.Println("响应状态码:", response.StatusCode)
-		//fmt.Println("响应内容:", string(body))
+		//fmt.Println("request URL:", infoURL)
+		//fmt.Println("request header:", request.Header)
+		//fmt.Println("response status code:", response.StatusCode)
+		//fmt.Println("response body:", string(body))
 
 		var data ResponseData
 		//err = json.NewDecoder(response.Body).Decode(&data)
@@ -2090,15 +1974,13 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fsrc := filepath.Join(src, item.Name)
 			fdst := filepath.Join(dst, item.Name)
 
-			fmt.Println(fsrc, fdst)
+			//fmt.Println(fsrc, fdst)
 			if item.IsDir {
-				// 创建子目录，递归处理
 				err := copyDir(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), r)
 				if err != nil {
 					return err
 				}
 			} else {
-				// 执行文件复制
 				err := copyFile(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), item.Size, r)
 				if err != nil {
 					return err
@@ -2107,7 +1989,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		}
 		return nil
 	} else if srcType == "sync" {
-		fmt.Println("Sync copy/move dir!")
+		//fmt.Println("Sync copy/move dir!")
 		type Item struct {
 			Type                 string `json:"type"`
 			Name                 string `json:"name"`
@@ -2133,70 +2015,61 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			DirentList []Item `json:"dirent_list"`
 		}
 
-		// 去除路径开头和结尾的斜杠
 		src = strings.Trim(src, "/")
-		// 检查路径中是否包含斜杠
 		if !strings.Contains(src, "/") {
 			err := e.New("invalid path format: path must contain at least one '/'")
 			fmt.Println("Error:", err)
 			return err
 		}
 
-		// 获取第一个斜杠的索引
 		firstSlashIdx := strings.Index(src, "/")
 
-		// 获取repo-id
 		repoID := src[:firstSlashIdx]
 
-		// 获取最后一个斜杠的索引
 		lastSlashIdx := strings.LastIndex(src, "/")
 
-		// 获取filename
 		filename := src[lastSlashIdx+1:]
 
-		// 获取prefix
 		prefix := ""
 		if firstSlashIdx != lastSlashIdx {
 			prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
 		}
 
-		fmt.Println("repo-id:", repoID)
-		fmt.Println("prefix:", prefix)
-		fmt.Println("filename:", filename)
+		//fmt.Println("repo-id:", repoID)
+		//fmt.Println("prefix:", prefix)
+		//fmt.Println("filename:", filename)
 
 		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+prefix+"/"+filename) + "&with_thumbnail=true"
-		fmt.Println(infoURL)
+		//fmt.Println(infoURL)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
 		if err != nil {
-			fmt.Printf("创建请求失败: %v\n", err)
+			fmt.Printf("create request failed: %v\n", err)
 			return err
 		}
 
 		request.Header = r.Header
-		fmt.Println("请求头:")
-		for key, values := range request.Header {
-			for _, value := range values {
-				fmt.Printf("%s: %s\n", key, value)
-			}
-		}
+		//fmt.Println("request headers:")
+		//for key, values := range request.Header {
+		//	for _, value := range values {
+		//		fmt.Printf("%s: %s\n", key, value)
+		//	}
+		//}
 
 		response, err := client.Do(request)
 		if err != nil {
-			fmt.Printf("请求失败: %v\n", err)
+			fmt.Printf("request failed: %v\n", err)
 			return err
 		}
 		defer response.Body.Close()
 
 		var bodyReader io.Reader = response.Body
 
-		// 检查Content-Encoding是否为gzip
 		if response.Header.Get("Content-Encoding") == "gzip" {
-			// 创建gzip Reader
 			gzipReader, err := gzip.NewReader(response.Body)
 			if err != nil {
-				fmt.Printf("解压缩响应失败: %v\n", err)
+				fmt.Printf("unzip response failed: %v\n", err)
 				return err
 			}
 			defer gzipReader.Close()
@@ -2206,14 +2079,14 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 
 		body, err := ioutil.ReadAll(bodyReader)
 		if err != nil {
-			fmt.Printf("读取响应失败: %v\n", err)
+			fmt.Printf("read response failed: %v\n", err)
 			return err
 		}
 
-		fmt.Println("请求URL:", infoURL)
-		fmt.Println("请求头:", request.Header)
-		fmt.Println("响应状态码:", response.StatusCode)
-		fmt.Println("响应内容:", string(body))
+		//fmt.Println("request URL:", infoURL)
+		//fmt.Println("request header:", request.Header)
+		//fmt.Println("response status code:", response.StatusCode)
+		//fmt.Println("response body:", string(body))
 
 		var data ResponseData
 		//err = json.NewDecoder(response.Body).Decode(&data)
@@ -2226,15 +2099,13 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fsrc := filepath.Join(src, item.Name)
 			fdst := filepath.Join(dst, item.Name)
 
-			fmt.Println(fsrc, fdst)
+			//fmt.Println(fsrc, fdst)
 			if item.Type == "dir" {
-				// 创建子目录，递归处理
 				err := copyDir(fs, srcType, fsrc, dstType, fdst, d, syncPermToMode(item.Permission), r)
 				if err != nil {
 					return err
 				}
 			} else {
-				// 执行文件复制
 				err := copyFile(fs, srcType, fsrc, dstType, fdst, d, syncPermToMode(item.Permission), item.Size, r)
 				if err != nil {
 					return err
@@ -2271,7 +2142,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
+		//fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
 		// Won't deal a file which is bigger than 4G for the time being
 		//if diskSize >= 4*1024*1024*1024 {
 		//	fmt.Println("file size exceeds 4GB")
@@ -2282,7 +2153,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Buffer file path: ", bufferPath)
+		//fmt.Println("Buffer file path: ", bufferPath)
 
 		err = makeDiskBuffer(bufferPath, diskSize)
 		if err != nil {
@@ -2298,7 +2169,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
+		//fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
 		//if diskSize >= 4*1024*1024*1024 {
 		//	fmt.Println("file size exceeds 4GB")
 		//	return e.New("file size exceeds 4GB") //os.ErrPermission
@@ -2308,7 +2179,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Buffer file path: ", bufferPath)
+		//fmt.Println("Buffer file path: ", bufferPath)
 
 		err = makeDiskBuffer(bufferPath, diskSize)
 		if err != nil {
@@ -2324,7 +2195,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
+		//fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
 		//if diskSize >= 4*1024*1024*1024 {
 		//	fmt.Println("file size exceeds 4GB")
 		//	return e.New("file size exceeds 4GB") //os.ErrPermission
@@ -2334,7 +2205,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Buffer file path: ", bufferPath)
+		//fmt.Println("Buffer file path: ", bufferPath)
 
 		err = makeDiskBuffer(bufferPath, diskSize)
 		if err != nil {
@@ -2348,7 +2219,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 
 	// paste
 	if dstType == "drive" {
-		fmt.Println("Begin to paste!")
+		//fmt.Println("Begin to paste!")
 		status, err := driveBufferToFile(bufferPath, dst, mode, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
@@ -2356,10 +2227,10 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Begin to remove buffer")
+		//fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath)
 	} else if dstType == "cache" {
-		fmt.Println("Begin to cache paste!")
+		//fmt.Println("Begin to cache paste!")
 		status, err := cacheBufferToFile(bufferPath, dst, mode, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
@@ -2367,10 +2238,10 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Begin to remove buffer")
+		//fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath)
 	} else if dstType == "sync" {
-		fmt.Println("Begin to sync paste!")
+		//fmt.Println("Begin to sync paste!")
 		err := syncMkdirAll(dst, mode, false, r)
 		if err != nil {
 			return err
@@ -2382,7 +2253,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		fmt.Println("Begin to remove buffer")
+		//fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath)
 	}
 	return nil
@@ -2463,18 +2334,17 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *data, fileCache FileCache, override, rename bool, r *http.Request) error {
 	fmt.Println("Now deal with ", action, " for same arch ", dstType)
 	if srcType == "drive" || srcType == "cache" {
-		url := "http://127.0.0.1:80/api/resources/" + strings.TrimLeft(src, "/") + "?action=" + action + "&destination=" + url.QueryEscape(dst) + "&override=" + strconv.FormatBool(override) + "&rename=" + strconv.FormatBool(rename)
+		patchUrl := "http://127.0.0.1:80/api/resources/" + strings.TrimLeft(src, "/") + "?action=" + action + "&destination=" + url.QueryEscape(dst) + "&override=" + strconv.FormatBool(override) + "&rename=" + strconv.FormatBool(rename)
 		method := "PATCH"
 		payload := []byte(``)
-		fmt.Println(url)
+		//fmt.Println(url)
 
 		client := &http.Client{}
-		req, err := http.NewRequest(method, url, bytes.NewBuffer(payload))
+		req, err := http.NewRequest(method, patchUrl, bytes.NewBuffer(payload))
 		if err != nil {
 			return err
 		}
 
-		// 获取原始请求的头部信息
 		req.Header = r.Header
 
 		res, err := client.Do(req)
@@ -2483,11 +2353,12 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		}
 		defer res.Body.Close()
 
-		respBody, err := ioutil.ReadAll(res.Body)
+		//respBody, err := ioutil.ReadAll(res.Body)
+		_, err = ioutil.ReadAll(res.Body)
 		if err != nil {
 			return err
 		}
-		fmt.Println(respBody)
+		//fmt.Println(respBody)
 		return nil
 	} else if srcType == "sync" {
 		var apiName string
@@ -2512,29 +2383,22 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			return err
 		}
 
-		// 去除路径开头和结尾的斜杠
 		src = strings.Trim(src, "/")
-		// 检查路径中是否包含斜杠
 		if !strings.Contains(src, "/") {
 			err := e.New("invalid path format: path must contain at least one '/'")
 			fmt.Println("Error:", err)
 			return err
 		}
 
-		// 获取第一个斜杠的索引
 		srcFirstSlashIdx := strings.Index(src, "/")
 
-		// 获取repo-id
 		srcRepoID := src[:srcFirstSlashIdx]
 
-		// 获取最后一个斜杠的索引
 		srcLastSlashIdx := strings.LastIndex(src, "/")
 
-		// 获取filename
 		srcFilename := src[srcLastSlashIdx+1:]
 		//filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
 
-		// 获取prefix
 		srcPrefix := ""
 		if srcFirstSlashIdx != srcLastSlashIdx {
 			srcPrefix = src[srcFirstSlashIdx+1 : srcLastSlashIdx+1]
@@ -2546,33 +2410,26 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			srcPrefix = "/"
 		}
 
-		fmt.Println("src repo-id:", srcRepoID)
-		fmt.Println("src prefix:", srcPrefix)
-		fmt.Println("src filename:", srcFilename)
+		//fmt.Println("src repo-id:", srcRepoID)
+		//fmt.Println("src prefix:", srcPrefix)
+		//fmt.Println("src filename:", srcFilename)
 
-		// 去除路径开头和结尾的斜杠
 		dst = strings.Trim(dst, "/")
-		// 检查路径中是否包含斜杠
 		if !strings.Contains(dst, "/") {
 			err := e.New("invalid path format: path must contain at least one '/'")
 			fmt.Println("Error:", err)
 			return err
 		}
 
-		// 获取第一个斜杠的索引
 		dstFirstSlashIdx := strings.Index(dst, "/")
 
-		// 获取repo-id
 		dstRepoID := dst[:dstFirstSlashIdx]
 
-		// 获取最后一个斜杠的索引
 		dstLastSlashIdx := strings.LastIndex(dst, "/")
 
-		// 获取filename
-		dstFilename := dst[dstLastSlashIdx+1:]
+		//dstFilename := dst[dstLastSlashIdx+1:]
 		//filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
 
-		// 获取prefix
 		dstPrefix := ""
 		if dstFirstSlashIdx != dstLastSlashIdx {
 			dstPrefix = dst[dstFirstSlashIdx+1 : dstLastSlashIdx+1]
@@ -2584,16 +2441,15 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			dstPrefix = "/"
 		}
 
-		fmt.Println("dst repo-id:", dstRepoID)
-		fmt.Println("dst prefix:", dstPrefix)
-		fmt.Println("dst filename:", dstFilename)
+		//fmt.Println("dst repo-id:", dstRepoID)
+		//fmt.Println("dst prefix:", dstPrefix)
+		//fmt.Println("dst filename:", dstFilename)
 
 		targetURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + apiName + "/"
-		// 创建请求体
 		requestBody := map[string]interface{}{
 			"dst_parent_dir": dstPrefix,
 			"dst_repo_id":    dstRepoID,
-			"src_dirents":    []string{srcFilename}, // 将 filename 放入数组中
+			"src_dirents":    []string{srcFilename},
 			"src_parent_dir": srcPrefix,
 			"src_repo_id":    srcRepoID,
 		}
@@ -2601,31 +2457,26 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		if err != nil {
 			return err
 		}
-		fmt.Println(jsonBody)
+		//fmt.Println(jsonBody)
 
-		// 创建 HTTP 请求
 		request, err := http.NewRequest("POST", targetURL, bytes.NewBuffer(jsonBody))
 		if err != nil {
 			return err
 		}
 
-		// 设置请求头
 		request.Header = r.Header
 		request.Header.Set("Content-Type", "application/json")
 
-		// 创建 HTTP 客户端
 		client := &http.Client{
 			Timeout: 10 * time.Second,
 		}
 
-		// 发送请求
 		response, err := client.Do(request)
 		if err != nil {
 			return err
 		}
 		defer response.Body.Close()
 
-		// 检查响应状态码
 		if response.StatusCode != http.StatusOK {
 			return fmt.Errorf("file delete failed with status: %d", response.StatusCode)
 		}
