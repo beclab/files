@@ -23,7 +23,7 @@ func DelThumbRedisKey(key string) error {
 	cleanupMux.Lock()
 	defer cleanupMux.Unlock()
 
-	err := RedisZRem(zsetKey, key)
+	err := RedisZRem(zsetKey, []string{key})
 	if err != nil {
 		fmt.Println("Error removing file from Redis:", err)
 		return err
@@ -58,18 +58,14 @@ func CleanupOldFilesAndRedisEntries(duration time.Duration) {
 	cutoffTimeStr := strconv.FormatInt(cutoffTime, 10)
 
 	// 获取所有成员及其分数
-	results, err := RedisZRangeByScore(zsetKey, "-inf", cutoffTimeStr, false)
-	if err != nil {
-		fmt.Println("Error fetching files from Redis:", err)
-		return
-	}
+	results := RedisZRangeByScore(zsetKey, "-inf", cutoffTimeStr)
 
 	for _, member := range results {
 		fileName := member
 		filePath := filepath.Join(folderPath, fileName)
 
 		// 删除文件
-		err = os.Remove(filePath)
+		err := os.Remove(filePath)
 		if err != nil {
 			fmt.Println("Error deleting file:", err)
 			// if file delete failed, key will also be removed
@@ -77,7 +73,7 @@ func CleanupOldFilesAndRedisEntries(duration time.Duration) {
 		}
 
 		// 从Redis ZSET中删除成员
-		err = RedisZRem(zsetKey, fileName)
+		err = RedisZRem(zsetKey, []string{fileName})
 		if err != nil {
 			fmt.Println("Error removing file from Redis:", err)
 			continue
@@ -97,9 +93,9 @@ func GetFileName(key string) string {
 func UpdateFileAccessTimeToRedis(fileName string) error {
 	key := fileName
 	currentTime := time.Now().Unix()
-	member := make(map[string]float64)
-	member[key] = float64(currentTime)
-	err := RedisZAdd(zsetKey, member)
+	//member := make(map[string]float64)
+	//member[key] = float64(currentTime)
+	err := RedisZAdd(zsetKey, key, float64(currentTime)) //member)
 	return err
 }
 
@@ -136,11 +132,7 @@ func InitFolderAndRedis() {
 		fmt.Println("Error initializing folder and Redis:", err)
 	}
 
-	results, err := RedisZRange(zsetKey, 0, -1)
-	if err != nil {
-		fmt.Println("Error fetching files from Redis:", err)
-		return
-	}
+	results := RedisZRange(zsetKey, 0, -1)
 
 	for _, member := range results {
 		fmt.Println("filename=", member)
