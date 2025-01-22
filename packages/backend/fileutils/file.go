@@ -71,7 +71,7 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 	if err := targetFile.Sync(); err != nil {
 		return err
 	}
-	return os.Rename(tempFilePath, targetPath)
+	return fs.Rename(tempFilePath, targetPath)
 }
 
 // CopyFile copies a file from source to dest and returns
