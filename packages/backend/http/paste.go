@@ -33,7 +33,13 @@ func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
 	}
 	defer sourceFile.Close()
 
-	targetFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	dir := filepath.Dir(targetPath)
+	baseName := filepath.Base(targetPath)
+
+	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
+	tempFilePath := filepath.Join(dir, tempFileName)
+
+	targetFile, err := os.OpenFile(tempFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return err
 	}
@@ -53,7 +59,10 @@ func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
 		}
 	}
 
-	return targetFile.Sync()
+	if err := targetFile.Sync(); err != nil {
+		return err
+	}
+	return os.Rename(tempFilePath, targetPath)
 }
 
 //func ioCopyFile(sourcePath, targetPath string) error {

@@ -1,6 +1,7 @@
 package fileutils
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -35,12 +36,19 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 	}
 	defer sourceFile.Close()
 
-	err = fs.MkdirAll(filepath.Dir(targetPath), 0755)
+	dir := filepath.Dir(targetPath)
+	baseName := filepath.Base(targetPath)
+
+	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
+	tempFilePath := filepath.Join(dir, tempFileName)
+
+	//err = fs.MkdirAll(filepath.Dir(targetPath), 0755)
+	err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755)
 	if err != nil {
 		return err
 	}
 
-	targetFile, err := fs.OpenFile(targetPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)
+	targetFile, err := fs.OpenFile(tempFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return err
 	}
@@ -59,8 +67,11 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 			return err
 		}
 	}
-	
-	return targetFile.Sync()
+
+	if err := targetFile.Sync(); err != nil {
+		return err
+	}
+	return os.Rename(tempFilePath, targetPath)
 }
 
 // CopyFile copies a file from source to dest and returns
