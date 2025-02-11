@@ -2520,11 +2520,16 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		}
 	} else if srcType == "google" {
 		var err error
-		if diskSize >= 4*1024*1024*1024 {
-			fmt.Println("file size exceeds 4GB")
-			return e.New("file size exceeds 4GB") //os.ErrPermission
+		//if diskSize >= 4*1024*1024*1024 {
+		//	fmt.Println("file size exceeds 4GB")
+		//	return e.New("file size exceeds 4GB") //os.ErrPermission
+		//}
+		//fmt.Println("Will reserve disk size: ", diskSize)
+		_, err = checkBufferDiskSpace(diskSize)
+		if err != nil {
+			return err
 		}
-		fmt.Println("Will reserve disk size: ", diskSize)
+
 		srcInfo, err := getGoogleDriveIdFocusedMetaInfos(src, w, r)
 		bufferFilePath, err := generateBufferFolder(srcInfo.Path, bflName)
 		if err != nil {
@@ -2546,11 +2551,16 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		}
 	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		var err error
-		if diskSize >= 4*1024*1024*1024 {
-			fmt.Println("file size exceeds 4GB")
-			return e.New("file size exceeds 4GB") //os.ErrPermission
+		//if diskSize >= 4*1024*1024*1024 {
+		//	fmt.Println("file size exceeds 4GB")
+		//	return e.New("file size exceeds 4GB") //os.ErrPermission
+		//}
+		//fmt.Println("Will reserve disk size: ", diskSize)
+		_, err = checkBufferDiskSpace(diskSize)
+		if err != nil {
+			return err
 		}
-		fmt.Println("Will reserve disk size: ", diskSize)
+
 		srcInfo, err := getAwss3FocusedMetaInfos(src, w, r)
 		bufferFilePath, err := generateBufferFolder(srcInfo.Path, bflName)
 		if err != nil {
