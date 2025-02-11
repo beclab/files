@@ -1104,7 +1104,7 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 		LocalFolder:   bufferFilePath,
 		CloudFilePath: srcPathId,
 		Drive:         srcDrive,
-		Name:          url.QueryEscape(srcName),
+		Name:          srcName,
 	}
 
 	jsonBody, err := json.Marshal(param)
