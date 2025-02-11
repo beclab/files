@@ -27,6 +27,10 @@ import (
 )
 
 func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
+	fmt.Println("***ioCopyFileWithBuffer")
+	fmt.Println("***sourcePath:", sourcePath)
+	fmt.Println("***targetPath:", targetPath)
+
 	sourceFile, err := os.Open(sourcePath)
 	if err != nil {
 		return err
@@ -38,6 +42,8 @@ func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
 
 	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
 	tempFilePath := filepath.Join(dir, tempFileName)
+	fmt.Println("***tempFilePath:", tempFilePath)
+	fmt.Println("***tempFileName:", tempFileName)
 
 	targetFile, err := os.OpenFile(tempFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
@@ -356,6 +362,10 @@ func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
 }
 
 func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *data) (int, error) {
+	fmt.Println("***driveBufferToFile!")
+	fmt.Println("*** bufferFilePath:", bufferFilePath)
+	fmt.Println("*** targetPath:", targetPath)
+
 	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
 	var err error
 	targetPath, err = url.QueryUnescape(targetPath)
