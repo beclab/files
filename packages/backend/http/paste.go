@@ -267,7 +267,7 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	if len(extension) > 0 {
 		originalPathName = strings.TrimSuffix(originalPathName, extension) + "_" + extension[1:]
 	}
-	originalPathName = url.QueryEscape(originalPathName)
+	//originalPathName = url.QueryEscape(originalPathName)
 
 	// 构建新的文件名
 	bufferPathName := fmt.Sprintf("%d_%s", timestamp, originalPathName) // as parent folder
@@ -1645,7 +1645,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 				return http.StatusInternalServerError, err
 			}
 			srcName := srcInfo.Name
-			formattedSrcName := removeNonAlphanumericUnderscore(srcName)
+			formattedSrcName := removeSlash(srcName) // removeNonAlphanumericUnderscore(srcName)
 			dst = strings.ReplaceAll(dst, srcName, formattedSrcName)
 		}
 		if rename && dstType != "google" {

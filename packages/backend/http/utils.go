@@ -483,9 +483,15 @@ func stringMD5(s string) string {
 	return hashString
 }
 
-func removeNonAlphanumericUnderscore(s string) string {
+func removeSlash(s string) string {
 	//re := regexp.MustCompile(`[^a-zA-Z0-9_]`)
 	re := regexp.MustCompile("/")
+	return re.ReplaceAllString(s, "_")
+}
+
+func removeNonAlphanumericUnderscore(s string) string {
+	re := regexp.MustCompile(`[^a-zA-Z0-9_]`)
+	//re := regexp.MustCompile("/")
 	return re.ReplaceAllString(s, "_")
 }
 
