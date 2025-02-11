@@ -1693,6 +1693,28 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 	}
 	defer resp.Body.Close()
 
+	// 检查响应状态码
+	if resp.StatusCode != http.StatusOK {
+		var responseBody []byte
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			reader, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				fmt.Println("Error creating gzip reader:", err)
+				return nil, err
+			}
+			defer reader.Close()
+			responseBody, err = ioutil.ReadAll(reader)
+		} else {
+			responseBody, err = ioutil.ReadAll(resp.Body)
+		}
+		if err != nil {
+			fmt.Println("Error reading response body:", err)
+			return nil, err
+		}
+		fmt.Printf("Non-200 response status: %d, body: %s\n", resp.StatusCode, responseBody)
+		return nil, fmt.Errorf("non-200 response status: %d", resp.StatusCode)
+	}
+
 	// 遍历并打印所有的 header 字段和值
 	//fmt.Printf("GoogleDriveListResponse Hedears:\n")
 	//for name, values := range resp.Header {
