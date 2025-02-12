@@ -356,6 +356,7 @@ type GoogleDriveDownloadFileParam struct {
 	CloudFilePath string `json:"cloud_file_path"`
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
+	LocalFileName string `json:"local_file_name,omitempty"`
 }
 
 type GoogleDriveUploadFileParam struct {
@@ -1084,8 +1085,7 @@ func findFirstDownloadingFile(dir string) (string, bool, error) {
 	return "", false, err
 }
 
-func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *http.Request) (string, error) {
-	var bufferFilename = ""
+func googleFileToBuffer(src, bufferFilePath, bufferFileName string, w http.ResponseWriter, r *http.Request) (string, error) {
 	if !strings.HasSuffix(src, "/") {
 		src += "/"
 	}
@@ -1097,7 +1097,7 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
 	if srcPathId == "" {
 		fmt.Println("Src parse failed.")
-		return bufferFilename, nil
+		return bufferFileName, nil
 	}
 
 	param := GoogleDriveDownloadFileParam{
@@ -1106,11 +1106,14 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 		Drive:         srcDrive,
 		Name:          srcName,
 	}
+	if bufferFileName != "" {
+		param.LocalFileName = bufferFileName
+	}
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
 		fmt.Println("Error marshalling JSON:", err)
-		return bufferFilename, err
+		return bufferFileName, err
 	}
 	fmt.Println("Download File Params:", string(jsonBody))
 
@@ -1118,12 +1121,12 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 	respBody, err = GoogleDriveCall("/drive/download_async", "POST", jsonBody, w, r, true)
 	if err != nil {
 		fmt.Println("Error calling drive/download_async:", err)
-		return bufferFilename, err
+		return bufferFileName, err
 	}
 	var respJson GoogleDriveTaskResponse
 	if err = json.Unmarshal(respBody, &respJson); err != nil {
 		fmt.Println(err)
-		return bufferFilename, err
+		return bufferFileName, err
 	}
 	taskId := respJson.Data.ID
 	taskParam := GoogleDriveTaskQueryParam{
@@ -1132,7 +1135,7 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 	taskJsonBody, err := json.Marshal(taskParam)
 	if err != nil {
 		fmt.Println("Error marshalling JSON:", err)
-		return bufferFilename, err
+		return bufferFileName, err
 	}
 	fmt.Println("Task Params:", string(taskJsonBody))
 
@@ -1142,15 +1145,15 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 		taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
 		if err != nil {
 			fmt.Println("Error calling drive/download_async:", err)
-			return bufferFilename, err
+			return bufferFileName, err
 		}
 		var taskRespJson GoogleDriveTaskQueryResponse
 		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
 			fmt.Println(err)
-			return bufferFilename, err
+			return bufferFileName, err
 		}
 		if len(taskRespJson.Data) == 0 {
-			return bufferFilename, e.New("Task Info Not Found")
+			return bufferFileName, e.New("Task Info Not Found")
 		}
 		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
 			if taskRespJson.Data[0].Status == "Completed" {
@@ -1164,9 +1167,9 @@ func googleFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *ht
 				//}
 				//fmt.Println("bufferFilename:", bufferFilename)
 				//time.Sleep(200 * time.Millisecond)
-				return bufferFilename, nil
+				return bufferFileName, nil
 			}
-			return bufferFilename, e.New(taskRespJson.Data[0].Status)
+			return bufferFileName, e.New(taskRespJson.Data[0].Status)
 		}
 	}
 }
@@ -2043,23 +2046,30 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 
 	var err error
 	diskSize := file.Size
-	if diskSize >= 4*1024*1024*1024 {
-		fmt.Println("file size exceeds 4GB")
-		return nil, e.New("file size exceeds 4GB") //os.ErrPermission
+	//if diskSize >= 4*1024*1024*1024 {
+	//	fmt.Println("file size exceeds 4GB")
+	//	return nil, e.New("file size exceeds 4GB") //os.ErrPermission
+	//}
+	//fmt.Println("Will reserve disk size: ", diskSize)
+	_, err = checkBufferDiskSpace(diskSize)
+	if err != nil {
+		return nil, err
 	}
-	fmt.Println("Will reserve disk size: ", diskSize)
+
 	bufferFilePath, err := generateBufferFolder(file.Path, bflName)
 	if err != nil {
 		return nil, err
 	}
-	bufferPath := filepath.Join(bufferFilePath, file.Name)
+	bufferFileName := removeNonAlphanumericUnderscore(file.Name)
+	//bufferPath := filepath.Join(bufferFilePath, file.Name)
+	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	fmt.Println("Buffer file path: ", bufferFilePath)
 	fmt.Println("Buffer path: ", bufferPath)
 	err = makeDiskBuffer(bufferPath, diskSize, true)
 	if err != nil {
 		return nil, err
 	}
-	_, err = googleFileToBuffer(src, bufferFilePath, w, r)
+	_, err = googleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
 	//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
 	//fmt.Println("Buffer file path: ", bufferFilePath)
 	//fmt.Println("Buffer path: ", bufferPath)
@@ -2112,23 +2122,30 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 func rawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, file *GoogleDriveMetaData, bflName string) (int, error) {
 	var err error
 	diskSize := file.Size
-	if diskSize >= 4*1024*1024*1024 {
-		fmt.Println("file size exceeds 4GB")
-		return http.StatusForbidden, e.New("file size exceeds 4GB") //os.ErrPermission
+	//if diskSize >= 4*1024*1024*1024 {
+	//	fmt.Println("file size exceeds 4GB")
+	//	return http.StatusForbidden, e.New("file size exceeds 4GB") //os.ErrPermission
+	//}
+	//fmt.Println("Will reserve disk size: ", diskSize)
+	_, err = checkBufferDiskSpace(diskSize)
+	if err != nil {
+		return errToStatus(err), err
 	}
-	fmt.Println("Will reserve disk size: ", diskSize)
+
 	bufferFilePath, err := generateBufferFolder(file.Path, bflName)
 	if err != nil {
 		return errToStatus(err), err
 	}
-	bufferPath := filepath.Join(bufferFilePath, file.Name)
+	bufferFileName := removeNonAlphanumericUnderscore(file.Name)
+	//bufferPath := filepath.Join(bufferFilePath, file.Name)
+	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	fmt.Println("Buffer file path: ", bufferFilePath)
 	fmt.Println("Buffer path: ", bufferPath)
 	err = makeDiskBuffer(bufferPath, diskSize, true)
 	if err != nil {
 		return errToStatus(err), err
 	}
-	_, err = googleFileToBuffer(src, bufferFilePath, w, r)
+	_, err = googleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
 	//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
 	//fmt.Println("Buffer file path: ", bufferFilePath)
 	//fmt.Println("Buffer path: ", bufferPath)

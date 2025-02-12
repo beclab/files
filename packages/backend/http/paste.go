@@ -2545,15 +2545,17 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
+		bufferFileName := removeNonAlphanumericUnderscore(srcInfo.Name)
 		//bufferPath = filepath.Join(bufferFilePath, url.QueryEscape(srcInfo.Name))
-		bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
+		//bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
+		bufferPath = filepath.Join(bufferFilePath, bufferFileName)
 		fmt.Println("Buffer file path: ", bufferFilePath)
 		fmt.Println("Buffer path: ", bufferPath)
 		err = makeDiskBuffer(bufferPath, diskSize, true)
 		if err != nil {
 			return err
 		}
-		_, err = googleFileToBuffer(src, bufferFilePath, w, r)
+		_, err = googleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
 		//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
 		//fmt.Println("Buffer file path: ", bufferFilePath)
 		//fmt.Println("Buffer path: ", bufferPath)
