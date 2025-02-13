@@ -43,7 +43,7 @@ import (
 func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
 	// src is like [repo-id]/path/filename
 	src := r.URL.Path
-	src, err := url.QueryUnescape(src)
+	src, err := unescapeURLIfEscaped(src) // url.QueryUnescape(src)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -635,7 +635,7 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		action := r.URL.Query().Get("action")
-		dst, err := url.QueryUnescape(dst)
+		dst, err := unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
 
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
@@ -660,7 +660,7 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 			}
 		}
 		if rename {
-			dst = addVersionSuffix(dst, d.user.Fs)
+			dst = addVersionSuffix(dst, d.user.Fs, strings.HasSuffix(src, "/"))
 		}
 
 		// Permission for overwriting the file
@@ -691,11 +691,15 @@ func checkParent(src, dst string) error {
 	return nil
 }
 
-func addVersionSuffix(source string, fs afero.Fs) string {
+func addVersionSuffix(source string, fs afero.Fs, isDir bool) string {
 	counter := 1
 	dir, name := path.Split(source)
-	ext := filepath.Ext(name)
-	base := strings.TrimSuffix(name, ext)
+	ext := ""
+	base := name
+	if !isDir {
+		ext = filepath.Ext(name)
+		base = strings.TrimSuffix(name, ext)
+	}
 
 	for {
 		if _, err := fs.Stat(source); err != nil {
