@@ -128,7 +128,19 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	}
 
 	// non-SSE
-	_, err = io.Copy(w, response.Body)
+	var responseBody io.Reader = response.Body
+	if response.Header.Get("Content-Encoding") == "gzip" {
+		reader, err := gzip.NewReader(response.Body)
+		if err != nil {
+			fmt.Println("Error creating gzip reader:", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return errToStatus(err), err
+		}
+		defer reader.Close()
+		responseBody = reader
+	}
+
+	_, err = io.Copy(w, responseBody)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return errToStatus(err), err
