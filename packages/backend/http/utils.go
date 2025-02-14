@@ -221,7 +221,8 @@ func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- 
 			if path != "/" {
 				path += "/"
 			}
-			path = url.QueryEscape(path)
+			//path = url.QueryEscape(path)
+			path = escapeURLWithSpace(path)
 			firstUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + path + "&with_thumbnail=true"
 			fmt.Println(firstUrl)
 

@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -70,7 +69,8 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	if prefix == "" {
 		prefix = "/"
 	}
-	prefix = url.QueryEscape(prefix)
+	//prefix = url.QueryEscape(prefix)
+	prefix = escapeURLWithSpace(prefix)
 
 	fmt.Println("repo-id:", repoID)
 	fmt.Println("prefix:", prefix)
