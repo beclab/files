@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -283,7 +284,7 @@ func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
 func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *data) (int, error) {
 	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
 	var err error
-	targetPath, err = url.QueryUnescape(targetPath)
+	targetPath, err = unescapeURLIfEscaped(targetPath) // url.QueryUnescape(targetPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -1163,13 +1164,21 @@ func resourceSyncDelete(path string, r *http.Request) (int, error) {
 func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, r *http.Request) string {
 	counter := 1
 	dir, name := path.Split(source)
-	ext := filepath.Ext(name)
-	base := strings.TrimSuffix(name, ext)
+	//ext := filepath.Ext(name)
+	//base := strings.TrimSuffix(name, ext)
+	ext := ""
+	base := name
 
 	for {
 		//if _, err := fs.Stat(source); err != nil {
-		if _, _, _, _, err := getStat(fs, dstType, source, r); err != nil {
+		var isDir bool
+		var err error
+		if _, _, _, isDir, err = getStat(fs, dstType, source, r); err != nil {
 			break
+		}
+		if !isDir {
+			ext = filepath.Ext(base)
+			base = strings.TrimSuffix(name, ext)
 		}
 		renamed := fmt.Sprintf("%s(%d)%s", base, counter, ext)
 		source = path.Join(dir, renamed)
@@ -1395,6 +1404,36 @@ func testDriveLs2(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+func isURLEscaped(s string) bool {
+	escapePattern := `%[0-9A-Fa-f]{2}`
+	re := regexp.MustCompile(escapePattern)
+
+	if re.MatchString(s) {
+		decodedStr, err := url.QueryUnescape(s)
+		if err != nil {
+			return false
+		}
+		return decodedStr != s
+	}
+	return false
+}
+
+func unescapeURLIfEscaped(s string) (string, error) {
+	var result = s
+	var err error
+	if isURLEscaped(s) {
+		result, err = url.QueryUnescape(s)
+		if err != nil {
+			return "", err
+		}
+	}
+	return result, nil
+}
+
+func escapeURLWithSpace(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+}
+
 func resourcePasteHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		// For this func, src starts with src type + /, dst start with dst type + /
@@ -1432,8 +1471,12 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		}
 		action := r.URL.Query().Get("action")
 		var err error
-		src, err = url.QueryUnescape(src)
-		dst, err = url.QueryUnescape(dst)
+		fmt.Println("src:", src)
+		src, err = unescapeURLIfEscaped(src) // url.QueryUnescape(src)
+		fmt.Println("src:", src, "err:", err)
+		fmt.Println("dst:", dst)
+		dst, err = unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
+		fmt.Println("dst:", dst, "err:", err)
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
 		}
@@ -2342,11 +2385,12 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 
 func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *data, fileCache FileCache, override, rename bool, r *http.Request) error {
 	fmt.Println("Now deal with ", action, " for same arch ", dstType)
+	fmt.Println("src: ", src, ", dst: ", dst, ", override: ", override)
 	if srcType == "drive" || srcType == "cache" {
-		patchUrl := "http://127.0.0.1:80/api/resources/" + strings.TrimLeft(src, "/") + "?action=" + action + "&destination=" + url.QueryEscape(dst) + "&override=" + strconv.FormatBool(override) + "&rename=" + strconv.FormatBool(rename)
+		patchUrl := "http://127.0.0.1:80/api/resources/" + escapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + escapeURLWithSpace(dst) + "&override=" + strconv.FormatBool(override) + "&rename=" + strconv.FormatBool(rename)
 		method := "PATCH"
 		payload := []byte(``)
-		//fmt.Println(url)
+		fmt.Println(patchUrl)
 
 		client := &http.Client{}
 		req, err := http.NewRequest(method, patchUrl, bytes.NewBuffer(payload))

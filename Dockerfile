@@ -3,7 +3,8 @@
 #                     mailcap \
 #                     curl
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
+
 RUN apt-get update && \
     apt-get install -y poppler-utils wv unrtf tidy && \
     apt-get install -y inotify-tools && \
