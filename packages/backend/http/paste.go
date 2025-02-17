@@ -250,6 +250,7 @@ func makeDiskBuffer(filePath string, bufferSize int64) error {
 func removeDiskBuffer(filePath string) {
 	//bufferFilePath := "buffer.bin"
 
+	fmt.Println("Removing buffer file:", filePath)
 	err := os.Remove(filePath)
 	if err != nil {
 		fmt.Println("Failed to delete buffer file:", err)
@@ -945,9 +946,10 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		prefix = dst[firstSlashIdx+1 : lastSlashIdx+1]
 	}
 
-	//fmt.Println("repo-id:", repoID)
-	//fmt.Println("prefix:", prefix)
-	//fmt.Println("filename:", filename)
+	fmt.Println("dst:", dst)
+	fmt.Println("repo-id:", repoID)
+	fmt.Println("prefix:", prefix)
+	fmt.Println("filename:", filename)
 
 	extension := getFileExtension(filename)
 	//fmt.Println("extension:", extension)
@@ -960,8 +962,8 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	// step2: GET upload URL
 	//getUrl := "http://seafile/api2/repos/" + repoID + "/upload-link/?p=/" + prefix //+ "&from=web"
 	//getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + url.QueryEscape("/"+prefix) + "&from=api"
-	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + escapeURLWithSpace("/"+prefix) + "&from=api"
-	//fmt.Println(getUrl)
+	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + escapeAndJoin("/"+prefix, "/") + "&from=api"
+	fmt.Println(getUrl)
 
 	getRequest, err := http.NewRequest("GET", getUrl, nil)
 	if err != nil {
@@ -996,7 +998,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	// step3: deal with upload URL
 	//targetURL := "http://seafile:8082" + uploadLink[9:] + "?ret-json=1"
 	targetURL := "http://127.0.0.1:80" + uploadLink + "?ret-json=1"
-	//fmt.Println(targetURL)
+	fmt.Println(targetURL)
 
 	bufferFile, err := os.Open(bufferFilePath)
 	if err != nil {
@@ -1012,7 +1014,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 
 	chunkSize := int64(5 * 1024 * 1024) // 5 MB
 	totalChunks := (fileSize + chunkSize - 1) / chunkSize
-	identifier := generateUniqueIdentifier(filename)
+	identifier := generateUniqueIdentifier(escapeAndJoin(filename, "/"))
 
 	var chunkStart int64 = 0
 	for chunkNumber := int64(1); chunkNumber <= totalChunks; chunkNumber++ {
@@ -1026,47 +1028,55 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
 
-		//fmt.Println("Identifier: ", identifier)
-		//fmt.Println("Parent Dir: ", "/"+prefix)
-		//fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
-		//fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
-		//fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
-		//fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
-		//fmt.Println("resumableType", mimeType)
-		//fmt.Println("resumableFilename", filename)     // "response")
-		//fmt.Println("resumableRelativePath", filename) // "response")
-		//fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
+		fmt.Println("Identifier: ", identifier)
+		fmt.Println("Parent Dir: ", escapeAndJoin("/"+prefix, "/"))
+		fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
+		fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
+		fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
+		fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
+		fmt.Println("resumableType", mimeType)
+		fmt.Println("resumableFilename", escapeAndJoin(filename, "/"))     // "response")
+		fmt.Println("resumableRelativePath", escapeAndJoin(filename, "/")) // "response")
+		fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
 
 		writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
 		writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
 		writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
 		writer.WriteField("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
 		writer.WriteField("resumableType", mimeType)
-		writer.WriteField("resumableIdentifier", identifier) //"096b7d0f1af58ccf5bfb1dbde97fb51cresponse")
-		writer.WriteField("resumableFilename", filename)     // "response")
-		writer.WriteField("resumableRelativePath", filename) // "response")
+		writer.WriteField("resumableIdentifier", identifier)                     //"096b7d0f1af58ccf5bfb1dbde97fb51cresponse")
+		writer.WriteField("resumableFilename", escapeAndJoin(filename, "/"))     // "response")
+		writer.WriteField("resumableRelativePath", escapeAndJoin(filename, "/")) // "response")
 		writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
-		writer.WriteField("parent_dir", "/"+prefix) //+"//")
+		writer.WriteField("parent_dir", escapeAndJoin("/"+prefix, "/")) //+"//")
 
 		//content := body.String()
 		//fmt.Println(content)
 
-		part, err := writer.CreateFormFile("file", filename)
+		fmt.Println("Create Form File")
+		part, err := writer.CreateFormFile("file", escapeAndJoin(filename, "/"))
 		if err != nil {
+			fmt.Println("Create Form File error: ", err)
 			return http.StatusInternalServerError, err
 		}
+		fmt.Println("Write Chunk Data")
 		_, err = part.Write(chunkData[:bytesRead])
 		if err != nil {
+			fmt.Println("Write Chunk Data error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
+		fmt.Println("Write Close")
 		err = writer.Close()
 		if err != nil {
+			fmt.Println("Write Close error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
+		fmt.Println("New Request")
 		request, err := http.NewRequest("POST", targetURL, body)
 		if err != nil {
+			fmt.Println("New Request error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
@@ -1075,7 +1085,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		//Content-Disposition:attachment; filename="2022.zip"
 		//Content-Length:5244224
 		//Content-Range:bytes 10485760-15728639/61034314
-		request.Header.Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+		request.Header.Set("Content-Disposition", "attachment; filename=\""+escapeAndJoin(filename, "/")+"\"")
 		//request.Header.Set("Content-Length", strconv.FormatInt(int64(bytesRead), 10))
 		request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(size, 10))
 		chunkStart += int64(bytesRead)
@@ -1088,23 +1098,29 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 
 		client := http.Client{}
 		response, err := client.Do(request)
+		fmt.Println("Do Request")
 		if err != nil {
+			fmt.Println("Do Request error: ", err)
 			return http.StatusInternalServerError, err
 		}
 		defer response.Body.Close()
 
 		// Read the response body as a string
-		//postBody, err := io.ReadAll(response.Body)
-		_, err = io.ReadAll(response.Body)
+		postBody, err := io.ReadAll(response.Body)
+		//_, err = io.ReadAll(response.Body)
+		fmt.Println("ReadAll")
 		if err != nil {
+			fmt.Println("ReadAll error: ", err)
 			return errToStatus(err), err
 		}
 
+		fmt.Println("Status Code: ", response.StatusCode)
 		if response.StatusCode != http.StatusOK {
-			//fmt.Println(string(postBody))
+			fmt.Println(string(postBody))
 			return response.StatusCode, fmt.Errorf("file upload failed, status code: %d", response.StatusCode)
 		}
 	}
+	fmt.Println("sync buffer to file success!")
 	return http.StatusOK, nil
 }
 
@@ -1449,6 +1465,14 @@ func escapeURLWithSpace(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
+func escapeAndJoin(input string, delimiter string) string {
+	segments := strings.Split(input, delimiter)
+	for i, segment := range segments {
+		segments[i] = escapeURLWithSpace(segment)
+	}
+	return strings.Join(segments, delimiter)
+}
+
 func resourcePasteHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		// For this func, src starts with src type + /, dst start with dst type + /
@@ -1501,6 +1525,18 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		if dst == "/" || src == "/" {
 			return http.StatusForbidden, nil
 		}
+
+		if dstType == "sync" && strings.Contains(dst, "\\") {
+			response := map[string]interface{}{
+				"code": -1,
+				"msg":  "Sync does not support directory entries with backslashes in their names.",
+			}
+			// w.WriteHeader(http.StatusOK)
+			//json.NewEncoder(w).Encode(response)
+			//return http.StatusOK, nil
+			return renderJSON(w, r, response)
+		}
+
 		override := r.URL.Query().Get("override") == "true"
 		rename := r.URL.Query().Get("rename") == "true"
 		if !override && !rename {
@@ -2315,7 +2351,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		//fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath)
 	} else if dstType == "sync" {
-		//fmt.Println("Begin to sync paste!")
+		fmt.Println("Begin to sync paste!")
 		err := syncMkdirAll(dst, mode, false, r)
 		if err != nil {
 			return err
@@ -2325,9 +2361,10 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return os.ErrInvalid
 		}
 		if err != nil {
+			fmt.Println("Sync paste failed! err: ", err)
 			return err
 		}
-		//fmt.Println("Begin to remove buffer")
+		fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath)
 	}
 	return nil
@@ -2522,12 +2559,16 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 
 		targetURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + apiName + "/"
 		requestBody := map[string]interface{}{
+			//"dst_parent_dir": escapeAndJoin(dstPrefix, "/"),
 			"dst_parent_dir": dstPrefix,
 			"dst_repo_id":    dstRepoID,
-			"src_dirents":    []string{srcFilename},
+			//"src_dirents":    []string{escapeAndJoin(srcFilename, "/")},
+			"src_dirents": []string{srcFilename},
+			//"src_parent_dir": escapeAndJoin(srcPrefix, "/"),
 			"src_parent_dir": srcPrefix,
 			"src_repo_id":    srcRepoID,
 		}
+		fmt.Println(requestBody)
 		jsonBody, err := json.Marshal(requestBody)
 		if err != nil {
 			return err
@@ -2552,8 +2593,18 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		}
 		defer response.Body.Close()
 
+		// Read the response body as a string
+		postBody, err := io.ReadAll(response.Body)
+		//_, err = io.ReadAll(response.Body)
+		fmt.Println("ReadAll")
+		if err != nil {
+			fmt.Println("ReadAll error: ", err)
+			return err
+		}
+
 		if response.StatusCode != http.StatusOK {
-			return fmt.Errorf("file delete failed with status: %d", response.StatusCode)
+			fmt.Println(string(postBody))
+			return fmt.Errorf("file paste failed with status: %d", response.StatusCode)
 		}
 
 		return nil
