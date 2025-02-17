@@ -264,6 +264,7 @@ func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("file.Path:", file.Path, ", path:", path)
 	fd, err := file.Fs.Open(path) // file.Path)
 	if err != nil {
 		return err
@@ -436,7 +437,7 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 	if err != nil {
 		return err
 	}
-	//fmt.Println(newSrc)
+	fmt.Println("newSrc:", newSrc, ", newPath:", newPath)
 	fd, err := os.Open(newPath) // newSrc)
 	if err != nil {
 		return err
