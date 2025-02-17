@@ -1621,6 +1621,11 @@ func syncModeToPermString(fileMode os.FileMode) string {
 
 func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
 	// we need only size, fileMode and isDir for the time being for all arch
+	src, err := unescapeURLIfEscaped(src)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+
 	if srcType == "drive" {
 		info, err := fs.Stat(src)
 		if err != nil {
