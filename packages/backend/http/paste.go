@@ -926,6 +926,10 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		fmt.Println("Error:", err)
 		return errToStatus(err), err
 	}
+	dst, err := unescapeURLIfEscaped(dst)
+	if err != nil {
+		return errToStatus(err), err
+	}
 
 	firstSlashIdx := strings.Index(dst, "/")
 
