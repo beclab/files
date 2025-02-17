@@ -818,7 +818,7 @@ func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 	//fmt.Println("prefix:", prefix)
 	//fmt.Println("filename:", filename)
 
-	dlUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + prefix + filename + "/" + "?dl=1"
+	dlUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + escapeURLWithSpace(prefix+filename) + "/" + "?dl=1"
 	//fmt.Println(url)
 
 	request, err := http.NewRequest("GET", dlUrl, nil)
