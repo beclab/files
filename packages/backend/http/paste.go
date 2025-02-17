@@ -1054,20 +1054,24 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 
 		part, err := writer.CreateFormFile("file", filename)
 		if err != nil {
+			fmt.Println("Create Form File error: ", err)
 			return http.StatusInternalServerError, err
 		}
 		_, err = part.Write(chunkData[:bytesRead])
 		if err != nil {
+			fmt.Println("Write Chunk Data error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
 		err = writer.Close()
 		if err != nil {
+			fmt.Println("Write Close error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
 		request, err := http.NewRequest("POST", targetURL, body)
 		if err != nil {
+			fmt.Println("New Request error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
@@ -1090,6 +1094,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		client := http.Client{}
 		response, err := client.Do(request)
 		if err != nil {
+			fmt.Println("Do Request error: ", err)
 			return http.StatusInternalServerError, err
 		}
 		defer response.Body.Close()
@@ -1098,6 +1103,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		//postBody, err := io.ReadAll(response.Body)
 		_, err = io.ReadAll(response.Body)
 		if err != nil {
+			fmt.Println("ReadAll error: ", err)
 			return errToStatus(err), err
 		}
 
