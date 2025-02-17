@@ -394,7 +394,7 @@ func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, 
 }
 
 func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
-	targetURL := "http://127.0.0.1:80/api/resources" + dst + "/?mode=" + mode.String() //strconv.FormatUint(uint64(mode), 10)
+	targetURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(dst) + "/?mode=" + mode.String() //strconv.FormatUint(uint64(mode), 10)
 	//fmt.Println(targetURL)
 
 	request, err := http.NewRequest("POST", targetURL, nil)
