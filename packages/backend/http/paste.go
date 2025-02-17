@@ -1621,7 +1621,7 @@ func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, in
 	} else if srcType == "cache" {
 		//host := r.Host
 		//infoUrl := "http://" + host + "/api/resources" + src
-		infoURL := "http://127.0.0.1:80/api/resources" + src
+		infoURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(src)
 		//fmt.Println(infoURL)
 
 		client := &http.Client{}
@@ -1963,7 +1963,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			Type      string `json:"type"`
 		}
 
-		infoURL := "http://127.0.0.1:80/api/resources" + src
+		infoURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(src)
 		//fmt.Println(infoURL)
 
 		client := &http.Client{}
