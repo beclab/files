@@ -945,9 +945,10 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		prefix = dst[firstSlashIdx+1 : lastSlashIdx+1]
 	}
 
-	//fmt.Println("repo-id:", repoID)
-	//fmt.Println("prefix:", prefix)
-	//fmt.Println("filename:", filename)
+	fmt.Println("dst:", dst)
+	fmt.Println("repo-id:", repoID)
+	fmt.Println("prefix:", prefix)
+	fmt.Println("filename:", filename)
 
 	extension := getFileExtension(filename)
 	//fmt.Println("extension:", extension)
@@ -961,7 +962,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	//getUrl := "http://seafile/api2/repos/" + repoID + "/upload-link/?p=/" + prefix //+ "&from=web"
 	//getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + url.QueryEscape("/"+prefix) + "&from=api"
 	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + escapeURLWithSpace("/"+prefix) + "&from=api"
-	//fmt.Println(getUrl)
+	fmt.Println(getUrl)
 
 	getRequest, err := http.NewRequest("GET", getUrl, nil)
 	if err != nil {
@@ -996,7 +997,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	// step3: deal with upload URL
 	//targetURL := "http://seafile:8082" + uploadLink[9:] + "?ret-json=1"
 	targetURL := "http://127.0.0.1:80" + uploadLink + "?ret-json=1"
-	//fmt.Println(targetURL)
+	fmt.Println(targetURL)
 
 	bufferFile, err := os.Open(bufferFilePath)
 	if err != nil {
@@ -1026,16 +1027,16 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
 
-		//fmt.Println("Identifier: ", identifier)
-		//fmt.Println("Parent Dir: ", "/"+prefix)
-		//fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
-		//fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
-		//fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
-		//fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
-		//fmt.Println("resumableType", mimeType)
-		//fmt.Println("resumableFilename", filename)     // "response")
-		//fmt.Println("resumableRelativePath", filename) // "response")
-		//fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
+		fmt.Println("Identifier: ", identifier)
+		fmt.Println("Parent Dir: ", "/"+prefix)
+		fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
+		fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
+		fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
+		fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
+		fmt.Println("resumableType", mimeType)
+		fmt.Println("resumableFilename", filename)     // "response")
+		fmt.Println("resumableRelativePath", filename) // "response")
+		fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
 
 		writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
 		writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
