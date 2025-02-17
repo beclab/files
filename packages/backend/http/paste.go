@@ -260,7 +260,11 @@ func removeDiskBuffer(filePath string) {
 }
 
 func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
-	fd, err := file.Fs.Open(file.Path)
+	path, err := unescapeURLIfEscaped(file.Path)
+	if err != nil {
+		return err
+	}
+	fd, err := file.Fs.Open(path) // file.Path)
 	if err != nil {
 		return err
 	}
@@ -428,8 +432,12 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 	//defer fd.Close()
 
 	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
+	newPath, err := unescapeURLIfEscaped(newSrc)
+	if err != nil {
+		return err
+	}
 	//fmt.Println(newSrc)
-	fd, err := os.Open(newSrc)
+	fd, err := os.Open(newPath) // newSrc)
 	if err != nil {
 		return err
 	}
