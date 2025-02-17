@@ -264,6 +264,7 @@ func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("file.Path:", file.Path, ", path:", path)
 	fd, err := file.Fs.Open(path) // file.Path)
 	if err != nil {
 		return err
@@ -436,7 +437,7 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 	if err != nil {
 		return err
 	}
-	//fmt.Println(newSrc)
+	fmt.Println("newSrc:", newSrc, ", newPath:", newPath)
 	fd, err := os.Open(newPath) // newSrc)
 	if err != nil {
 		return err
@@ -925,6 +926,10 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		fmt.Println("Error:", err)
 		return errToStatus(err), err
 	}
+	dst, err := unescapeURLIfEscaped(dst)
+	if err != nil {
+		return errToStatus(err), err
+	}
 
 	firstSlashIdx := strings.Index(dst, "/")
 
@@ -1175,10 +1180,9 @@ func resourceSyncDelete(path string, r *http.Request) (int, error) {
 func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, r *http.Request) string {
 	counter := 1
 	dir, name := path.Split(source)
-	//ext := filepath.Ext(name)
-	//base := strings.TrimSuffix(name, ext)
-	ext := ""
-	base := name
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	renamed := ""
 
 	for {
 		//if _, err := fs.Stat(source); err != nil {
@@ -1188,10 +1192,10 @@ func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, r *http.R
 			break
 		}
 		if !isDir {
-			ext = filepath.Ext(base)
-			base = strings.TrimSuffix(name, ext)
+			renamed = fmt.Sprintf("%s(%d)%s", base, counter, ext)
+		} else {
+			renamed = fmt.Sprintf("%s(%d)", name, counter)
 		}
-		renamed := fmt.Sprintf("%s(%d)%s", base, counter, ext)
 		source = path.Join(dir, renamed)
 		counter++
 	}
@@ -1620,6 +1624,11 @@ func syncModeToPermString(fileMode os.FileMode) string {
 
 func getStat(fs afero.Fs, srcType, src string, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
 	// we need only size, fileMode and isDir for the time being for all arch
+	src, err := unescapeURLIfEscaped(src)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+
 	if srcType == "drive" {
 		info, err := fs.Stat(src)
 		if err != nil {
