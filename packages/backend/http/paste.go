@@ -962,7 +962,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	// step2: GET upload URL
 	//getUrl := "http://seafile/api2/repos/" + repoID + "/upload-link/?p=/" + prefix //+ "&from=web"
 	//getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + url.QueryEscape("/"+prefix) + "&from=api"
-	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + escapeURLWithSpace("/"+prefix) + "&from=api"
+	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + escapeAndJoin("/"+prefix, "/") + "&from=api"
 	fmt.Println(getUrl)
 
 	getRequest, err := http.NewRequest("GET", getUrl, nil)
