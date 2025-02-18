@@ -1114,11 +1114,13 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 			return errToStatus(err), err
 		}
 
+		fmt.Println("Status Code: ", response.StatusCode)
 		if response.StatusCode != http.StatusOK {
 			//fmt.Println(string(postBody))
 			return response.StatusCode, fmt.Errorf("file upload failed, status code: %d", response.StatusCode)
 		}
 	}
+	fmt.Println("sync buffer to file success!")
 	return http.StatusOK, nil
 }
 
