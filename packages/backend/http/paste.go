@@ -1014,7 +1014,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 
 	chunkSize := int64(5 * 1024 * 1024) // 5 MB
 	totalChunks := (fileSize + chunkSize - 1) / chunkSize
-	identifier := generateUniqueIdentifier(escapeURLWithSpace(filename))
+	identifier := generateUniqueIdentifier(escapeAndJoin(filename, "/"))
 
 	var chunkStart int64 = 0
 	for chunkNumber := int64(1); chunkNumber <= totalChunks; chunkNumber++ {
@@ -1029,14 +1029,14 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		writer := multipart.NewWriter(body)
 
 		fmt.Println("Identifier: ", identifier)
-		fmt.Println("Parent Dir: ", "/"+prefix)
+		fmt.Println("Parent Dir: ", escapeAndJoin("/"+prefix, "/"))
 		fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
 		fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
 		fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
 		fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
 		fmt.Println("resumableType", mimeType)
-		fmt.Println("resumableFilename", escapeURLWithSpace(filename))     // "response")
-		fmt.Println("resumableRelativePath", escapeURLWithSpace(filename)) // "response")
+		fmt.Println("resumableFilename", escapeAndJoin(filename, "/"))     // "response")
+		fmt.Println("resumableRelativePath", escapeAndJoin(filename, "/")) // "response")
 		fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
 
 		writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
@@ -1045,16 +1045,16 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		writer.WriteField("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
 		writer.WriteField("resumableType", mimeType)
 		writer.WriteField("resumableIdentifier", identifier)                     //"096b7d0f1af58ccf5bfb1dbde97fb51cresponse")
-		writer.WriteField("resumableFilename", escapeURLWithSpace(filename))     // "response")
-		writer.WriteField("resumableRelativePath", escapeURLWithSpace(filename)) // "response")
+		writer.WriteField("resumableFilename", escapeAndJoin(filename, "/"))     // "response")
+		writer.WriteField("resumableRelativePath", escapeAndJoin(filename, "/")) // "response")
 		writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
-		writer.WriteField("parent_dir", "/"+prefix) //+"//")
+		writer.WriteField("parent_dir", escapeAndJoin("/"+prefix, "/")) //+"//")
 
 		//content := body.String()
 		//fmt.Println(content)
 
 		fmt.Println("Create Form File")
-		part, err := writer.CreateFormFile("file", escapeURLWithSpace(filename))
+		part, err := writer.CreateFormFile("file", escapeAndJoin(filename, "/"))
 		if err != nil {
 			fmt.Println("Create Form File error: ", err)
 			return http.StatusInternalServerError, err
@@ -1085,7 +1085,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		//Content-Disposition:attachment; filename="2022.zip"
 		//Content-Length:5244224
 		//Content-Range:bytes 10485760-15728639/61034314
-		request.Header.Set("Content-Disposition", "attachment; filename=\""+escapeURLWithSpace(filename)+"\"")
+		request.Header.Set("Content-Disposition", "attachment; filename=\""+escapeAndJoin(filename, "/")+"\"")
 		//request.Header.Set("Content-Length", strconv.FormatInt(int64(bytesRead), 10))
 		request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(size, 10))
 		chunkStart += int64(bytesRead)
@@ -1463,6 +1463,14 @@ func unescapeURLIfEscaped(s string) (string, error) {
 
 func escapeURLWithSpace(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+}
+
+func escapeAndJoin(input string, delimiter string) string {
+	segments := strings.Split(input, delimiter)
+	for i, segment := range segments {
+		segments[i] = escapeURLWithSpace(segment)
+	}
+	return strings.Join(segments, delimiter)
 }
 
 func resourcePasteHandler(fileCache FileCache) handleFunc {
