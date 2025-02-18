@@ -250,6 +250,7 @@ func makeDiskBuffer(filePath string, bufferSize int64) error {
 func removeDiskBuffer(filePath string) {
 	//bufferFilePath := "buffer.bin"
 
+	fmt.Println("Removing buffer file:", filePath)
 	err := os.Remove(filePath)
 	if err != nil {
 		fmt.Println("Failed to delete buffer file:", err)
@@ -1052,23 +1053,27 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		//content := body.String()
 		//fmt.Println(content)
 
+		fmt.Println("Create Form File")
 		part, err := writer.CreateFormFile("file", filename)
 		if err != nil {
 			fmt.Println("Create Form File error: ", err)
 			return http.StatusInternalServerError, err
 		}
+		fmt.Println("Write Chunk Data")
 		_, err = part.Write(chunkData[:bytesRead])
 		if err != nil {
 			fmt.Println("Write Chunk Data error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
+		fmt.Println("Write Close")
 		err = writer.Close()
 		if err != nil {
 			fmt.Println("Write Close error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
+		fmt.Println("New Request")
 		request, err := http.NewRequest("POST", targetURL, body)
 		if err != nil {
 			fmt.Println("New Request error: ", err)
@@ -1093,6 +1098,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 
 		client := http.Client{}
 		response, err := client.Do(request)
+		fmt.Println("Do Request")
 		if err != nil {
 			fmt.Println("Do Request error: ", err)
 			return http.StatusInternalServerError, err
@@ -1102,6 +1108,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		// Read the response body as a string
 		//postBody, err := io.ReadAll(response.Body)
 		_, err = io.ReadAll(response.Body)
+		fmt.Println("ReadAll")
 		if err != nil {
 			fmt.Println("ReadAll error: ", err)
 			return errToStatus(err), err
@@ -2322,7 +2329,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		//fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath)
 	} else if dstType == "sync" {
-		//fmt.Println("Begin to sync paste!")
+		fmt.Println("Begin to sync paste!")
 		err := syncMkdirAll(dst, mode, false, r)
 		if err != nil {
 			return err
@@ -2332,9 +2339,10 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return os.ErrInvalid
 		}
 		if err != nil {
+			fmt.Println("Sync paste failed! err: ", err)
 			return err
 		}
-		//fmt.Println("Begin to remove buffer")
+		fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath)
 	}
 	return nil
