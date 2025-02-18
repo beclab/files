@@ -1029,7 +1029,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		writer := multipart.NewWriter(body)
 
 		fmt.Println("Identifier: ", identifier)
-		fmt.Println("Parent Dir: ", escapeURLWithSpace("/"+prefix))
+		fmt.Println("Parent Dir: ", "/"+prefix)
 		fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
 		fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
 		fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
@@ -1048,7 +1048,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		writer.WriteField("resumableFilename", escapeURLWithSpace(filename))     // "response")
 		writer.WriteField("resumableRelativePath", escapeURLWithSpace(filename)) // "response")
 		writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
-		writer.WriteField("parent_dir", escapeURLWithSpace("/"+prefix)) //+"//")
+		writer.WriteField("parent_dir", "/"+prefix) //+"//")
 
 		//content := body.String()
 		//fmt.Println(content)
