@@ -1029,14 +1029,14 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		writer := multipart.NewWriter(body)
 
 		fmt.Println("Identifier: ", identifier)
-		fmt.Println("Parent Dir: ", escapeAndJoin("/"+prefix, "/"))
+		fmt.Println("Parent Dir: ", "/"+prefix)
 		fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
 		fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
 		fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
 		fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
 		fmt.Println("resumableType", mimeType)
-		fmt.Println("resumableFilename", escapeAndJoin(filename, "/"))     // "response")
-		fmt.Println("resumableRelativePath", escapeAndJoin(filename, "/")) // "response")
+		fmt.Println("resumableFilename", filename)     // "response")
+		fmt.Println("resumableRelativePath", filename) // "response")
 		fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
 
 		writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
@@ -1044,11 +1044,11 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
 		writer.WriteField("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
 		writer.WriteField("resumableType", mimeType)
-		writer.WriteField("resumableIdentifier", identifier)                     //"096b7d0f1af58ccf5bfb1dbde97fb51cresponse")
-		writer.WriteField("resumableFilename", escapeAndJoin(filename, "/"))     // "response")
-		writer.WriteField("resumableRelativePath", escapeAndJoin(filename, "/")) // "response")
+		writer.WriteField("resumableIdentifier", identifier) //"096b7d0f1af58ccf5bfb1dbde97fb51cresponse")
+		writer.WriteField("resumableFilename", filename)     // "response")
+		writer.WriteField("resumableRelativePath", filename) // "response")
 		writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
-		writer.WriteField("parent_dir", escapeAndJoin("/"+prefix, "/")) //+"//")
+		writer.WriteField("parent_dir", "/"+prefix) //+"//")
 
 		//content := body.String()
 		//fmt.Println(content)
@@ -2559,12 +2559,9 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 
 		targetURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + apiName + "/"
 		requestBody := map[string]interface{}{
-			//"dst_parent_dir": escapeAndJoin(dstPrefix, "/"),
 			"dst_parent_dir": dstPrefix,
 			"dst_repo_id":    dstRepoID,
-			//"src_dirents":    []string{escapeAndJoin(srcFilename, "/")},
-			"src_dirents": []string{srcFilename},
-			//"src_parent_dir": escapeAndJoin(srcPrefix, "/"),
+			"src_dirents":    []string{srcFilename},
 			"src_parent_dir": srcPrefix,
 			"src_repo_id":    srcRepoID,
 		}
