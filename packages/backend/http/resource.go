@@ -2,7 +2,6 @@ package http
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -37,116 +36,6 @@ import (
 // 	}
 // 	return
 // }
-
-func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
-	// src is like [repo-id]/path/filename
-	src := r.URL.Path
-	src, err := unescapeURLIfEscaped(src) // url.QueryUnescape(src)
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-	fmt.Println("src Path:", src)
-	src = strings.Trim(src, "/") + "/"
-	//if !strings.Contains(src, "/") {
-	//	err := e.New("invalid path format: path must contain at least one '/'")
-	//	fmt.Println("Error:", err)
-	//	return errToStatus(err), err
-	//}
-
-	firstSlashIdx := strings.Index(src, "/")
-
-	repoID := src[:firstSlashIdx]
-
-	lastSlashIdx := strings.LastIndex(src, "/")
-
-	// don't use, because this is only used for folders
-	filename := src[lastSlashIdx+1:]
-
-	prefix := ""
-	if firstSlashIdx != lastSlashIdx {
-		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
-	}
-	if prefix == "" {
-		prefix = "/"
-	}
-	//prefix = url.QueryEscape(prefix)
-	prefix = escapeURLWithSpace(prefix)
-
-	fmt.Println("repo-id:", repoID)
-	fmt.Println("prefix:", prefix)
-	fmt.Println("filename:", filename)
-
-	url := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + prefix + "&with_thumbnail=true"
-	fmt.Println(url)
-
-	request, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return errToStatus(err), err
-	}
-
-	request.Header = r.Header
-
-	client := http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return errToStatus(err), err
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return response.StatusCode, nil
-	}
-
-	// SSE
-	if stream == 1 {
-		var body []byte
-		if response.Header.Get("Content-Encoding") == "gzip" {
-			reader, err := gzip.NewReader(response.Body)
-			defer reader.Close()
-			if err != nil {
-				fmt.Println("Error creating gzip reader:", err)
-				return errToStatus(err), err
-			}
-
-			body, err = ioutil.ReadAll(reader)
-			if err != nil {
-				fmt.Println("Error reading gzipped response body:", err)
-				reader.Close()
-				return errToStatus(err), err
-			}
-		} else {
-			body, err = ioutil.ReadAll(response.Body)
-			if err != nil {
-				fmt.Println("Error reading response body:", err)
-				return errToStatus(err), err
-			}
-		}
-		//body, _ := ioutil.ReadAll(response.Body)
-		streamSyncDirents(w, r, body, repoID)
-		return 0, nil
-	}
-
-	// non-SSE
-	var responseBody io.Reader = response.Body
-	if response.Header.Get("Content-Encoding") == "gzip" {
-		reader, err := gzip.NewReader(response.Body)
-		if err != nil {
-			fmt.Println("Error creating gzip reader:", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return errToStatus(err), err
-		}
-		defer reader.Close()
-		responseBody = reader
-	}
-
-	_, err = io.Copy(w, responseBody)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return errToStatus(err), err
-	}
-
-	return 0, nil
-}
 
 var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	start := time.Now()
@@ -500,6 +389,11 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			return http.StatusForbidden, nil
 		}
 
+		srcType := r.URL.Query().Get("src")
+		if srcType == "sync" {
+			return resourcePostSync(w, r)
+		}
+
 		modeParam := r.URL.Query().Get("mode")
 
 		mode, err := strconv.ParseUint(modeParam, 8, 32)
@@ -561,6 +455,11 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 var resourcePutHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	if !d.user.Perm.Modify || !d.Check(r.URL.Path) {
 		return http.StatusForbidden, nil
+	}
+
+	srcType := r.URL.Query().Get("src")
+	if srcType == "sync" {
+		return resourcePutSync(w, r)
 	}
 
 	// Only allow PUT for files.

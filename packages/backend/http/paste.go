@@ -1526,15 +1526,19 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			return http.StatusForbidden, nil
 		}
 
-		if dstType == "sync" && strings.Contains(dst, "\\") {
-			response := map[string]interface{}{
-				"code": -1,
-				"msg":  "Sync does not support directory entries with backslashes in their names.",
-			}
-			// w.WriteHeader(http.StatusOK)
-			//json.NewEncoder(w).Encode(response)
-			//return http.StatusOK, nil
-			return renderJSON(w, r, response)
+		//if dstType == "sync" && strings.Contains(dst, "\\") {
+		//	response := map[string]interface{}{
+		//		"code": -1,
+		//		"msg":  "Sync does not support directory entries with backslashes in their names.",
+		//	}
+		//	// w.WriteHeader(http.StatusOK)
+		//	//json.NewEncoder(w).Encode(response)
+		//	//return http.StatusOK, nil
+		//	return renderJSON(w, r, response)
+		//}
+		valid, checkResponse := checkSpecialCharacters(src, srcType, dst, dstType)
+		if !valid {
+			return renderJSON(w, r, checkResponse)
 		}
 
 		override := r.URL.Query().Get("override") == "true"

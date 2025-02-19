@@ -22,7 +22,7 @@ func NewHandler(
 	fileCache FileCache,
 	store *storage.Storage,
 	server *settings.Server,
-// assetsFs fs.FS,
+	// assetsFs fs.FS,
 ) (http.Handler, error) {
 	server.Clean()
 
@@ -96,6 +96,11 @@ func NewHandler(
 	//	api.HandleFunc("/get_dataset_folder_status_test", ginHandlerAdapter(rpc.RpcEngine))
 	//	api.HandleFunc("/update_dataset_folder_paths_test", ginHandlerAdapter(rpc.RpcEngine))
 	//}
+
+	upload := r.PathPrefix("/upload").Subrouter()
+	upload.PathPrefix("/upload-link").Handler(monkey(uploadLinkHandler, "upload/upload-link")).Methods("GET")
+	upload.PathPrefix("/file-uploaded-bytes").Handler(monkey(uploadedBytesHandler, "upload/file-uploaded-bytes")).Methods("GET")
+	upload.PathPrefix("/upload-link/{uid}").Handler(monkey(uploadChunksHandler, "upload/upload-link")).Methods("POST")
 
 	files := r.PathPrefix("/files").Subrouter()
 	files.HandleFunc("/healthcheck", ginHandlerAdapter(rpc.RpcEngine))

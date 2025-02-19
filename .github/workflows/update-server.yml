@@ -10,6 +10,7 @@ on:
     branches:
       - "main"
       - "dev"
+      - "unified_url"
     tags:
       - 'v*'
 
@@ -53,7 +54,7 @@ jobs:
         uses: "WyriHaximus/github-action-get-previous-tag@v1"
         id: get-latest-tag
         with:
-          fallback: latest
+          fallback: unified_url
 
 #      - name: Build
 #        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
