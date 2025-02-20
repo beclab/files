@@ -140,6 +140,7 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 		responseBody = reader
 	}
 
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err = io.Copy(w, responseBody)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

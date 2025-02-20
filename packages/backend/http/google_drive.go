@@ -35,17 +35,20 @@ type GoogleDriveListResponse struct {
 
 // GoogleDriveListResponseFileData 定义了文件或文件夹数据的结构
 type GoogleDriveListResponseFileData struct {
-	Path      string                           `json:"path"`
-	Name      string                           `json:"name"`
-	Size      int64                            `json:"size"`
-	FileSize  int64                            `json:"fileSize"`
-	Extension string                           `json:"extension"`
-	Modified  time.Time                        `json:"modified"`
-	Mode      string                           `json:"mode"`
-	IsDir     bool                             `json:"isDir"`
-	IsSymlink bool                             `json:"isSymlink"`
-	Type      string                           `json:"type"`
-	Meta      *GoogleDriveListResponseFileMeta `json:"meta,omitempty"`
+	Path         string                           `json:"path"`
+	Name         string                           `json:"name"`
+	Size         int64                            `json:"size"`
+	FileSize     int64                            `json:"fileSize"`
+	Extension    string                           `json:"extension"`
+	Modified     time.Time                        `json:"modified"`
+	Mode         string                           `json:"mode"`
+	IsDir        bool                             `json:"isDir"`
+	IsSymlink    bool                             `json:"isSymlink"`
+	Type         string                           `json:"type"`
+	Meta         *GoogleDriveListResponseFileMeta `json:"meta,omitempty"`
+	CanDownload  bool                             `json:"canDownload"`
+	CanExport    bool                             `json:"canExport"`
+	ExportSuffix string                           `json:"exportSuffix"`
 }
 
 // GoogleDriveListResponseFileMeta 定义了文件或文件夹的元数据结构
@@ -149,17 +152,20 @@ type GoogleDriveMetaResponse struct {
 }
 
 type GoogleDriveMetaData struct {
-	Extension string                  `json:"extension"`
-	FileSize  int64                   `json:"fileSize"`
-	IsDir     bool                    `json:"isDir"`
-	IsSymlink bool                    `json:"isSymlink"`
-	Meta      GoogleDriveMetaFileMeta `json:"meta"`
-	Mode      string                  `json:"mode"`
-	Modified  time.Time               `json:"modified"`
-	Name      string                  `json:"name"`
-	Path      string                  `json:"path"`
-	Size      int64                   `json:"size"`
-	Type      string                  `json:"type"`
+	Extension    string                   `json:"extension"`
+	FileSize     int64                    `json:"fileSize"`
+	IsDir        bool                     `json:"isDir"`
+	IsSymlink    bool                     `json:"isSymlink"`
+	Meta         *GoogleDriveMetaFileMeta `json:"meta"`
+	Mode         string                   `json:"mode"`
+	Modified     time.Time                `json:"modified"`
+	Name         string                   `json:"name"`
+	Path         string                   `json:"path"`
+	Size         int64                    `json:"size"`
+	Type         string                   `json:"type"`
+	CanDownload  bool                     `json:"canDownload"`
+	CanExport    bool                     `json:"canExport"`
+	ExportSuffix string                   `json:"exportSuffix"`
 }
 
 type GoogleDriveMetaFileMeta struct {
@@ -732,11 +738,14 @@ func getGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) 
 }
 
 type GoogleDriveIdFocusedMetaInfos struct {
-	ID    string `json:"id"`
-	Path  string `json:"path"`
-	Name  string `json:"name"`
-	Size  int64  `json:"size"`
-	IsDir bool   `json:"is_dir"`
+	ID           string `json:"id"`
+	Path         string `json:"path"`
+	Name         string `json:"name"`
+	Size         int64  `json:"size"`
+	IsDir        bool   `json:"is_dir"`
+	CanDownload  bool   `json:"canDownload"`
+	CanExport    bool   `json:"canExport"`
+	ExportSuffix string `json:"exportSuffix"`
 }
 
 func getGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request) (info *GoogleDriveIdFocusedMetaInfos, err error) {
@@ -784,11 +793,14 @@ func getGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http
 	}
 
 	info = &GoogleDriveIdFocusedMetaInfos{
-		ID:    pathId,
-		Path:  bodyJson.Data.Path,
-		Name:  bodyJson.Data.Name,
-		Size:  bodyJson.Data.FileSize,
-		IsDir: bodyJson.Data.IsDir,
+		ID:           pathId,
+		Path:         bodyJson.Data.Path,
+		Name:         bodyJson.Data.Name,
+		Size:         bodyJson.Data.FileSize,
+		IsDir:        bodyJson.Data.IsDir,
+		CanDownload:  bodyJson.Data.CanDownload,
+		CanExport:    bodyJson.Data.CanExport,
+		ExportSuffix: bodyJson.Data.ExportSuffix,
 	}
 	if info.Path == "/My Drive" {
 		info.Name = "/"
