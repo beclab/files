@@ -89,12 +89,12 @@ func NewHandler(
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryDeleteHandler, "/api/smb_history")).Methods("DELETE")
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryDeleteHandler, "/api/smb_history")).Methods("PATCH")
 
-	//api.PathPrefix("/preview/{size}/{path:.*}").
-	//	Handler(monkey(previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
+	api.PathPrefix("/preview/{size}/{path:.*}").
+		Handler(monkey(previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
 
-	r.HandleFunc("/api/preview/{size}/{path:.*}", limitedHandler(func(w http.ResponseWriter, r *http.Request) {
-		previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview)
-	})).Methods("GET")
+	//r.HandleFunc("/api/preview/{size}/{path:.*}", limitedHandler(func(w http.ResponseWriter, r *http.Request) {
+	//	previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview)
+	//})).Methods("GET")
 
 	api.PathPrefix("/command").Handler(monkey(commandsHandler, "/api/command")).Methods("GET")
 	api.PathPrefix("/search").Handler(monkey(searchHandler, "/api/search")).Methods("GET")
