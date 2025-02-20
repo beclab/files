@@ -33,6 +33,21 @@ type FileCache interface {
 	Delete(ctx context.Context, key string) error
 }
 
+var (
+	maxConcurrentRequests = 10 // 每次处理的最大请求数
+	sem                   = make(chan struct{}, maxConcurrentRequests)
+)
+
+func limitedHandler(handler func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 阻塞等待直到可以获取一个槽位
+		sem <- struct{}{}
+		defer func() { <-sem }() // 处理完成后释放槽位
+
+		handler(w, r)
+	}
+}
+
 func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, resizePreview bool) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		if !d.user.Perm.Download {
