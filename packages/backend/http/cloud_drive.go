@@ -21,20 +21,52 @@ import (
 	"time"
 )
 
-type Awss3ListParam struct {
+type CloudDriveListParam struct {
 	Path  string `json:"path"`
 	Drive string `json:"drive"`
 	Name  string `json:"name"`
 }
 
-type Awss3ListResponse struct {
-	StatusCode string                       `json:"status_code"`
-	FailReason *string                      `json:"fail_reason,omitempty"`
-	Data       []*Awss3ListResponseFileData `json:"data"`
+type CloudDriveListResponse struct {
+	StatusCode string                            `json:"status_code"`
+	FailReason *string                           `json:"fail_reason,omitempty"`
+	Data       []*CloudDriveListResponseFileData `json:"data"`
 	sync.Mutex
 }
 
-type Awss3ListResponseFileData struct {
+type CloudDriveListResponseFileData struct {
+	Path      string                          `json:"path"`
+	Name      string                          `json:"name"`
+	Size      int64                           `json:"size"`
+	FileSize  int64                           `json:"fileSize"`
+	Extension string                          `json:"extension"`
+	Modified  *string                         `json:"modified,omitempty"`
+	Mode      string                          `json:"mode"`
+	IsDir     bool                            `json:"isDir"`
+	IsSymlink bool                            `json:"isSymlink"`
+	Type      string                          `json:"type"`
+	Meta      *CloudDriveListResponseFileMeta `json:"meta,omitempty"`
+}
+
+type CloudDriveListResponseFileMeta struct {
+	ETag         string  `json:"e_tag"`
+	Key          string  `json:"key"`
+	LastModified *string `json:"last_modified,omitempty"`
+	Owner        *string `json:"owner,omitempty"`
+	Size         int     `json:"size"`
+	StorageClass string  `json:"storage_class"`
+}
+
+type CloudDriveMetaResponseMeta struct {
+	ETag         string  `json:"e_tag"`
+	Key          string  `json:"key"`
+	LastModified *string `json:"last_modified,omitempty"`
+	Owner        *string `json:"owner"`
+	Size         int64   `json:"size"`
+	StorageClass *string `json:"storage_class"`
+}
+
+type CloudDriveMetaResponseData struct {
 	Path      string                     `json:"path"`
 	Name      string                     `json:"name"`
 	Size      int64                      `json:"size"`
@@ -45,48 +77,16 @@ type Awss3ListResponseFileData struct {
 	IsDir     bool                       `json:"isDir"`
 	IsSymlink bool                       `json:"isSymlink"`
 	Type      string                     `json:"type"`
-	Meta      *Awss3ListResponseFileMeta `json:"meta,omitempty"`
+	Meta      CloudDriveMetaResponseMeta `json:"meta"`
 }
 
-type Awss3ListResponseFileMeta struct {
-	ETag         string  `json:"e_tag"`
-	Key          string  `json:"key"`
-	LastModified *string `json:"last_modified,omitempty"`
-	Owner        *string `json:"owner,omitempty"`
-	Size         int     `json:"size"`
-	StorageClass string  `json:"storage_class"`
+type CloudDriveMetaResponse struct {
+	StatusCode string                     `json:"status_code"`
+	FailReason *string                    `json:"fail_reason"`
+	Data       CloudDriveMetaResponseData `json:"data"`
 }
 
-type Awss3MetaResponseMeta struct {
-	ETag         string  `json:"e_tag"`
-	Key          string  `json:"key"`
-	LastModified *string `json:"last_modified,omitempty"`
-	Owner        *string `json:"owner"`
-	Size         int64   `json:"size"`
-	StorageClass *string `json:"storage_class"`
-}
-
-type Awss3MetaResponseData struct {
-	Path      string                `json:"path"`
-	Name      string                `json:"name"`
-	Size      int64                 `json:"size"`
-	FileSize  int64                 `json:"fileSize"`
-	Extension string                `json:"extension"`
-	Modified  *string               `json:"modified,omitempty"`
-	Mode      string                `json:"mode"`
-	IsDir     bool                  `json:"isDir"`
-	IsSymlink bool                  `json:"isSymlink"`
-	Type      string                `json:"type"`
-	Meta      Awss3MetaResponseMeta `json:"meta"`
-}
-
-type Awss3MetaResponse struct {
-	StatusCode string                `json:"status_code"`
-	FailReason *string               `json:"fail_reason"`
-	Data       Awss3MetaResponseData `json:"data"`
-}
-
-type Awss3FocusedMetaInfos struct {
+type CloudDriveFocusedMetaInfos struct {
 	Key   string `json:"key"`
 	Path  string `json:"path"`
 	Name  string `json:"name"`
@@ -94,14 +94,14 @@ type Awss3FocusedMetaInfos struct {
 	IsDir bool   `json:"is_dir"`
 }
 
-type Awss3PostParam struct {
+type CloudDrivePostParam struct {
 	ParentPath string `json:"parent_path"`
 	FolderName string `json:"folder_name"`
 	Drive      string `json:"drive"`
 	Name       string `json:"name"`
 }
 
-type Awss3PostResponseFileMeta struct {
+type CloudDrivePostResponseFileMeta struct {
 	Capabilities                 *bool       `json:"capabilities,omitempty"`
 	CopyRequiresWriterPermission *bool       `json:"copyRequiresWriterPermission,omitempty"`
 	CreatedTime                  *time.Time  `json:"createdTime,omitempty"`
@@ -145,40 +145,40 @@ type Awss3PostResponseFileMeta struct {
 	WritersCanShare              *bool       `json:"writersCanShare,omitempty"`
 }
 
-type Awss3PostResponseFileData struct {
-	Extension string                    `json:"extension"`
-	FileSize  int64                     `json:"fileSize"`
-	IsDir     bool                      `json:"isDir"`
-	IsSymlink bool                      `json:"isSymlink"`
-	Meta      Awss3PostResponseFileMeta `json:"meta"`
-	Mode      string                    `json:"mode"`
-	Modified  string                    `json:"modified"`
-	Name      string                    `json:"name"`
-	Path      string                    `json:"path"`
-	Size      int64                     `json:"size"`
-	Type      string                    `json:"type"`
+type CloudDrivePostResponseFileData struct {
+	Extension string                         `json:"extension"`
+	FileSize  int64                          `json:"fileSize"`
+	IsDir     bool                           `json:"isDir"`
+	IsSymlink bool                           `json:"isSymlink"`
+	Meta      CloudDrivePostResponseFileMeta `json:"meta"`
+	Mode      string                         `json:"mode"`
+	Modified  string                         `json:"modified"`
+	Name      string                         `json:"name"`
+	Path      string                         `json:"path"`
+	Size      int64                          `json:"size"`
+	Type      string                         `json:"type"`
 }
 
-type Awss3PostResponse struct {
-	Data       Awss3PostResponseFileData `json:"data"`
-	FailReason *string                   `json:"fail_reason,omitempty"`
-	StatusCode string                    `json:"status_code"`
+type CloudDrivePostResponse struct {
+	Data       CloudDrivePostResponseFileData `json:"data"`
+	FailReason *string                        `json:"fail_reason,omitempty"`
+	StatusCode string                         `json:"status_code"`
 }
 
-type Awss3PatchParam struct {
+type CloudDrivePatchParam struct {
 	Path        string `json:"path"`
 	NewFileName string `json:"new_file_name"`
 	Drive       string `json:"drive"`
 	Name        string `json:"name"`
 }
 
-type Awss3DeleteParam struct {
+type CloudDriveDeleteParam struct {
 	Path  string `json:"path"`
 	Drive string `json:"drive"`
 	Name  string `json:"name"`
 }
 
-type Awss3CopyFileParam struct {
+type CloudDriveCopyFileParam struct {
 	CloudFilePath     string `json:"cloud_file_path"`
 	NewCloudDirectory string `json:"new_cloud_directory"`
 	NewCloudFileName  string `json:"new_cloud_file_name"`
@@ -186,87 +186,87 @@ type Awss3CopyFileParam struct {
 	Name              string `json:"name"`
 }
 
-type Awss3MoveFileParam struct {
+type CloudDriveMoveFileParam struct {
 	CloudFilePath     string `json:"cloud_file_path"`
 	NewCloudDirectory string `json:"new_cloud_directory"`
 	Drive             string `json:"drive"`
 	Name              string `json:"name"`
 }
 
-type Awss3DownloadFileParam struct {
+type CloudDriveDownloadFileParam struct {
 	LocalFolder   string `json:"local_folder"`
 	CloudFilePath string `json:"cloud_file_path"`
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
 }
 
-type Awss3UploadFileParam struct {
+type CloudDriveUploadFileParam struct {
 	ParentPath    string `json:"parent_path"`
 	LocalFilePath string `json:"local_file_path"`
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
 }
 
-type Awss3TaskParameter struct {
+type CloudDriveTaskParameter struct {
 	Drive         string `json:"drive"`
 	CloudFilePath string `json:"cloud_file_path"`
 	LocalFolder   string `json:"local_folder"`
 	Name          string `json:"name"`
 }
 
-type Awss3TaskPauseInfo struct {
+type CloudDriveTaskPauseInfo struct {
 	FileSize  int64  `json:"file_size,omitempty"`
 	Location  string `json:"location,omitempty"`
 	NextStart int64  `json:"next_start,omitempty"`
 }
 
-type Awss3TaskResultData struct {
-	FileInfo                 *Awss3ListResponseFileData `json:"file_info,omitempty"`
-	UploadFirstOperationTime int64                      `json:"upload_first_operation_time"`
+type CloudDriveTaskResultData struct {
+	FileInfo                 *CloudDriveListResponseFileData `json:"file_info,omitempty"`
+	UploadFirstOperationTime int64                           `json:"upload_first_operation_time"`
 }
 
-type Awss3TaskData struct {
-	ID            string               `json:"id"`
-	TaskType      string               `json:"task_type"`
-	Status        string               `json:"status"`
-	Progress      float64              `json:"progress"`
-	TaskParameter Awss3TaskParameter   `json:"task_parameter"`
-	PauseInfo     *Awss3TaskPauseInfo  `json:"pause_info,omitempty"`
-	ResultData    *Awss3TaskResultData `json:"result_data,omitempty"`
-	UserName      string               `json:"user_name"`
-	DriverName    string               `json:"driver_name"`
-	FailedReason  *string              `json:"failed_reason,omitempty"`
-	WorkerName    *string              `json:"worker_name,omitempty"`
-	CreatedAt     *int64               `json:"created_at,omitempty"`
-	UpdatedAt     *int64               `json:"updated_at,omitempty"`
+type CloudDriveTaskData struct {
+	ID            string                    `json:"id"`
+	TaskType      string                    `json:"task_type"`
+	Status        string                    `json:"status"`
+	Progress      float64                   `json:"progress"`
+	TaskParameter CloudDriveTaskParameter   `json:"task_parameter"`
+	PauseInfo     *CloudDriveTaskPauseInfo  `json:"pause_info,omitempty"`
+	ResultData    *CloudDriveTaskResultData `json:"result_data,omitempty"`
+	UserName      string                    `json:"user_name"`
+	DriverName    string                    `json:"driver_name"`
+	FailedReason  *string                   `json:"failed_reason,omitempty"`
+	WorkerName    *string                   `json:"worker_name,omitempty"`
+	CreatedAt     *int64                    `json:"created_at,omitempty"`
+	UpdatedAt     *int64                    `json:"updated_at,omitempty"`
 }
 
-type Awss3TaskResponse struct {
-	StatusCode string        `json:"status_code"`
-	FailReason *string       `json:"fail_reason,omitempty"`
-	Data       Awss3TaskData `json:"data"`
+type CloudDriveTaskResponse struct {
+	StatusCode string             `json:"status_code"`
+	FailReason *string            `json:"fail_reason,omitempty"`
+	Data       CloudDriveTaskData `json:"data"`
 }
 
-type Awss3TaskQueryParam struct {
+type CloudDriveTaskQueryParam struct {
 	TaskIds []string `json:"task_ids"`
 }
 
-type Awss3TaskQueryResponse struct {
-	StatusCode string          `json:"status_code"`
-	FailReason string          `json:"fail_reason"`
-	Data       []Awss3TaskData `json:"data"`
+type CloudDriveTaskQueryResponse struct {
+	StatusCode string               `json:"status_code"`
+	FailReason string               `json:"fail_reason"`
+	Data       []CloudDriveTaskData `json:"data"`
 }
 
-type Awss3TaskIDResponse struct {
+type CloudDriveTaskIDResponse struct {
 	Data struct {
 		ID string `json:"id"`
 	} `json:"data"`
 }
 
-func getAwss3Metadata(src string, w http.ResponseWriter, r *http.Request) (*Awss3MetaResponseData, error) {
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+func getCloudDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*CloudDriveMetaResponseData, error) {
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 
-	param := Awss3ListParam{
+	param := CloudDriveListParam{
 		Path:  srcPath,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
@@ -277,14 +277,14 @@ func getAwss3Metadata(src string, w http.ResponseWriter, r *http.Request) (*Awss
 		fmt.Println("Error marshalling JSON:", err)
 		return nil, err
 	}
-	fmt.Println("Awss3 List Params:", string(jsonBody))
-	respBody, err := Awss3Call("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	fmt.Println("Cloud Drive List Params:", string(jsonBody))
+	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
 	if err != nil {
 		fmt.Println("Error calling drive/ls:", err)
 		return nil, err
 	}
 
-	var bodyJson Awss3MetaResponse
+	var bodyJson CloudDriveMetaResponse
 	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -292,33 +292,32 @@ func getAwss3Metadata(src string, w http.ResponseWriter, r *http.Request) (*Awss
 	return &bodyJson.Data, nil
 }
 
-func getAwss3FocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request) (info *Awss3FocusedMetaInfos, err error) {
+func getCloudDriveFocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request) (info *CloudDriveFocusedMetaInfos, err error) {
 	src = strings.TrimSuffix(src, "/")
 	info = nil
 	err = nil
 
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 
-	param := Awss3ListParam{
+	param := CloudDriveListParam{
 		Path:  srcPath,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
 	}
 
-	// 将数据序列化为 JSON
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
 		fmt.Println("Error marshalling JSON:", err)
 		return
 	}
-	fmt.Println("Awss3 Awss3MetaResponseMeta Params:", string(jsonBody))
-	respBody, err := Awss3Call("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	fmt.Println("Cloud Drive CloudDriveMetaResponseMeta Params:", string(jsonBody))
+	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
 	if err != nil {
 		fmt.Println("Error calling drive/get_file_meta_data:", err)
 		return
 	}
 
-	var bodyJson Awss3MetaResponse
+	var bodyJson CloudDriveMetaResponse
 	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
 		fmt.Println(err)
 		return
@@ -329,7 +328,7 @@ func getAwss3FocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	info = &Awss3FocusedMetaInfos{
+	info = &CloudDriveFocusedMetaInfos{
 		Key:   bodyJson.Data.Meta.Key,
 		Path:  bodyJson.Data.Path,
 		Name:  bodyJson.Data.Name,
@@ -339,17 +338,17 @@ func getAwss3FocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request
 	return
 }
 
-func generateAwss3FilesData(body []byte, stopChan <-chan struct{}, dataChan chan<- string,
-	w http.ResponseWriter, r *http.Request, param Awss3ListParam) {
+func generateCloudDriveFilesData(body []byte, stopChan <-chan struct{}, dataChan chan<- string,
+	w http.ResponseWriter, r *http.Request, param CloudDriveListParam) {
 	defer close(dataChan)
 
-	var bodyJson Awss3ListResponse
+	var bodyJson CloudDriveListResponse
 	if err := json.Unmarshal(body, &bodyJson); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	var A []*Awss3ListResponseFileData
+	var A []*CloudDriveListResponseFileData
 	bodyJson.Lock()
 	A = append(A, bodyJson.Data...)
 	bodyJson.Unlock()
@@ -361,7 +360,7 @@ func generateAwss3FilesData(body []byte, stopChan <-chan struct{}, dataChan chan
 		fmt.Println("firstItem Name:", firstItem.Name)
 
 		if firstItem.IsDir {
-			firstParam := Awss3ListParam{
+			firstParam := CloudDriveListParam{
 				Path:  firstItem.Path,
 				Drive: param.Drive,
 				Name:  param.Name,
@@ -373,9 +372,9 @@ func generateAwss3FilesData(body []byte, stopChan <-chan struct{}, dataChan chan
 				return
 			}
 			var firstRespBody []byte
-			firstRespBody, err = Awss3Call("/drive/ls", "POST", firstJsonBody, w, r, true)
+			firstRespBody, err = CloudDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
 
-			var firstBodyJson Awss3ListResponse
+			var firstBodyJson CloudDriveListResponse
 			if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
 				fmt.Println(err)
 				return
@@ -396,7 +395,7 @@ func generateAwss3FilesData(body []byte, stopChan <-chan struct{}, dataChan chan
 	}
 }
 
-func streamAwss3Files(w http.ResponseWriter, r *http.Request, body []byte, param Awss3ListParam) {
+func streamCloudDriveFiles(w http.ResponseWriter, r *http.Request, body []byte, param CloudDriveListParam) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -404,7 +403,7 @@ func streamAwss3Files(w http.ResponseWriter, r *http.Request, body []byte, param
 	stopChan := make(chan struct{})
 	dataChan := make(chan string)
 
-	go generateAwss3FilesData(body, stopChan, dataChan, w, r, param)
+	go generateCloudDriveFilesData(body, stopChan, dataChan, w, r, param)
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -432,14 +431,14 @@ func streamAwss3Files(w http.ResponseWriter, r *http.Request, body []byte, param
 	}
 }
 
-func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request) error {
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+func copyCloudDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.Request) error {
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
 		fmt.Println("Src parse failed.")
 		return nil
 	}
-	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
+	dstDrive, dstName, dstPath := parseCloudDrivePath(dst, true)
 	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	dstDir, dstFilename := path.Split(dstPath)
 	if dstDir == "" || dstFilename == "" {
@@ -451,7 +450,7 @@ func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request
 		trimmedDstDir = "/"
 	}
 	// 填充数据
-	param := Awss3CopyFileParam{
+	param := CloudDriveCopyFileParam{
 		CloudFilePath:     srcPath,       // id of "path/to/cloud/file.txt",
 		NewCloudDirectory: trimmedDstDir, // id of "new/cloud/directory",
 		NewCloudFileName:  dstFilename,   // "new_file_name.txt",
@@ -466,7 +465,7 @@ func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request
 		return err
 	}
 	fmt.Println("Copy File Params:", string(jsonBody))
-	_, err = Awss3Call("/drive/copy_file", "POST", jsonBody, w, r, true)
+	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, true)
 	if err != nil {
 		fmt.Println("Error calling drive/copy_file:", err)
 		return err
@@ -474,8 +473,8 @@ func copyAwss3SingleFile(src, dst string, w http.ResponseWriter, r *http.Request
 	return nil
 }
 
-func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, srcPath, srcPathName string) error {
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+func copyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Request, srcPath, srcPathName string) error {
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
 		fmt.Println("Src parse failed.")
@@ -487,7 +486,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 		return nil
 	}
 
-	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
+	dstDrive, dstName, dstPath := parseCloudDrivePath(dst, true)
 	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	if dstPath == "" {
 		fmt.Println("Dst parse failed.")
@@ -500,12 +499,12 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 	}
 
 	var recursivePath = srcPath
-	var A []*Awss3ListResponseFileData
+	var A []*CloudDriveListResponseFileData
 	for {
 		fmt.Println("len(A): ", len(A))
 
 		var isDir = true
-		var firstItem *Awss3ListResponseFileData
+		var firstItem *CloudDriveListResponseFileData
 		if len(A) > 0 {
 			firstItem = A[0]
 			recursivePath = firstItem.Path
@@ -522,7 +521,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 				parentPath = dstPath + strings.TrimPrefix(filepath.Dir(firstItem.Path), srcPath)
 				folderName = filepath.Base(firstItem.Path)
 			}
-			postParam := Awss3PostParam{
+			postParam := CloudDrivePostParam{
 				ParentPath: parentPath,
 				FolderName: folderName,
 				Drive:      srcDrive,
@@ -535,18 +534,18 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 			}
 			fmt.Println("Google Drive Post Params:", string(postJsonBody))
 			var postRespBody []byte
-			postRespBody, err = Awss3Call("/drive/create_folder", "POST", postJsonBody, w, r, true)
+			postRespBody, err = CloudDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, true)
 			if err != nil {
 				fmt.Println("Error calling drive/create_folder:", err)
 				return err
 			}
-			var postBodyJson Awss3PostResponse
+			var postBodyJson CloudDrivePostResponse
 			if err = json.Unmarshal(postRespBody, &postBodyJson); err != nil {
 				fmt.Println(err)
 				return err
 			}
 
-			firstParam := Awss3ListParam{
+			firstParam := CloudDriveListParam{
 				Path:  recursivePath,
 				Drive: srcDrive,
 				Name:  srcName,
@@ -560,9 +559,9 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 				return err
 			}
 			var firstRespBody []byte
-			firstRespBody, err = Awss3Call("/drive/ls", "POST", firstJsonBody, w, r, true)
+			firstRespBody, err = CloudDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
 
-			var firstBodyJson Awss3ListResponse
+			var firstBodyJson CloudDriveListResponse
 			if err = json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
 				fmt.Println(err)
 				return err
@@ -582,7 +581,7 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 				copyDst := copyPathPrefix + parentPath + "/" + firstItem.Name
 				fmt.Println("copySrc: ", copySrc)
 				fmt.Println("copyDst: ", copyDst)
-				err := copyAwss3SingleFile(copySrc, copyDst, w, r)
+				err := copyCloudDriveSingleFile(copySrc, copyDst, w, r)
 				if err != nil {
 					return err
 				}
@@ -595,19 +594,19 @@ func copyAwss3Folder(src, dst string, w http.ResponseWriter, r *http.Request, sr
 	}
 }
 
-func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *http.Request) error {
+func cloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimSuffix(src, "/")
 	if !strings.HasSuffix(bufferFilePath, "/") {
 		bufferFilePath += "/"
 	}
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 	fmt.Println("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
 		fmt.Println("Src parse failed.")
 		return nil
 	}
 
-	param := Awss3DownloadFileParam{
+	param := CloudDriveDownloadFileParam{
 		LocalFolder:   bufferFilePath,
 		CloudFilePath: srcPath,
 		Drive:         srcDrive,
@@ -622,19 +621,19 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 	fmt.Println("Download File Params:", string(jsonBody))
 
 	var respBody []byte
-	respBody, err = Awss3Call("/drive/download_async", "POST", jsonBody, w, r, true)
+	respBody, err = CloudDriveCall("/drive/download_async", "POST", jsonBody, w, r, true)
 	if err != nil {
 		fmt.Println("Error calling drive/download_async:", err)
 		return err
 	}
 
-	var respJson Awss3TaskIDResponse
+	var respJson CloudDriveTaskIDResponse
 	if err = json.Unmarshal(respBody, &respJson); err != nil {
 		fmt.Println(err)
 		return err
 	}
 	taskId := respJson.Data.ID
-	taskParam := Awss3TaskQueryParam{
+	taskParam := CloudDriveTaskQueryParam{
 		TaskIds: []string{taskId},
 	}
 	taskJsonBody, err := json.Marshal(taskParam)
@@ -647,12 +646,12 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 	for {
 		time.Sleep(1000 * time.Millisecond)
 		var taskRespBody []byte
-		taskRespBody, err = Awss3Call("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
+		taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
 		if err != nil {
 			fmt.Println("Error calling drive/download_async:", err)
 			return err
 		}
-		var taskRespJson Awss3TaskQueryResponse
+		var taskRespJson CloudDriveTaskQueryResponse
 		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
 			fmt.Println(err)
 			return err
@@ -672,8 +671,8 @@ func awss3FileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *htt
 	}
 }
 
-func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *http.Request) (int, error) {
-	dstDrive, dstName, dstPath := parseAwss3Path(dst, true)
+func cloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *http.Request) (int, error) {
+	dstDrive, dstName, dstPath := parseCloudDrivePath(dst, true)
 	fmt.Println("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	if dstPath == "" {
 		fmt.Println("Src parse failed.")
@@ -686,7 +685,7 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 		trimmedDstDir = "/"
 	}
 
-	param := Awss3UploadFileParam{
+	param := CloudDriveUploadFileParam{
 		ParentPath:    trimmedDstDir,
 		LocalFilePath: bufferFilePath,
 		Drive:         dstDrive,
@@ -701,18 +700,18 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 	fmt.Println("Upload File Params:", string(jsonBody))
 
 	var respBody []byte
-	respBody, err = Awss3Call("/drive/upload_async", "POST", jsonBody, w, r, true)
+	respBody, err = CloudDriveCall("/drive/upload_async", "POST", jsonBody, w, r, true)
 	if err != nil {
 		fmt.Println("Error calling drive/upload_async:", err)
 		return errToStatus(err), err
 	}
-	var respJson Awss3TaskIDResponse
+	var respJson CloudDriveTaskIDResponse
 	if err = json.Unmarshal(respBody, &respJson); err != nil {
 		fmt.Println(err)
 		return errToStatus(err), err
 	}
 	taskId := respJson.Data.ID
-	taskParam := Awss3TaskQueryParam{
+	taskParam := CloudDriveTaskQueryParam{
 		TaskIds: []string{taskId},
 	}
 	taskJsonBody, err := json.Marshal(taskParam)
@@ -725,12 +724,12 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 	for {
 		time.Sleep(500 * time.Millisecond)
 		var taskRespBody []byte
-		taskRespBody, err = Awss3Call("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
+		taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
 		if err != nil {
 			fmt.Println("Error calling drive/upload_async:", err)
 			return errToStatus(err), err
 		}
-		var taskRespJson Awss3TaskQueryResponse
+		var taskRespJson CloudDriveTaskQueryResponse
 		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
 			fmt.Println(err)
 			return errToStatus(err), err
@@ -752,9 +751,9 @@ func awss3BufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *htt
 	}
 }
 
-func moveAwss3FolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Request) error {
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
-	_, _, dstPath := parseAwss3Path(dst, true)
+func moveCloudDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Request) error {
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
+	_, _, dstPath := parseCloudDrivePath(dst, true)
 
 	dstDir, _ := filepath.Split(dstPath)
 
@@ -763,7 +762,7 @@ func moveAwss3FolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Requ
 		trimmedDstDir = "/"
 	}
 
-	param := Awss3MoveFileParam{
+	param := CloudDriveMoveFileParam{
 		CloudFilePath:     srcPath,
 		NewCloudDirectory: trimmedDstDir,
 		Drive:             srcDrive, // "my_drive",
@@ -775,8 +774,8 @@ func moveAwss3FolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Requ
 		fmt.Println("Error marshalling JSON:", err)
 		return err
 	}
-	fmt.Println("Awss3 Move File Params:", string(jsonBody))
-	_, err = Awss3Call("/drive/move_file", "POST", jsonBody, w, r, false)
+	fmt.Println("Cloud Drive Move File Params:", string(jsonBody))
+	_, err = CloudDriveCall("/drive/move_file", "POST", jsonBody, w, r, false)
 	if err != nil {
 		fmt.Println("Error calling drive/move_file:", err)
 		return err
@@ -784,23 +783,23 @@ func moveAwss3FolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, error) {
+func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return nil, os.ErrPermission
 	}
 
 	//authority := r.Header.Get("Authority")
-	//fmt.Println("*****Awss3 Call URL authority:", authority)
+	//fmt.Println("*****Cloud Drive Call URL authority:", authority)
 	//host := r.Header.Get("Origin")
 	//if host == "" {
 	//	host = getHost(w, r) // r.Header.Get("Origin")
 	//}
-	//fmt.Println("*****Awss3 Call URL referer:", host)
+	//fmt.Println("*****Cloud Drive Call URL referer:", host)
 	//if host == "" {
 	//	host = "https://files." + bflName + ".olares.cn"
 	//}
-	//fmt.Println("*****Awss3 Call URL forced:", host)
+	//fmt.Println("*****Cloud Drive Call URL forced:", host)
 	host := getHost(r)
 	dstUrl := host + dst
 
@@ -834,7 +833,7 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 	// 检查Content-Type
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
-		fmt.Println("Awss3 Call BflResponse is not JSON format:", contentType)
+		fmt.Println("Cloud Drive Call BflResponse is not JSON format:", contentType)
 	}
 
 	// 读取响应体
@@ -894,7 +893,7 @@ func Awss3Call(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r 
 	return nil, nil
 }
 
-func parseAwss3Path(src string, trimSuffix bool) (drive, name, path string) {
+func parseCloudDrivePath(src string, trimSuffix bool) (drive, name, path string) {
 	//if strings.HasPrefix(src, "/Drive/awss3") {
 	//	src = src[12:]
 	//	drive = "awss3"
@@ -930,14 +929,14 @@ func parseAwss3Path(src string, trimSuffix bool) (drive, name, path string) {
 	return drive, name, path
 }
 
-func resourceGetAwss3(w http.ResponseWriter, r *http.Request, stream int, meta int) (int, error) {
+func resourceGetCloudDrive(w http.ResponseWriter, r *http.Request, stream int, meta int) (int, error) {
 	src := r.URL.Path
 	fmt.Println("src Path:", src)
 
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 	fmt.Println("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
 
-	param := Awss3ListParam{
+	param := CloudDriveListParam{
 		Path:  srcPath,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
@@ -949,17 +948,17 @@ func resourceGetAwss3(w http.ResponseWriter, r *http.Request, stream int, meta i
 		fmt.Println("Error marshalling JSON:", err)
 		return errToStatus(err), err
 	}
-	fmt.Println("Awss3 List Params:", string(jsonBody))
+	fmt.Println("Cloud Drive List Params:", string(jsonBody))
 	if stream == 1 {
 		var body []byte
-		body, err = Awss3Call("/drive/ls", "POST", jsonBody, w, r, true)
-		streamAwss3Files(w, r, body, param)
+		body, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+		streamCloudDriveFiles(w, r, body, param)
 		return 0, nil
 	}
 	if meta == 1 {
-		_, err = Awss3Call("/drive/get_file_meta_data", "POST", jsonBody, w, r, false)
+		_, err = CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, false)
 	} else {
-		_, err = Awss3Call("/drive/ls", "POST", jsonBody, w, r, false)
+		_, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, false)
 	}
 	if err != nil {
 		fmt.Println("Error calling drive/ls:", err)
@@ -999,17 +998,17 @@ func resourceGetAwss3(w http.ResponseWriter, r *http.Request, stream int, meta i
 //	return dir, name
 //}
 
-func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
+func resourcePostCloudDrive(src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
 	if src == "" {
 		src = r.URL.Path
 	}
 	fmt.Println("src Path:", src)
 
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 	fmt.Println("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
 	path, newName := path.Split(srcPath)
 
-	param := Awss3PostParam{
+	param := CloudDrivePostParam{
 		ParentPath: path,
 		FolderName: newName,
 		Drive:      srcDrive, // "my_drive",
@@ -1021,12 +1020,12 @@ func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, retur
 		fmt.Println("Error marshalling JSON:", err)
 		return nil, errToStatus(err), err
 	}
-	fmt.Println("Awss3 Post Params:", string(jsonBody))
+	fmt.Println("Cloud Drive Post Params:", string(jsonBody))
 	var respBody []byte = nil
 	if returnResp {
-		respBody, err = Awss3Call("/drive/create_folder", "POST", jsonBody, w, r, true)
+		respBody, err = CloudDriveCall("/drive/create_folder", "POST", jsonBody, w, r, true)
 	} else {
-		_, err = Awss3Call("/drive/create_folder", "POST", jsonBody, w, r, false)
+		_, err = CloudDriveCall("/drive/create_folder", "POST", jsonBody, w, r, false)
 	}
 	if err != nil {
 		fmt.Println("Error calling drive/create_folder:", err)
@@ -1035,19 +1034,19 @@ func resourcePostAwss3(src string, w http.ResponseWriter, r *http.Request, retur
 	return respBody, 0, nil
 }
 
-func resourcePatchAwss3(fileCache FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
+func resourcePatchCloudDrive(fileCache FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
 	src := r.URL.Path
 	dst := r.URL.Query().Get("destination")
 	//action := r.URL.Query().Get("action")
 	dst, err := unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
 
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
-	_, _, dstPath := parseAwss3Path(dst, true)
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
+	_, _, dstPath := parseCloudDrivePath(dst, true)
 	fmt.Println("dstPath=", dstPath)
 	dstDir, dstFilename := path.Split(dstPath)
 	fmt.Println("dstDir=", dstDir, ", dstFilename=", dstFilename)
 
-	param := Awss3PatchParam{
+	param := CloudDrivePatchParam{
 		Path:        srcPath,
 		NewFileName: dstFilename,
 		Drive:       srcDrive, // "my_drive",
@@ -1059,15 +1058,15 @@ func resourcePatchAwss3(fileCache FileCache, w http.ResponseWriter, r *http.Requ
 		fmt.Println("Error marshalling JSON:", err)
 		return errToStatus(err), err
 	}
-	fmt.Println("Awss3 Patch Params:", string(jsonBody))
+	fmt.Println("Cloud Drive Patch Params:", string(jsonBody))
 
-	// del thumbnails for awss3
-	err = delThumbsAwss3(r.Context(), fileCache, src, w, r)
+	// del thumbnails for Cloud Drive
+	err = delThumbsCloudDrive(r.Context(), fileCache, src, w, r)
 	if err != nil {
 		return errToStatus(err), err
 	}
 
-	_, err = Awss3Call("/drive/rename", "POST", jsonBody, w, r, false)
+	_, err = CloudDriveCall("/drive/rename", "POST", jsonBody, w, r, false)
 	if err != nil {
 		fmt.Println("Error calling drive/rename:", err)
 		return errToStatus(err), err
@@ -1075,7 +1074,7 @@ func resourcePatchAwss3(fileCache FileCache, w http.ResponseWriter, r *http.Requ
 	return 0, nil
 }
 
-func resourceDeleteAwss3(fileCache FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
+func resourceDeleteCloudDrive(fileCache FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
 	if src == "" {
 		src = r.URL.Path
 	}
@@ -1084,9 +1083,9 @@ func resourceDeleteAwss3(fileCache FileCache, src string, w http.ResponseWriter,
 		src = strings.TrimSuffix(src, "/")
 	}
 
-	srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 
-	param := Awss3DeleteParam{
+	param := CloudDriveDeleteParam{
 		Path:  srcPath,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
@@ -1097,20 +1096,20 @@ func resourceDeleteAwss3(fileCache FileCache, src string, w http.ResponseWriter,
 		fmt.Println("Error marshalling JSON:", err)
 		return nil, errToStatus(err), err
 	}
-	fmt.Println("Awss3 Delete Params:", string(jsonBody))
+	fmt.Println("Cloud Drive Delete Params:", string(jsonBody))
 
-	// del thumbnails for awss3
-	err = delThumbsAwss3(r.Context(), fileCache, src, w, r)
+	// del thumbnails for Cloud Drive
+	err = delThumbsCloudDrive(r.Context(), fileCache, src, w, r)
 	if err != nil {
 		return nil, errToStatus(err), err
 	}
 
 	var respBody []byte = nil
 	if returnResp {
-		respBody, err = Awss3Call("/drive/delete", "POST", jsonBody, w, r, true)
+		respBody, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, true)
 		fmt.Println(string(respBody))
 	} else {
-		_, err = Awss3Call("/drive/delete", "POST", jsonBody, w, r, false)
+		_, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, false)
 	}
 	if err != nil {
 		fmt.Println("Error calling drive/delete:", err)
@@ -1120,7 +1119,7 @@ func resourceDeleteAwss3(fileCache FileCache, src string, w http.ResponseWriter,
 }
 
 // TODO: can be one
-func setContentDispositionAwss3(w http.ResponseWriter, r *http.Request, fileName string) {
+func setContentDispositionCloudDrive(w http.ResponseWriter, r *http.Request, fileName string) {
 	if r.URL.Query().Get("inline") == "true" {
 		w.Header().Set("Content-Disposition", "inline")
 	} else {
@@ -1140,13 +1139,13 @@ func ParseTimeString(s *string) time.Time {
 	return parsed
 }
 
-func previewCacheKeyAwss3(f *Awss3MetaResponseData, previewSize PreviewSize) string {
+func previewCacheKeyCloudDrive(f *CloudDriveMetaResponseData, previewSize PreviewSize) string {
 	//return stringMD5(fmt.Sprintf("%s%d%s", f.Path, f.Modified.Unix(), previewSize))
 	return fmt.Sprintf("%x%x%x", f.Path, ParseTimeString(f.Modified).Unix(), previewSize)
 }
 
-func createPreviewAwss3(w http.ResponseWriter, r *http.Request, src string, imgSvc ImgService, fileCache FileCache,
-	file *Awss3MetaResponseData, previewSize PreviewSize, bflName string) ([]byte, error) {
+func createPreviewCloudDrive(w http.ResponseWriter, r *http.Request, src string, imgSvc ImgService, fileCache FileCache,
+	file *CloudDriveMetaResponseData, previewSize PreviewSize, bflName string) ([]byte, error) {
 	fmt.Println("!!!!CreatePreview:", previewSize)
 
 	var err error
@@ -1167,7 +1166,7 @@ func createPreviewAwss3(w http.ResponseWriter, r *http.Request, src string, imgS
 	if err != nil {
 		return nil, err
 	}
-	err = awss3FileToBuffer(src, bufferFilePath, w, r)
+	err = cloudDriveFileToBuffer(src, bufferFilePath, w, r)
 	//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
 	//fmt.Println("Buffer file path: ", bufferFilePath)
 	//fmt.Println("Buffer path: ", bufferPath)
@@ -1206,18 +1205,18 @@ func createPreviewAwss3(w http.ResponseWriter, r *http.Request, src string, imgS
 	}
 
 	go func() {
-		cacheKey := previewCacheKeyAwss3(file, previewSize)
+		cacheKey := previewCacheKeyCloudDrive(file, previewSize)
 		if err := fileCache.Store(context.Background(), cacheKey, buf.Bytes()); err != nil {
 			fmt.Printf("failed to cache resized image: %v", err)
 		}
 	}()
 
 	fmt.Println("Begin to remove buffer")
-	removeDiskBuffer(bufferPath, "awss3")
+	removeDiskBuffer(bufferPath, "cloud")
 	return buf.Bytes(), nil
 }
 
-func rawFileHandlerAwss3(src string, w http.ResponseWriter, r *http.Request, file *Awss3MetaResponseData, bflName string) (int, error) {
+func rawFileHandlerCloudDrive(src string, w http.ResponseWriter, r *http.Request, file *CloudDriveMetaResponseData, bflName string) (int, error) {
 	var err error
 	diskSize := file.Size
 	if diskSize >= 4*1024*1024*1024 {
@@ -1236,7 +1235,7 @@ func rawFileHandlerAwss3(src string, w http.ResponseWriter, r *http.Request, fil
 	if err != nil {
 		return errToStatus(err), err
 	}
-	err = awss3FileToBuffer(src, bufferFilePath, w, r)
+	err = cloudDriveFileToBuffer(src, bufferFilePath, w, r)
 	//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
 	//fmt.Println("Buffer file path: ", bufferFilePath)
 	//fmt.Println("Buffer path: ", bufferPath)
@@ -1250,23 +1249,23 @@ func rawFileHandlerAwss3(src string, w http.ResponseWriter, r *http.Request, fil
 	}
 	defer fd.Close()
 
-	setContentDispositionAwss3(w, r, file.Name)
+	setContentDispositionCloudDrive(w, r, file.Name)
 
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, ParseTimeString(file.Modified), fd)
 
 	fmt.Println("Begin to remove buffer")
-	removeDiskBuffer(bufferPath, "awss3")
+	removeDiskBuffer(bufferPath, "cloud")
 	return 0, nil
 }
 
-func handleImagePreviewAwss3(
+func handleImagePreviewCloudDrive(
 	w http.ResponseWriter,
 	r *http.Request,
 	src string,
 	imgSvc ImgService,
 	fileCache FileCache,
-	file *Awss3MetaResponseData,
+	file *CloudDriveMetaResponseData,
 	previewSize PreviewSize,
 	enableThumbnails, resizePreview bool,
 ) (int, error) {
@@ -1277,19 +1276,19 @@ func handleImagePreviewAwss3(
 
 	if (previewSize == PreviewSizeBig && !resizePreview) ||
 		(previewSize == PreviewSizeThumb && !enableThumbnails) {
-		return rawFileHandlerAwss3(src, w, r, file, bflName)
+		return rawFileHandlerCloudDrive(src, w, r, file, bflName)
 	}
 
 	format, err := imgSvc.FormatFromExtension(path.Ext(file.Name))
 	// Unsupported extensions directly return the raw data
 	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
-		return rawFileHandlerAwss3(src, w, r, file, bflName)
+		return rawFileHandlerCloudDrive(src, w, r, file, bflName)
 	}
 	if err != nil {
 		return errToStatus(err), err
 	}
 
-	cacheKey := previewCacheKeyAwss3(file, previewSize)
+	cacheKey := previewCacheKeyCloudDrive(file, previewSize)
 	fmt.Println("cacheKey:", cacheKey)
 	fmt.Println("f.RealPath:", file.Path)
 	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
@@ -1297,7 +1296,7 @@ func handleImagePreviewAwss3(
 		return errToStatus(err), err
 	}
 	if !ok {
-		resizedImage, err = createPreviewAwss3(w, r, src, imgSvc, fileCache, file, previewSize, bflName)
+		resizedImage, err = createPreviewCloudDrive(w, r, src, imgSvc, fileCache, file, previewSize, bflName)
 		if err != nil {
 			return errToStatus(err), err
 		}
@@ -1314,31 +1313,31 @@ func handleImagePreviewAwss3(
 	return 0, nil
 }
 
-func previewGetAwss3(w http.ResponseWriter, r *http.Request, previewSize PreviewSize, path string,
+func previewGetCloudDrive(w http.ResponseWriter, r *http.Request, previewSize PreviewSize, path string,
 	imgSvc ImgService, fileCache FileCache, enableThumbnails, resizePreview bool) (int, error) {
 	src := path
 	if strings.HasSuffix(src, "/") {
 		src = strings.TrimSuffix(src, "/")
 	}
 
-	metaData, err := getAwss3Metadata(src, w, r)
+	metaData, err := getCloudDriveMetadata(src, w, r)
 	if err != nil {
 		fmt.Println(err)
 		return errToStatus(err), err
 	}
 
-	setContentDispositionAwss3(w, r, metaData.Name)
+	setContentDispositionCloudDrive(w, r, metaData.Name)
 
 	fileType := parser.MimeTypeByExtension(metaData.Name)
 	if strings.HasPrefix(fileType, "image") {
-		return handleImagePreviewAwss3(w, r, src, imgSvc, fileCache, metaData, previewSize, enableThumbnails, resizePreview)
+		return handleImagePreviewCloudDrive(w, r, src, imgSvc, fileCache, metaData, previewSize, enableThumbnails, resizePreview)
 	} else {
 		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", fileType)
 	}
 }
 
-func delThumbsAwss3(ctx context.Context, fileCache FileCache, src string, w http.ResponseWriter, r *http.Request) error {
-	metaData, err := getAwss3Metadata(src, w, r)
+func delThumbsCloudDrive(ctx context.Context, fileCache FileCache, src string, w http.ResponseWriter, r *http.Request) error {
+	metaData, err := getCloudDriveMetadata(src, w, r)
 	if err != nil {
 		fmt.Println("Error calling drive/get_file_meta_data:", err)
 		return err
@@ -1346,7 +1345,7 @@ func delThumbsAwss3(ctx context.Context, fileCache FileCache, src string, w http
 
 	for _, previewSizeName := range PreviewSizeNames() {
 		size, _ := ParsePreviewSize(previewSizeName)
-		cacheKey := previewCacheKeyAwss3(metaData, size)
+		cacheKey := previewCacheKeyCloudDrive(metaData, size)
 		if err := fileCache.Delete(ctx, cacheKey); err != nil {
 			return err
 		}

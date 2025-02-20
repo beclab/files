@@ -52,7 +52,7 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 		} else if srcType == "google" {
 			return previewGetGoogle(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			return previewGetAwss3(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
+			return previewGetCloudDrive(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{

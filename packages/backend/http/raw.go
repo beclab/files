@@ -100,7 +100,7 @@ var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) 
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		bflName := r.Header.Get("X-Bfl-User")
 		src := r.URL.Path
-		metaData, err := getAwss3Metadata(src, w, r)
+		metaData, err := getCloudDriveMetadata(src, w, r)
 		if err != nil {
 			fmt.Println(err)
 			return errToStatus(err), err
@@ -108,7 +108,7 @@ var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) 
 		if metaData.IsDir {
 			return http.StatusNotImplemented, errors.New("doesn't support directory download for " + srcType + " drive now")
 		}
-		return rawFileHandlerAwss3(src, w, r, metaData, bflName)
+		return rawFileHandlerCloudDrive(src, w, r, metaData, bflName)
 	}
 
 	file, err := files.NewFileInfo(files.FileOptions{

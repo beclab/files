@@ -182,7 +182,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	} else if srcType == "google" {
 		return resourceGetGoogle(w, r, stream, meta)
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-		return resourceGetAwss3(w, r, stream, meta)
+		return resourceGetCloudDrive(w, r, stream, meta)
 	}
 
 	xBflUser := r.Header.Get("X-Bfl-User")
@@ -431,7 +431,7 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			_, status, err := resourceDeleteGoogle(fileCache, "", w, r, false)
 			return status, err
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, status, err := resourceDeleteAwss3(fileCache, "", w, r, false)
+			_, status, err := resourceDeleteCloudDrive(fileCache, "", w, r, false)
 			return status, err
 		}
 
@@ -530,7 +530,7 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			_, status, err := resourcePostGoogle("", w, r, false)
 			return status, err
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, status, err := resourcePostAwss3("", w, r, false)
+			_, status, err := resourcePostCloudDrive("", w, r, false)
 			return status, err
 		}
 
@@ -630,7 +630,7 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		if srcType == "google" {
 			return resourcePatchGoogle(fileCache, w, r)
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			return resourcePatchAwss3(fileCache, w, r)
+			return resourcePatchCloudDrive(fileCache, w, r)
 		}
 
 		src := r.URL.Path

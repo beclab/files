@@ -1363,6 +1363,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			"drive":   true,
 			"sync":    true,
 			"cache":   true,
+			"cloud":   true,
 			"google":  true,
 			"awss3":   true,
 			"dropbox": true,
@@ -1455,17 +1456,17 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			return http.StatusForbidden, nil
 		}
 		var same = srcType == dstType
-		// google drive, awss3 of two users must be seen as diff archs
+		// all cloud drives of two users must be seen as diff archs
 		var srcName, dstName string
 		if srcType == "google" {
 			_, srcName, _, _ = parseGoogleDrivePath(src)
-		} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, srcName, _ = parseAwss3Path(src, true)
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+			_, srcName, _ = parseCloudDrivePath(src, true)
 		}
 		if dstType == "google" {
 			_, dstName, _, _ = parseGoogleDrivePath(dst)
-		} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, dstName, _ = parseAwss3Path(dst, true)
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+			_, dstName, _ = parseCloudDrivePath(dst, true)
 		}
 		if srcName != dstName {
 			same = false
@@ -1602,7 +1603,7 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 		return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		src = strings.TrimSuffix(src, "/")
-		metaInfo, err := getAwss3FocusedMetaInfos(src, w, r)
+		metaInfo, err := getCloudDriveFocusedMetaInfos(src, w, r)
 		if err != nil {
 			return nil, 0, 0, false, err
 		}
@@ -1884,8 +1885,8 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		if err != nil {
 			return err
 		}
-	} else if dstType == "awss3" || dstType == "tencent" || dstType == "dropbox" {
-		_, _, err := resourcePostAwss3(dst, w, r, false)
+	} else if dstType == "cloud" || dstType == "awss3" || dstType == "tencent" || dstType == "dropbox" {
+		_, _, err := resourcePostCloudDrive(dst, w, r, false)
 		if err != nil {
 			return err
 		}
@@ -1992,12 +1993,12 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 				}
 			}
 		}
-	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		//src = strings.TrimSuffix(src, "/")
 
-		srcDrive, srcName, srcPath := parseAwss3Path(src, true)
+		srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 
-		param := Awss3ListParam{
+		param := CloudDriveListParam{
 			Path:  srcPath,
 			Drive: srcDrive,
 			Name:  srcName,
@@ -2008,14 +2009,14 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fmt.Println("Error marshalling JSON:", err)
 			return err
 		}
-		fmt.Println("Awss3 List Params:", string(jsonBody))
+		fmt.Println("Cloud Drive List Params:", string(jsonBody))
 		var respBody []byte
-		respBody, err = Awss3Call("/drive/ls", "POST", jsonBody, w, r, true)
+		respBody, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
 		if err != nil {
 			fmt.Println("Error calling drive/ls:", err)
 			return err
 		}
-		var bodyJson Awss3ListResponse
+		var bodyJson CloudDriveListResponse
 		if err = json.Unmarshal(respBody, &bodyJson); err != nil {
 			fmt.Println(err)
 			return err
@@ -2289,7 +2290,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		return os.ErrPermission
 	}
 
-	extRemains := dstType == "google" || dstType == "awss3" || dstType == "tencent" || dstType == "dropbox"
+	extRemains := dstType == "google" || dstType == "cloud" || dstType == "awss3" || dstType == "tencent" || dstType == "dropbox"
 	var bufferPath string
 	// copy/move
 	if srcType == "drive" {
@@ -2361,7 +2362,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		var err error
 		//if diskSize >= 4*1024*1024*1024 {
 		//	fmt.Println("file size exceeds 4GB")
@@ -2373,7 +2374,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 
-		srcInfo, err := getAwss3FocusedMetaInfos(src, w, r)
+		srcInfo, err := getCloudDriveFocusedMetaInfos(src, w, r)
 		bufferFilePath, err := generateBufferFolder(srcInfo.Path, bflName)
 		if err != nil {
 			return err
@@ -2385,7 +2386,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		err = awss3FileToBuffer(src, bufferFilePath, w, r)
+		err = cloudDriveFileToBuffer(src, bufferFilePath, w, r)
 		if err != nil {
 			return err
 		}
@@ -2484,10 +2485,10 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		}
 		fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath, srcType)
-	} else if dstType == "awss3" || dstType == "tencent" || dstType == "dropbox" {
+	} else if dstType == "cloud" || dstType == "awss3" || dstType == "tencent" || dstType == "dropbox" {
 		fmt.Println("Begin to paste!")
 		fmt.Println("dst: ", dst)
-		status, err := awss3BufferToFile(bufferPath, dst, w, r)
+		status, err := cloudDriveBufferToFile(bufferPath, dst, w, r)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -2588,8 +2589,8 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 			return err
 		}
 		return nil
-	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-		_, status, err := resourceDeleteAwss3(fileCache, src, w, r, true)
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+		_, status, err := resourceDeleteCloudDrive(fileCache, src, w, r, true)
 		if status != http.StatusOK && status != 0 {
 			return os.ErrInvalid
 		}
@@ -2670,27 +2671,27 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			}
 			return moveGoogleDriveFolderOrFiles(src, dst, w, r)
 		}
-	} else if srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		switch action {
 		case "copy":
 			if strings.HasSuffix(src, "/") {
 				src = strings.TrimSuffix(src, "/")
 			}
-			metaInfo, err := getAwss3FocusedMetaInfos(src, w, r)
+			metaInfo, err := getCloudDriveFocusedMetaInfos(src, w, r)
 			if err != nil {
 				return err
 			}
 
 			if metaInfo.IsDir {
 				// TODO: should wait for creating folder function
-				return copyAwss3Folder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
+				return copyCloudDriveFolder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
 			}
-			return copyAwss3SingleFile(src, dst, w, r)
+			return copyCloudDriveSingleFile(src, dst, w, r)
 		case "rename":
 			if !strings.HasSuffix(src, "/") {
 				src += "/"
 			}
-			return moveAwss3FolderOrFiles(src, dst, w, r)
+			return moveCloudDriveFolderOrFiles(src, dst, w, r)
 		}
 	} else if srcType == "sync" {
 		var apiName string
