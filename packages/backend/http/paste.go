@@ -1431,6 +1431,21 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			srcName := srcInfo.Name
 			formattedSrcName := removeSlash(srcName) // removeNonAlphanumericUnderscore(srcName)
 			dst = strings.ReplaceAll(dst, srcName, formattedSrcName)
+
+			if !srcInfo.CanDownload {
+				if srcInfo.CanExport {
+					dst += srcInfo.ExportSuffix
+				} else {
+					response := map[string]interface{}{
+						"code": -1,
+						"msg":  "Google drive cannot export this file.",
+					}
+					// w.WriteHeader(http.StatusOK)
+					//json.NewEncoder(w).Encode(response)
+					//return http.StatusOK, nil
+					return renderJSON(w, r, response)
+				}
+			}
 		}
 		if rename && dstType != "google" {
 			dst = pasteAddVersionSuffix(dst, dstType, d.user.Fs, w, r)
