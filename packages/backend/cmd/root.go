@@ -210,7 +210,7 @@ user created with the credentials from options "username" and "password".`,
 			}
 			password := os.Getenv("ZINC_PASSWORD")
 			if password == "" {
-				password = "GoogleDriveListResponseUser#123"
+				password = "User#123"
 			}
 
 			fmt.Println("Init RPCSERVER!")

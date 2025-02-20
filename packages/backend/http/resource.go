@@ -185,7 +185,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 
 	xBflUser := r.Header.Get("X-Bfl-User")
-	fmt.Println("X-Bfl-GoogleDriveListResponseUser: ", xBflUser)
+	fmt.Println("X-Bfl-User: ", xBflUser)
 
 	olaresVersion := os.Getenv("OLARES_VERSION")
 	if olaresVersion == "" {

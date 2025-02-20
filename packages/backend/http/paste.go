@@ -122,7 +122,7 @@ func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
 
 func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInfo, int, error) {
 	xBflUser := r.Header.Get("X-Bfl-User")
-	fmt.Println("X-Bfl-GoogleDriveListResponseUser: ", xBflUser)
+	fmt.Println("X-Bfl-User: ", xBflUser)
 
 	d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
 	//fmt.Println(d.user.Fs)
