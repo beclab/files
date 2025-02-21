@@ -273,9 +273,9 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	bufferPathName := fmt.Sprintf("%d_%s", timestamp, originalPathName) // as parent folder
 	//bufferPathName := fmt.Sprintf("%d", timestamp)
 	bufferPathName = removeSlash(bufferPathName) // removeNonAlphanumericUnderscore(bufferPathName)
-	if len(bufferPathName) > 30 {
-		bufferPathName = bufferPathName[:30]
-	}
+	//if len(bufferPathName) > 30 {
+	//	bufferPathName = bufferPathName[:30]
+	//}
 	bufferFolderPath := "/data/" + bflName + "/buffer" + "/" + bufferPathName
 	err := os.MkdirAll(bufferFolderPath, 0755)
 	if err != nil {
