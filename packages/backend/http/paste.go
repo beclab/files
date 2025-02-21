@@ -272,7 +272,7 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	// 构建新的文件名
 	bufferPathName := fmt.Sprintf("%d_%s", timestamp, originalPathName) // as parent folder
 	//bufferPathName := fmt.Sprintf("%d", timestamp)
-	bufferPathName = removeNonAlphanumericUnderscore(bufferPathName)
+	bufferPathName = removeSlash(bufferPathName) // removeNonAlphanumericUnderscore(bufferPathName)
 	if len(bufferPathName) > 30 {
 		bufferPathName = bufferPathName[:30]
 	}
@@ -2345,7 +2345,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		bufferFileName := removeNonAlphanumericUnderscore(srcInfo.Name)
+		bufferFileName := removeSlash(srcInfo.Name) // removeNonAlphanumericUnderscore(srcInfo.Name)
 		//bufferPath = filepath.Join(bufferFilePath, url.QueryEscape(srcInfo.Name))
 		//bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
 		bufferPath = filepath.Join(bufferFilePath, bufferFileName)

@@ -1837,7 +1837,7 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 	if err != nil {
 		return nil, err
 	}
-	bufferFileName := removeNonAlphanumericUnderscore(file.Name)
+	bufferFileName := removeSlash(file.Name) // removeNonAlphanumericUnderscore(file.Name)
 	//bufferPath := filepath.Join(bufferFilePath, file.Name)
 	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	fmt.Println("Buffer file path: ", bufferFilePath)
@@ -1913,7 +1913,7 @@ func rawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, fi
 	if err != nil {
 		return errToStatus(err), err
 	}
-	bufferFileName := removeNonAlphanumericUnderscore(file.Name)
+	bufferFileName := removeSlash(file.Name) // removeNonAlphanumericUnderscore(file.Name)
 	//bufferPath := filepath.Join(bufferFilePath, file.Name)
 	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	fmt.Println("Buffer file path: ", bufferFilePath)
