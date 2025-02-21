@@ -2345,7 +2345,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		bufferFileName := removeSlash(srcInfo.Name) // removeNonAlphanumericUnderscore(srcInfo.Name)
+		bufferFileName := removeSlash(srcInfo.Name) + srcInfo.ExportSuffix // removeNonAlphanumericUnderscore(srcInfo.Name)
 		//bufferPath = filepath.Join(bufferFilePath, url.QueryEscape(srcInfo.Name))
 		//bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
 		bufferPath = filepath.Join(bufferFilePath, bufferFileName)
