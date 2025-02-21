@@ -485,8 +485,9 @@ func stringMD5(s string) string {
 
 func removeSlash(s string) string {
 	//re := regexp.MustCompile(`[^a-zA-Z0-9_]`)
-	re := regexp.MustCompile("/")
-	return re.ReplaceAllString(s, "_")
+	//re := regexp.MustCompile("/")
+	//return re.ReplaceAllString(s, "_")
+	return strings.ReplaceAll(s, "/", "_")
 }
 
 func removeNonAlphanumericUnderscore(s string) string {
