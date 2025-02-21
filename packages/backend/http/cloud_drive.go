@@ -1219,11 +1219,16 @@ func createPreviewCloudDrive(w http.ResponseWriter, r *http.Request, src string,
 func rawFileHandlerCloudDrive(src string, w http.ResponseWriter, r *http.Request, file *CloudDriveMetaResponseData, bflName string) (int, error) {
 	var err error
 	diskSize := file.Size
-	if diskSize >= 4*1024*1024*1024 {
-		fmt.Println("file size exceeds 4GB")
-		return http.StatusForbidden, e.New("file size exceeds 4GB") //os.ErrPermission
+	//if diskSize >= 4*1024*1024*1024 {
+	//	fmt.Println("file size exceeds 4GB")
+	//	return http.StatusForbidden, e.New("file size exceeds 4GB") //os.ErrPermission
+	//}
+	//fmt.Println("Will reserve disk size: ", diskSize)
+	_, err = checkBufferDiskSpace(diskSize)
+	if err != nil {
+		return errToStatus(err), err
 	}
-	fmt.Println("Will reserve disk size: ", diskSize)
+
 	bufferFilePath, err := generateBufferFolder(file.Path, bflName)
 	if err != nil {
 		return errToStatus(err), err
