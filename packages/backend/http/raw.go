@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -44,7 +45,7 @@ func parseQueryFiles(r *http.Request, f *files.FileInfo, _ *users.User) ([]strin
 	return fileSlice, nil
 }
 
-//nolint: goconst
+// nolint: goconst
 func parseQueryAlgorithm(r *http.Request) (string, archiver.Writer, error) {
 	// TODO: use enum
 	switch r.URL.Query().Get("algo") {
@@ -79,6 +80,35 @@ func setContentDisposition(w http.ResponseWriter, r *http.Request, file *files.F
 var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	if !d.user.Perm.Download {
 		return http.StatusAccepted, nil
+	}
+
+	srcType := r.URL.Query().Get("src")
+	if srcType == "sync" {
+		return http.StatusNotImplemented, nil
+	} else if srcType == "google" {
+		bflName := r.Header.Get("X-Bfl-User")
+		src := r.URL.Path
+		metaData, err := getGoogleDriveMetadata(src, w, r)
+		if err != nil {
+			fmt.Println(err)
+			return errToStatus(err), err
+		}
+		if metaData.IsDir {
+			return http.StatusNotImplemented, errors.New("doesn't support directory download for google drive now")
+		}
+		return rawFileHandlerGoogle(src, w, r, metaData, bflName)
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+		bflName := r.Header.Get("X-Bfl-User")
+		src := r.URL.Path
+		metaData, err := getCloudDriveMetadata(src, w, r)
+		if err != nil {
+			fmt.Println(err)
+			return errToStatus(err), err
+		}
+		if metaData.IsDir {
+			return http.StatusNotImplemented, errors.New("doesn't support directory download for " + srcType + " drive now")
+		}
+		return rawFileHandlerCloudDrive(src, w, r, metaData, bflName)
 	}
 
 	file, err := files.NewFileInfo(files.FileOptions{

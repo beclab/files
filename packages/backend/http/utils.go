@@ -2,6 +2,8 @@ package http
 
 import (
 	"compress/gzip"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -466,4 +468,78 @@ func checkBufferDiskSpace(diskSize int64) (bool, error) {
 			needsStr, availsStr, reservedStr)
 		return false, errors.New(errorMessage)
 	}
+}
+
+func stringMD5(s string) string {
+	hasher := md5.New()
+
+	hasher.Write([]byte(s))
+
+	hashBytes := hasher.Sum(nil)
+
+	hashString := hex.EncodeToString(hashBytes)
+
+	return hashString
+}
+
+func removeSlash(s string) string {
+	s = strings.TrimSuffix(s, "/")
+	return strings.ReplaceAll(s, "/", "_")
+}
+
+//func removeNonAlphanumericUnderscore(s string) string {
+//	re := regexp.MustCompile(`[^a-zA-Z0-9_]`)
+//	return re.ReplaceAllString(s, "_")
+//}
+
+func getHost(r *http.Request) string {
+	bflName := r.Header.Get("X-Bfl-User")
+	url := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
+
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Error making GET request:", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response body:", err)
+		return ""
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Received non-200 response: %d\n", resp.StatusCode)
+		return ""
+	}
+
+	type BflResponse struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			TerminusName    string `json:"terminusName"`
+			WizardStatus    string `json:"wizardStatus"`
+			Selfhosted      bool   `json:"selfhosted"`
+			TailScaleEnable bool   `json:"tailScaleEnable"`
+			OsVersion       string `json:"osVersion"`
+			LoginBackground string `json:"loginBackground"`
+			Avatar          string `json:"avatar"`
+			TerminusId      string `json:"terminusId"`
+			Did             string `json:"did"`
+			ReverseProxy    string `json:"reverseProxy"`
+			Terminusd       string `json:"terminusd"`
+		} `json:"data"`
+	}
+
+	var responseObj BflResponse
+	err = json.Unmarshal(body, &responseObj)
+	if err != nil {
+		fmt.Println("Error unmarshaling JSON:", err)
+		return ""
+	}
+
+	modifiedTerminusName := strings.Replace(responseObj.Data.TerminusName, "@", ".", 1)
+	fmt.Println(modifiedTerminusName)
+	return "https://files." + modifiedTerminusName
 }

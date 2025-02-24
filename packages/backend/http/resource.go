@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"io"
 	"io/ioutil"
 	"log"
@@ -139,6 +140,7 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 		responseBody = reader
 	}
 
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err = io.Copy(w, responseBody)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -164,9 +166,23 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 	fmt.Println("stream: ", stream)
 
+	metaStr := r.URL.Query().Get("meta")
+	meta := 0
+	if metaStr != "" {
+		meta, err = strconv.Atoi(metaStr)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+	fmt.Println("meta: ", meta)
+
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return resourceGetSync(w, r, stream)
+	} else if srcType == "google" {
+		return resourceGetGoogle(w, r, stream, meta)
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+		return resourceGetCloudDrive(w, r, stream, meta)
 	}
 
 	xBflUser := r.Header.Get("X-Bfl-User")
@@ -410,6 +426,15 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			return http.StatusForbidden, nil
 		}
 
+		srcType := r.URL.Query().Get("src")
+		if srcType == "google" {
+			_, status, err := resourceDeleteGoogle(fileCache, "", w, r, false)
+			return status, err
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+			_, status, err := resourceDeleteCloudDrive(fileCache, "", w, r, false)
+			return status, err
+		}
+
 		file, err := files.NewFileInfo(files.FileOptions{
 			Fs:         d.user.Fs,
 			Path:       r.URL.Path,
@@ -498,6 +523,15 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
+		}
+
+		srcType := r.URL.Query().Get("src")
+		if srcType == "google" {
+			_, status, err := resourcePostGoogle("", w, r, false)
+			return status, err
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+			_, status, err := resourcePostCloudDrive("", w, r, false)
+			return status, err
 		}
 
 		modeParam := r.URL.Query().Get("mode")
@@ -592,6 +626,13 @@ var resourcePutHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 
 func resourcePatchHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		srcType := r.URL.Query().Get("src")
+		if srcType == "google" {
+			return resourcePatchGoogle(fileCache, w, r)
+		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+			return resourcePatchCloudDrive(fileCache, w, r)
+		}
+
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		action := r.URL.Query().Get("action")
@@ -708,7 +749,12 @@ func writeFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 func delThumbs(ctx context.Context, fileCache FileCache, file *files.FileInfo) error {
 	for _, previewSizeName := range PreviewSizeNames() {
 		size, _ := ParsePreviewSize(previewSizeName)
-		if err := fileCache.Delete(ctx, previewCacheKey(file, size)); err != nil {
+		cacheKey := previewCacheKey(file, size)
+		if err := fileCache.Delete(ctx, cacheKey); err != nil {
+			return err
+		}
+		err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
+		if err != nil {
 			return err
 		}
 	}

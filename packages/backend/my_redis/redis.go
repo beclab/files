@@ -30,9 +30,9 @@ func InitRedis() {
 	redisDB, _ := strconv.Atoi(redisDBStr)
 
 	redisClient = redis.NewClient(&redis.Options{
-		Addr:     redisHost + ":" + redisPort, // "localhost:6379", // Redis服务器地址和端口
-		Password: redisPassword,               // "difyai123456",   // Redis服务器密码，如果有的话
-		DB:       redisDB,                     //0,                // 使用的Redis数据库编号
+		Addr:     redisHost + ":" + redisPort, // "localhost:6379",
+		Password: redisPassword,               // "difyai123456",
+		DB:       redisDB,                     //0,
 	})
 }
 

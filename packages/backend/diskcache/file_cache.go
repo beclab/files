@@ -6,13 +6,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/spf13/afero"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/spf13/afero"
 )
+
+var CacheDir = "/data/file_cache"
 
 type FileCache struct {
 	fs afero.Fs
@@ -37,6 +38,7 @@ func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
 	defer mu.Unlock()
 
 	fileName := f.getFileName(key)
+	fmt.Println("key: ", key, " fileName: ", fileName, " filePath: ", filepath.Dir(fileName))
 	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil { //nolint:gomnd
 		return err
 	}
@@ -106,5 +108,6 @@ func (f *FileCache) getFileName(key string) string {
 	hasher := sha1.New() //nolint:gosec
 	_, _ = hasher.Write([]byte(key))
 	hash := hex.EncodeToString(hasher.Sum(nil))
-	return fmt.Sprintf("%s/%s/%s", hash[:1], hash[1:3], hash)
+	//return fmt.Sprintf("%s/%s/%s", hash[:1], hash[1:3], hash)
+	return hash
 }
