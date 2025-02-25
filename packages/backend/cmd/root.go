@@ -145,8 +145,10 @@ user created with the credentials from options "username" and "password".`,
 
 		// my_redis for watcher
 		my_redis.InitRedis()
-		my_redis.InitFolderAndRedis()
-		go my_redis.StartDailyCleanup()
+		if diskcache.CacheDir != "" {
+			my_redis.InitFolderAndRedis()
+			go my_redis.StartDailyCleanup()
+		}
 
 		// rpcServer for zinc
 		var wg sync.WaitGroup

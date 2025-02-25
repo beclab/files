@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-var CacheDir = "/data/file_cache"
+var CacheDir = os.Getenv("FILE_CACHE_DIR") // "/data/file_cache"
 
 type FileCache struct {
 	fs afero.Fs

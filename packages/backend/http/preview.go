@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/diskcache"
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/img"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
@@ -126,7 +127,9 @@ func handleImagePreview(
 		}
 	}
 
-	my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
+	if diskcache.CacheDir != "" {
+		my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
+	}
 
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, file.ModTime, bytes.NewReader(resizedImage))
