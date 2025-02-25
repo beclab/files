@@ -95,11 +95,10 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 		log.Info().Msgf("watching path %s", strings.Join(addPaths, ","))
 	}
 
-	// 写入当前时间到 Redis
 	currentTime := time.Now().Format(time.RFC3339)
 	my_redis.RedisSet("last_update_time", currentTime, time.Duration(0))
 	if err != nil {
-		fmt.Println("写入失败:", err)
+		fmt.Println("write to redis failed:", err)
 		my_redis.RedisSet("indexing_error", true, time.Duration(0))
 		return
 	}
@@ -341,19 +340,19 @@ func dedupLoop(w *jfsnotify.Watcher) {
 //			pendingEvent[e.Name] = e
 //			t, ok := timers[e.Name]
 //			if !ok {
-//				t = time.NewTimer(waitFor) // 创建一个新的定时器
+//				t = time.NewTimer(waitFor)
 //			} else {
-//				t.Reset(waitFor) // 重置现有定时器
+//				t.Reset(waitFor)
 //			}
 //			timers[e.Name] = t
 //			mu.Unlock()
 //
 //			go func(t *time.Timer, eventName string) {
-//				<-t.C // 等待定时器触发
+//				<-t.C
 //				mu.Lock()
 //				ev := pendingEvent[eventName]
-//				delete(pendingEvent, eventName) // 处理完后删除事件
-//				delete(timers, eventName)       // 删除定时器
+//				delete(pendingEvent, eventName)
+//				delete(timers, eventName)
 //				mu.Unlock()
 //				printEvent(ev)
 //				err := handleEvent(ev)
@@ -630,7 +629,6 @@ func getFileOwnerUID(filename string) (uint32, error) {
 		return 0, fmt.Errorf("unable to convert Sys() type to *syscall.Stat_t")
 	}
 
-	// 返回文件的UID
 	return statT.Uid, nil
 }
 

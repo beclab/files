@@ -34,7 +34,7 @@ type FileCache interface {
 }
 
 var (
-	maxConcurrentRequests = 10 // 每次处理的最大请求数
+	maxConcurrentRequests = 10
 	sem                   = make(chan struct{}, maxConcurrentRequests)
 )
 

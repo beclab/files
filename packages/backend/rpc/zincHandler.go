@@ -286,31 +286,26 @@ package rpc
 //	fmt.Println(token.Data)
 //
 //	req := c.Request
-//	// 解析表单数据
 //	if err := req.ParseForm(); err != nil {
 //		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse form data"})
 //		return
 //	}
 //
-//	// 添加index字段
 //	if token.Data.Index != "" {
 //		fmt.Println(token.Data.Index)
 //		req.PostForm.Set("index", token.Data.Index)
 //	}
 //
-//	// 添加query字段
 //	if token.Data.Query != "" {
 //		fmt.Println(token.Data.Query)
 //		req.PostForm.Set("query", token.Data.Query)
 //	}
 //
-//	// 添加limit字段
 //	if token.Data.Limit != 0 {
 //		fmt.Println(token.Data.Limit)
 //		req.PostForm.Set("limit", strconv.Itoa(token.Data.Limit))
 //	}
 //
-//	// 添加offset字段
 //	if token.Data.Offset != 0 {
 //		fmt.Println(token.Data.Offset)
 //		req.PostForm.Set("offset", strconv.Itoa(token.Data.Offset))

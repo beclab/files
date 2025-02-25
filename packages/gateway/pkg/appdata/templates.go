@@ -309,13 +309,11 @@ func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, key string
 //}
 
 func getPodIP(client *kubernetes.Clientset, prefix, serviceName, namespace, nodeName string) (string, error) {
-	// 列出所有Pod
 	pods, err := client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return "", fmt.Errorf("error listing pods: %w", err)
 	}
 
-	// 筛选出符合条件的Pod
 	var podIP string
 	for _, pod := range pods.Items {
 		if strings.HasPrefix(pod.GetName(), prefix) && pod.Spec.NodeName == nodeName {
@@ -324,7 +322,6 @@ func getPodIP(client *kubernetes.Clientset, prefix, serviceName, namespace, node
 		}
 	}
 
-	// 检查是否找到了符合条件的Pod
 	if podIP == "" {
 		return "", fmt.Errorf("no pod found with the specified prefix and node name")
 	}
@@ -333,13 +330,11 @@ func getPodIP(client *kubernetes.Clientset, prefix, serviceName, namespace, node
 }
 
 func getPodDNSName(client *kubernetes.Clientset, prefix, serviceName, namespace, nodeName string) (string, error) {
-	// 列出所有Pod
 	pods, err := client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return "", fmt.Errorf("error listing pods: %w", err)
 	}
 
-	// 筛选出符合条件的Pod
 	var dnsName string
 	for _, pod := range pods.Items {
 		if strings.HasPrefix(pod.GetName(), prefix) && pod.Spec.NodeName == nodeName {
@@ -348,7 +343,6 @@ func getPodDNSName(client *kubernetes.Clientset, prefix, serviceName, namespace,
 		}
 	}
 
-	// 检查是否找到了符合条件的Pod
 	if dnsName == "" {
 		return "", fmt.Errorf("no pod found with the specified prefix and node name")
 	}
@@ -380,9 +374,7 @@ func GetAppDataServiceEndpoint(client *kubernetes.Clientset, nodeName string) st
 	fmt.Println("Pod DNS name: ", dnsName)
 	return dnsName
 
-	//// 构建无头服务的 Pod DNS 名称
 	//podDNSName := fmt.Sprintf("%s-%s.%s.svc.cluster.local", UserAppDataDeployService, nodeName, Namespace)
-	//// 构建 HTTP 访问点
 	//httpEndpoint := fmt.Sprintf("%s:%d", podDNSName, PodPort)
 	//return httpEndpoint
 }

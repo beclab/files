@@ -151,7 +151,7 @@ func (c *Service) loadRoutes() error {
 	//RpcEngine.POST("/files/delete", c.HandleDelete)
 	//RpcEngine.POST("/files/query", c.HandleQuery)
 	//RpcEngine.POST("/provider/query_file", c.QueryFile)
-	//下面一行用于重定向测试：
+	// the row below for redirect test：
 	//RpcEngine.POST("/provider/query_file", c.HandleSearchFolderPaths)
 	//RpcEngine.POST("/provider/get_search_folder_status", c.HandleSearchFolderStatus)
 	//RpcEngine.POST("/provider/update_search_folder_paths", c.HandleSearchFolderPaths)
@@ -262,13 +262,11 @@ func (c *Service) loadRoutes() error {
 //	fmt.Println(token.Data)
 //
 //	req := c.Request
-//	// 解析表单数据
 //	if err := req.ParseForm(); err != nil {
 //		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse form data"})
 //		return
 //	}
 //
-//	// 添加paths字段
 //	var paths = []string{}
 //	if len(token.Data.Paths) > 0 {
 //		fmt.Println(token.Data.Paths)
@@ -316,13 +314,13 @@ func (c *Service) loadRoutes() error {
 //
 //	resp, err := CallDifyGatewayBaseProvider(1, nil)
 //	if err != nil {
-//		return nil, fmt.Errorf("请求失败：%s\n", err.Error())
+//		return nil, fmt.Errorf("Request failed：%s\n", err.Error())
 //	}
 //
 //	var datasetResponse DatasetResponse
 //	err = json.NewDecoder(bytes.NewReader(resp)).Decode(&datasetResponse)
 //	if err != nil {
-//		return nil, fmt.Errorf("解析响应失败：%s\n", err.Error())
+//		return nil, fmt.Errorf("Parse response failed：%s\n", err.Error())
 //	}
 //
 //	for _, dataItem := range datasetResponse.Data.Data {
@@ -361,11 +359,9 @@ func (c *Service) loadRoutes() error {
 //func getRedisDatasetIDs() ([]string, error) {
 //	allKeys, _ := my_redis.RedisGetAllKeys()
 //	fmt.Println("Current Redis All keys:", allKeys)
-//	// 获取以 "DATASET_" 开头的所有 key
 //	keys := my_redis.RedisGetKeys("*DATASET_*")
 //	fmt.Println("DATASET keys:", keys)
 //
-//	// 提取 key 中的 datasetID
 //	datasetIDs := make([]string, len(keys))
 //	for i, key := range keys {
 //		parts := strings.Split(key, "_")
@@ -395,12 +391,11 @@ func (c *Service) loadRoutes() error {
 //
 //	var err error
 //	if len(datasetIDs) == 0 && all == 1 {
-//		// 获取 Redis 中以 "DATASET_" 开头的所有 key
 //		datasetIDs, err = getRedisDatasetIDs()
 //		fmt.Println("datasetIDs:", datasetIDs)
 //		if err != nil {
 //			fmt.Println(err)
-//			return nil, fmt.Errorf("获取 Redis 中的 datasetIDs 失败: %s", err.Error())
+//			return nil, fmt.Errorf("Get datasetIDs in redis failed: %s", err.Error())
 //		}
 //	}
 //
@@ -411,18 +406,17 @@ func (c *Service) loadRoutes() error {
 //		fmt.Println("resp:", resp)
 //		if err != nil {
 //			fmt.Println(err)
-//			return nil, fmt.Errorf("请求失败：%s\n", err.Error())
+//			return nil, fmt.Errorf("Request failed：%s\n", err.Error())
 //		}
 //
 //		err = json.NewDecoder(bytes.NewReader(resp)).Decode(&datasetResponse)
 //		if err != nil {
-//			return nil, fmt.Errorf("解析响应失败：%s\n", err.Error())
+//			return nil, fmt.Errorf("Parse response failed：%s\n", err.Error())
 //		}
 //
 //		//fmt.Println(url)
 //		fmt.Println("datasetResponse=", datasetResponse)
 //
-//		// 创建 datasetResponseCopy 的副本
 //		dataCopy = make([]DataItem, len(datasetResponse.Data.Data))
 //		copy(dataCopy, datasetResponse.Data.Data)
 //	} else {
@@ -504,7 +498,6 @@ func (c *Service) loadRoutes() error {
 //	fmt.Println(token.Data)
 //
 //	req := c.Request
-//	// 解析表单数据
 //	if err := req.ParseForm(); err != nil {
 //		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse form data"})
 //		return
@@ -572,7 +565,7 @@ func (c *Service) loadRoutes() error {
 //	if datasetName != "" {
 //		resp, err := CallDifyGatewayBaseProvider(1, nil) //http.Get(url)
 //		if err != nil {
-//			return nil, fmt.Errorf("请求失败：%s\n", err.Error())
+//			return nil, fmt.Errorf("request failed：%s\n", err.Error())
 //		}
 //
 //		var datasetResponse struct {
@@ -586,7 +579,7 @@ func (c *Service) loadRoutes() error {
 //
 //		err = json.NewDecoder(bytes.NewReader(resp)).Decode(&datasetResponse)
 //		if err != nil {
-//			return nil, fmt.Errorf("解析响应失败：%s\n", err.Error())
+//			return nil, fmt.Errorf("parse response failed：%s\n", err.Error())
 //		}
 //
 //		var datasetIDs []string
@@ -652,13 +645,11 @@ func (c *Service) loadRoutes() error {
 //	fmt.Println(token.Data)
 //
 //	req := c.Request
-//	// 解析表单数据
 //	if err := req.ParseForm(); err != nil {
 //		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse form data"})
 //		return
 //	}
 //
-//	// 添加paths字段
 //	var datasetID = ""
 //	var datasetName = ""
 //	var paths = []string{}
@@ -711,7 +702,6 @@ func (c *Service) loadRoutes() error {
 //		c.JSON(http.StatusOK, response)
 //	}()
 //
-//	// 在原函数返回前调用新函数
 //	s.SendUpdateDatasetFolderPathsRequest(false)
 //	if createOrDelete == -1 {
 //		for _, updateID := range datasetIDs {
@@ -823,7 +813,6 @@ func (c *Service) loadRoutes() error {
 //	var requestData Request
 //	err = json.Unmarshal([]byte(reqBody), &requestData)
 //	if err != nil {
-//		// 处理解析错误
 //	}
 //
 //	datasetNames := requestData.DatasetNames
@@ -867,7 +856,6 @@ func (c *Service) loadRoutes() error {
 //		Paths []string `json:"paths"`
 //	}
 //
-//	// 从 Redis 获取的字符串表示的 JSON 数据
 //	redisValue := my_redis.RedisGet(redisKey)
 //
 //	var redisResponse RedisResponse
@@ -877,10 +865,8 @@ func (c *Service) loadRoutes() error {
 //		return ""
 //	}
 //
-//	// 提取 paths 字段
 //	redisPaths := redisResponse.Paths
 //
-//	// 将 paths 转换为字符串
 //	redisPathsStr := strings.Join(redisPaths, ",")
 //	return redisPathsStr
 //}
@@ -907,7 +893,6 @@ func (c *Service) loadRoutes() error {
 //	var requestData Request
 //	err = json.Unmarshal([]byte(reqBody), &requestData)
 //	if err != nil {
-//		// 处理解析错误
 //	}
 //
 //	paths := requestData.Paths
@@ -947,7 +932,6 @@ func (c *Service) loadRoutes() error {
 //		c.JSON(http.StatusOK, response)
 //	}()
 //
-//	// 在原函数返回前调用新函数
 //	s.SendUpdateDatasetFolderPathsRequest(false)
 //	if createOrDelete == -1 {
 //		for _, updateID := range datasetIDs {

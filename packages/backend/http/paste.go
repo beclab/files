@@ -73,54 +73,6 @@ func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
 	return os.Rename(tempFilePath, targetPath)
 }
 
-//func ioCopyFile(sourcePath, targetPath string) error {
-//	sourceFile, err := os.Open(sourcePath)
-//	if err != nil {
-//		return err
-//	}
-//	defer sourceFile.Close()
-//
-//	// 使用 os.OpenFile 以确保文件被创建且可写
-//	targetFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-//	if err != nil {
-//		return err
-//	}
-//	defer targetFile.Close()
-//
-//	_, err = io.Copy(targetFile, sourceFile)
-//	if err != nil {
-//		return err
-//	}
-//
-//	err = targetFile.Sync()
-//	if err != nil {
-//		return err
-//	}
-//
-//	return nil
-//}
-
-//func ioCopyFile(sourcePath, targetPath string) error {
-//	sourceFile, err := os.Open(sourcePath)
-//	if err != nil {
-//		return err
-//	}
-//	defer sourceFile.Close()
-//
-//	targetFile, err := os.Create(targetPath)
-//	if err != nil {
-//		return err
-//	}
-//	defer targetFile.Close()
-//
-//	_, err = io.Copy(targetFile, sourceFile)
-//	if err != nil {
-//		return err
-//	}
-//
-//	return nil
-//}
-
 func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInfo, int, error) {
 	xBflUser := r.Header.Get("X-Bfl-User")
 	fmt.Println("X-Bfl-User: ", xBflUser)
@@ -962,7 +914,6 @@ func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 }
 
 func generateUniqueIdentifier(relativePath string) string {
-	// 计算 MD5 哈希
 	h := md5.New()
 	io.WriteString(h, relativePath+time.Now().String())
 	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
@@ -1198,7 +1149,6 @@ func resourceSyncDelete(path string, r *http.Request) (int, error) {
 	lastSlashIdx := strings.LastIndex(path, "/")
 
 	filename := path[lastSlashIdx+1:]
-	//filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
 
 	prefix := ""
 	if firstSlashIdx != lastSlashIdx {
@@ -1211,13 +1161,9 @@ func resourceSyncDelete(path string, r *http.Request) (int, error) {
 		prefix = "/"
 	}
 
-	//fmt.Println("repo-id:", repoID)
-	//fmt.Println("prefix:", prefix)
-	//fmt.Println("filename:", filename)
-
 	targetURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/batch-delete-item/"
 	requestBody := map[string]interface{}{
-		"dirents":    []string{filename}, // 将 filename 放入数组中
+		"dirents":    []string{filename},
 		"parent_dir": prefix,
 		"repo_id":    repoID,
 	}
@@ -1225,7 +1171,6 @@ func resourceSyncDelete(path string, r *http.Request) (int, error) {
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
-	//fmt.Println(jsonBody)
 
 	request, err := http.NewRequest("DELETE", targetURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -1260,7 +1205,6 @@ func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 	renamed := ""
 
 	for {
-		//if _, err := fs.Stat(source); err != nil {
 		var isDir bool
 		var err error
 		if _, _, _, isDir, err = getStat(fs, dstType, source, w, r); err != nil {
