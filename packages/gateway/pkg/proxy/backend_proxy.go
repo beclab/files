@@ -88,12 +88,6 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	backendProxy.addHandlers(API_PREVIEW_BIG_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
-	//backendProxy.addHandlers(API_PREFIX, backendProxy.listNodesOrNot(backendProxy.apiHandler))
-	//backendProxy.addHandlers(API_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.apiHandler))
-	//backendProxy.addHandlers(UPLOADER_PREFIX, backendProxy.uploaderHandler)
-	//backendProxy.addHandlers(UPLOADER_PREFIX+"/", backendProxy.uploaderHandler)
-	//backendProxy.addHandlers(MEDIA_PREFIX, backendProxy.mediaHandler)
-	//backendProxy.addHandlers(MEDIA_PREFIX+"/", backendProxy.mediaHandler)
 
 	proxy.Use(middleware.Recover())
 	proxy.Use(middleware.Logger())
@@ -317,14 +311,14 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	}
 	klog.Info("BFL_NAME: ", bflName)
 
-	userPvc, err := PVCs.getUserPVCOrCache(bflName) // appdata.GetAnnotation(p.mainCtx, p.k8sClient, "userspace_pvc", bflName)
+	userPvc, err := PVCs.getUserPVCOrCache(bflName)
 	if err != nil {
 		klog.Info(err)
 	} else {
 		klog.Info("user-space pvc: ", userPvc)
 	}
 
-	cachePvc, err := PVCs.getCachePVCOrCache(bflName) // appdata.GetAnnotation(p.mainCtx, p.k8sClient, "appcache_pvc", bflName)
+	cachePvc, err := PVCs.getCachePVCOrCache(bflName)
 	if err != nil {
 		klog.Info(err)
 	} else {

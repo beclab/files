@@ -32,22 +32,10 @@ type Data struct {
 	ResourceURI     string                 `json:"resource_uri"`
 	CreatedAt       int64                  `json:"created_at"`
 	Service         string                 `json:"service"`
-	Meta            map[string]interface{} `json:"meta"` // 使用map来存储未知字段
+	Meta            map[string]interface{} `json:"meta"`
 }
 
-// maybe need in the future
-//type Meta struct {
-//	MD5         string    `json:"md5"`
-//	Size        int64     `json:"size"`
-//	Created     int64     `json:"created"`
-//	Updated     int64     `json:"updated"`
-//	FormatName  string    `json:"format_name"`
-//}
-
 func fetchDocumentByResourceUri(resourceUri, bflName string) (string, string, error) {
-	// maybe need in the future
-	// escapedResourceUri := url.QueryEscape(resourceUri)
-
 	baseURL := "http://search3.os-system:80/document/get_by_resource_uri"
 	query := url.Values{}
 	query.Set("resource_uri", resourceUri)
@@ -84,21 +72,12 @@ func fetchDocumentByResourceUri(resourceUri, bflName string) (string, string, er
 	var md5 string
 	if response.StatusCode == "SUCCESS" && response.Data != nil {
 		searchId = fmt.Sprintf("%d", response.Data.ID)
-		//md5 = fmt.Sprintf("%d", response.Data.Meta.MD5)
-		//for key, value := range response.Data.Meta {
-		//	fmt.Printf("Meta[%s] = %v\n", key, value)
-		//	if key == "md5" {
-		//		md5 = value.(string)
-		//	}
-		//}
 		md5 = ""
 	} else {
 		searchId = ""
 		md5 = ""
 		log.Println("Failed to retrieve data or data is nil.")
 	}
-
-	//fmt.Println("searchId: ", searchId, "; md5: ", md5)
 
 	return searchId, md5, nil
 }
@@ -137,8 +116,6 @@ func postDocumentSearch3(doc map[string]interface{}, bflName string) (string, er
 		fmt.Println("Error marshaling doc to JSON:", err)
 		return "", err
 	}
-	//fmt.Println("Doc content:")
-	//fmt.Println(string(docBytes))
 
 	url := "http://search3.os-system:80/document/add"
 	jsonStr := bytes.NewBuffer(docBytes)
@@ -165,9 +142,6 @@ func postDocumentSearch3(doc map[string]interface{}, bflName string) (string, er
 		return "", err
 	}
 
-	//fmt.Println("Response from server:")
-	//fmt.Println(string(body))
-
 	var response Response
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -177,15 +151,10 @@ func postDocumentSearch3(doc map[string]interface{}, bflName string) (string, er
 	var searchId string
 	if response.StatusCode == "SUCCESS" && response.Data != nil {
 		searchId = fmt.Sprintf("%d", response.Data.ID)
-		//for key, value := range response.Data.Meta {
-		//	fmt.Printf("Meta[%s] = %v\n", key, value)
-		//}
 	} else {
 		searchId = ""
 		log.Println("Failed to retrieve data or data is nil.")
 	}
-
-	//fmt.Println("searchId:", searchId)
 
 	SearchIdCacheLock.Lock()
 	defer SearchIdCacheLock.Unlock()
@@ -202,8 +171,6 @@ func putDocumentSearch3(searchId string, doc map[string]interface{}, bflName str
 		fmt.Println("Error marshaling doc to JSON:", err)
 		return "", err
 	}
-	//fmt.Println("Doc content:")
-	//fmt.Println(string(docBytes))
 
 	url := "http://search3.os-system:80/document/update/" + searchId
 	jsonStr := bytes.NewBuffer(docBytes)
@@ -230,9 +197,6 @@ func putDocumentSearch3(searchId string, doc map[string]interface{}, bflName str
 		return "", err
 	}
 
-	//fmt.Println("Response from server:")
-	//fmt.Println(string(body))
-
 	var response Response
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -242,22 +206,10 @@ func putDocumentSearch3(searchId string, doc map[string]interface{}, bflName str
 	var respSearchId string
 	if response.StatusCode == "SUCCESS" && response.Data != nil {
 		respSearchId = fmt.Sprintf("%d", response.Data.ID)
-		//for key, value := range response.Data.Meta {
-		//	fmt.Printf("Meta[%s] = %v\n", key, value)
-		//}
 	} else {
 		respSearchId = ""
 		log.Println("Failed to retrieve data or data is nil.")
 	}
-
-	//fmt.Println("searchId:", respSearchId)
-
-	//SearchIdCacheLock.Lock()
-	//defer SearchIdCacheLock.Unlock()
-	//if searchId != "" {
-	//	fmt.Println("Search Id to key: ", doc["resource_uri"].(string))
-	//	SearchIdCache[doc["resource_uri"].(string)] = searchId
-	//}
 	return respSearchId, nil
 }
 
@@ -286,9 +238,6 @@ func deleteDocumentSearch3(searchId string, bflName string) (string, error) {
 		return "", err
 	}
 
-	//fmt.Println("Response from server:")
-	//fmt.Println(string(body))
-
 	var response Response
 	err = json.Unmarshal(body, &response)
 	if err != nil {
@@ -300,21 +249,15 @@ func deleteDocumentSearch3(searchId string, bflName string) (string, error) {
 	if response.StatusCode == "SUCCESS" && response.Data != nil {
 		respSearchId = fmt.Sprintf("%d", response.Data.ID)
 		respResourceUri = fmt.Sprintf("%d", response.Data.ResourceURI)
-		//for key, value := range response.Data.Meta {
-		//	fmt.Printf("Meta[%s] = %v\n", key, value)
-		//}
 	} else {
 		respSearchId = ""
 		log.Println("Failed to retrieve data or data is nil.")
 	}
 
-	//fmt.Println("searchId:", respSearchId)
-
 	SearchIdCacheLock.Lock()
 	defer SearchIdCacheLock.Unlock()
 	if searchId != "" {
 		fmt.Println("Search Id to key: ", respResourceUri)
-		//SearchIdCache[respResourceUri] = searchId
 		delete(SearchIdCache, respResourceUri)
 	}
 	return respSearchId, nil

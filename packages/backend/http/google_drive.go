@@ -835,16 +835,6 @@ func googleFileToBuffer(src, bufferFilePath, bufferFileName string, w http.Respo
 		}
 		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
 			if taskRespJson.Data[0].Status == "Completed" {
-				//var found bool
-				//bufferFilename, found, err = findFirstDownloadingFile(bufferFilePath)
-				//if err != nil {
-				//	return bufferFilename, err
-				//}
-				//if !found || bufferFilename == "" {
-				//	bufferFilename = bufferFilePath + "/" + srcFilename
-				//}
-				//fmt.Println("bufferFilename:", bufferFilename)
-				//time.Sleep(200 * time.Millisecond)
 				return bufferFileName, nil
 			}
 			return bufferFileName, e.New(taskRespJson.Data[0].Status)
@@ -983,12 +973,6 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 		req.Header = r.Header.Clone()
 		req.Header.Set("Content-Type", "application/json")
 
-		//for name, values := range req.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", name, value)
-		//	}
-		//}
-
 		client := &http.Client{}
 		resp, err = client.Do(req)
 		if err != nil {
@@ -1022,13 +1006,6 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 			fmt.Printf("Non-200 response status: %d, body: %s\n", resp.StatusCode, responseBody)
 			return nil, fmt.Errorf("non-200 response status: %d", resp.StatusCode)
 		}
-
-		//fmt.Printf("GoogleDriveListResponse Hedears:\n")
-		//for name, values := range resp.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", name, value)
-		//	}
-		//}
 
 		contentType := resp.Header.Get("Content-Type")
 		if !strings.HasPrefix(contentType, "application/json") {
@@ -1196,8 +1173,7 @@ func resourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 func resourcePatchGoogle(fileCache FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
 	src := r.URL.Path
 	dst := r.URL.Query().Get("destination")
-	//action := r.URL.Query().Get("action")
-	dst, err := unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
+	dst, err := unescapeURLIfEscaped(dst)
 
 	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
 	_, _, _, dstFilename := parseGoogleDrivePath(dst)
@@ -1301,7 +1277,7 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 	if err != nil {
 		return nil, err
 	}
-	bufferFileName := removeSlash(file.Name) // removeNonAlphanumericUnderscore(file.Name)
+	bufferFileName := removeSlash(file.Name)
 	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	fmt.Println("Buffer file path: ", bufferFilePath)
 	fmt.Println("Buffer path: ", bufferPath)
@@ -1368,7 +1344,7 @@ func rawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, fi
 	if err != nil {
 		return errToStatus(err), err
 	}
-	bufferFileName := removeSlash(file.Name) // removeNonAlphanumericUnderscore(file.Name)
+	bufferFileName := removeSlash(file.Name)
 	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	fmt.Println("Buffer file path: ", bufferFilePath)
 	fmt.Println("Buffer path: ", bufferPath)

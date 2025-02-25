@@ -40,9 +40,6 @@ func main() {
 		KubeConfig: config,
 	}
 
-	//nodeWatcher := operator.NewWatcher(ctx, config)
-	//nodeWatcher.Start()
-
 	backendProxy := builder.Build()
 	proxy.PVCs = proxy.NewPVCCache(backendProxy)
 

@@ -67,7 +67,6 @@ func downloadAndComputeMD5(r *http.Request, url string) (string, error) {
 }
 
 func md5Sync(w http.ResponseWriter, r *http.Request) (int, error) {
-	// src is like [repo-id]/path/filename
 	src := r.URL.Path
 	src = strings.Trim(src, "/")
 	if !strings.Contains(src, "/") {
@@ -107,12 +106,6 @@ func md5Sync(w http.ResponseWriter, r *http.Request) (int, error) {
 }
 
 func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo) (int, error) {
-	//fd, err := file.Fs.Open(file.Path)
-	//if err != nil {
-	//	return http.StatusInternalServerError, err
-	//}
-	//defer fd.Close()
-
 	var err error
 	responseData := make(map[string]interface{})
 	responseData["md5"], err = common.Md5File(file.Path)
@@ -122,23 +115,18 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 	return renderJSON(w, r, responseData)
 }
 
-var md5Handler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func md5Handler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return md5Sync(w, r)
 	}
 
-	if !d.user.Perm.Download {
-		return http.StatusAccepted, nil
-	}
-
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
+		Fs:         files.DefaultFs,
 		Path:       r.URL.Path,
-		Modify:     d.user.Perm.Modify,
+		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		Checker:    d,
 	})
 	if err != nil {
 		return errToStatus(err), err
@@ -150,4 +138,4 @@ var md5Handler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) 
 	}
 
 	return md5FileHandler(w, r, file)
-})
+}

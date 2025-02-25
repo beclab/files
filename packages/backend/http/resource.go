@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/spf13/afero"
 
 	"github.com/filebrowser/filebrowser/v2/errors"
@@ -26,34 +25,14 @@ import (
 	"github.com/filebrowser/filebrowser/v2/fileutils"
 )
 
-// func recursiveSize(file *files.FileInfo) {
-// 	if file.IsDir {
-// 		for _, info := range file.Items {
-// 			//fmt.Println(info)
-// 			recursiveSize(info)
-// 		}
-// 		if file.Listing != nil {
-// 			file.Size += file.Listing.Size
-// 			file.FileSize += file.Listing.FileSize
-// 		}
-// 	}
-// 	return
-// }
-
 func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
-	// src is like [repo-id]/path/filename
 	src := r.URL.Path
-	src, err := unescapeURLIfEscaped(src) // url.QueryUnescape(src)
+	src, err := unescapeURLIfEscaped(src)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
 	fmt.Println("src Path:", src)
 	src = strings.Trim(src, "/") + "/"
-	//if !strings.Contains(src, "/") {
-	//	err := e.New("invalid path format: path must contain at least one '/'")
-	//	fmt.Println("Error:", err)
-	//	return errToStatus(err), err
-	//}
 
 	firstSlashIdx := strings.Index(src, "/")
 
@@ -61,7 +40,7 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 
 	lastSlashIdx := strings.LastIndex(src, "/")
 
-	// don't use, because this is only used for folders
+	// won't use, because this func is only used for folders
 	filename := src[lastSlashIdx+1:]
 
 	prefix := ""
@@ -71,7 +50,6 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	if prefix == "" {
 		prefix = "/"
 	}
-	//prefix = url.QueryEscape(prefix)
 	prefix = escapeURLWithSpace(prefix)
 
 	fmt.Println("repo-id:", repoID)
@@ -123,7 +101,6 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 				return errToStatus(err), err
 			}
 		}
-		//body, _ := ioutil.ReadAll(response.Body)
 		streamSyncDirents(w, r, body, repoID)
 		return 0, nil
 	}
@@ -151,7 +128,7 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	return 0, nil
 }
 
-var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	start := time.Now()
 	fmt.Println("Function resourceGetHandler starts at", start)
 
@@ -206,7 +183,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		// for 1.12: path-incluster URL exists, won't err in normal condition
 		// for 1.11: path-incluster URL may not exist, if err, use usb-incluster and hdd-incluster for system functional
 		url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
-
+		
 		headers := r.Header.Clone()
 		headers.Set("Content-Type", "application/json")
 		headers.Set("X-Signature", "temp_signature")
@@ -256,22 +233,20 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	var file *files.FileInfo
 	if mountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-			Fs:         d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
 			Content:    true,
 		}, mountedData)
 	} else {
 		file, err = files.NewFileInfo(files.FileOptions{
-			Fs:         d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
 			Content:    true,
 		})
 	}
@@ -309,16 +284,12 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 
 	if file.IsDir {
-		// fmt.Println(file)
-		// file.Size = file.Listing.Size
-		// recursiveSize(file)
 		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
 			file.ExternalType = files.GetExternalType(file.Path, mountedData)
 		}
-		file.Listing.Sorting = d.user.Sorting
+		file.Listing.Sorting = files.DefaultSorting
 		file.Listing.ApplySort()
 		if stream == 1 {
-			//return streamJSON(w, r, file)
 			streamListingItems(w, r, file.Listing, d, mountedData)
 			elapsed := time.Since(start)
 			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
@@ -328,7 +299,6 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
 			return renderJSON(w, r, file)
 		}
-		//return renderJSON(w, r, file)
 	}
 
 	if checksum := r.URL.Query().Get("checksum"); checksum != "" {
@@ -345,39 +315,8 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 
 	if file.Type == "video" {
 		osSystemServer := "system-server.user-system-" + xBflUser
-		//osSystemServer := v.Get("OS_SYSTEM_SERVER")
-		//if osSystemServer == nil {
-		//	log.Println("need env OS_SYSTEM_SERVER")
-		//}
 
-		/*
-				showLogUrl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", os.Getenv("OS_SYSTEM_SERVER"))
-			listTobeSend := "{\"action\": \"view\",\"category\": \"container_log\",\"data\": {\"statefulset\": \"geth\",\"container\": \"geth\"}}"
-			showLogRequestOption := &HttpCallRequestOption{
-				// Header:  map[string]string{"X-Access-Token": accessToken, "type":"application/json"},
-				Header:  map[string]string{"type":"application/json"},
-				Url:     showLogUrl,
-				Timeout: 1000 * 10,
-				JsonStr: listTobeSend,
-				TestOKFun: func(bodyStr string) bool {
-					log.Println("bodyis:", bodyStr)
-					code := gjson.Get(bodyStr, "code").Int()
-					return code == 0
-				},
-			}
-			showLogBody, listOk, showLogErr := NewHttpCall().PostJsonCall(showLogRequestOption)
-			if showLogErr != nil {
-				err = showLogErr
-				return
-			}
-			if !listOk {
-				err = errors.WithMessage(GetNoEmptyError(err), "show log error")
-				return
-			}
-			message = showLogBody
-		*/
-
-		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer) // os.Getenv("OS_SYSTEM_SERVER"))
+		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer)
 
 		fmt.Println("HTTP JSON POST URL:", httpposturl)
 
@@ -408,11 +347,11 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	elapsed := time.Since(start)
 	fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
 	return renderJSON(w, r, file)
-})
+}
 
 func resourceDeleteHandler(fileCache FileCache) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if r.URL.Path == "/" || !d.user.Perm.Delete {
+	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		if r.URL.Path == "/" {
 			return http.StatusForbidden, nil
 		}
 
@@ -426,12 +365,11 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     false,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
 		})
 		if err != nil {
 			return errToStatus(err), err
@@ -443,78 +381,47 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			return errToStatus(err), err
 		}
 
-		err = d.RunHook(func() error {
-			return d.user.Fs.RemoveAll(r.URL.Path)
-		}, "delete", r.URL.Path, "", d.user)
+		err = files.DefaultFs.RemoveAll(r.URL.Path)
 
 		if err != nil {
 			return errToStatus(err), err
 		}
 
 		return http.StatusOK, nil
-	})
+	}
 }
 
-func resourceMountHandler(fileCache FileCache) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if !d.user.Perm.Create {
-			return http.StatusForbidden, nil
-		}
+func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	respJson, err := files.MountPathIncluster(r)
+	if err != nil {
+		return errToStatus(err), err
+	}
 
-		respJson, err := files.MountPathIncluster(r)
-		if err != nil {
-			return errToStatus(err), err
-		}
-
-		return renderJSON(w, r, respJson)
-		//return http.StatusOK, nil
-	})
+	return renderJSON(w, r, respJson)
 }
 
-func resourceUnmountHandler(fileCache FileCache) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if !d.user.Perm.Delete {
-			return http.StatusForbidden, nil
-		}
-
-		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         d.user.Fs,
-			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
-			Expand:     false,
-			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
-		})
-		if err != nil {
-			return errToStatus(err), err
-		}
-
-		// delete thumbnails
-		//err = delThumbs(r.Context(), fileCache, file)
-		//if err != nil {
-		//	return errToStatus(err), err
-		//}
-
-		//err = d.RunHook(func() error {
-		//	return d.user.Fs.RemoveAll(r.URL.Path)
-		//}, "delete", r.URL.Path, "", d.user)
-
-		respJson, err := files.UnmountPathIncluster(r, file.Path)
-		if err != nil {
-			return errToStatus(err), err
-		}
-
-		return renderJSON(w, r, respJson)
-		//return http.StatusOK, nil
+func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:         files.DefaultFs,
+		Path:       r.URL.Path,
+		Modify:     true,
+		Expand:     false,
+		ReadHeader: d.server.TypeDetectionByHeader,
 	})
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	respJson, err := files.UnmountPathIncluster(r, file.Path)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	return renderJSON(w, r, respJson)
 }
 
 func resourcePostHandler(fileCache FileCache) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
-			return http.StatusForbidden, nil
-		}
-
+	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
 			_, status, err := resourcePostGoogle("", w, r, false)
@@ -535,64 +442,46 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 
 		// Directories creation on POST.
 		if strings.HasSuffix(r.URL.Path, "/") {
-			err := d.user.Fs.MkdirAll(r.URL.Path, fileMode) // 0775) //nolint:gomnd
+			err := files.DefaultFs.MkdirAll(r.URL.Path, fileMode)
 			return errToStatus(err), err
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     false,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
 		})
 		if err == nil {
 			if r.URL.Query().Get("override") != "true" {
 				return http.StatusConflict, nil
 			}
-
-			// Permission for overwriting the file
-			if !d.user.Perm.Modify {
-				return http.StatusForbidden, nil
-			}
-
 			err = delThumbs(r.Context(), fileCache, file)
 			if err != nil {
 				return errToStatus(err), err
 			}
 		}
 
-		err = d.RunHook(func() error {
-			info, writeErr := writeFile(d.user.Fs, r.URL.Path, r.Body)
-			if writeErr != nil {
-				return writeErr
-			}
-
-			etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
-			w.Header().Set("ETag", etag)
-			return nil
-		}, "upload", r.URL.Path, "", d.user)
+		info, err := writeFile(files.DefaultFs, r.URL.Path, r.Body)
+		etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
+		w.Header().Set("ETag", etag)
 
 		if err != nil {
-			_ = d.user.Fs.RemoveAll(r.URL.Path)
+			_ = files.DefaultFs.RemoveAll(r.URL.Path)
 		}
 
 		return errToStatus(err), err
-	})
+	}
 }
 
-var resourcePutHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	if !d.user.Perm.Modify || !d.Check(r.URL.Path) {
-		return http.StatusForbidden, nil
-	}
-
+func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	// Only allow PUT for files.
 	if strings.HasSuffix(r.URL.Path, "/") {
 		return http.StatusMethodNotAllowed, nil
 	}
 
-	exists, err := afero.Exists(d.user.Fs, r.URL.Path)
+	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -600,22 +489,15 @@ var resourcePutHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		return http.StatusNotFound, nil
 	}
 
-	err = d.RunHook(func() error {
-		info, writeErr := writeFile(d.user.Fs, r.URL.Path, r.Body)
-		if writeErr != nil {
-			return writeErr
-		}
-
-		etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
-		w.Header().Set("ETag", etag)
-		return nil
-	}, "save", r.URL.Path, "", d.user)
+	info, err := writeFile(files.DefaultFs, r.URL.Path, r.Body)
+	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
+	w.Header().Set("ETag", etag)
 
 	return errToStatus(err), err
-})
+}
 
 func resourcePatchHandler(fileCache FileCache) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
 			return resourcePatchGoogle(fileCache, w, r)
@@ -626,11 +508,8 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		action := r.URL.Query().Get("action")
-		dst, err := unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
+		dst, err := unescapeURLIfEscaped(dst)
 
-		if !d.Check(src) || !d.Check(dst) {
-			return http.StatusForbidden, nil
-		}
 		if err != nil {
 			return errToStatus(err), err
 		}
@@ -646,26 +525,24 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		override := r.URL.Query().Get("override") == "true"
 		rename := r.URL.Query().Get("rename") == "true"
 		if !override && !rename {
-			if _, err = d.user.Fs.Stat(dst); err == nil {
+			if _, err = files.DefaultFs.Stat(dst); err == nil {
 				return http.StatusConflict, nil
 			}
 		}
 		if rename {
-			dst = addVersionSuffix(dst, d.user.Fs, strings.HasSuffix(src, "/"))
+			dst = addVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
 		// Permission for overwriting the file
-		if override && !d.user.Perm.Modify {
+		if override {
 			return http.StatusForbidden, nil
 		}
 
 		fmt.Println("Before patch action:", src, dst, action, override, rename)
-		err = d.RunHook(func() error {
-			return patchAction(r.Context(), action, src, dst, d, fileCache)
-		}, action, src, dst, d.user)
+		err = patchAction(r.Context(), action, src, dst, d, fileCache)
 
 		return errToStatus(err), err
-	})
+	}
 }
 
 func checkParent(src, dst string) error {
@@ -707,13 +584,13 @@ func addVersionSuffix(source string, fs afero.Fs, isDir bool) string {
 func writeFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 	fmt.Println("Before open ", dst)
 	dir, _ := path.Split(dst)
-	err := fs.MkdirAll(dir, 0775) //nolint:gomnd
+	err := fs.MkdirAll(dir, 0775)
 	if err != nil {
 		return nil, err
 	}
 
 	fmt.Println("Open ", dst)
-	file, err := fs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775) //nolint:gomnd
+	file, err := fs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)
 	if err != nil {
 		return nil, err
 	}
@@ -756,27 +633,18 @@ func delThumbs(ctx context.Context, fileCache FileCache, file *files.FileInfo) e
 
 func patchAction(ctx context.Context, action, src, dst string, d *data, fileCache FileCache) error {
 	switch action {
-	// TODO: use enum
 	case "copy":
-		if !d.user.Perm.Create {
-			return errors.ErrPermissionDenied
-		}
-
-		return fileutils.Copy(d.user.Fs, src, dst)
+		return fileutils.Copy(files.DefaultFs, src, dst)
 	case "rename":
-		if !d.user.Perm.Rename {
-			return errors.ErrPermissionDenied
-		}
 		src = path.Clean("/" + src)
 		dst = path.Clean("/" + dst)
 
 		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       src,
-			Modify:     d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     false,
 			ReadHeader: false,
-			Checker:    d,
 		})
 		if err != nil {
 			return err
@@ -788,44 +656,8 @@ func patchAction(ctx context.Context, action, src, dst string, d *data, fileCach
 			return err
 		}
 
-		return fileutils.MoveFile(d.user.Fs, src, dst)
+		return fileutils.MoveFile(files.DefaultFs, src, dst)
 	default:
 		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
 	}
 }
-
-type DiskUsageResponse struct {
-	Total uint64 `json:"total"`
-	Used  uint64 `json:"used"`
-}
-
-var diskUsage = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
-		Path:       r.URL.Path,
-		Modify:     d.user.Perm.Modify,
-		Expand:     false,
-		ReadHeader: false,
-		Checker:    d,
-		Content:    false,
-	})
-	if err != nil {
-		return errToStatus(err), err
-	}
-	fPath := file.RealPath()
-	if !file.IsDir {
-		return renderJSON(w, r, &DiskUsageResponse{
-			Total: 0,
-			Used:  0,
-		})
-	}
-
-	usage, err := disk.UsageWithContext(r.Context(), fPath)
-	if err != nil {
-		return errToStatus(err), err
-	}
-	return renderJSON(w, r, &DiskUsageResponse{
-		Total: usage.Total,
-		Used:  usage.Used,
-	})
-})

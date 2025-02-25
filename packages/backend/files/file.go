@@ -2,13 +2,14 @@ package files
 
 import (
 	"bytes"
-	"crypto/md5"  //nolint:gosec
-	"crypto/sha1" //nolint:gosec
+	"crypto/md5"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/common"
 	"hash"
 	"io"
 	"io/ioutil"
@@ -24,8 +25,13 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/filebrowser/filebrowser/v2/errors"
-	"github.com/filebrowser/filebrowser/v2/rules"
 )
+
+var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), common.RootPrefix)
+var DefaultSorting = Sorting{
+	By:  "name",
+	Asc: true,
+}
 
 // FileInfo describes a file.
 type FileInfo struct {
@@ -56,7 +62,6 @@ type FileOptions struct {
 	Expand     bool
 	ReadHeader bool
 	Token      string
-	Checker    rules.Checker
 	Content    bool
 }
 
@@ -64,8 +69,6 @@ var TerminusdHost = os.Getenv("TERMINUSD_HOST")
 var ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
 
 func CheckPath(s, prefix, except string) bool {
-	// prefix := "/data/External/"
-
 	if prefix == "" || except == "" {
 		return false
 	}
@@ -80,7 +83,7 @@ func CheckPath(s, prefix, except string) bool {
 		remaining = remaining[:len(remaining)-len(except)]
 	}
 
-	return !strings.Contains(remaining, except) // "/")
+	return !strings.Contains(remaining, except)
 }
 
 type Response struct {
@@ -110,9 +113,6 @@ func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
 		return nil, err
 	}
 
-	//for key, value := range header {
-	//	req.Header.Set(key, value)
-	//}
 	req.Header = header
 
 	resp, err := client.Do(req)
@@ -267,10 +267,6 @@ func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{},
 // object will be automatically filled depending on if it is a directory
 // or a file. If it's a video file, it will also detect any subtitles.
 func NewFileInfo(opts FileOptions) (*FileInfo, error) {
-	if !opts.Checker.Check(opts.Path) {
-		return nil, os.ErrPermission
-	}
-
 	file, err := stat(opts)
 	if err != nil {
 		return nil, err
@@ -278,7 +274,7 @@ func NewFileInfo(opts FileOptions) (*FileInfo, error) {
 
 	if opts.Expand {
 		if file.IsDir {
-			if err := file.readListing(opts.Checker, opts.ReadHeader); err != nil { //nolint:govet
+			if err := file.readListing(opts.ReadHeader); err != nil {
 				return nil, err
 			}
 			return file, nil
@@ -294,10 +290,6 @@ func NewFileInfo(opts FileOptions) (*FileInfo, error) {
 }
 
 func NewFileInfoWithDiskInfo(opts FileOptions, mountedData []DiskInfo) (*FileInfo, error) {
-	if !opts.Checker.Check(opts.Path) {
-		return nil, os.ErrPermission
-	}
-
 	file, err := stat(opts)
 	if err != nil {
 		return nil, err
@@ -305,7 +297,7 @@ func NewFileInfoWithDiskInfo(opts FileOptions, mountedData []DiskInfo) (*FileInf
 
 	if opts.Expand {
 		if file.IsDir {
-			if err := file.readListingWithDiskInfo(opts.Checker, opts.ReadHeader, mountedData); err != nil { //nolint:govet
+			if err := file.readListingWithDiskInfo(opts.ReadHeader, mountedData); err != nil {
 				return nil, err
 			}
 			return file, nil
@@ -398,7 +390,6 @@ func (i *FileInfo) Checksum(algo string) error {
 
 	var h hash.Hash
 
-	//nolint:gosec
 	switch algo {
 	case "md5":
 		h = md5.New()
@@ -434,9 +425,6 @@ func (i *FileInfo) RealPath() string {
 	return i.Path
 }
 
-// TODO: use constants
-//
-//nolint:goconst
 func (i *FileInfo) detectType(modify, saveContent, readHeader bool) error {
 	if IsNamedPipe(i.Mode) {
 		i.Type = "blob"
@@ -448,7 +436,6 @@ func (i *FileInfo) detectType(modify, saveContent, readHeader bool) error {
 	// a 500 even though it doesn't matter. So we just log it.
 
 	mimetype := mime.TypeByExtension(i.Extension)
-	//fmt.Println("extension mimitype:", mimetype)
 
 	var buffer []byte
 	if readHeader && mimetype == "" {
@@ -504,7 +491,7 @@ func (i *FileInfo) readFirstBytes() []byte {
 	}
 	defer reader.Close()
 
-	buffer := make([]byte, 512) //nolint:gomnd
+	buffer := make([]byte, 512)
 	n, err := reader.Read(buffer)
 	if err != nil && err != io.EOF {
 		log.Print(err)
@@ -524,7 +511,6 @@ func (i *FileInfo) detectSubtitles() {
 	ext := filepath.Ext(i.Path)
 
 	// detect multiple languages. Base*.vtt
-	// TODO: give subtitles descriptive names (lang) and track attributes
 	parentDir := strings.TrimRight(i.Path, i.Name)
 	dir, err := afero.ReadDir(i.Fs, parentDir)
 	if err == nil {
@@ -537,75 +523,7 @@ func (i *FileInfo) detectSubtitles() {
 	}
 }
 
-//func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
-//	afs := &afero.Afero{Fs: i.Fs}
-//	dir, err := afs.ReadDir(i.Path)
-//	if err != nil {
-//		return err
-//	}
-//
-//	listing := &Listing{
-//		Items:    []*FileInfo{},
-//		NumDirs:  0,
-//		NumFiles: 0,
-//	}
-//
-//	for _, f := range dir {
-//		name := f.Name()
-//		fPath := path.Join(i.Path, name)
-//
-//		if !checker.Check(fPath) {
-//			continue
-//		}
-//
-//		isSymlink, isInvalidLink := false, false
-//		if IsSymlink(f.Mode()) {
-//			isSymlink = true
-//			// It's a symbolic link. We try to follow it. If it doesn't work,
-//			// we stay with the link information instead of the target's.
-//			info, err := i.Fs.Stat(fPath)
-//			if err == nil {
-//				f = info
-//			} else {
-//				isInvalidLink = true
-//			}
-//		}
-//
-//		file := &FileInfo{
-//			Fs:        i.Fs,
-//			Name:      name,
-//			Size:      f.Size(),
-//			ModTime:   f.ModTime(),
-//			Mode:      f.Mode(),
-//			IsDir:     f.IsDir(),
-//			IsSymlink: isSymlink,
-//			Extension: filepath.Ext(name),
-//			Path:      fPath,
-//		}
-//
-//		if file.IsDir {
-//			listing.NumDirs++
-//		} else {
-//			listing.NumFiles++
-//
-//			if isInvalidLink {
-//				file.Type = "invalid_link"
-//			} else {
-//				err := file.detectType(true, false, readHeader)
-//				if err != nil {
-//					return err
-//				}
-//			}
-//		}
-//
-//		listing.Items = append(listing.Items, file)
-//	}
-//
-//	i.Listing = listing
-//	return nil
-//}
-
-func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
+func (i *FileInfo) readListing(readHeader bool) error {
 	afs := &afero.Afero{Fs: i.Fs}
 	dir, err := afs.ReadDir(i.Path)
 	if err != nil {
@@ -624,10 +542,6 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 	for _, f := range dir {
 		name := f.Name()
 		fPath := path.Join(i.Path, name)
-
-		if !checker.Check(fPath) {
-			continue
-		}
 
 		isSymlink, isInvalidLink := false, false
 		if IsSymlink(f.Mode()) {
@@ -653,16 +567,9 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 		}
 
 		if file.IsDir {
-			// err := file.readListing(checker, readHeader)
-			// if err != nil {
-			// 	return err
-			// }
 			listing.NumDirs++
-			// listing.Size += file.Size + file.Listing.Size
-			// listing.NumTotalFiles += file.Listing.NumTotalFiles
 		} else {
 			listing.NumFiles++
-			// listing.NumTotalFiles++
 
 			if isInvalidLink {
 				file.Type = "invalid_link"
@@ -684,7 +591,7 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 	return nil
 }
 
-func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader bool, mountedData []DiskInfo) error {
+func (i *FileInfo) readListingWithDiskInfo(readHeader bool, mountedData []DiskInfo) error {
 	afs := &afero.Afero{Fs: i.Fs}
 	dir, err := afs.ReadDir(i.Path)
 	if err != nil {
@@ -703,10 +610,6 @@ func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader boo
 	for _, f := range dir {
 		name := f.Name()
 		fPath := path.Join(i.Path, name)
-
-		if !checker.Check(fPath) {
-			continue
-		}
 
 		isSymlink, isInvalidLink := false, false
 		if IsSymlink(f.Mode()) {
@@ -735,16 +638,9 @@ func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader boo
 			if CheckPath(file.Path, ExternalPrefix, "/") {
 				file.ExternalType = GetExternalType(file.Path, mountedData)
 			}
-			// err := file.readListing(checker, readHeader)
-			// if err != nil {
-			// 	return err
-			// }
 			listing.NumDirs++
-			// listing.Size += file.Size + file.Listing.Size
-			// listing.NumTotalFiles += file.Listing.NumTotalFiles
 		} else {
 			listing.NumFiles++
-			// listing.NumTotalFiles++
 
 			if isInvalidLink {
 				file.Type = "invalid_link"

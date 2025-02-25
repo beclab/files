@@ -21,7 +21,7 @@ package nats
 //	nc       *nats.Conn
 //	wg       sync.WaitGroup
 //	subject  = NATS_SUBJECT
-//	shutdown = make(chan struct{}) // 关闭通道，用于通知消息接收器停止
+//	shutdown = make(chan struct{})
 //)
 //
 //func InitNATSConnection() error {
