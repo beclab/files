@@ -107,10 +107,6 @@ func NewHandler(
 	//provider.HandleFunc("/get_dataset_folder_status", ginHandlerAdapter(rpc.RpcEngine))
 	//provider.HandleFunc("/update_dataset_folder_paths", ginHandlerAdapter(rpc.RpcEngine))
 
-	public := api.PathPrefix("/public").Subrouter()
-	public.PathPrefix("/dl").Handler(monkey(publicDlHandler, "/api/public/dl/")).Methods("GET")
-	//public.PathPrefix("/share").Handler(monkey(publicShareHandler, "/api/public/share/")).Methods("GET")
-
 	return stripPrefix(server.BaseURL, r), nil
 }
 
