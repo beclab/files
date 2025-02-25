@@ -99,7 +99,6 @@ func dedupArray(paths []string, prefix string) []string {
 	return result
 }
 
-//// difference 函数返回仅在 a 中存在而不在 b 中存在的元素切片
 //func difference(a, b []string) []string {
 //	m := make(map[string]bool)
 //	for _, value := range b {
@@ -117,8 +116,6 @@ func dedupArray(paths []string, prefix string) []string {
 //}
 //
 //func UpdateSearchFolderPaths(paths []string) {
-//	// A为原始，B为输入，设A、B均经历过“父子去重”，自己“父子去重”为简单去重后，取出所有没有在自己中有任一元素作为父祖路径的元素集合
-//	// 则：
 //	// ADD = B-A
 //	// REDIS = B
 //	// DELETE = A-B
@@ -159,20 +156,17 @@ func dedupArray(paths []string, prefix string) []string {
 //	getRedisKey := fmt.Sprintf("DATASET_%s", datasetID)
 //	setRedisKey := fmt.Sprintf("DATASET_%s", datasetID)
 //
-//	// 从 Redis 中获取数据集信息
 //	datasetJSON := my_redis.RedisGet(getRedisKey)
 //
 //	var dataset DatasetRedis
 //	if datasetJSON != "" {
-//		// 解析 Redis 中的数据集信息
 //		err := json.Unmarshal([]byte(datasetJSON), &dataset)
 //		if err != nil {
-//			fmt.Printf("解析 Redis 中的数据集信息失败：%s\n", err.Error())
+//			fmt.Printf("Parse dataset info in Redis failed：%s\n", err.Error())
 //			return
 //		}
 //	}
 //
-//	// 更新数据集的路径信息
 //	dataset.DatasetID = datasetID
 //	fmt.Println("paths=", paths)
 //	fmt.Println("PathPrefix=", PathPrefix)
@@ -182,10 +176,9 @@ func dedupArray(paths []string, prefix string) []string {
 //
 //	fmt.Println("DatasetID:", dataset.DatasetID, ", Paths:", dataset.Paths, ", LastUpdateTime:", dataset.LastUpdateTime)
 //
-//	// 将更新后的数据集信息存储回 Redis
 //	newDatasetJSON, err := json.Marshal(dataset)
 //	if err != nil {
-//		fmt.Printf("序列化更新后的数据集信息失败：%s\n", err.Error())
+//		fmt.Printf("Serialize updated dataset info failed：%s\n", err.Error())
 //		return
 //	}
 //	fmt.Println(newDatasetJSON)

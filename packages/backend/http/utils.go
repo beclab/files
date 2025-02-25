@@ -173,22 +173,22 @@ func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.L
 }
 
 type Dirent struct {
-	Type                 string `json:"type"`                             // 目录项类型（文件或目录）
-	ID                   string `json:"id"`                               // 目录项ID
-	Name                 string `json:"name"`                             // 目录项名称
-	Mtime                int64  `json:"mtime"`                            // 修改时间（Unix时间戳）
-	Permission           string `json:"permission"`                       // 权限
-	ParentDir            string `json:"parent_dir"`                       // 父目录路径
-	Size                 int64  `json:"size"`                             // 目录项大小（对于文件）
-	FileSize             int64  `json:"fileSize,omitempty"`               // 文件大小（如果与Size不同）
-	NumTotalFiles        int    `json:"numTotalFiles,omitempty"`          // 总文件数（对于目录）
-	NumFiles             int    `json:"numFiles,omitempty"`               // 文件数（对于目录）
-	NumDirs              int    `json:"numDirs,omitempty"`                // 目录数（对于目录）
-	Path                 string `json:"path"`                             // 目录项完整路径
-	Starred              bool   `json:"starred"`                          // 是否标记为星标
-	ModifierEmail        string `json:"modifier_email,omitempty"`         // 修改者邮箱（对于文件）
-	ModifierName         string `json:"modifier_name,omitempty"`          // 修改者名称（对于文件）
-	ModifierContactEmail string `json:"modifier_contact_email,omitempty"` // 修改者联系邮箱（对于文件）
+	Type                 string `json:"type"`
+	ID                   string `json:"id"`
+	Name                 string `json:"name"`
+	Mtime                int64  `json:"mtime"`
+	Permission           string `json:"permission"`
+	ParentDir            string `json:"parent_dir"`
+	Size                 int64  `json:"size"`
+	FileSize             int64  `json:"fileSize,omitempty"`
+	NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
+	NumFiles             int    `json:"numFiles,omitempty"`
+	NumDirs              int    `json:"numDirs,omitempty"`
+	Path                 string `json:"path"`
+	Starred              bool   `json:"starred"`
+	ModifierEmail        string `json:"modifier_email,omitempty"`
+	ModifierName         string `json:"modifier_name,omitempty"`
+	ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
 }
 
 type DirentResponse struct {

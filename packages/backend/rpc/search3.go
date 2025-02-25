@@ -32,7 +32,7 @@ type Data struct {
 	ResourceURI     string                 `json:"resource_uri"`
 	CreatedAt       int64                  `json:"created_at"`
 	Service         string                 `json:"service"`
-	Meta            map[string]interface{} `json:"meta"` // 使用map来存储未知字段
+	Meta            map[string]interface{} `json:"meta"`
 }
 
 // maybe need in the future
