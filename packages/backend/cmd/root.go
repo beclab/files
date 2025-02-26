@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/auth"
 	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"io"
@@ -25,7 +26,6 @@ import (
 	v "github.com/spf13/viper"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/filebrowser/filebrowser/v2/auth"
 	"github.com/filebrowser/filebrowser/v2/diskcache"
 
 	//"github.com/filebrowser/filebrowser/v2/frontend"
@@ -444,8 +444,8 @@ func quickSetup(flags *pflag.FlagSet, d pythonData) {
 		set.AuthMethod = auth.MethodNoAuth
 		err = d.store.Auth.Save(&auth.NoAuth{})
 	} else {
-		set.AuthMethod = auth.MethodJSONAuth
-		err = d.store.Auth.Save(&auth.JSONAuth{})
+		//set.AuthMethod = auth.MethodJSONAuth
+		//err = d.store.Auth.Save(&auth.JSONAuth{})
 	}
 
 	checkErr(err)

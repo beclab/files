@@ -3,7 +3,7 @@ package bolt
 import (
 	"github.com/asdine/storm/v3"
 
-	"github.com/filebrowser/filebrowser/v2/auth"
+	//"github.com/filebrowser/filebrowser/v2/auth"
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
 	"github.com/filebrowser/filebrowser/v2/users"
@@ -13,7 +13,7 @@ import (
 func NewStorage(db *storm.DB) (*storage.Storage, error) {
 	userStore := users.NewStorage(usersBackend{db: db})
 	settingsStore := settings.NewStorage(settingsBackend{db: db})
-	authStore := auth.NewStorage(authBackend{db: db}, userStore)
+	//authStore := auth.NewStorage(authBackend{db: db}, userStore)
 
 	err := save(db, "version", 2) //nolint:gomnd
 	if err != nil {
@@ -21,7 +21,7 @@ func NewStorage(db *storm.DB) (*storage.Storage, error) {
 	}
 
 	return &storage.Storage{
-		Auth:     authStore,
+		//Auth:     authStore,
 		Users:    userStore,
 		Settings: settingsStore,
 	}, nil
