@@ -57,16 +57,6 @@ func checkOrUpdatePhotosRedis(filepath, fileMd5 string, op int) error {
 	filepathMd5 := common.Md5String(filepath)
 
 	if fileMd5 == "" {
-		//f, err := os.Open(filepath)
-		//if err != nil {
-		//	return err
-		//}
-		//b, err := ioutil.ReadAll(f)
-		//f.Close()
-		//if err != nil {
-		//	return err
-		//}
-		//fileMd5 = common.Md5File(bytes.NewReader(b))
 		var err error
 		fileMd5, err = common.Md5File(filepath)
 		if err != nil {
@@ -86,10 +76,6 @@ func checkOrUpdatePhotosRedis(filepath, fileMd5 string, op int) error {
 		if err != nil {
 			return err
 		}
-		//err = markPhotoAsUploaded(hashName, filepathMd5, true)
-		//if err != nil {
-		//	return err
-		//}
 	case 3: // delete
 		err = markPhotoAsDeleted(hashName, filepathMd5, true)
 		if err != nil {
@@ -149,31 +135,6 @@ func addOrUploadPhotoRedis(hashName, filepath, filepathMd5, fileMd5 string, uplo
 	}
 	return nil
 }
-
-//func markPhotoAsUploaded(hashName, filepathMd5 string, status bool) error {
-//	redisValue := my_redis.RedisHGet(hashName, filepathMd5)
-//	if redisValue == "" {
-//		log.Warn().Msgf("No entry found for %s in Redis when marking as uploaded", filepathMd5)
-//		return nil
-//	}
-//
-//	var redisData map[string]interface{}
-//	err := json.Unmarshal([]byte(redisValue), &redisData)
-//	if err != nil {
-//		return fmt.Errorf("failed to unmarshal Redis data: %v", err)
-//	}
-//
-//	redisData["uploaded"] = status
-//	newData, err := json.Marshal(redisData)
-//	if err != nil {
-//		return fmt.Errorf("failed to marshal updated Redis data: %v", err)
-//	}
-//
-//	my_redis.RedisHSet(hashName, filepathMd5, string(newData))
-//
-//	log.Debug().Msgf("Marked photo %s as uploaded in Redis", filepathMd5)
-//	return nil
-//}
 
 func markPhotoAsDeleted(hashName, filepathMd5 string, status bool) error {
 	redisValue := my_redis.RedisHGet(hashName, filepathMd5)
