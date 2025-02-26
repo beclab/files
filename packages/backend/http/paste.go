@@ -77,7 +77,7 @@ func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInf
 	xBflUser := r.Header.Get("X-Bfl-User")
 	fmt.Println("X-Bfl-User: ", xBflUser)
 
-	d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
+	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
 	//fmt.Println(d.user.Fs)
 	//fmt.Println(path)
 	//fmt.Println(d.user.Perm.Modify)

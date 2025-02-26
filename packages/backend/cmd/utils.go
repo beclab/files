@@ -10,7 +10,6 @@ import (
 
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
-	"github.com/filebrowser/filebrowser/v2/storage/bolt"
 )
 
 func checkErr(err error) {
@@ -18,24 +17,6 @@ func checkErr(err error) {
 		log.Fatal(err)
 	}
 }
-
-//func mustGetString(flags *pflag.FlagSet, flag string) string {
-//	s, err := flags.GetString(flag)
-//	checkErr(err)
-//	return s
-//}
-//
-//func mustGetBool(flags *pflag.FlagSet, flag string) bool {
-//	b, err := flags.GetBool(flag)
-//	checkErr(err)
-//	return b
-//}
-//
-//func mustGetUint(flags *pflag.FlagSet, flag string) uint {
-//	b, err := flags.GetUint(flag)
-//	checkErr(err)
-//	return b
-//}
 
 func generateKey() []byte {
 	k, err := settings.GenerateKey()
@@ -95,57 +76,11 @@ func python(fn pythonFunc, cfg pythonConfig) cobraFunc {
 		db, err := storm.Open(path)
 		checkErr(err)
 		defer db.Close()
-		data.store, err = bolt.NewStorage(db)
-		checkErr(err)
+		//data.store, err = bolt.NewStorage(db)
+		//checkErr(err)
 		fn(cmd, args, data)
 	}
 }
-
-//func marshal(filename string, data interface{}) error {
-//	fd, err := os.Create(filename)
-//	checkErr(err)
-//	defer fd.Close()
-//
-//	switch ext := filepath.Ext(filename); ext {
-//	case ".json":
-//		encoder := json.NewEncoder(fd)
-//		encoder.SetIndent("", "    ")
-//		return encoder.Encode(data)
-//	case ".yml", ".yaml": //nolint:goconst
-//		encoder := yaml.NewEncoder(fd)
-//		return encoder.Encode(data)
-//	default:
-//		return errors.New("invalid format: " + ext)
-//	}
-//}
-//
-//func unmarshal(filename string, data interface{}) error {
-//	fd, err := os.Open(filename)
-//	checkErr(err)
-//	defer fd.Close()
-//
-//	switch ext := filepath.Ext(filename); ext {
-//	case ".json":
-//		return json.NewDecoder(fd).Decode(data)
-//	case ".yml", ".yaml":
-//		return yaml.NewDecoder(fd).Decode(data)
-//	default:
-//		return errors.New("invalid format: " + ext)
-//	}
-//}
-//
-//func jsonYamlArg(cmd *cobra.Command, args []string) error {
-//	if err := cobra.ExactArgs(1)(cmd, args); err != nil {
-//		return err
-//	}
-//
-//	switch ext := filepath.Ext(args[0]); ext {
-//	case ".json", ".yml", ".yaml":
-//		return nil
-//	default:
-//		return errors.New("invalid format: " + ext)
-//	}
-//}
 
 func cleanUpInterfaceMap(in map[interface{}]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
@@ -173,15 +108,3 @@ func cleanUpMapValue(v interface{}) interface{} {
 		return v
 	}
 }
-
-// convertCmdStrToCmdArray checks if cmd string is blank (whitespace included)
-// then returns empty string array, else returns the splitted word array of cmd.
-// This is to ensure the result will never be []string{""}
-//func convertCmdStrToCmdArray(cmd string) []string {
-//	var cmdArray []string
-//	trimmedCmdStr := strings.TrimSpace(cmd)
-//	if trimmedCmdStr != "" {
-//		cmdArray = strings.Split(trimmedCmdStr, " ")
-//	}
-//	return cmdArray
-//}
