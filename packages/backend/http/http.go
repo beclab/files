@@ -50,13 +50,6 @@ func NewHandler(
 
 	api := r.PathPrefix("/api").Subrouter()
 
-	//users := api.PathPrefix("/users").Subrouter()
-	//users.Handle("", monkey(usersGetHandler, "")).Methods("GET")
-	//users.Handle("", monkey(userPostHandler, "")).Methods("POST")
-	//users.Handle("/{id:[0-9]+}", monkey(userPutHandler, "")).Methods("PUT")
-	//users.Handle("/{id:[0-9]+}", monkey(userGetHandler, "")).Methods("GET")
-	//users.Handle("/{id:[0-9]+}", monkey(userDeleteHandler, "")).Methods("DELETE")
-
 	api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
 	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
 	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler(fileCache), "/api/resources")).Methods("POST")
@@ -80,7 +73,7 @@ func NewHandler(
 	api.PathPrefix("/preview/{size}/{path:.*}").
 		Handler(monkey(previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
 
-	api.PathPrefix("/command").Handler(monkey(commandsHandler, "/api/command")).Methods("GET")
+	//api.PathPrefix("/command").Handler(monkey(commandsHandler, "/api/command")).Methods("GET")
 	//if rpc.KnowledgeBaseEnabled == "True" {
 	//	api.HandleFunc("/get_dataset_folder_status_test", ginHandlerAdapter(rpc.RpcEngine))
 	//	api.HandleFunc("/update_dataset_folder_paths_test", ginHandlerAdapter(rpc.RpcEngine))
