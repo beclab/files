@@ -34,39 +34,6 @@ func renderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, 
 	return 0, nil
 }
 
-//func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string) {
-//	defer close(dataChan)
-//
-//	listing.Lock()
-//	for _, item := range listing.Items {
-//		select {
-//		case <-stopChan:
-//			listing.Unlock()
-//			return
-//		case dataChan <- formatSSEvent(item):
-//		}
-//	}
-//	listing.Unlock()
-//
-//	itemCount := len(listing.Items)
-//	for itemCount < 100000 {
-//		select {
-//		case <-stopChan:
-//			return
-//		default:
-//			item := &files.FileInfo{
-//				Path: fmt.Sprintf("/path/to/item%d", itemCount),
-//				Name: fmt.Sprintf("item%d", itemCount),
-//				Size: int64(itemCount * 100),
-//			}
-//			dataChan <- formatSSEvent(item)
-//			itemCount++
-//
-//			time.Sleep(100 * time.Millisecond)
-//		}
-//	}
-//}
-
 func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *data, mountedData []files.DiskInfo) {
 	defer close(dataChan)
 
@@ -76,9 +43,7 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 	listing.Unlock()
 
 	for len(A) > 0 {
-		//fmt.Println("len(A): ", len(A))
 		firstItem := A[0]
-		//fmt.Println("firstItem: ", firstItem.Path)
 
 		if firstItem.IsDir {
 			var file *files.FileInfo
@@ -223,7 +188,6 @@ func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- 
 			if path != "/" {
 				path += "/"
 			}
-			//path = url.QueryEscape(path)
 			path = escapeURLWithSpace(path)
 			firstUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + path + "&with_thumbnail=true"
 			fmt.Println(firstUrl)
@@ -450,7 +414,6 @@ func formatBytes(bytes int64) string {
 }
 
 func checkBufferDiskSpace(diskSize int64) (bool, error) {
-	//fmt.Println("*********Checking Buffer Disk Space***************")
 	spaceOk, needs, avails, reserved, err := checkDiskSpace("/data", diskSize)
 	if err != nil {
 		return false, err // errors.New("disk space check error")
@@ -459,9 +422,6 @@ func checkBufferDiskSpace(diskSize int64) (bool, error) {
 	availsStr := formatBytes(avails)
 	reservedStr := formatBytes(reserved)
 	if spaceOk {
-		//spaceMessage := fmt.Sprintf("Sufficient disk space available. This file still requires: %s, while %s is already available (with an additional %s reserved for the system).",
-		//	needsStr, availsStr, reservedStr)
-		//fmt.Println(spaceMessage)
 		return true, nil
 	} else {
 		errorMessage := fmt.Sprintf("Insufficient disk space available. This file still requires: %s, but only %s is available (with an additional %s reserved for the system).",

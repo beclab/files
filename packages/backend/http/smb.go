@@ -84,14 +84,6 @@ var smbHistoryPutHandler = withUser(func(w http.ResponseWriter, r *http.Request,
 	return renderJSON(w, r, "Successfully added/updated SMB history and hash")
 })
 
-//func stringSliceToInterfaceSlice(strings []string) []interface{} {
-//	interfaces := make([]interface{}, len(strings))
-//	for i, str := range strings {
-//		interfaces[i] = str
-//	}
-//	return interfaces
-//}
-
 var smbHistoryDeleteHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {

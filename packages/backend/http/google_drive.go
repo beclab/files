@@ -983,12 +983,6 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 		req.Header = r.Header.Clone()
 		req.Header.Set("Content-Type", "application/json")
 
-		//for name, values := range req.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", name, value)
-		//	}
-		//}
-
 		client := &http.Client{}
 		resp, err = client.Do(req)
 		if err != nil {
@@ -1022,13 +1016,6 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 			fmt.Printf("Non-200 response status: %d, body: %s\n", resp.StatusCode, responseBody)
 			return nil, fmt.Errorf("non-200 response status: %d", resp.StatusCode)
 		}
-
-		//fmt.Printf("GoogleDriveListResponse Hedears:\n")
-		//for name, values := range resp.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", name, value)
-		//	}
-		//}
 
 		contentType := resp.Header.Get("Content-Type")
 		if !strings.HasPrefix(contentType, "application/json") {
@@ -1196,7 +1183,6 @@ func resourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 func resourcePatchGoogle(fileCache FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
 	src := r.URL.Path
 	dst := r.URL.Query().Get("destination")
-	//action := r.URL.Query().Get("action")
 	dst, err := unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
 
 	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)

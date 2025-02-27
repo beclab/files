@@ -537,74 +537,6 @@ func (i *FileInfo) detectSubtitles() {
 	}
 }
 
-//func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
-//	afs := &afero.Afero{Fs: i.Fs}
-//	dir, err := afs.ReadDir(i.Path)
-//	if err != nil {
-//		return err
-//	}
-//
-//	listing := &Listing{
-//		Items:    []*FileInfo{},
-//		NumDirs:  0,
-//		NumFiles: 0,
-//	}
-//
-//	for _, f := range dir {
-//		name := f.Name()
-//		fPath := path.Join(i.Path, name)
-//
-//		if !checker.Check(fPath) {
-//			continue
-//		}
-//
-//		isSymlink, isInvalidLink := false, false
-//		if IsSymlink(f.Mode()) {
-//			isSymlink = true
-//			// It's a symbolic link. We try to follow it. If it doesn't work,
-//			// we stay with the link information instead of the target's.
-//			info, err := i.Fs.Stat(fPath)
-//			if err == nil {
-//				f = info
-//			} else {
-//				isInvalidLink = true
-//			}
-//		}
-//
-//		file := &FileInfo{
-//			Fs:        i.Fs,
-//			Name:      name,
-//			Size:      f.Size(),
-//			ModTime:   f.ModTime(),
-//			Mode:      f.Mode(),
-//			IsDir:     f.IsDir(),
-//			IsSymlink: isSymlink,
-//			Extension: filepath.Ext(name),
-//			Path:      fPath,
-//		}
-//
-//		if file.IsDir {
-//			listing.NumDirs++
-//		} else {
-//			listing.NumFiles++
-//
-//			if isInvalidLink {
-//				file.Type = "invalid_link"
-//			} else {
-//				err := file.detectType(true, false, readHeader)
-//				if err != nil {
-//					return err
-//				}
-//			}
-//		}
-//
-//		listing.Items = append(listing.Items, file)
-//	}
-//
-//	i.Listing = listing
-//	return nil
-//}
-
 func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 	afs := &afero.Afero{Fs: i.Fs}
 	dir, err := afs.ReadDir(i.Path)
@@ -653,16 +585,9 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 		}
 
 		if file.IsDir {
-			// err := file.readListing(checker, readHeader)
-			// if err != nil {
-			// 	return err
-			// }
 			listing.NumDirs++
-			// listing.Size += file.Size + file.Listing.Size
-			// listing.NumTotalFiles += file.Listing.NumTotalFiles
 		} else {
 			listing.NumFiles++
-			// listing.NumTotalFiles++
 
 			if isInvalidLink {
 				file.Type = "invalid_link"
@@ -735,16 +660,9 @@ func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader boo
 			if CheckPath(file.Path, ExternalPrefix, "/") {
 				file.ExternalType = GetExternalType(file.Path, mountedData)
 			}
-			// err := file.readListing(checker, readHeader)
-			// if err != nil {
-			// 	return err
-			// }
 			listing.NumDirs++
-			// listing.Size += file.Size + file.Listing.Size
-			// listing.NumTotalFiles += file.Listing.NumTotalFiles
 		} else {
 			listing.NumFiles++
-			// listing.NumTotalFiles++
 
 			if isInvalidLink {
 				file.Type = "invalid_link"

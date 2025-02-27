@@ -67,7 +67,6 @@ func downloadAndComputeMD5(r *http.Request, url string) (string, error) {
 }
 
 func md5Sync(w http.ResponseWriter, r *http.Request) (int, error) {
-	// src is like [repo-id]/path/filename
 	src := r.URL.Path
 	src = strings.Trim(src, "/")
 	if !strings.Contains(src, "/") {
@@ -107,12 +106,6 @@ func md5Sync(w http.ResponseWriter, r *http.Request) (int, error) {
 }
 
 func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo) (int, error) {
-	//fd, err := file.Fs.Open(file.Path)
-	//if err != nil {
-	//	return http.StatusInternalServerError, err
-	//}
-	//defer fd.Close()
-
 	var err error
 	responseData := make(map[string]interface{})
 	responseData["md5"], err = common.Md5File(file.Path)
