@@ -48,6 +48,7 @@ type GoogleDriveListResponseFileData struct {
 	CanDownload  bool                             `json:"canDownload"`
 	CanExport    bool                             `json:"canExport"`
 	ExportSuffix string                           `json:"exportSuffix"`
+	IdPath       string                           `json:"id_path,omitempty"`
 }
 
 type GoogleDriveListResponseFileMeta struct {
