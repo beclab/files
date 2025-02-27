@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/common"
 	"hash"
 	"io"
 	"io/ioutil"
@@ -26,6 +27,12 @@ import (
 	"github.com/filebrowser/filebrowser/v2/errors"
 	"github.com/filebrowser/filebrowser/v2/rules"
 )
+
+var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), common.RootPrefix)
+var DefaultSorting = Sorting{
+	By:  "name",
+	Asc: true,
+}
 
 // FileInfo describes a file.
 type FileInfo struct {

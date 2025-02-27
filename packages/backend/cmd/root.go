@@ -157,13 +157,13 @@ user created with the credentials from options "username" and "password".`,
 			defer wg.Done()
 
 			//url := os.Getenv("ZINC_URI")
-			zincHost := os.Getenv("ZINC_HOST")
-			zincPort := os.Getenv("ZINC_PORT")
-			url := "http://" + zincHost + ":" + zincPort
-			if zincHost == "" || zincPort == "" {
-				url = "http://localhost:4080"
-			}
-			url = "http://localhost:4080"
+			//zincHost := os.Getenv("ZINC_HOST")
+			//zincPort := os.Getenv("ZINC_PORT")
+			//url := "http://" + zincHost + ":" + zincPort
+			//if zincHost == "" || zincPort == "" {
+			//	url = "http://localhost:4080"
+			//}
+			url := "http://localhost:4080"
 
 			watchDirStr := os.Getenv("WATCH_DIR")
 			//var watchDirs []string

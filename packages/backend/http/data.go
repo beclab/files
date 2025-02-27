@@ -7,7 +7,6 @@ import (
 
 	"github.com/tomasen/realip"
 
-	"github.com/filebrowser/filebrowser/v2/rules"
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
 	"github.com/filebrowser/filebrowser/v2/users"
@@ -26,9 +25,9 @@ type data struct {
 
 // Check implements rules.Checker.
 func (d *data) Check(path string) bool {
-	if d.user.HideDotfiles && rules.MatchHidden(path) {
-		return false
-	}
+	//if d.user.HideDotfiles && rules.MatchHidden(path) {
+	//	return false
+	//}
 
 	allow := true
 	for _, rule := range d.settings.Rules {
@@ -37,11 +36,11 @@ func (d *data) Check(path string) bool {
 		}
 	}
 
-	for _, rule := range d.user.Rules {
-		if rule.Matches(path) {
-			allow = rule.Allow
-		}
-	}
+	//for _, rule := range d.user.Rules {
+	//	if rule.Matches(path) {
+	//		allow = rule.Allow
+	//	}
+	//}
 
 	return allow
 }

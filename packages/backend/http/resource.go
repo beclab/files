@@ -26,22 +26,7 @@ import (
 	"github.com/filebrowser/filebrowser/v2/fileutils"
 )
 
-// func recursiveSize(file *files.FileInfo) {
-// 	if file.IsDir {
-// 		for _, info := range file.Items {
-// 			//fmt.Println(info)
-// 			recursiveSize(info)
-// 		}
-// 		if file.Listing != nil {
-// 			file.Size += file.Listing.Size
-// 			file.FileSize += file.Listing.FileSize
-// 		}
-// 	}
-// 	return
-// }
-
 func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
-	// src is like [repo-id]/path/filename
 	src := r.URL.Path
 	src, err := unescapeURLIfEscaped(src) // url.QueryUnescape(src)
 	if err != nil {
@@ -49,11 +34,6 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	}
 	fmt.Println("src Path:", src)
 	src = strings.Trim(src, "/") + "/"
-	//if !strings.Contains(src, "/") {
-	//	err := e.New("invalid path format: path must contain at least one '/'")
-	//	fmt.Println("Error:", err)
-	//	return errToStatus(err), err
-	//}
 
 	firstSlashIdx := strings.Index(src, "/")
 
@@ -61,7 +41,7 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 
 	lastSlashIdx := strings.LastIndex(src, "/")
 
-	// don't use, because this is only used for folders
+	// won't use, because this func is only used for folders
 	filename := src[lastSlashIdx+1:]
 
 	prefix := ""
@@ -71,7 +51,6 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	if prefix == "" {
 		prefix = "/"
 	}
-	//prefix = url.QueryEscape(prefix)
 	prefix = escapeURLWithSpace(prefix)
 
 	fmt.Println("repo-id:", repoID)
@@ -123,7 +102,6 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 				return errToStatus(err), err
 			}
 		}
-		//body, _ := ioutil.ReadAll(response.Body)
 		streamSyncDirents(w, r, body, repoID)
 		return 0, nil
 	}
@@ -151,7 +129,7 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	return 0, nil
 }
 
-var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	start := time.Now()
 	fmt.Println("Function resourceGetHandler starts at", start)
 
@@ -206,7 +184,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		// for 1.12: path-incluster URL exists, won't err in normal condition
 		// for 1.11: path-incluster URL may not exist, if err, use usb-incluster and hdd-incluster for system functional
 		url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
-
+		
 		headers := r.Header.Clone()
 		headers.Set("Content-Type", "application/json")
 		headers.Set("X-Signature", "temp_signature")
@@ -256,9 +234,9 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	var file *files.FileInfo
 	if mountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-			Fs:         d.user.Fs,
+			Fs:         files.DefaultFs, // d.user.Fs,
 			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
+			Modify:     true, // d.user.Perm.Modify,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,
@@ -266,9 +244,9 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		}, mountedData)
 	} else {
 		file, err = files.NewFileInfo(files.FileOptions{
-			Fs:         d.user.Fs,
+			Fs:         files.DefaultFs, // d.user.Fs,
 			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
+			Modify:     true, // d.user.Perm.Modify,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,
@@ -309,16 +287,12 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 
 	if file.IsDir {
-		// fmt.Println(file)
-		// file.Size = file.Listing.Size
-		// recursiveSize(file)
 		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
 			file.ExternalType = files.GetExternalType(file.Path, mountedData)
 		}
-		file.Listing.Sorting = d.user.Sorting
+		file.Listing.Sorting = files.DefaultSorting // d.user.Sorting
 		file.Listing.ApplySort()
 		if stream == 1 {
-			//return streamJSON(w, r, file)
 			streamListingItems(w, r, file.Listing, d, mountedData)
 			elapsed := time.Since(start)
 			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
@@ -328,7 +302,6 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
 			return renderJSON(w, r, file)
 		}
-		//return renderJSON(w, r, file)
 	}
 
 	if checksum := r.URL.Query().Get("checksum"); checksum != "" {
@@ -345,39 +318,8 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 
 	if file.Type == "video" {
 		osSystemServer := "system-server.user-system-" + xBflUser
-		//osSystemServer := v.Get("OS_SYSTEM_SERVER")
-		//if osSystemServer == nil {
-		//	log.Println("need env OS_SYSTEM_SERVER")
-		//}
 
-		/*
-				showLogUrl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", os.Getenv("OS_SYSTEM_SERVER"))
-			listTobeSend := "{\"action\": \"view\",\"category\": \"container_log\",\"data\": {\"statefulset\": \"geth\",\"container\": \"geth\"}}"
-			showLogRequestOption := &HttpCallRequestOption{
-				// Header:  map[string]string{"X-Access-Token": accessToken, "type":"application/json"},
-				Header:  map[string]string{"type":"application/json"},
-				Url:     showLogUrl,
-				Timeout: 1000 * 10,
-				JsonStr: listTobeSend,
-				TestOKFun: func(bodyStr string) bool {
-					log.Println("bodyis:", bodyStr)
-					code := gjson.Get(bodyStr, "code").Int()
-					return code == 0
-				},
-			}
-			showLogBody, listOk, showLogErr := NewHttpCall().PostJsonCall(showLogRequestOption)
-			if showLogErr != nil {
-				err = showLogErr
-				return
-			}
-			if !listOk {
-				err = errors.WithMessage(GetNoEmptyError(err), "show log error")
-				return
-			}
-			message = showLogBody
-		*/
-
-		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer) // os.Getenv("OS_SYSTEM_SERVER"))
+		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer)
 
 		fmt.Println("HTTP JSON POST URL:", httpposturl)
 
@@ -408,7 +350,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	elapsed := time.Since(start)
 	fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
 	return renderJSON(w, r, file)
-})
+}
 
 func resourceDeleteHandler(fileCache FileCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
