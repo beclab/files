@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/filebrowser/filebrowser/v2/auth"
 	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"io"
@@ -440,15 +439,15 @@ func quickSetup(flags *pflag.FlagSet, d pythonData) {
 	}
 
 	var err error
-	if _, noauth := getParamB(flags, "noauth"); noauth {
-		set.AuthMethod = auth.MethodNoAuth
-		err = d.store.Auth.Save(&auth.NoAuth{})
-	} else {
-		//set.AuthMethod = auth.MethodJSONAuth
-		//err = d.store.Auth.Save(&auth.JSONAuth{})
-	}
+	//if _, noauth := getParamB(flags, "noauth"); noauth {
+	//	set.AuthMethod = auth.MethodNoAuth
+	//	err = d.store.Auth.Save(&auth.NoAuth{})
+	//} else {
+	//	//set.AuthMethod = auth.MethodJSONAuth
+	//	//err = d.store.Auth.Save(&auth.JSONAuth{})
+	//}
 
-	checkErr(err)
+	//checkErr(err)
 	err = d.store.Settings.Save(set)
 	checkErr(err)
 
