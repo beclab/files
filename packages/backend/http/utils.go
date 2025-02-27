@@ -2,8 +2,6 @@ package http
 
 import (
 	"compress/gzip"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,39 +32,6 @@ func renderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, 
 	return 0, nil
 }
 
-//func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string) {
-//	defer close(dataChan)
-//
-//	listing.Lock()
-//	for _, item := range listing.Items {
-//		select {
-//		case <-stopChan:
-//			listing.Unlock()
-//			return
-//		case dataChan <- formatSSEvent(item):
-//		}
-//	}
-//	listing.Unlock()
-//
-//	itemCount := len(listing.Items)
-//	for itemCount < 100000 {
-//		select {
-//		case <-stopChan:
-//			return
-//		default:
-//			item := &files.FileInfo{
-//				Path: fmt.Sprintf("/path/to/item%d", itemCount),
-//				Name: fmt.Sprintf("item%d", itemCount),
-//				Size: int64(itemCount * 100),
-//			}
-//			dataChan <- formatSSEvent(item)
-//			itemCount++
-//
-//			time.Sleep(100 * time.Millisecond)
-//		}
-//	}
-//}
-
 func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *data, mountedData []files.DiskInfo) {
 	defer close(dataChan)
 
@@ -76,31 +41,27 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 	listing.Unlock()
 
 	for len(A) > 0 {
-		//fmt.Println("len(A): ", len(A))
 		firstItem := A[0]
-		//fmt.Println("firstItem: ", firstItem.Path)
 
 		if firstItem.IsDir {
 			var file *files.FileInfo
 			var err error
 			if mountedData != nil {
 				file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-					Fs:         d.user.Fs,
-					Path:       firstItem.Path, //r.URL.Path,
-					Modify:     d.user.Perm.Modify,
+					Fs:         files.DefaultFs,
+					Path:       firstItem.Path,
+					Modify:     true,
 					Expand:     true,
 					ReadHeader: d.server.TypeDetectionByHeader,
-					Checker:    d,
 					Content:    true,
 				}, mountedData)
 			} else {
 				file, err = files.NewFileInfo(files.FileOptions{
-					Fs:         d.user.Fs,
-					Path:       firstItem.Path, //r.URL.Path,
-					Modify:     d.user.Perm.Modify,
+					Fs:         files.DefaultFs,
+					Path:       firstItem.Path,
+					Modify:     true,
 					Expand:     true,
 					ReadHeader: d.server.TypeDetectionByHeader,
-					Checker:    d,
 					Content:    true,
 				})
 			}
@@ -173,22 +134,22 @@ func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.L
 }
 
 type Dirent struct {
-	Type                 string `json:"type"`                             // 目录项类型（文件或目录）
-	ID                   string `json:"id"`                               // 目录项ID
-	Name                 string `json:"name"`                             // 目录项名称
-	Mtime                int64  `json:"mtime"`                            // 修改时间（Unix时间戳）
-	Permission           string `json:"permission"`                       // 权限
-	ParentDir            string `json:"parent_dir"`                       // 父目录路径
-	Size                 int64  `json:"size"`                             // 目录项大小（对于文件）
-	FileSize             int64  `json:"fileSize,omitempty"`               // 文件大小（如果与Size不同）
-	NumTotalFiles        int    `json:"numTotalFiles,omitempty"`          // 总文件数（对于目录）
-	NumFiles             int    `json:"numFiles,omitempty"`               // 文件数（对于目录）
-	NumDirs              int    `json:"numDirs,omitempty"`                // 目录数（对于目录）
-	Path                 string `json:"path"`                             // 目录项完整路径
-	Starred              bool   `json:"starred"`                          // 是否标记为星标
-	ModifierEmail        string `json:"modifier_email,omitempty"`         // 修改者邮箱（对于文件）
-	ModifierName         string `json:"modifier_name,omitempty"`          // 修改者名称（对于文件）
-	ModifierContactEmail string `json:"modifier_contact_email,omitempty"` // 修改者联系邮箱（对于文件）
+	Type                 string `json:"type"`
+	ID                   string `json:"id"`
+	Name                 string `json:"name"`
+	Mtime                int64  `json:"mtime"`
+	Permission           string `json:"permission"`
+	ParentDir            string `json:"parent_dir"`
+	Size                 int64  `json:"size"`
+	FileSize             int64  `json:"fileSize,omitempty"`
+	NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
+	NumFiles             int    `json:"numFiles,omitempty"`
+	NumDirs              int    `json:"numDirs,omitempty"`
+	Path                 string `json:"path"`
+	Starred              bool   `json:"starred"`
+	ModifierEmail        string `json:"modifier_email,omitempty"`
+	ModifierName         string `json:"modifier_name,omitempty"`
+	ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
 }
 
 type DirentResponse struct {
@@ -223,7 +184,6 @@ func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- 
 			if path != "/" {
 				path += "/"
 			}
-			//path = url.QueryEscape(path)
 			path = escapeURLWithSpace(path)
 			firstUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + path + "&with_thumbnail=true"
 			fmt.Println(firstUrl)
@@ -241,7 +201,6 @@ func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- 
 			if err != nil {
 				return
 			}
-			//defer response.Body.Close()
 
 			if firstResponse.StatusCode != http.StatusOK {
 				fmt.Println(firstResponse.StatusCode)
@@ -450,18 +409,14 @@ func formatBytes(bytes int64) string {
 }
 
 func checkBufferDiskSpace(diskSize int64) (bool, error) {
-	//fmt.Println("*********Checking Buffer Disk Space***************")
 	spaceOk, needs, avails, reserved, err := checkDiskSpace("/data", diskSize)
 	if err != nil {
-		return false, err // errors.New("disk space check error")
+		return false, err
 	}
 	needsStr := formatBytes(needs)
 	availsStr := formatBytes(avails)
 	reservedStr := formatBytes(reserved)
 	if spaceOk {
-		//spaceMessage := fmt.Sprintf("Sufficient disk space available. This file still requires: %s, while %s is already available (with an additional %s reserved for the system).",
-		//	needsStr, availsStr, reservedStr)
-		//fmt.Println(spaceMessage)
 		return true, nil
 	} else {
 		errorMessage := fmt.Sprintf("Insufficient disk space available. This file still requires: %s, but only %s is available (with an additional %s reserved for the system).",
@@ -470,33 +425,16 @@ func checkBufferDiskSpace(diskSize int64) (bool, error) {
 	}
 }
 
-func stringMD5(s string) string {
-	hasher := md5.New()
-
-	hasher.Write([]byte(s))
-
-	hashBytes := hasher.Sum(nil)
-
-	hashString := hex.EncodeToString(hashBytes)
-
-	return hashString
-}
-
 func removeSlash(s string) string {
 	s = strings.TrimSuffix(s, "/")
 	return strings.ReplaceAll(s, "/", "_")
 }
 
-//func removeNonAlphanumericUnderscore(s string) string {
-//	re := regexp.MustCompile(`[^a-zA-Z0-9_]`)
-//	return re.ReplaceAllString(s, "_")
-//}
-
 func getHost(r *http.Request) string {
 	bflName := r.Header.Get("X-Bfl-User")
-	url := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
+	hostUrl := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
 
-	resp, err := http.Get(url)
+	resp, err := http.Get(hostUrl)
 	if err != nil {
 		fmt.Println("Error making GET request:", err)
 		return ""

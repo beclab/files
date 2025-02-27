@@ -27,26 +27,6 @@ func GetTypeFromName(filename string) string {
 	return strings.ToLower(path.Ext(filename))
 }
 
-//func ParseDoc(f io.Reader, filename string) (string, error) {
-//	fileType := GetTypeFromName(filename)
-//	if _, ok := ParseAble[fileType]; !ok {
-//		return "", nil
-//	}
-//	if fileType == ".txt" || fileType == ".md" || fileType == ".markdown" {
-//		data, err := ioutil.ReadAll(f)
-//		if err != nil {
-//			return "", err
-//		}
-//		return string(data), nil
-//	}
-//	mimeType := MimeTypeByExtension(filename) // docconv.MimeTypeByExtension(filename)
-//	res, err := docconv.Convert(f, mimeType, true)
-//	if err != nil {
-//		return "", err
-//	}
-//	return res.Body, nil
-//}
-
 func ParseDoc(filepath string) (string, error) {
 	fileType := GetTypeFromName(filepath)
 	if _, ok := ParseAble[fileType]; !ok {

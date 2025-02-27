@@ -2,7 +2,7 @@ package diskcache
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec
+	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-var CacheDir = "/data/file_cache"
+var CacheDir = os.Getenv("FILE_CACHE_DIR") // "/data/file_cache"
 
 type FileCache struct {
 	fs afero.Fs
@@ -39,11 +39,11 @@ func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
 
 	fileName := f.getFileName(key)
 	fmt.Println("key: ", key, " fileName: ", fileName, " filePath: ", filepath.Dir(fileName))
-	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil { //nolint:gomnd
+	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil {
 		return err
 	}
 
-	if err := afero.WriteFile(f.fs, fileName, value, 0700); err != nil { //nolint:gomnd
+	if err := afero.WriteFile(f.fs, fileName, value, 0700); err != nil {
 		return err
 	}
 
@@ -105,9 +105,8 @@ func (f *FileCache) getScopedLocks(key string) (lock sync.Locker) {
 }
 
 func (f *FileCache) getFileName(key string) string {
-	hasher := sha1.New() //nolint:gosec
+	hasher := sha1.New()
 	_, _ = hasher.Write([]byte(key))
 	hash := hex.EncodeToString(hasher.Sum(nil))
-	//return fmt.Sprintf("%s/%s/%s", hash[:1], hash[1:3], hash)
 	return hash
 }

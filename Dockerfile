@@ -1,8 +1,3 @@
-#FROM alpine:latest
-#RUN apk --update add ca-certificates \
-#                     mailcap \
-#                     curl
-
 FROM ubuntu:24.04
 
 RUN apt-get update && \
@@ -17,7 +12,6 @@ VOLUME /srv
 EXPOSE 8110
 
 COPY packages/backend/docker_config.json /.filebrowser.json
-#COPY packages/backend/filebrowser /filebrowser
 RUN mkdir dist
 COPY packages/backend/dist dist
 
