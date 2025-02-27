@@ -267,12 +267,6 @@ user created with the credentials from options "username" and "password".`,
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 		go cleanupHandler(listener, sigc)
 
-		//assetsFs, err := fs.Sub(frontend.Assets(), "dist")
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		//handler, err := fbhttp.NewHandler(imgSvc, fileCache, d.store, server, assetsFs)
 		handler, err := fbhttp.NewHandler(imgSvc, fileCache, d.store, server)
 		checkErr(err)
 
@@ -439,15 +433,7 @@ func quickSetup(flags *pflag.FlagSet, d pythonData) {
 	}
 
 	var err error
-	//if _, noauth := getParamB(flags, "noauth"); noauth {
-	//	set.AuthMethod = auth.MethodNoAuth
-	//	err = d.store.Auth.Save(&auth.NoAuth{})
-	//} else {
-	//	//set.AuthMethod = auth.MethodJSONAuth
-	//	//err = d.store.Auth.Save(&auth.JSONAuth{})
-	//}
 
-	//checkErr(err)
 	err = d.store.Settings.Save(set)
 	checkErr(err)
 

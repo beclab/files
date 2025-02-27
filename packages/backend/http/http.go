@@ -17,7 +17,6 @@ func NewHandler(
 	fileCache FileCache,
 	store *storage.Storage,
 	server *settings.Server,
-	// assetsFs fs.FS,
 ) (http.Handler, error) {
 	server.Clean()
 
@@ -28,7 +27,6 @@ func NewHandler(
 			next.ServeHTTP(w, r)
 		})
 	})
-	//index, static := getStaticHandlers(store, server, assetsFs)
 
 	// NOTE: This fixes the issue where it would redirect if people did not put a
 	// trailing slash in the end. I hate this decision since this allows some awful
