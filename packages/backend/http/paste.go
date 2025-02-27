@@ -341,31 +341,15 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	}
 
 	//fmt.Println("Going to write file!")
-	err = d.RunHook(func() error {
-		//fmt.Println("Opening ", bufferFilePath)
-		//bufferFile, err := os.Open(bufferFilePath)
-		//if err != nil {
-		//	return err
-		//}
-		//defer bufferFile.Close()
-		//fmt.Println("Opened ", bufferFilePath)
-
-		//_, writeErr := writeFile(d.user.Fs, targetPath, bufferFile)
-		//if writeErr != nil {
-		//	fmt.Println(writeErr)
-		//	return writeErr
-		//}
-		err := ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
-		if err != nil {
-			fmt.Println(err)
-			return err
-		}
-		//fmt.Println("Writer File done!")
-
-		//etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
-		//w.Header().Set("ETag", etag)
-		return nil
-	}, "upload", targetPath, "", d.user)
+	//err = d.RunHook(func() error {
+	//	err := ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
+	//	if err != nil {
+	//		fmt.Println(err)
+	//		return err
+	//	}
+	//	return nil
+	//}, "upload", targetPath, "", d.user)
+	err = ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
 
 	if err != nil {
 		_ = d.user.Fs.RemoveAll(targetPath)
@@ -399,9 +383,10 @@ func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, 
 		return errToStatus(err), err
 	}
 
-	err = d.RunHook(func() error {
-		return d.user.Fs.RemoveAll(path)
-	}, "delete", path, "", d.user)
+	//err = d.RunHook(func() error {
+	//	return d.user.Fs.RemoveAll(path)
+	//}, "delete", path, "", d.user)
+	err = d.user.Fs.RemoveAll(path)
 
 	if err != nil {
 		return errToStatus(err), err
@@ -575,14 +560,15 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
 	//fmt.Println(newTargetPath)
 	//fmt.Println("Going to write file!")
-	err = d.RunHook(func() error {
-		err := ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
-		if err != nil {
-			fmt.Println(err)
-			return err
-		}
-		return nil
-	}, "upload", targetPath, "", d.user)
+	//err = d.RunHook(func() error {
+	//	err := ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
+	//	if err != nil {
+	//		fmt.Println(err)
+	//		return err
+	//	}
+	//	return nil
+	//}, "upload", targetPath, "", d.user)
+	err = ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
 
 	if err != nil {
 		//_ = d.user.Fs.RemoveAll(targetPath)
@@ -654,12 +640,15 @@ func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, 
 	//	return errToStatus(err), err
 	//}
 
-	err := d.RunHook(func() error {
-		newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
-		//fmt.Println(newTargetPath)
-		return os.RemoveAll(newTargetPath)
-		//return d.user.Fs.RemoveAll(path)
-	}, "delete", path, "", d.user)
+	//err := d.RunHook(func() error {
+	//	newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
+	//	//fmt.Println(newTargetPath)
+	//	return os.RemoveAll(newTargetPath)
+	//	//return d.user.Fs.RemoveAll(path)
+	//}, "delete", path, "", d.user)
+
+	newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
+	err := os.RemoveAll(newTargetPath)
 
 	if err != nil {
 		return errToStatus(err), err
@@ -1391,13 +1380,15 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		}
 
 		if same {
-			err = d.RunHook(func() error {
-				return pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, w, r)
-			}, action, src, dst, d.user)
+			//err = d.RunHook(func() error {
+			//	return pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, w, r)
+			//}, action, src, dst, d.user)
+			err = pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, w, r)
 		} else {
-			err = d.RunHook(func() error {
-				return pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
-			}, action, src, dst, d.user)
+			//err = d.RunHook(func() error {
+			//	return pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
+			//}, action, src, dst, d.user)
+			err = pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
 		}
 		if errToStatus(err) == http.StatusRequestEntityTooLarge {
 			fmt.Fprintln(w, err.Error())
