@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
 )
 
@@ -19,11 +18,11 @@ func checkErr(err error) {
 	}
 }
 
-func generateKey() []byte {
-	k, err := settings.GenerateKey()
-	checkErr(err)
-	return k
-}
+//func generateKey() []byte {
+//	k, err := settings.GenerateKey()
+//	checkErr(err)
+//	return k
+//}
 
 type cobraFunc func(cmd *cobra.Command, args []string)
 type pythonFunc func(cmd *cobra.Command, args []string, data pythonData)

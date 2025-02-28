@@ -238,8 +238,7 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 			Modify:     true,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			//Checker:    d,
-			Content: true,
+			Content:    true,
 		}, mountedData)
 	} else {
 		file, err = files.NewFileInfo(files.FileOptions{
@@ -248,8 +247,7 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 			Modify:     true,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			//Checker:    d,
-			Content: true,
+			Content:    true,
 		})
 	}
 	if err != nil {
@@ -372,7 +370,6 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			Modify:     true,
 			Expand:     false,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			//Checker:    d,
 		})
 		if err != nil {
 			return errToStatus(err), err
@@ -410,7 +407,6 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (in
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		//Checker:    d,
 	})
 	if err != nil {
 		return errToStatus(err), err
@@ -426,10 +422,6 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (in
 
 func resourcePostHandler(fileCache FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		//if !d.Check(r.URL.Path) {
-		//	return http.StatusForbidden, nil
-		//}
-
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
 			_, status, err := resourcePostGoogle("", w, r, false)
@@ -460,7 +452,6 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			Modify:     true,
 			Expand:     false,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			//Checker:    d,
 		})
 		if err == nil {
 			if r.URL.Query().Get("override") != "true" {
@@ -485,10 +476,6 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 }
 
 func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	//if !d.Check(r.URL.Path) {
-	//	return http.StatusForbidden, nil
-	//}
-
 	// Only allow PUT for files.
 	if strings.HasSuffix(r.URL.Path, "/") {
 		return http.StatusMethodNotAllowed, nil
@@ -523,9 +510,6 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		action := r.URL.Query().Get("action")
 		dst, err := unescapeURLIfEscaped(dst)
 
-		//if !d.Check(src) || !d.Check(dst) {
-		//	return http.StatusForbidden, nil
-		//}
 		if err != nil {
 			return errToStatus(err), err
 		}
@@ -661,7 +645,6 @@ func patchAction(ctx context.Context, action, src, dst string, d *data, fileCach
 			Modify:     true,
 			Expand:     false,
 			ReadHeader: false,
-			//Checker:    d,
 		})
 		if err != nil {
 			return err

@@ -393,38 +393,6 @@ func setupLog(logMethod string) {
 }
 
 func quickSetup(flags *pflag.FlagSet, d pythonData) {
-	//set := &settings.Settings{
-	//	Key:              generateKey(),
-	//	Signup:           false,
-	//	CreateUserDir:    false,
-	//	UserHomeBasePath: settings.DefaultUsersHomeBasePath,
-	//	//Defaults: settings.UserDefaults{
-	//	//	Scope:       ".",
-	//	//	Locale:      "en",
-	//	//	SingleClick: false,
-	//	//	//Perm: users.Permissions{
-	//	//	//	Admin:    false,
-	//	//	//	Execute:  true,
-	//	//	//	Create:   true,
-	//	//	//	Rename:   true,
-	//	//	//	Modify:   true,
-	//	//	//	Delete:   true,
-	//	//	//	Share:    true,
-	//	//	//	Download: true,
-	//	//	//},
-	//	//},
-	//	//AuthMethod: "",
-	//	//Branding:   settings.Branding{},
-	//	Commands: nil,
-	//	Shell:    nil,
-	//	Rules:    nil,
-	//}
-	//
-	//var err error
-	//
-	//err = d.store.Settings.Save(set)
-	//checkErr(err)
-
 	ser := &settings.Server{
 		BaseURL: getParam(flags, "baseurl"),
 		Port:    getParam(flags, "port"),

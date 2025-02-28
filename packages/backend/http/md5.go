@@ -127,7 +127,6 @@ func md5Handler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		//Checker:    d,
 	})
 	if err != nil {
 		return errToStatus(err), err

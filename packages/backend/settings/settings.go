@@ -1,27 +1,8 @@
 package settings
 
 import (
-	"crypto/rand"
 	"strings"
 )
-
-//const DefaultUsersHomeBasePath = "/users"
-
-// Settings contain the main settings of the application.
-//type Settings struct {
-//	Key              []byte              `json:"key"`
-//	Signup           bool                `json:"signup"`
-//	CreateUserDir    bool                `json:"createUserDir"`
-//	UserHomeBasePath string              `json:"userHomeBasePath"`
-//	Commands         map[string][]string `json:"commands"`
-//	Shell            []string            `json:"shell"`
-//	Rules            []rules.Rule        `json:"rules"`
-//}
-
-// GetRules implements rules.Provider.
-//func (s *Settings) GetRules() []rules.Rule {
-//	return s.Rules
-//}
 
 // Server specific settings.
 type Server struct {
@@ -46,13 +27,13 @@ func (s *Server) Clean() {
 }
 
 // GenerateKey generates a key of 512 bits.
-func GenerateKey() ([]byte, error) {
-	b := make([]byte, 64) //nolint:gomnd
-	_, err := rand.Read(b)
-	// Note that err == nil only if we read len(b) bytes.
-	if err != nil {
-		return nil, err
-	}
-
-	return b, nil
-}
+//func GenerateKey() ([]byte, error) {
+//	b := make([]byte, 64) //nolint:gomnd
+//	_, err := rand.Read(b)
+//	// Note that err == nil only if we read len(b) bytes.
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	return b, nil
+//}

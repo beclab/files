@@ -110,7 +110,6 @@ func rawHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		//Checker:    d,
 	})
 	if err != nil {
 		return errToStatus(err), err
@@ -129,10 +128,6 @@ func rawHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 }
 
 func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
-	//if !d.Check(path) {
-	//	return nil
-	//}
-
 	info, err := files.DefaultFs.Stat(path)
 	if err != nil {
 		return err

@@ -64,7 +64,6 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 			Modify:     true,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
-			//Checker:    d,
 		})
 		if err != nil {
 			return errToStatus(err), err
