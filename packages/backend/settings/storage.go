@@ -3,7 +3,6 @@ package settings
 import (
 	"github.com/filebrowser/filebrowser/v2/errors"
 	"github.com/filebrowser/filebrowser/v2/rules"
-	"github.com/filebrowser/filebrowser/v2/users"
 )
 
 // StorageBackend is a settings storage backend.
@@ -50,17 +49,17 @@ func (s *Storage) Save(set *Settings) error {
 		return errors.ErrEmptyKey
 	}
 
-	if set.Defaults.Locale == "" {
-		set.Defaults.Locale = "en"
-	}
-
-	if set.Defaults.Commands == nil {
-		set.Defaults.Commands = []string{}
-	}
-
-	if set.Defaults.ViewMode == "" {
-		set.Defaults.ViewMode = users.MosaicViewMode
-	}
+	//if set.Defaults.Locale == "" {
+	//	set.Defaults.Locale = "en"
+	//}
+	//
+	//if set.Defaults.Commands == nil {
+	//	set.Defaults.Commands = []string{}
+	//}
+	//
+	//if set.Defaults.ViewMode == "" {
+	//	set.Defaults.ViewMode = users.MosaicViewMode
+	//}
 
 	if set.Rules == nil {
 		set.Rules = []rules.Rule{}

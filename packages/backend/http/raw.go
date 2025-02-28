@@ -14,7 +14,6 @@ import (
 
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/fileutils"
-	"github.com/filebrowser/filebrowser/v2/users"
 )
 
 func slashClean(name string) string {
@@ -24,7 +23,7 @@ func slashClean(name string) string {
 	return gopath.Clean(name)
 }
 
-func parseQueryFiles(r *http.Request, f *files.FileInfo, _ *users.User) ([]string, error) {
+func parseQueryFiles(r *http.Request, f *files.FileInfo) ([]string, error) {
 	var fileSlice []string
 	names := strings.Split(r.URL.Query().Get("files"), ",")
 
@@ -76,10 +75,6 @@ func setContentDisposition(w http.ResponseWriter, r *http.Request, file *files.F
 }
 
 func rawHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	//if !d.user.Perm.Download {
-	//	return http.StatusAccepted, nil
-	//}
-
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return http.StatusNotImplemented, nil
@@ -110,9 +105,9 @@ func rawHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	}
 
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs, // d.user.Fs,
+		Fs:         files.DefaultFs,
 		Path:       r.URL.Path,
-		Modify:     true, // d.user.Perm.Modify,
+		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
@@ -138,7 +133,7 @@ func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
 		return nil
 	}
 
-	info, err := files.DefaultFs.Stat(path) // d.user.Fs.Stat(path)
+	info, err := files.DefaultFs.Stat(path)
 	if err != nil {
 		return err
 	}
@@ -147,7 +142,7 @@ func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
 		return nil
 	}
 
-	file, err := files.DefaultFs.Open(path) // d.user.Fs.Open(path)
+	file, err := files.DefaultFs.Open(path)
 	if err != nil {
 		return err
 	}
@@ -187,7 +182,7 @@ func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
 }
 
 func rawDirHandler(w http.ResponseWriter, r *http.Request, d *data, file *files.FileInfo) (int, error) {
-	filenames, err := parseQueryFiles(r, file, nil) // d.user)
+	filenames, err := parseQueryFiles(r, file)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

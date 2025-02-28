@@ -835,16 +835,6 @@ func googleFileToBuffer(src, bufferFilePath, bufferFileName string, w http.Respo
 		}
 		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
 			if taskRespJson.Data[0].Status == "Completed" {
-				//var found bool
-				//bufferFilename, found, err = findFirstDownloadingFile(bufferFilePath)
-				//if err != nil {
-				//	return bufferFilename, err
-				//}
-				//if !found || bufferFilename == "" {
-				//	bufferFilename = bufferFilePath + "/" + srcFilename
-				//}
-				//fmt.Println("bufferFilename:", bufferFilename)
-				//time.Sleep(200 * time.Millisecond)
 				return bufferFileName, nil
 			}
 			return bufferFileName, e.New(taskRespJson.Data[0].Status)
@@ -1183,7 +1173,7 @@ func resourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 func resourcePatchGoogle(fileCache FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
 	src := r.URL.Path
 	dst := r.URL.Query().Get("destination")
-	dst, err := unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
+	dst, err := unescapeURLIfEscaped(dst)
 
 	srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
 	_, _, _, dstFilename := parseGoogleDrivePath(dst)
@@ -1287,7 +1277,7 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 	if err != nil {
 		return nil, err
 	}
-	bufferFileName := removeSlash(file.Name) // removeNonAlphanumericUnderscore(file.Name)
+	bufferFileName := removeSlash(file.Name)
 	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	fmt.Println("Buffer file path: ", bufferFilePath)
 	fmt.Println("Buffer path: ", bufferPath)
@@ -1354,7 +1344,7 @@ func rawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, fi
 	if err != nil {
 		return errToStatus(err), err
 	}
-	bufferFileName := removeSlash(file.Name) // removeNonAlphanumericUnderscore(file.Name)
+	bufferFileName := removeSlash(file.Name)
 	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	fmt.Println("Buffer file path: ", bufferFilePath)
 	fmt.Println("Buffer path: ", bufferPath)

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
-	"github.com/filebrowser/filebrowser/v2/users"
 	"io"
 	"log"
 	"net"
@@ -399,26 +398,26 @@ func quickSetup(flags *pflag.FlagSet, d pythonData) {
 		Signup:           false,
 		CreateUserDir:    false,
 		UserHomeBasePath: settings.DefaultUsersHomeBasePath,
-		Defaults: settings.UserDefaults{
-			Scope:       ".",
-			Locale:      "en",
-			SingleClick: false,
-			Perm: users.Permissions{
-				Admin:    false,
-				Execute:  true,
-				Create:   true,
-				Rename:   true,
-				Modify:   true,
-				Delete:   true,
-				Share:    true,
-				Download: true,
-			},
-		},
-		AuthMethod: "",
-		Branding:   settings.Branding{},
-		Commands:   nil,
-		Shell:      nil,
-		Rules:      nil,
+		//Defaults: settings.UserDefaults{
+		//	Scope:       ".",
+		//	Locale:      "en",
+		//	SingleClick: false,
+		//	//Perm: users.Permissions{
+		//	//	Admin:    false,
+		//	//	Execute:  true,
+		//	//	Create:   true,
+		//	//	Rename:   true,
+		//	//	Modify:   true,
+		//	//	Delete:   true,
+		//	//	Share:    true,
+		//	//	Download: true,
+		//	//},
+		//},
+		//AuthMethod: "",
+		//Branding:   settings.Branding{},
+		Commands: nil,
+		Shell:    nil,
+		Rules:    nil,
 	}
 
 	var err error

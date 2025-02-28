@@ -41,9 +41,6 @@ var (
 
 func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, resizePreview bool) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		//if !d.user.Perm.Download {
-		//	return http.StatusAccepted, nil
-		//}
 		vars := mux.Vars(r)
 
 		previewSize, err := ParsePreviewSize(vars["size"])
@@ -62,9 +59,9 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs, // d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       path,
-			Modify:     true, // d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,

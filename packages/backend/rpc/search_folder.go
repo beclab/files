@@ -62,6 +62,5 @@ func dedupArray(paths []string, prefix string) []string {
 			result = append(result, subPath)
 		}
 	}
-	//fmt.Println("redis paths: ", result)
 	return result
 }

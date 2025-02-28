@@ -121,14 +121,10 @@ func md5Handler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		return md5Sync(w, r)
 	}
 
-	//if !d.user.Perm.Download {
-	//	return http.StatusAccepted, nil
-	//}
-
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs, // d.user.Fs,
+		Fs:         files.DefaultFs,
 		Path:       r.URL.Path,
-		Modify:     true, // d.user.Perm.Modify,
+		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,

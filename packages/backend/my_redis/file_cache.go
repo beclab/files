@@ -32,7 +32,7 @@ func DelThumbRedisKey(key string) error {
 }
 
 func StartDailyCleanup() {
-	cycle := 7 * 24 * time.Hour // time.Minute * 5
+	cycle := 7 * 24 * time.Hour
 	ticker := time.NewTicker(cycle)
 	defer ticker.Stop()
 
@@ -51,7 +51,6 @@ func StartDailyCleanup() {
 func CleanupOldFilesAndRedisEntries(duration time.Duration) {
 	fmt.Printf("Cleaning up old files at %d\n", time.Now().Unix())
 	cutoffTime := time.Now().Add(-duration).Unix()
-	//cutoffTime := time.Now().Add(-7 * 24 * time.Hour).Unix()
 	cutoffTimeStr := strconv.FormatInt(cutoffTime, 10)
 
 	results := RedisZRangeByScore(zsetKey, "-inf", cutoffTimeStr)
@@ -63,8 +62,6 @@ func CleanupOldFilesAndRedisEntries(duration time.Duration) {
 		err := os.Remove(filePath)
 		if err != nil {
 			fmt.Println("Error deleting file:", err)
-			// if file delete failed, key will also be removed
-			//continue
 		}
 
 		err = RedisZRem(zsetKey, []string{fileName})
@@ -76,19 +73,16 @@ func CleanupOldFilesAndRedisEntries(duration time.Duration) {
 }
 
 func GetFileName(key string) string {
-	hasher := sha1.New() //nolint:gosec
+	hasher := sha1.New()
 	_, _ = hasher.Write([]byte(key))
 	hash := hex.EncodeToString(hasher.Sum(nil))
-	//return fmt.Sprintf("%s/%s/%s", hash[:1], hash[1:3], hash)
 	return hash
 }
 
 func UpdateFileAccessTimeToRedis(fileName string) error {
 	key := fileName
 	currentTime := time.Now().Unix()
-	//member := make(map[string]float64)
-	//member[key] = float64(currentTime)
-	err := RedisZAdd(zsetKey, key, float64(currentTime)) //member)
+	err := RedisZAdd(zsetKey, key, float64(currentTime))
 	return err
 }
 

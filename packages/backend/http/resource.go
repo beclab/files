@@ -27,7 +27,7 @@ import (
 
 func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
 	src := r.URL.Path
-	src, err := unescapeURLIfEscaped(src) // url.QueryUnescape(src)
+	src, err := unescapeURLIfEscaped(src)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -233,9 +233,9 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 	var file *files.FileInfo
 	if mountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-			Fs:         files.DefaultFs, // d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
-			Modify:     true, // d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,
@@ -243,9 +243,9 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 		}, mountedData)
 	} else {
 		file, err = files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs, // d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
-			Modify:     true, // d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,
@@ -289,7 +289,7 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
 			file.ExternalType = files.GetExternalType(file.Path, mountedData)
 		}
-		file.Listing.Sorting = files.DefaultSorting // d.user.Sorting
+		file.Listing.Sorting = files.DefaultSorting
 		file.Listing.ApplySort()
 		if stream == 1 {
 			streamListingItems(w, r, file.Listing, d, mountedData)
@@ -353,7 +353,7 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 
 func resourceDeleteHandler(fileCache FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if r.URL.Path == "/" { // || !d.user.Perm.Delete {
+		if r.URL.Path == "/" {
 			return http.StatusForbidden, nil
 		}
 
@@ -367,9 +367,9 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs, // d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
-			Modify:     true, // d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     false,
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,
@@ -384,7 +384,7 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			return errToStatus(err), err
 		}
 
-		err = files.DefaultFs.RemoveAll(r.URL.Path) // d.user.Fs.RemoveAll(r.URL.Path)
+		err = files.DefaultFs.RemoveAll(r.URL.Path)
 
 		if err != nil {
 			return errToStatus(err), err
@@ -395,10 +395,6 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 }
 
 func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	//if !d.user.Perm.Create {
-	//	return http.StatusForbidden, nil
-	//}
-
 	respJson, err := files.MountPathIncluster(r)
 	if err != nil {
 		return errToStatus(err), err
@@ -408,14 +404,10 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 }
 
 func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	//if !d.user.Perm.Delete {
-	//	return http.StatusForbidden, nil
-	//}
-
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs, // d.user.Fs,
+		Fs:         files.DefaultFs,
 		Path:       r.URL.Path,
-		Modify:     true, // d.user.Perm.Modify,
+		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
@@ -423,12 +415,6 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (in
 	if err != nil {
 		return errToStatus(err), err
 	}
-
-	// delete thumbnails
-	//err = delThumbs(r.Context(), fileCache, file)
-	//if err != nil {
-	//	return errToStatus(err), err
-	//}
 
 	respJson, err := files.UnmountPathIncluster(r, file.Path)
 	if err != nil {
@@ -440,7 +426,6 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (in
 
 func resourcePostHandler(fileCache FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		//if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 		if !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
 		}
@@ -465,14 +450,14 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 
 		// Directories creation on POST.
 		if strings.HasSuffix(r.URL.Path, "/") {
-			err := files.DefaultFs.MkdirAll(r.URL.Path, fileMode) // d.user.Fs.MkdirAll(r.URL.Path, fileMode) // 0775) //nolint:gomnd
+			err := files.DefaultFs.MkdirAll(r.URL.Path, fileMode)
 			return errToStatus(err), err
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs, // d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
-			Modify:     true, // d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     false,
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,
@@ -481,24 +466,18 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			if r.URL.Query().Get("override") != "true" {
 				return http.StatusConflict, nil
 			}
-
-			// Permission for overwriting the file
-			//if !d.user.Perm.Modify {
-			//	return http.StatusForbidden, nil
-			//}
-
 			err = delThumbs(r.Context(), fileCache, file)
 			if err != nil {
 				return errToStatus(err), err
 			}
 		}
 
-		info, err := writeFile(files.DefaultFs, r.URL.Path, r.Body) // d.user.Fs, r.URL.Path, r.Body)
+		info, err := writeFile(files.DefaultFs, r.URL.Path, r.Body)
 		etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
 		w.Header().Set("ETag", etag)
 
 		if err != nil {
-			_ = files.DefaultFs.RemoveAll(r.URL.Path) // d.user.Fs.RemoveAll(r.URL.Path)
+			_ = files.DefaultFs.RemoveAll(r.URL.Path)
 		}
 
 		return errToStatus(err), err
@@ -506,7 +485,6 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 }
 
 func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	//if !d.user.Perm.Modify || !d.Check(r.URL.Path) {
 	if !d.Check(r.URL.Path) {
 		return http.StatusForbidden, nil
 	}
@@ -516,7 +494,7 @@ func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 		return http.StatusMethodNotAllowed, nil
 	}
 
-	exists, err := afero.Exists(files.DefaultFs, r.URL.Path) // d.user.Fs, r.URL.Path)
+	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -524,7 +502,7 @@ func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 		return http.StatusNotFound, nil
 	}
 
-	info, err := writeFile(files.DefaultFs, r.URL.Path, r.Body) // d.user.Fs, r.URL.Path, r.Body)
+	info, err := writeFile(files.DefaultFs, r.URL.Path, r.Body)
 	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
 	w.Header().Set("ETag", etag)
 
@@ -543,7 +521,7 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		action := r.URL.Query().Get("action")
-		dst, err := unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
+		dst, err := unescapeURLIfEscaped(dst)
 
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
@@ -563,18 +541,16 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		override := r.URL.Query().Get("override") == "true"
 		rename := r.URL.Query().Get("rename") == "true"
 		if !override && !rename {
-			//if _, err = d.user.Fs.Stat(dst); err == nil {
 			if _, err = files.DefaultFs.Stat(dst); err == nil {
 				return http.StatusConflict, nil
 			}
 		}
 		if rename {
-			//dst = addVersionSuffix(dst, d.user.Fs, strings.HasSuffix(src, "/"))
 			dst = addVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
 		// Permission for overwriting the file
-		if override { // && !d.user.Perm.Modify {
+		if override {
 			return http.StatusForbidden, nil
 		}
 
@@ -624,13 +600,13 @@ func addVersionSuffix(source string, fs afero.Fs, isDir bool) string {
 func writeFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 	fmt.Println("Before open ", dst)
 	dir, _ := path.Split(dst)
-	err := fs.MkdirAll(dir, 0775) //nolint:gomnd
+	err := fs.MkdirAll(dir, 0775)
 	if err != nil {
 		return nil, err
 	}
 
 	fmt.Println("Open ", dst)
-	file, err := fs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775) //nolint:gomnd
+	file, err := fs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)
 	if err != nil {
 		return nil, err
 	}
@@ -674,23 +650,15 @@ func delThumbs(ctx context.Context, fileCache FileCache, file *files.FileInfo) e
 func patchAction(ctx context.Context, action, src, dst string, d *data, fileCache FileCache) error {
 	switch action {
 	case "copy":
-		//if !d.user.Perm.Create {
-		//	return errors.ErrPermissionDenied
-		//}
-
-		//return fileutils.Copy(d.user.Fs, src, dst)
 		return fileutils.Copy(files.DefaultFs, src, dst)
 	case "rename":
-		//if !d.user.Perm.Rename {
-		//	return errors.ErrPermissionDenied
-		//}
 		src = path.Clean("/" + src)
 		dst = path.Clean("/" + dst)
 
 		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs, // d.user.Fs,
+			Fs:         files.DefaultFs,
 			Path:       src,
-			Modify:     true, // d.user.Perm.Modify,
+			Modify:     true,
 			Expand:     false,
 			ReadHeader: false,
 			Checker:    d,
@@ -705,7 +673,7 @@ func patchAction(ctx context.Context, action, src, dst string, d *data, fileCach
 			return err
 		}
 
-		return fileutils.MoveFile(files.DefaultFs, src, dst) // d.user.Fs, src, dst)
+		return fileutils.MoveFile(files.DefaultFs, src, dst)
 	default:
 		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
 	}

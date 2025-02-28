@@ -995,8 +995,7 @@ func resourcePostCloudDrive(src string, w http.ResponseWriter, r *http.Request, 
 func resourcePatchCloudDrive(fileCache FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
 	src := r.URL.Path
 	dst := r.URL.Query().Get("destination")
-	//action := r.URL.Query().Get("action")
-	dst, err := unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
+	dst, err := unescapeURLIfEscaped(dst)
 
 	srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 	_, _, dstPath := parseCloudDrivePath(dst, true)

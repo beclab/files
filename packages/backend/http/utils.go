@@ -48,9 +48,9 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 			var err error
 			if mountedData != nil {
 				file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-					Fs:         files.DefaultFs, // d.user.Fs,
-					Path:       firstItem.Path,  //r.URL.Path,
-					Modify:     true,            // d.user.Perm.Modify,
+					Fs:         files.DefaultFs,
+					Path:       firstItem.Path,
+					Modify:     true,
 					Expand:     true,
 					ReadHeader: d.server.TypeDetectionByHeader,
 					Checker:    d,
@@ -58,9 +58,9 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 				}, mountedData)
 			} else {
 				file, err = files.NewFileInfo(files.FileOptions{
-					Fs:         files.DefaultFs, // d.user.Fs,
-					Path:       firstItem.Path,  //r.URL.Path,
-					Modify:     true,            // d.user.Perm.Modify,
+					Fs:         files.DefaultFs,
+					Path:       firstItem.Path,
+					Modify:     true,
 					Expand:     true,
 					ReadHeader: d.server.TypeDetectionByHeader,
 					Checker:    d,
@@ -203,7 +203,6 @@ func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- 
 			if err != nil {
 				return
 			}
-			//defer response.Body.Close()
 
 			if firstResponse.StatusCode != http.StatusOK {
 				fmt.Println(firstResponse.StatusCode)
@@ -414,7 +413,7 @@ func formatBytes(bytes int64) string {
 func checkBufferDiskSpace(diskSize int64) (bool, error) {
 	spaceOk, needs, avails, reserved, err := checkDiskSpace("/data", diskSize)
 	if err != nil {
-		return false, err // errors.New("disk space check error")
+		return false, err
 	}
 	needsStr := formatBytes(needs)
 	availsStr := formatBytes(avails)

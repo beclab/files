@@ -78,9 +78,9 @@ func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInf
 	fmt.Println("X-Bfl-User: ", xBflUser)
 
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs, // d.user.Fs,
-		Path:       path,            //r.URL.Path,
-		Modify:     true,            // d.user.Perm.Modify,
+		Fs:         files.DefaultFs,
+		Path:       path,
+		Modify:     true,
 		Expand:     true,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
@@ -91,7 +91,7 @@ func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInf
 	}
 
 	if file.IsDir {
-		file.Listing.Sorting = files.DefaultSorting // d.user.Sorting
+		file.Listing.Sorting = files.DefaultSorting
 		file.Listing.ApplySort()
 		return file, http.StatusOK, nil
 	}
@@ -237,19 +237,6 @@ func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
 	fmt.Println("file.Path:", file.Path, ", path:", path)
 
 	err = ioCopyFileWithBuffer("/data"+path, bufferFilePath, 8*1024*1024)
-
-	//fd, err := file.Fs.Open(path)
-	//if err != nil {
-	//	return err
-	//}
-	//defer fd.Close()
-	//
-	//bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
-	//if err != nil {
-	//	return err
-	//}
-	//defer bufferFile.Close()
-	//_, err = io.Copy(bufferFile, fd)
 	if err != nil {
 		return err
 	}
@@ -268,37 +255,28 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		return http.StatusInternalServerError, err
 	}
 
-	//if !d.user.Perm.Create || !d.Check(targetPath) {
 	if !d.Check(targetPath) {
 		return http.StatusForbidden, nil
 	}
 
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		//err := d.user.Fs.MkdirAll(targetPath, mode) // 0775) //nolint:gomnd
 		err = files.DefaultFs.MkdirAll(targetPath, mode)
 		return errToStatus(err), err
 	}
 
 	_, err = files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs, // d.user.Fs,
+		Fs:         files.DefaultFs,
 		Path:       targetPath,
-		Modify:     true, // d.user.Perm.Modify,
+		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
 	})
-	if err == nil {
-		// Permission for overwriting the file
-		//if !d.user.Perm.Modify {
-		//	return http.StatusForbidden, nil
-		//}
-	}
 
 	err = ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
 
 	if err != nil {
-		//_ = d.user.Fs.RemoveAll(targetPath)
 		_ = files.DefaultFs.RemoveAll(targetPath)
 	}
 
@@ -306,14 +284,14 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 }
 
 func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, d *data) (int, error) {
-	if path == "/" { // || !d.user.Perm.Delete {
+	if path == "/" {
 		return http.StatusForbidden, nil
 	}
 
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs, // d.user.Fs,
+		Fs:         files.DefaultFs,
 		Path:       path,
-		Modify:     true, // d.user.Perm.Modify,
+		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
@@ -328,7 +306,6 @@ func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, 
 		return errToStatus(err), err
 	}
 
-	//err = d.user.Fs.RemoveAll(path)
 	err = files.DefaultFs.RemoveAll(path)
 
 	if err != nil {
@@ -372,20 +349,6 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 	fmt.Println("newSrc:", newSrc, ", newPath:", newPath)
 
 	err = ioCopyFileWithBuffer(newPath, bufferFilePath, 8*1024*1024)
-
-	//fd, err := os.Open(newPath)
-	//if err != nil {
-	//	return err
-	//}
-	//defer fd.Close()
-	//
-	//bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
-	//if err != nil {
-	//	return err
-	//}
-	//defer bufferFile.Close()
-	//
-	//_, err = io.Copy(bufferFile, fd)
 	if err != nil {
 		return err
 	}
@@ -394,32 +357,24 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 }
 
 func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *data) (int, error) {
-	//if !d.user.Perm.Create || !d.Check(targetPath) {
 	if !d.Check(targetPath) {
 		return http.StatusForbidden, nil
 	}
 
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		//err := d.user.Fs.MkdirAll(targetPath, mode) // 0775) //nolint:gomnd
 		err := files.DefaultFs.MkdirAll(targetPath, mode)
 		return errToStatus(err), err
 	}
 
 	_, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs, // d.user.Fs,
+		Fs:         files.DefaultFs,
 		Path:       targetPath,
-		Modify:     true, // d.user.Perm.Modify,
+		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
 	})
-	if err == nil {
-		// Permission for overwriting the file
-		//if !d.user.Perm.Modify {
-		//	return http.StatusForbidden, nil
-		//}
-	}
 
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
 	err = ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
@@ -436,7 +391,7 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 }
 
 func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, d *data) (int, error) {
-	if path == "/" { // || !d.user.Perm.Delete {
+	if path == "/" {
 		return http.StatusForbidden, nil
 	}
 
@@ -469,8 +424,6 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 		prefix = dst[firstSlashIdx+1:]
 
 	} else {
-		//filename = dst[lastSlashIdx+1:]
-
 		if firstSlashIdx != lastSlashIdx {
 			prefix = dst[firstSlashIdx+1 : lastSlashIdx+1]
 		}
@@ -1002,7 +955,6 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		override := r.URL.Query().Get("override") == "true"
 		rename := r.URL.Query().Get("rename") == "true"
 		if !override && !rename {
-			//if _, err := d.user.Fs.Stat(dst); err == nil {
 			if _, err := files.DefaultFs.Stat(dst); err == nil {
 				return http.StatusConflict, nil
 			}
@@ -1029,10 +981,10 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			}
 		}
 		if rename && dstType != "google" {
-			dst = pasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r) // d.user.Fs, w, r)
+			dst = pasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r)
 		}
 		// Permission for overwriting the file
-		if override { // && !d.user.Perm.Modify {
+		if override {
 			return http.StatusForbidden, nil
 		}
 		var same = srcType == dstType
@@ -1797,7 +1749,6 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 
 	rename := r.URL.Query().Get("rename") == "true"
 	if rename && dstType != "google" && srcType == "google" {
-		//dst = pasteAddVersionSuffix(dst, dstType, d.user.Fs, w, r)
 		dst = pasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r)
 	}
 
@@ -2143,17 +2094,8 @@ func pasteActionDiffArch(ctx context.Context, action, srcType, src, dstType, dst
 	// In this function, context if tied up to src, because src is in the URL
 	switch action {
 	case "copy":
-		//if !d.user.Perm.Create {
-		//	return errors.ErrPermissionDenied
-		//}
-
-		//return doPaste(d.user.Fs, srcType, src, dstType, dst, d, w, r)
 		return doPaste(files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 	case "rename":
-		//if !d.user.Perm.Rename {
-		//	return errors.ErrPermissionDenied
-		//}
-		//err := doPaste(d.user.Fs, srcType, src, dstType, dst, d, w, r)
 		err := doPaste(files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 		if err != nil {
 			return err
