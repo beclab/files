@@ -6,12 +6,12 @@ import (
 	//"github.com/filebrowser/filebrowser/v2/auth"
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
-	"github.com/filebrowser/filebrowser/v2/users"
+	//"github.com/filebrowser/filebrowser/v2/users"
 )
 
 // NewStorage creates a storage.Storage based on Bolt DB.
 func NewStorage(db *storm.DB) (*storage.Storage, error) {
-	userStore := users.NewStorage(usersBackend{db: db})
+	//userStore := users.NewStorage(usersBackend{db: db})
 	settingsStore := settings.NewStorage(settingsBackend{db: db})
 	//authStore := auth.NewStorage(authBackend{db: db}, userStore)
 
@@ -22,7 +22,7 @@ func NewStorage(db *storm.DB) (*storage.Storage, error) {
 
 	return &storage.Storage{
 		//Auth:     authStore,
-		Users:    userStore,
+		//Users:    userStore,
 		Settings: settingsStore,
 	}, nil
 }

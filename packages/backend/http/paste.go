@@ -236,7 +236,7 @@ func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
 	}
 	fmt.Println("file.Path:", file.Path, ", path:", path)
 
-	err = ioCopyFileWithBuffer(path, bufferFilePath, 8*1024*1024)
+	err = ioCopyFileWithBuffer("/data"+path, bufferFilePath, 8*1024*1024)
 
 	//fd, err := file.Fs.Open(path)
 	//if err != nil {
@@ -1002,7 +1002,8 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		override := r.URL.Query().Get("override") == "true"
 		rename := r.URL.Query().Get("rename") == "true"
 		if !override && !rename {
-			if _, err := d.user.Fs.Stat(dst); err == nil {
+			//if _, err := d.user.Fs.Stat(dst); err == nil {
+			if _, err := files.DefaultFs.Stat(dst); err == nil {
 				return http.StatusConflict, nil
 			}
 		}
@@ -1028,7 +1029,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			}
 		}
 		if rename && dstType != "google" {
-			dst = pasteAddVersionSuffix(dst, dstType, d.user.Fs, w, r)
+			dst = pasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r) // d.user.Fs, w, r)
 		}
 		// Permission for overwriting the file
 		if override { // && !d.user.Perm.Modify {
@@ -1796,7 +1797,8 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 
 	rename := r.URL.Query().Get("rename") == "true"
 	if rename && dstType != "google" && srcType == "google" {
-		dst = pasteAddVersionSuffix(dst, dstType, d.user.Fs, w, r)
+		//dst = pasteAddVersionSuffix(dst, dstType, d.user.Fs, w, r)
+		dst = pasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r)
 	}
 
 	// paste
@@ -2145,12 +2147,14 @@ func pasteActionDiffArch(ctx context.Context, action, srcType, src, dstType, dst
 		//	return errors.ErrPermissionDenied
 		//}
 
-		return doPaste(d.user.Fs, srcType, src, dstType, dst, d, w, r)
+		//return doPaste(d.user.Fs, srcType, src, dstType, dst, d, w, r)
+		return doPaste(files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 	case "rename":
 		//if !d.user.Perm.Rename {
 		//	return errors.ErrPermissionDenied
 		//}
-		err := doPaste(d.user.Fs, srcType, src, dstType, dst, d, w, r)
+		//err := doPaste(d.user.Fs, srcType, src, dstType, dst, d, w, r)
+		err := doPaste(files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 		if err != nil {
 			return err
 		}

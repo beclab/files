@@ -71,8 +71,6 @@ var TerminusdHost = os.Getenv("TERMINUSD_HOST")
 var ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
 
 func CheckPath(s, prefix, except string) bool {
-	// prefix := "/data/External/"
-
 	if prefix == "" || except == "" {
 		return false
 	}
@@ -87,7 +85,7 @@ func CheckPath(s, prefix, except string) bool {
 		remaining = remaining[:len(remaining)-len(except)]
 	}
 
-	return !strings.Contains(remaining, except) // "/")
+	return !strings.Contains(remaining, except)
 }
 
 type Response struct {
@@ -117,9 +115,6 @@ func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
 		return nil, err
 	}
 
-	//for key, value := range header {
-	//	req.Header.Set(key, value)
-	//}
 	req.Header = header
 
 	resp, err := client.Do(req)
@@ -452,7 +447,6 @@ func (i *FileInfo) detectType(modify, saveContent, readHeader bool) error {
 	// a 500 even though it doesn't matter. So we just log it.
 
 	mimetype := mime.TypeByExtension(i.Extension)
-	//fmt.Println("extension mimitype:", mimetype)
 
 	var buffer []byte
 	if readHeader && mimetype == "" {
@@ -508,7 +502,7 @@ func (i *FileInfo) readFirstBytes() []byte {
 	}
 	defer reader.Close()
 
-	buffer := make([]byte, 512) //nolint:gomnd
+	buffer := make([]byte, 512)
 	n, err := reader.Read(buffer)
 	if err != nil && err != io.EOF {
 		log.Print(err)

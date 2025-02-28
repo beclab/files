@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/filebrowser/filebrowser/v2/common"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
+	"github.com/filebrowser/filebrowser/v2/users"
 	"io"
 	"log"
 	"net"
@@ -33,7 +34,6 @@ import (
 	"github.com/filebrowser/filebrowser/v2/rpc"
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
-	"github.com/filebrowser/filebrowser/v2/users"
 )
 
 var (
@@ -132,9 +132,6 @@ user created with the credentials from options "username" and "password".`,
 		imgSvc := img.New(workersCount)
 
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
-		// cacheDir, err := cmd.Flags().GetString("cache-dir")
-		//cacheDir := "/data/file_cache"
-		//checkErr(err)
 		if diskcache.CacheDir != "" {
 			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil { //nolint:govet,gomnd
 				log.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
@@ -155,14 +152,6 @@ user created with the credentials from options "username" and "password".`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
-			//url := os.Getenv("ZINC_URI")
-			//zincHost := os.Getenv("ZINC_HOST")
-			//zincPort := os.Getenv("ZINC_PORT")
-			//url := "http://" + zincHost + ":" + zincPort
-			//if zincHost == "" || zincPort == "" {
-			//	url = "http://localhost:4080"
-			//}
 			url := "http://localhost:4080"
 
 			watchDirStr := os.Getenv("WATCH_DIR")
@@ -448,30 +437,6 @@ func quickSetup(flags *pflag.FlagSet, d pythonData) {
 	}
 
 	err = d.store.Settings.SaveServer(ser)
-	checkErr(err)
-
-	username := getParam(flags, "username")
-	password := getParam(flags, "password")
-
-	if password == "" {
-		password, err = users.HashPwd("admin")
-		checkErr(err)
-	}
-
-	if username == "" || password == "" {
-		log.Fatal("username and password cannot be empty during quick setup")
-	}
-
-	user := &users.User{
-		Username:     username,
-		Password:     password,
-		LockPassword: false,
-	}
-
-	set.Defaults.Apply(user)
-	user.Perm.Admin = true
-
-	err = d.store.Users.Save(user)
 	checkErr(err)
 }
 

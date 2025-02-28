@@ -678,7 +678,8 @@ func patchAction(ctx context.Context, action, src, dst string, d *data, fileCach
 		//	return errors.ErrPermissionDenied
 		//}
 
-		return fileutils.Copy(d.user.Fs, src, dst)
+		//return fileutils.Copy(d.user.Fs, src, dst)
+		return fileutils.Copy(files.DefaultFs, src, dst)
 	case "rename":
 		//if !d.user.Perm.Rename {
 		//	return errors.ErrPermissionDenied

@@ -42,7 +42,6 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
 	tempFilePath := filepath.Join(dir, tempFileName)
 
-	//err = fs.MkdirAll(filepath.Dir(targetPath), 0755)
 	err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755)
 	if err != nil {
 		return err
