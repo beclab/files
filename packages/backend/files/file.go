@@ -441,9 +441,6 @@ func (i *FileInfo) RealPath() string {
 	return i.Path
 }
 
-// TODO: use constants
-//
-//nolint:goconst
 func (i *FileInfo) detectType(modify, saveContent, readHeader bool) error {
 	if IsNamedPipe(i.Mode) {
 		i.Type = "blob"
@@ -531,7 +528,6 @@ func (i *FileInfo) detectSubtitles() {
 	ext := filepath.Ext(i.Path)
 
 	// detect multiple languages. Base*.vtt
-	// TODO: give subtitles descriptive names (lang) and track attributes
 	parentDir := strings.TrimRight(i.Path, i.Name)
 	dir, err := afero.ReadDir(i.Fs, parentDir)
 	if err == nil {

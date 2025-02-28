@@ -40,10 +40,10 @@ var (
 )
 
 func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, resizePreview bool) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if !d.user.Perm.Download {
-			return http.StatusAccepted, nil
-		}
+	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		//if !d.user.Perm.Download {
+		//	return http.StatusAccepted, nil
+		//}
 		vars := mux.Vars(r)
 
 		previewSize, err := ParsePreviewSize(vars["size"])
@@ -62,9 +62,9 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         d.user.Fs,
+			Fs:         files.DefaultFs, // d.user.Fs,
 			Path:       path,
-			Modify:     d.user.Perm.Modify,
+			Modify:     true, // d.user.Perm.Modify,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,
 			Checker:    d,
@@ -81,7 +81,7 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 		default:
 			return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", file.Type)
 		}
-	})
+	}
 }
 
 func handleImagePreview(
@@ -123,7 +123,6 @@ func handleImagePreview(
 				fmt.Println("second method failed!")
 				return rawFileHandler(w, r, file)
 			}
-			//return errToStatus(err), err
 		}
 	}
 
@@ -190,6 +189,5 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 }
 
 func previewCacheKey(f *files.FileInfo, previewSize PreviewSize) string {
-	//return stringMD5(fmt.Sprintf("%s%d%s", f.RealPath(), f.ModTime.Unix(), previewSize))
 	return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
 }

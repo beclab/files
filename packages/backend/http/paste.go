@@ -77,58 +77,29 @@ func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInf
 	xBflUser := r.Header.Get("X-Bfl-User")
 	fmt.Println("X-Bfl-User: ", xBflUser)
 
-	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
-	//fmt.Println(d.user.Fs)
-	//fmt.Println(path)
-	//fmt.Println(d.user.Perm.Modify)
-	//fmt.Println(d.server.TypeDetectionByHeader)
-	//fmt.Println(d)
-	fmt.Println("d.user.Username: ", d.user.Username)
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
-		Path:       path, //r.URL.Path,
-		Modify:     d.user.Perm.Modify,
+		Fs:         files.DefaultFs, // d.user.Fs,
+		Path:       path,            //r.URL.Path,
+		Modify:     true,            // d.user.Perm.Modify,
 		Expand:     true,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
 		Content:    true,
 	})
-	//fmt.Println(file)
 	if err != nil {
 		return file, errToStatus(err), err
 	}
 
 	if file.IsDir {
-		//fmt.Println(file)
-		//file.Size = file.Listing.Size
-		// recursiveSize(file)
-		file.Listing.Sorting = d.user.Sorting
+		file.Listing.Sorting = files.DefaultSorting // d.user.Sorting
 		file.Listing.ApplySort()
-		return file, http.StatusOK, nil //renderJSON(w, r, file)
+		return file, http.StatusOK, nil
 	}
-
-	//if checksum := r.URL.Query().Get("checksum"); checksum != "" {
-	//	err := file.Checksum(checksum)
-	//	if err == errors.ErrInvalidOption {
-	//		return file, http.StatusBadRequest, nil
-	//	} else if err != nil {
-	//		return file, http.StatusInternalServerError, err
-	//	}
-	//
-	//	// do not waste bandwidth if we just want the checksum
-	//	file.Content = ""
-	//}
 
 	if file.Type == "video" {
 		osSystemServer := "system-server.user-system-" + xBflUser
-		//osSystemServer := v.Get("OS_SYSTEM_SERVER")
-		//if osSystemServer == nil {
-		//	log.Println("need env OS_SYSTEM_SERVER")
-		//}
 
-		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer) // os.Getenv("OS_SYSTEM_SERVER"))
-
-		//fmt.Println("HTTP JSON POST URL:", httpposturl)
+		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer)
 
 		var jsonData = []byte(`{
 			"action": "view",
@@ -149,13 +120,11 @@ func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInf
 		}
 		defer response.Body.Close()
 
-		//fmt.Println("response Status:", response.Status)
-		//fmt.Println("response Headers:", response.Header)
 		body, _ := ioutil.ReadAll(response.Body)
 		fmt.Println("response Body:", string(body))
 	}
 
-	return file, http.StatusOK, nil //renderJSON(w, r, file)
+	return file, http.StatusOK, nil
 }
 
 func generateBufferFileName(originalFilePath, bflName string, extRemains bool) (string, error) {
@@ -198,11 +167,9 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	if len(extension) > 0 {
 		originalPathName = strings.TrimSuffix(originalPathName, extension) + "_" + extension[1:]
 	}
-	//originalPathName = url.QueryEscape(originalPathName)
 
 	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
-	//bufferPathName := fmt.Sprintf("%d", timestamp)
-	bufferPathName = removeSlash(bufferPathName) // removeNonAlphanumericUnderscore(bufferPathName)
+	bufferPathName = removeSlash(bufferPathName)
 	bufferFolderPath := "/data/" + bflName + "/buffer" + "/" + bufferPathName
 	err := os.MkdirAll(bufferFolderPath, 0755)
 	if err != nil {
@@ -212,9 +179,6 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 }
 
 func makeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
-	//filePath := "buffer.bin"
-	//bufferSize := int64(1024 * 1024) // 1 MB
-
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		fmt.Println("Failed to create buffer file:", err)
@@ -247,8 +211,6 @@ func makeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
 }
 
 func removeDiskBuffer(filePath string, srcType string) {
-	//bufferFilePath := "buffer.bin"
-
 	fmt.Println("Removing buffer file:", filePath)
 	err := os.Remove(filePath)
 	if err != nil {
@@ -273,20 +235,21 @@ func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
 		return err
 	}
 	fmt.Println("file.Path:", file.Path, ", path:", path)
-	fd, err := file.Fs.Open(path) // file.Path)
-	if err != nil {
-		return err
-	}
-	defer fd.Close()
 
-	//bufferFilePath := "buffer.bin"
-	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-	defer bufferFile.Close()
+	err = ioCopyFileWithBuffer(path, bufferFilePath, 8*1024*1024)
 
-	_, err = io.Copy(bufferFile, fd)
+	//fd, err := file.Fs.Open(path)
+	//if err != nil {
+	//	return err
+	//}
+	//defer fd.Close()
+	//
+	//bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+	//if err != nil {
+	//	return err
+	//}
+	//defer bufferFile.Close()
+	//_, err = io.Copy(bufferFile, fd)
 	if err != nil {
 		return err
 	}
@@ -299,76 +262,58 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	fmt.Println("*** bufferFilePath:", bufferFilePath)
 	fmt.Println("*** targetPath:", targetPath)
 
-	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
 	var err error
-	targetPath, err = unescapeURLIfEscaped(targetPath) // url.QueryUnescape(targetPath)
+	targetPath, err = unescapeURLIfEscaped(targetPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
-	if !d.user.Perm.Create || !d.Check(targetPath) {
+	//if !d.user.Perm.Create || !d.Check(targetPath) {
+	if !d.Check(targetPath) {
 		return http.StatusForbidden, nil
 	}
 
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		err := d.user.Fs.MkdirAll(targetPath, mode) // 0775) //nolint:gomnd
+		//err := d.user.Fs.MkdirAll(targetPath, mode) // 0775) //nolint:gomnd
+		err = files.DefaultFs.MkdirAll(targetPath, mode)
 		return errToStatus(err), err
 	}
 
 	_, err = files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
+		Fs:         files.DefaultFs, // d.user.Fs,
 		Path:       targetPath,
-		Modify:     d.user.Perm.Modify,
+		Modify:     true, // d.user.Perm.Modify,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
 	})
 	if err == nil {
-		//if override != "true" {
-		//	return http.StatusConflict, nil
-		//}
-
 		// Permission for overwriting the file
-		if !d.user.Perm.Modify {
-			return http.StatusForbidden, nil
-		}
-
-		//err = delThumbs(r.Context(), fileCache, file)
-		//if err != nil {
-		//	return errToStatus(err), err
+		//if !d.user.Perm.Modify {
+		//	return http.StatusForbidden, nil
 		//}
 	}
 
-	//fmt.Println("Going to write file!")
-	//err = d.RunHook(func() error {
-	//	err := ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
-	//	if err != nil {
-	//		fmt.Println(err)
-	//		return err
-	//	}
-	//	return nil
-	//}, "upload", targetPath, "", d.user)
 	err = ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
 
 	if err != nil {
-		_ = d.user.Fs.RemoveAll(targetPath)
+		//_ = d.user.Fs.RemoveAll(targetPath)
+		_ = files.DefaultFs.RemoveAll(targetPath)
 	}
 
 	return errToStatus(err), err
 }
 
 func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, d *data) (int, error) {
-	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
-	//fmt.Println("deleting", path)
-	if path == "/" || !d.user.Perm.Delete {
+	if path == "/" { // || !d.user.Perm.Delete {
 		return http.StatusForbidden, nil
 	}
 
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
+		Fs:         files.DefaultFs, // d.user.Fs,
 		Path:       path,
-		Modify:     d.user.Perm.Modify,
+		Modify:     true, // d.user.Perm.Modify,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
@@ -383,10 +328,8 @@ func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, 
 		return errToStatus(err), err
 	}
 
-	//err = d.RunHook(func() error {
-	//	return d.user.Fs.RemoveAll(path)
-	//}, "delete", path, "", d.user)
-	err = d.user.Fs.RemoveAll(path)
+	//err = d.user.Fs.RemoveAll(path)
+	err = files.DefaultFs.RemoveAll(path)
 
 	if err != nil {
 		return errToStatus(err), err
@@ -396,8 +339,7 @@ func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, 
 }
 
 func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
-	targetURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(dst) + "/?mode=" + mode.String() //strconv.FormatUint(uint64(mode), 10)
-	//fmt.Println(targetURL)
+	targetURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(dst) + "/?mode=" + mode.String()
 
 	request, err := http.NewRequest("POST", targetURL, nil)
 	if err != nil {
@@ -415,7 +357,6 @@ func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		//fmt.Println(response.StatusCode)
 		return fmt.Errorf("file upload failed with status: %d", response.StatusCode)
 	}
 
@@ -423,32 +364,28 @@ func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 }
 
 func cacheFileToBuffer(src string, bufferFilePath string) error {
-	//fd, err := file.Fs.Open(file.Path)
-	//if err != nil {
-	//	return err
-	//}
-	//defer fd.Close()
-
 	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
 	newPath, err := unescapeURLIfEscaped(newSrc)
 	if err != nil {
 		return err
 	}
 	fmt.Println("newSrc:", newSrc, ", newPath:", newPath)
-	fd, err := os.Open(newPath) // newSrc)
-	if err != nil {
-		return err
-	}
-	defer fd.Close()
 
-	//bufferFilePath := "buffer.bin"
-	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-	defer bufferFile.Close()
+	err = ioCopyFileWithBuffer(newPath, bufferFilePath, 8*1024*1024)
 
-	_, err = io.Copy(bufferFile, fd)
+	//fd, err := os.Open(newPath)
+	//if err != nil {
+	//	return err
+	//}
+	//defer fd.Close()
+	//
+	//bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+	//if err != nil {
+	//	return err
+	//}
+	//defer bufferFile.Close()
+	//
+	//_, err = io.Copy(bufferFile, fd)
 	if err != nil {
 		return err
 	}
@@ -456,122 +393,38 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 	return nil
 }
 
-//func cacheFileToBuffer(src string, bufferFilePath string, r *http.Request) error {
-//	url := "http://127.0.0.1:80/api/raw" + src
-//
-//	request, err := http.NewRequest("GET", url, nil)
-//	if err != nil {
-//		return err
-//	}
-//
-//	request.Header = r.Header
-//
-//	client := http.Client{}
-//	response, err := client.Do(request)
-//	if err != nil {
-//		return err
-//	}
-//	defer response.Body.Close()
-//
-//	if response.StatusCode != http.StatusOK {
-//		return fmt.Errorf("request failed，status code：%d", response.StatusCode)
-//	}
-//
-//	contentDisposition := response.Header.Get("Content-Disposition")
-//	if contentDisposition == "" {
-//		return fmt.Errorf("unrecognizable response format")
-//	}
-//
-//	_, params, err := mime.ParseMediaType(contentDisposition)
-//	if err != nil {
-//		return err
-//	}
-//	filename := params["filename"]
-//	fmt.Println("download filename: ", filename)
-//
-//	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
-//	if err != nil {
-//		return err
-//	}
-//	defer bufferFile.Close()
-//
-//	if response.Header.Get("Content-Encoding") == "gzip" {
-//		gzipReader, err := gzip.NewReader(response.Body)
-//		if err != nil {
-//			return err
-//		}
-//		defer gzipReader.Close()
-//
-//		_, err = io.Copy(bufferFile, gzipReader)
-//		if err != nil {
-//			return err
-//		}
-//	} else {
-//		bodyBytes, err := ioutil.ReadAll(response.Body)
-//		if err != nil {
-//			return err
-//		}
-//
-//		_, err = io.Copy(bufferFile, bytes.NewReader(bodyBytes))
-//		if err != nil {
-//			return err
-//		}
-//	}
-//
-//	//fmt.Println("status code:", response.StatusCode)
-//
-//	//fmt.Println("response headers:")
-//	//for key, values := range response.Header {
-//	//	for _, value := range values {
-//	//		fmt.Printf("%s: %s\n", key, value)
-//	//	}
-//	//}
-//
-//	return nil
-//}
-
 func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *data) (int, error) {
-	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
-	if !d.user.Perm.Create || !d.Check(targetPath) {
+	//if !d.user.Perm.Create || !d.Check(targetPath) {
+	if !d.Check(targetPath) {
 		return http.StatusForbidden, nil
 	}
 
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		err := d.user.Fs.MkdirAll(targetPath, mode) // 0775) //nolint:gomnd
+		//err := d.user.Fs.MkdirAll(targetPath, mode) // 0775) //nolint:gomnd
+		err := files.DefaultFs.MkdirAll(targetPath, mode)
 		return errToStatus(err), err
 	}
 
 	_, err := files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
+		Fs:         files.DefaultFs, // d.user.Fs,
 		Path:       targetPath,
-		Modify:     d.user.Perm.Modify,
+		Modify:     true, // d.user.Perm.Modify,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
 	})
 	if err == nil {
 		// Permission for overwriting the file
-		if !d.user.Perm.Modify {
-			return http.StatusForbidden, nil
-		}
+		//if !d.user.Perm.Modify {
+		//	return http.StatusForbidden, nil
+		//}
 	}
 
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
-	//fmt.Println(newTargetPath)
-	//fmt.Println("Going to write file!")
-	//err = d.RunHook(func() error {
-	//	err := ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
-	//	if err != nil {
-	//		fmt.Println(err)
-	//		return err
-	//	}
-	//	return nil
-	//}, "upload", targetPath, "", d.user)
 	err = ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
 
 	if err != nil {
-		//_ = d.user.Fs.RemoveAll(targetPath)
 		err = os.RemoveAll(newTargetPath)
 		if err == nil {
 			fmt.Println("Rollback Failed:", err)
@@ -582,70 +435,10 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	return errToStatus(err), err
 }
 
-//func cacheBufferToFile(bufferFilePath string, dst string, mode os.FileMode, r *http.Request) (int, error) {
-//	targetURL := "http://127.0.0.1:80/api/resources" + dst + "?mode=" + mode.String() // strconv.FormatUint(uint64(mode), 10)
-//	//fmt.Println(targetURL)
-//	bufferFile, err := os.Open(bufferFilePath)
-//	if err != nil {
-//		return http.StatusInternalServerError, err
-//	}
-//	defer bufferFile.Close()
-//
-//	request, err := http.NewRequest("POST", targetURL, bufferFile)
-//	if err != nil {
-//		return http.StatusInternalServerError, err
-//	}
-//
-//	request.Header = r.Header
-//	request.Header.Set("Content-Type", "application/octet-stream")
-//
-//	client := http.Client{}
-//	response, err := client.Do(request)
-//	if err != nil {
-//		return http.StatusInternalServerError, err
-//	}
-//	defer response.Body.Close()
-//
-//	if response.StatusCode != http.StatusOK {
-//		//fmt.Println(response.StatusCode)
-//		return response.StatusCode, fmt.Errorf("file upload failed with status: %d", response.StatusCode)
-//	}
-//
-//	return http.StatusOK, nil
-//}
-
 func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, d *data) (int, error) {
-	//d.user, _ = d.store.Users.Get(d.server.Root, uint(1))
-	//fmt.Println("deleting", path)
-	if path == "/" || !d.user.Perm.Delete {
+	if path == "/" { // || !d.user.Perm.Delete {
 		return http.StatusForbidden, nil
 	}
-
-	// No thumbnails in cache for the time being
-	//file, err := files.NewFileInfo(files.FileOptions{
-	//	Fs:         d.user.Fs,
-	//	Path:       path,
-	//	Modify:     d.user.Perm.Modify,
-	//	Expand:     false,
-	//	ReadHeader: d.server.TypeDetectionByHeader,
-	//	Checker:    d,
-	//})
-	//if err != nil {
-	//	return errToStatus(err), err
-	//}
-
-	// delete thumbnails
-	//err = delThumbs(ctx, fileCache, file)
-	//if err != nil {
-	//	return errToStatus(err), err
-	//}
-
-	//err := d.RunHook(func() error {
-	//	newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
-	//	//fmt.Println(newTargetPath)
-	//	return os.RemoveAll(newTargetPath)
-	//	//return d.user.Fs.RemoveAll(path)
-	//}, "delete", path, "", d.user)
 
 	newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
 	err := os.RemoveAll(newTargetPath)
@@ -656,33 +449,6 @@ func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, 
 
 	return http.StatusOK, nil
 }
-
-//func resourceCacheDelete(path string, r *http.Request) (int, error) {
-//	targetURL := "http://127.0.0.1:80/api/resources" + path
-//
-//	client := http.Client{
-//		Timeout: time.Second * 10,
-//	}
-//
-//	request, err := http.NewRequest("DELETE", targetURL, nil)
-//	if err != nil {
-//		return http.StatusInternalServerError, err
-//	}
-//
-//	request.Header = r.Header
-//
-//	response, err := client.Do(request)
-//	if err != nil {
-//		return http.StatusInternalServerError, err
-//	}
-//	defer response.Body.Close()
-//
-//	if response.StatusCode != http.StatusOK {
-//		return response.StatusCode, fmt.Errorf("file delete failed with status: %d", response.StatusCode)
-//	}
-//
-//	return http.StatusOK, nil
-//}
 
 func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) error {
 	dst = strings.Trim(dst, "/")
@@ -698,7 +464,6 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 
 	lastSlashIdx := strings.LastIndex(dst, "/")
 
-	//filename := ""
 	prefix := ""
 	if isDir {
 		prefix = dst[firstSlashIdx+1:]
@@ -711,34 +476,19 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 		}
 	}
 
-	//fmt.Println("repo-id:", repoID)
-	//fmt.Println("prefix:", prefix)
-	//fmt.Println("filename:", filename)
-
-	//infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=/"
-	//fmt.Println(infoURL)
-
 	client := &http.Client{}
 
 	// Split the prefix by '/' and generate the URLs
 	prefixParts := strings.Split(prefix, "/")
 	for i := 0; i < len(prefixParts); i++ {
 		curPrefix := strings.Join(prefixParts[:i+1], "/")
-		//curInfoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+curPrefix) + "&with_thumbnail=true"
 		curInfoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + escapeURLWithSpace("/"+curPrefix) + "&with_thumbnail=true"
-		//fmt.Println("!!! Try to mkdir through: ", curInfoURL)
 		getRequest, err := http.NewRequest("GET", curInfoURL, nil)
 		if err != nil {
 			fmt.Printf("create request failed: %v\n", err)
 			return err
 		}
 		getRequest.Header = r.Header
-		//fmt.Println("request headers:")
-		//for key, values := range getRequest.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 		getResponse, err := client.Do(getRequest)
 		if err != nil {
 			fmt.Printf("request failed: %v\n", err)
@@ -746,7 +496,6 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 		}
 		defer getResponse.Body.Close()
 		if getResponse.StatusCode == 200 {
-			//fmt.Println(curPrefix, " already exist! Don't need to create!")
 			continue
 		} else {
 			fmt.Println(getResponse.Status)
@@ -756,9 +505,7 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 			Operation string `json:"operation"`
 		}
 
-		//curCreateURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+curPrefix)
 		curCreateURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + escapeURLWithSpace("/"+curPrefix)
-		//fmt.Println(curCreateURL)
 
 		createDirReq := CreateDirRequest{
 			Operation: "mkdir",
@@ -778,13 +525,6 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 		request.Header = r.Header
 		request.Header.Set("Content-Type", "application/json")
 
-		//fmt.Println("request headers:")
-		//for key, values := range request.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
-
 		response, err := client.Do(request)
 		if err != nil {
 			fmt.Printf("request failed: %v\n", err)
@@ -793,7 +533,6 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 		defer response.Body.Close()
 
 		// Handle the response as needed
-		//fmt.Println("GoogleDriveListResponse status:", response.Status)
 		if response.StatusCode != 200 && response.StatusCode != 201 {
 			err = e.New("mkdir failed")
 			return err
@@ -803,7 +542,6 @@ func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 }
 
 func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error {
-	// src is like [repo-id]/path/filename
 	src = strings.Trim(src, "/")
 	if !strings.Contains(src, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
@@ -824,12 +562,7 @@ func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
 	}
 
-	//fmt.Println("repo-id:", repoID)
-	//fmt.Println("prefix:", prefix)
-	//fmt.Println("filename:", filename)
-
 	dlUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + escapeURLWithSpace(prefix+filename) + "/" + "?dl=1"
-	//fmt.Println(url)
 
 	request, err := http.NewRequest("GET", dlUrl, nil)
 	if err != nil {
@@ -859,7 +592,6 @@ func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 		return err
 	}
 	filename = params["filename"]
-	//fmt.Println("download filename: ", filename)
 
 	bufferFile, err := os.OpenFile(bufferFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
 	if err != nil {
@@ -890,15 +622,6 @@ func syncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 		}
 	}
 
-	//fmt.Println("statud code:", response.StatusCode)
-
-	//fmt.Println("response header:")
-	//for key, values := range response.Header {
-	//	for _, value := range values {
-	//		fmt.Printf("%s: %s\n", key, value)
-	//	}
-	//}
-
 	return nil
 }
 
@@ -906,16 +629,6 @@ func generateUniqueIdentifier(relativePath string) string {
 	h := md5.New()
 	io.WriteString(h, relativePath+time.Now().String())
 	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
-}
-
-func getFileExtension(filename string) string {
-	extension := path.Ext(filename)
-	//if extension == "" {
-	//	extension = "blob"
-	//} else {
-	//	extension = extension[1:]
-	//}
-	return extension
 }
 
 func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Request) (int, error) {
@@ -938,7 +651,6 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	lastSlashIdx := strings.LastIndex(dst, "/")
 
 	filename := dst[lastSlashIdx+1:]
-	//filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
 
 	prefix := ""
 	if firstSlashIdx != lastSlashIdx {
@@ -950,17 +662,13 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	fmt.Println("prefix:", prefix)
 	fmt.Println("filename:", filename)
 
-	extension := getFileExtension(filename)
-	//fmt.Println("extension:", extension)
+	extension := path.Ext(filename)
 	mimeType := "application/octet-stream"
 	if extension != "" {
 		mimeType = mime.TypeByExtension(extension)
 	}
-	//fmt.Println("MIME Type:", mimeType)
 
 	// step2: GET upload URL
-	//getUrl := "http://seafile/api2/repos/" + repoID + "/upload-link/?p=/" + prefix //+ "&from=web"
-	//getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + url.QueryEscape("/"+prefix) + "&from=api"
 	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/upload-link/?p=" + escapeAndJoin("/"+prefix, "/") + "&from=api"
 	fmt.Println(getUrl)
 
@@ -991,11 +699,7 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 	uploadLink := string(getBody)
 	uploadLink = strings.Trim(uploadLink, "\"")
 
-	// Now you can use the 'uploadLink' variable for further processing
-	//fmt.Println("Upload link:", uploadLink)
-
 	// step3: deal with upload URL
-	//targetURL := "http://seafile:8082" + uploadLink[9:] + "?ret-json=1"
 	targetURL := "http://127.0.0.1:80" + uploadLink + "?ret-json=1"
 	fmt.Println(targetURL)
 
@@ -1032,47 +736,41 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		fmt.Println("resumableChunkNumber: ", strconv.FormatInt(chunkNumber, 10))
 		fmt.Println("resumableChunkSize: ", strconv.FormatInt(chunkSize, 10))
 		fmt.Println("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
-		fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
+		fmt.Println("resumableTotalSize", strconv.FormatInt(size, 10))
 		fmt.Println("resumableType", mimeType)
-		fmt.Println("resumableFilename", filename)     // "response")
-		fmt.Println("resumableRelativePath", filename) // "response")
+		fmt.Println("resumableFilename", filename)
+		fmt.Println("resumableRelativePath", filename)
 		fmt.Println("resumableTotalChunks", strconv.FormatInt(totalChunks, 10), "\n")
 
 		writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
 		writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
 		writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
-		writer.WriteField("resumableTotalSize", strconv.FormatInt(size, 10)) // "169")
+		writer.WriteField("resumableTotalSize", strconv.FormatInt(size, 10))
 		writer.WriteField("resumableType", mimeType)
-		writer.WriteField("resumableIdentifier", identifier) //"096b7d0f1af58ccf5bfb1dbde97fb51cresponse")
-		writer.WriteField("resumableFilename", filename)     // "response")
-		writer.WriteField("resumableRelativePath", filename) // "response")
+		writer.WriteField("resumableIdentifier", identifier)
+		writer.WriteField("resumableFilename", filename)
+		writer.WriteField("resumableRelativePath", filename)
 		writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
-		writer.WriteField("parent_dir", "/"+prefix) //+"//")
+		writer.WriteField("parent_dir", "/"+prefix)
 
-		//content := body.String()
-		//fmt.Println(content)
-
-		fmt.Println("Create Form File")
 		part, err := writer.CreateFormFile("file", escapeAndJoin(filename, "/"))
 		if err != nil {
 			fmt.Println("Create Form File error: ", err)
 			return http.StatusInternalServerError, err
 		}
-		fmt.Println("Write Chunk Data")
+
 		_, err = part.Write(chunkData[:bytesRead])
 		if err != nil {
 			fmt.Println("Write Chunk Data error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
-		fmt.Println("Write Close")
 		err = writer.Close()
 		if err != nil {
 			fmt.Println("Write Close error: ", err)
 			return http.StatusInternalServerError, err
 		}
 
-		fmt.Println("New Request")
 		request, err := http.NewRequest("POST", targetURL, body)
 		if err != nil {
 			fmt.Println("New Request error: ", err)
@@ -1081,19 +779,9 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 
 		request.Header = r.Header
 		request.Header.Set("Content-Type", writer.FormDataContentType())
-		//Content-Disposition:attachment; filename="2022.zip"
-		//Content-Length:5244224
-		//Content-Range:bytes 10485760-15728639/61034314
 		request.Header.Set("Content-Disposition", "attachment; filename=\""+escapeAndJoin(filename, "/")+"\"")
-		//request.Header.Set("Content-Length", strconv.FormatInt(int64(bytesRead), 10))
 		request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(size, 10))
 		chunkStart += int64(bytesRead)
-
-		//for key, values := range request.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 
 		client := http.Client{}
 		response, err := client.Do(request)
@@ -1106,7 +794,6 @@ func syncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 
 		// Read the response body as a string
 		postBody, err := io.ReadAll(response.Body)
-		//_, err = io.ReadAll(response.Body)
 		fmt.Println("ReadAll")
 		if err != nil {
 			fmt.Println("ReadAll error: ", err)
@@ -1250,9 +937,7 @@ func escapeAndJoin(input string, delimiter string) string {
 }
 
 func resourcePasteHandler(fileCache FileCache) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		// For this func, src starts with src type + /, dst start with dst type + /
-		// type is only "drive", "sync" and "cache" for the time being
+	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		srcType := r.URL.Query().Get("src_type")
@@ -1263,8 +948,6 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		if dstType == "" {
 			dstType = "drive"
 		}
-
-		//fmt.Println(srcType, src, dstType, dst)
 
 		validSrcTypes := map[string]bool{
 			"drive":   true,
@@ -1290,17 +973,13 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		} else {
 			fmt.Println("Src and dst are of different arches!")
 		}
-		//if srcType == "google" || dstType == "google" {
-		//	err := GoogleDriveCall("/api/resources%2FHome%2FDocuments%2F", "GET", nil, w, r)
-		//	return errToStatus(err), err
-		//}
 		action := r.URL.Query().Get("action")
 		var err error
 		fmt.Println("src:", src)
-		src, err = unescapeURLIfEscaped(src) // url.QueryUnescape(src)
+		src, err = unescapeURLIfEscaped(src)
 		fmt.Println("src:", src, "err:", err)
 		fmt.Println("dst:", dst)
-		dst, err = unescapeURLIfEscaped(dst) // url.QueryUnescape(dst)
+		dst, err = unescapeURLIfEscaped(dst)
 		fmt.Println("dst:", dst, "err:", err)
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
@@ -1317,9 +996,6 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 				"code": -1,
 				"msg":  "Sync does not support directory entries with backslashes in their names.",
 			}
-			// w.WriteHeader(http.StatusOK)
-			//json.NewEncoder(w).Encode(response)
-			//return http.StatusOK, nil
 			return renderJSON(w, r, response)
 		}
 
@@ -1331,13 +1007,12 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			}
 		}
 		if srcType == "google" && dstType != "google" {
-			//srcDrive, srcName, srcDir, srcFilename := parseGoogleDrivePath(src)
 			srcInfo, err := getGoogleDriveIdFocusedMetaInfos(src, w, r)
 			if err != nil {
 				return http.StatusInternalServerError, err
 			}
 			srcName := srcInfo.Name
-			formattedSrcName := removeSlash(srcName) // removeNonAlphanumericUnderscore(srcName)
+			formattedSrcName := removeSlash(srcName)
 			dst = strings.ReplaceAll(dst, srcName, formattedSrcName)
 
 			if !srcInfo.CanDownload {
@@ -1348,9 +1023,6 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 						"code": -1,
 						"msg":  "Google drive cannot export this file.",
 					}
-					// w.WriteHeader(http.StatusOK)
-					//json.NewEncoder(w).Encode(response)
-					//return http.StatusOK, nil
 					return renderJSON(w, r, response)
 				}
 			}
@@ -1359,7 +1031,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			dst = pasteAddVersionSuffix(dst, dstType, d.user.Fs, w, r)
 		}
 		// Permission for overwriting the file
-		if override && !d.user.Perm.Modify {
+		if override { // && !d.user.Perm.Modify {
 			return http.StatusForbidden, nil
 		}
 		var same = srcType == dstType
@@ -1380,35 +1052,26 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		}
 
 		if same {
-			//err = d.RunHook(func() error {
-			//	return pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, w, r)
-			//}, action, src, dst, d.user)
 			err = pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, w, r)
 		} else {
-			//err = d.RunHook(func() error {
-			//	return pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
-			//}, action, src, dst, d.user)
 			err = pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
 		}
 		if errToStatus(err) == http.StatusRequestEntityTooLarge {
 			fmt.Fprintln(w, err.Error())
 		}
 		return errToStatus(err), err
-	})
+	}
 }
 
 func syncPermToMode(permStr string) os.FileMode {
 	perm := os.FileMode(0)
 	if permStr == "r" {
-		//perm = perm | 0444
 		perm = perm | 0555
 	} else if permStr == "w" {
-		//perm = perm | 0200
 		perm = perm | 0311
 	} else if permStr == "x" {
 		perm = perm | 0111
 	} else if permStr == "rw" {
-		//perm = perm | 0644
 		perm = perm | 0755
 	} else if permStr == "rx" {
 		perm = perm | 0555
@@ -1421,71 +1084,7 @@ func syncPermToMode(permStr string) os.FileMode {
 		return 0
 	}
 
-	//fmt.Println("transferred permission:", perm)
 	return perm
-}
-
-func syncModeToPermString(fileMode os.FileMode) string {
-	permStr := ""
-
-	//if fileMode&os.ModeDir != 0 {
-	//	permStr += "d"
-	//} else {
-	//	permStr += "-"
-	//}
-
-	if fileMode&0400 != 0 {
-		permStr += "r"
-	}
-	//} else {
-	//	permStr += "-"
-	//}
-	if fileMode&0200 != 0 {
-		permStr += "w"
-	}
-	//} else {
-	//	permStr += "-"
-	//}
-	if fileMode&0100 != 0 {
-		permStr += "x"
-	}
-	//} else {
-	//	permStr += "-"
-	//}
-
-	//if fileMode&040 != 0 {
-	//	permStr += "r"
-	//} else {
-	//	permStr += "-"
-	//}
-	//if fileMode&020 != 0 {
-	//	permStr += "w"
-	//} else {
-	//	permStr += "-"
-	//}
-	//if fileMode&010 != 0 {
-	//	permStr += "x"
-	//} else {
-	//	permStr += "-"
-	//}
-
-	//if fileMode&04 != 0 {
-	//	permStr += "r"
-	//} else {
-	//	permStr += "-"
-	//}
-	//if fileMode&02 != 0 {
-	//	permStr += "w"
-	//} else {
-	//	permStr += "-"
-	//}
-	//if fileMode&01 != 0 {
-	//	permStr += "x"
-	//} else {
-	//	permStr += "-"
-	//}
-
-	return permStr
 }
 
 func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
@@ -1518,10 +1117,7 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 		}
 		return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
 	} else if srcType == "cache" {
-		//host := r.Host
-		//infoUrl := "http://" + host + "/api/resources" + src
 		infoURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(src)
-		//fmt.Println(infoURL)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
@@ -1531,12 +1127,6 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 		}
 
 		request.Header = r.Header
-		//fmt.Println("request headers:")
-		//for key, values := range request.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 
 		response, err := client.Do(request)
 		if err != nil {
@@ -1544,13 +1134,6 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			return nil, 0, 0, false, err
 		}
 		defer response.Body.Close()
-
-		//fmt.Println("response haeders:")
-		//for key, values := range response.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 
 		var bodyReader io.Reader = response.Body
 
@@ -1571,11 +1154,6 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			return nil, 0, 0, false, err
 		}
 
-		//fmt.Println("request URL:", infoURL)
-		//fmt.Println("request headers:", request.Header)
-		//fmt.Println("response status code:", response.StatusCode)
-		//fmt.Println("response body:", string(body))
-
 		var fileInfo struct {
 			Size  int64       `json:"size"`
 			Mode  os.FileMode `json:"mode"`
@@ -1591,16 +1169,8 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			return nil, 0, 0, false, err
 		}
 
-		//fmt.Println("Size:", fileInfo.Size)
-		//fmt.Println("Mode:", fileInfo.Mode)
-		//fmt.Println("IsDir:", fileInfo.IsDir)
-		//fmt.Println("Path:", fileInfo.Path)
-		//fmt.Println("Name:", fileInfo.Name)
-		//fmt.Println("Type:", fileInfo.Type)
-
 		return nil, fileInfo.Size, fileInfo.Mode, fileInfo.IsDir, nil
 	} else if srcType == "sync" {
-		// src is like [repo-id]/path/filename
 		src = strings.Trim(src, "/")
 		if !strings.Contains(src, "/") {
 			err := e.New("invalid path format: path must contain at least one '/'")
@@ -1621,13 +1191,7 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
 		}
 
-		//fmt.Println("repo-id:", repoID)
-		//fmt.Println("prefix:", prefix)
-		//fmt.Println("filename:", filename)
-
-		//infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+prefix) + "&with_thumbnail=true"
 		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + escapeURLWithSpace("/"+prefix) + "&with_thumbnail=true"
-		//fmt.Println(infoURL)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
@@ -1637,12 +1201,6 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 		}
 
 		request.Header = r.Header
-		//fmt.Println("request headers:")
-		//for key, values := range request.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 
 		response, err := client.Do(request)
 		if err != nil {
@@ -1650,13 +1208,6 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			return nil, 0, 0, false, err
 		}
 		defer response.Body.Close()
-
-		//fmt.Println("response headers:")
-		//for key, values := range response.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 
 		var bodyReader io.Reader = response.Body
 
@@ -1676,11 +1227,6 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			fmt.Printf("read response failed: %v\n", err)
 			return nil, 0, 0, false, err
 		}
-
-		//fmt.Println("request URL:", infoURL)
-		//fmt.Println("request header:", request.Header)
-		//fmt.Println("response status code:", response.StatusCode)
-		//fmt.Println("response body:", string(body))
 
 		type Dirent struct {
 			Type                 string `json:"type"`
@@ -1716,30 +1262,10 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			return nil, 0, 0, false, err
 		}
 
-		//fmt.Println("GoogleDriveListResponseUser Perm:", dirResp.UserPerm)
-		//fmt.Println("Dir ID:", dirResp.DirID)
-		//fmt.Println("Dirent List:")
 		var found = false
 		for _, dirent := range dirResp.DirentList {
 			if dirent.Name == filename {
 				fileInfo = dirent
-				//fmt.Println("Type:", dirent.Type)
-				//fmt.Println("ID:", dirent.ID)
-				//fmt.Println("Name:", dirent.Name)
-				//fmt.Println("Mtime:", dirent.Mtime)
-				//fmt.Println("Permission:", dirent.Permission)
-				//fmt.Println("Parent Dir:", dirent.ParentDir)
-				//fmt.Println("Starred:", dirent.Starred)
-				//fmt.Println("Size:", dirent.Size)
-				//fmt.Println("FileSize:", dirent.FileSize)
-				//fmt.Println("NumTotalFiles:", dirent.NumTotalFiles)
-				//fmt.Println("NumFiles:", dirent.NumFiles)
-				//fmt.Println("NumDirs:", dirent.NumDirs)
-				//fmt.Println("Path:", dirent.Path)
-				//fmt.Println("Modifier Email:", dirent.ModifierEmail)
-				//fmt.Println("Modifier Name:", dirent.ModifierName)
-				//fmt.Println("Modifier Contact Email:", dirent.ModifierContactEmail)
-				//fmt.Println()
 				found = true
 				break
 			}
@@ -1829,7 +1355,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fsrc := src + "/" + obj.Name()
 			fdst := fdstBase + "/" + obj.Name()
 
-			//fmt.Println(fsrc, fdst)
 			if obj.IsDir() {
 				// Create sub-directories, recursively.
 				err = copyDir(fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), w, r, driveIdCache)
@@ -1883,7 +1408,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			return err
 		}
 		for _, item := range bodyJson.Data {
-			//fsrc := filepath.Join(src, item.Name)
 			fsrc := filepath.Dir(strings.TrimSuffix(src, "/")) + "/" + item.Meta.ID
 			fdst := filepath.Join(fdstBase, item.Name)
 			fmt.Println(fsrc, fdst)
@@ -1893,6 +1417,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 					return err
 				}
 			} else {
+				fdst += item.ExportSuffix
 				err = copyFile(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
 				if err != nil {
 					return err
@@ -1900,8 +1425,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			}
 		}
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-		//src = strings.TrimSuffix(src, "/")
-
 		srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
 
 		param := CloudDriveListParam{
@@ -1976,7 +1499,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		}
 
 		infoURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(src)
-		//fmt.Println(infoURL)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
@@ -1986,12 +1508,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		}
 
 		request.Header = r.Header
-		//fmt.Println("request headers:")
-		//for key, values := range request.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 
 		response, err := client.Do(request)
 		if err != nil {
@@ -1999,13 +1515,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			return err
 		}
 		defer response.Body.Close()
-
-		//fmt.Println("response headers:")
-		//for key, values := range response.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 
 		var bodyReader io.Reader = response.Body
 
@@ -2026,13 +1535,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			return err
 		}
 
-		//fmt.Println("request URL:", infoURL)
-		//fmt.Println("request header:", request.Header)
-		//fmt.Println("response status code:", response.StatusCode)
-		//fmt.Println("response body:", string(body))
-
 		var data ResponseData
-		//err = json.NewDecoder(response.Body).Decode(&data)
 		err = json.Unmarshal(body, &data)
 		if err != nil {
 			return err
@@ -2042,7 +1545,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fsrc := filepath.Join(src, item.Name)
 			fdst := filepath.Join(fdstBase, item.Name)
 
-			//fmt.Println(fsrc, fdst)
 			if item.IsDir {
 				err := copyDir(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), w, r, driveIdCache)
 				if err != nil {
@@ -2057,7 +1559,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		}
 		return nil
 	} else if srcType == "sync" {
-		//fmt.Println("Sync copy/move dir!")
 		type Item struct {
 			Type                 string `json:"type"`
 			Name                 string `json:"name"`
@@ -2103,13 +1604,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
 		}
 
-		//fmt.Println("repo-id:", repoID)
-		//fmt.Println("prefix:", prefix)
-		//fmt.Println("filename:", filename)
-
-		//infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + url.QueryEscape("/"+prefix+"/"+filename) + "&with_thumbnail=true"
 		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + escapeURLWithSpace("/"+prefix+"/"+filename) + "&with_thumbnail=true"
-		//fmt.Println(infoURL)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
@@ -2119,12 +1614,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		}
 
 		request.Header = r.Header
-		//fmt.Println("request headers:")
-		//for key, values := range request.Header {
-		//	for _, value := range values {
-		//		fmt.Printf("%s: %s\n", key, value)
-		//	}
-		//}
 
 		response, err := client.Do(request)
 		if err != nil {
@@ -2152,13 +1641,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			return err
 		}
 
-		//fmt.Println("request URL:", infoURL)
-		//fmt.Println("request header:", request.Header)
-		//fmt.Println("response status code:", response.StatusCode)
-		//fmt.Println("response body:", string(body))
-
 		var data ResponseData
-		//err = json.NewDecoder(response.Body).Decode(&data)
 		err = json.Unmarshal(body, &data)
 		if err != nil {
 			return err
@@ -2168,7 +1651,6 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fsrc := filepath.Join(src, item.Name)
 			fdst := filepath.Join(fdstBase, item.Name)
 
-			//fmt.Println(fsrc, fdst)
 			if item.Type == "dir" {
 				err := copyDir(fs, srcType, fsrc, dstType, fdst, d, syncPermToMode(item.Permission), w, r, driveIdCache)
 				if err != nil {
@@ -2201,7 +1683,6 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 	// copy/move
 	if srcType == "drive" {
 		fileInfo, status, err := resourceDriveGetInfo(src, r, d)
-		//fmt.Println(fileInfo, status, err)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -2213,18 +1694,10 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		//fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
-		// Won't deal a file which is bigger than 4G for the time being
-		//if diskSize >= 4*1024*1024*1024 {
-		//	fmt.Println("file size exceeds 4GB")
-		//	return e.New("file size exceeds 4GB") //os.ErrPermission
-		//}
-		//fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src, bflName, extRemains)
 		if err != nil {
 			return err
 		}
-		//fmt.Println("Buffer file path: ", bufferPath)
 
 		err = makeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
@@ -2236,11 +1709,6 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		}
 	} else if srcType == "google" {
 		var err error
-		//if diskSize >= 4*1024*1024*1024 {
-		//	fmt.Println("file size exceeds 4GB")
-		//	return e.New("file size exceeds 4GB") //os.ErrPermission
-		//}
-		//fmt.Println("Will reserve disk size: ", diskSize)
 		_, err = checkBufferDiskSpace(diskSize)
 		if err != nil {
 			return err
@@ -2251,9 +1719,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		bufferFileName := removeSlash(srcInfo.Name) + srcInfo.ExportSuffix // removeNonAlphanumericUnderscore(srcInfo.Name)
-		//bufferPath = filepath.Join(bufferFilePath, url.QueryEscape(srcInfo.Name))
-		//bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
+		bufferFileName := removeSlash(srcInfo.Name) + srcInfo.ExportSuffix
 		bufferPath = filepath.Join(bufferFilePath, bufferFileName)
 		fmt.Println("Buffer file path: ", bufferFilePath)
 		fmt.Println("Buffer path: ", bufferPath)
@@ -2262,19 +1728,11 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		_, err = googleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
-		//bufferPath = filepath.Join(bufferFilePath, bufferFilename)
-		//fmt.Println("Buffer file path: ", bufferFilePath)
-		//fmt.Println("Buffer path: ", bufferPath)
 		if err != nil {
 			return err
 		}
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		var err error
-		//if diskSize >= 4*1024*1024*1024 {
-		//	fmt.Println("file size exceeds 4GB")
-		//	return e.New("file size exceeds 4GB") //os.ErrPermission
-		//}
-		//fmt.Println("Will reserve disk size: ", diskSize)
 		_, err = checkBufferDiskSpace(diskSize)
 		if err != nil {
 			return err
@@ -2302,17 +1760,10 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		//fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
-		//if diskSize >= 4*1024*1024*1024 {
-		//	fmt.Println("file size exceeds 4GB")
-		//	return e.New("file size exceeds 4GB") //os.ErrPermission
-		//}
-		//fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src, bflName, extRemains)
 		if err != nil {
 			return err
 		}
-		//fmt.Println("Buffer file path: ", bufferPath)
 
 		err = makeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
@@ -2328,17 +1779,10 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		//fmt.Println("Buffer Disk Space check OK, will reserve disk size: ", diskSize)
-		//if diskSize >= 4*1024*1024*1024 {
-		//	fmt.Println("file size exceeds 4GB")
-		//	return e.New("file size exceeds 4GB") //os.ErrPermission
-		//}
-		//fmt.Println("Will reserve disk size: ", diskSize)
 		bufferPath, err = generateBufferFileName(src, bflName, extRemains)
 		if err != nil {
 			return err
 		}
-		//fmt.Println("Buffer file path: ", bufferPath)
 
 		err = makeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
@@ -2357,7 +1801,6 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 
 	// paste
 	if dstType == "drive" {
-		//fmt.Println("Begin to paste!")
 		status, err := driveBufferToFile(bufferPath, dst, mode, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
@@ -2365,22 +1808,9 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		//fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath, srcType)
 	} else if dstType == "google" {
 		fmt.Println("Begin to paste!")
-		//key := filepath.Dir(strings.TrimSuffix(src, "/"))
-		//dstPathId := driveIdCache[key]
-		//var newDst string
-		//if dstPathId != "" {
-		//	tempDst := strings.TrimSuffix(dstPathId, "/")
-		//	dstFilename := filepath.Base(tempDst)
-		//	newDst = filepath.Dir(filepath.Dir(tempDst)) + "/" + dstPathId + "/" + dstFilename
-		//} else {
-		//	// for single file
-		//	newDst = dst
-		//}
-		//fmt.Println("newDst: ", newDst)
 		fmt.Println("dst: ", dst)
 		status, err := googleBufferToFile(bufferPath, dst, w, r)
 		if status != http.StatusOK {
@@ -2404,7 +1834,6 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath, srcType)
 	} else if dstType == "cache" {
-		//fmt.Println("Begin to cache paste!")
 		status, err := cacheBufferToFile(bufferPath, dst, mode, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
@@ -2412,7 +1841,6 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 		if err != nil {
 			return err
 		}
-		//fmt.Println("Begin to remove buffer")
 		removeDiskBuffer(bufferPath, srcType)
 	} else if dstType == "sync" {
 		fmt.Println("Begin to sync paste!")
@@ -2454,10 +1882,6 @@ func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *data, w http.Res
 		return os.ErrInvalid
 	}
 
-	//info, err := fs.Stat(src)
-	//if err != nil {
-	//	return err
-	//}
 	_, size, mode, isDir, err := getStat(fs, srcType, src, w, r)
 	if err != nil {
 		return err
@@ -2549,12 +1973,10 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		}
 		defer res.Body.Close()
 
-		//respBody, err := ioutil.ReadAll(res.Body)
 		_, err = ioutil.ReadAll(res.Body)
 		if err != nil {
 			return err
 		}
-		//fmt.Println(respBody)
 		return nil
 	} else if srcType == "google" {
 		switch action {
@@ -2589,7 +2011,6 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			}
 
 			if metaInfo.IsDir {
-				// TODO: should wait for creating folder function
 				return copyCloudDriveFolder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
 			}
 			return copyCloudDriveSingleFile(src, dst, w, r)
@@ -2609,12 +2030,6 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		default:
 			return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
 		}
-
-		//_, _, mode, isDir, err := getStat(d.user.Fs, srcType, src, r)
-		//if err != nil {
-		//	return err
-		//}
-		//err = syncMkdirAll(dst, mode, isDir, r)
 
 		// It seems that we can't mkdir althrough when using sync-bacth-copy/move-item, so we must use false for isDir here.
 		err := syncMkdirAll(dst, 0, false, r)
@@ -2636,7 +2051,6 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		srcLastSlashIdx := strings.LastIndex(src, "/")
 
 		srcFilename := src[srcLastSlashIdx+1:]
-		//filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
 
 		srcPrefix := ""
 		if srcFirstSlashIdx != srcLastSlashIdx {
@@ -2648,10 +2062,6 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		} else {
 			srcPrefix = "/"
 		}
-
-		//fmt.Println("src repo-id:", srcRepoID)
-		//fmt.Println("src prefix:", srcPrefix)
-		//fmt.Println("src filename:", srcFilename)
 
 		dst = strings.Trim(dst, "/")
 		if !strings.Contains(dst, "/") {
@@ -2666,9 +2076,6 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 
 		dstLastSlashIdx := strings.LastIndex(dst, "/")
 
-		//dstFilename := dst[dstLastSlashIdx+1:]
-		//filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
-
 		dstPrefix := ""
 		if dstFirstSlashIdx != dstLastSlashIdx {
 			dstPrefix = dst[dstFirstSlashIdx+1 : dstLastSlashIdx+1]
@@ -2679,10 +2086,6 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		} else {
 			dstPrefix = "/"
 		}
-
-		//fmt.Println("dst repo-id:", dstRepoID)
-		//fmt.Println("dst prefix:", dstPrefix)
-		//fmt.Println("dst filename:", dstFilename)
 
 		targetURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + apiName + "/"
 		requestBody := map[string]interface{}{
@@ -2697,7 +2100,6 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		if err != nil {
 			return err
 		}
-		//fmt.Println(jsonBody)
 
 		request, err := http.NewRequest("POST", targetURL, bytes.NewBuffer(jsonBody))
 		if err != nil {
@@ -2719,7 +2121,6 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 
 		// Read the response body as a string
 		postBody, err := io.ReadAll(response.Body)
-		//_, err = io.ReadAll(response.Body)
 		fmt.Println("ReadAll")
 		if err != nil {
 			fmt.Println("ReadAll error: ", err)
@@ -2739,17 +2140,16 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 func pasteActionDiffArch(ctx context.Context, action, srcType, src, dstType, dst string, d *data, fileCache FileCache, w http.ResponseWriter, r *http.Request) error {
 	// In this function, context if tied up to src, because src is in the URL
 	switch action {
-	// TODO: use enum
 	case "copy":
-		if !d.user.Perm.Create {
-			return errors.ErrPermissionDenied
-		}
+		//if !d.user.Perm.Create {
+		//	return errors.ErrPermissionDenied
+		//}
 
 		return doPaste(d.user.Fs, srcType, src, dstType, dst, d, w, r)
 	case "rename":
-		if !d.user.Perm.Rename {
-			return errors.ErrPermissionDenied
-		}
+		//if !d.user.Perm.Rename {
+		//	return errors.ErrPermissionDenied
+		//}
 		err := doPaste(d.user.Fs, srcType, src, dstType, dst, d, w, r)
 		if err != nil {
 			return err

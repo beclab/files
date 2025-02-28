@@ -115,20 +115,20 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 	return renderJSON(w, r, responseData)
 }
 
-var md5Handler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func md5Handler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return md5Sync(w, r)
 	}
 
-	if !d.user.Perm.Download {
-		return http.StatusAccepted, nil
-	}
+	//if !d.user.Perm.Download {
+	//	return http.StatusAccepted, nil
+	//}
 
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
+		Fs:         files.DefaultFs, // d.user.Fs,
 		Path:       r.URL.Path,
-		Modify:     d.user.Perm.Modify,
+		Modify:     true, // d.user.Perm.Modify,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
@@ -143,4 +143,4 @@ var md5Handler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) 
 	}
 
 	return md5FileHandler(w, r, file)
-})
+}

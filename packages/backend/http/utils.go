@@ -2,8 +2,6 @@ package http
 
 import (
 	"compress/gzip"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,9 +48,9 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 			var err error
 			if mountedData != nil {
 				file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-					Fs:         d.user.Fs,
-					Path:       firstItem.Path, //r.URL.Path,
-					Modify:     d.user.Perm.Modify,
+					Fs:         files.DefaultFs, // d.user.Fs,
+					Path:       firstItem.Path,  //r.URL.Path,
+					Modify:     true,            // d.user.Perm.Modify,
 					Expand:     true,
 					ReadHeader: d.server.TypeDetectionByHeader,
 					Checker:    d,
@@ -60,9 +58,9 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 				}, mountedData)
 			} else {
 				file, err = files.NewFileInfo(files.FileOptions{
-					Fs:         d.user.Fs,
-					Path:       firstItem.Path, //r.URL.Path,
-					Modify:     d.user.Perm.Modify,
+					Fs:         files.DefaultFs, // d.user.Fs,
+					Path:       firstItem.Path,  //r.URL.Path,
+					Modify:     true,            // d.user.Perm.Modify,
 					Expand:     true,
 					ReadHeader: d.server.TypeDetectionByHeader,
 					Checker:    d,
@@ -430,33 +428,16 @@ func checkBufferDiskSpace(diskSize int64) (bool, error) {
 	}
 }
 
-func stringMD5(s string) string {
-	hasher := md5.New()
-
-	hasher.Write([]byte(s))
-
-	hashBytes := hasher.Sum(nil)
-
-	hashString := hex.EncodeToString(hashBytes)
-
-	return hashString
-}
-
 func removeSlash(s string) string {
 	s = strings.TrimSuffix(s, "/")
 	return strings.ReplaceAll(s, "/", "_")
 }
 
-//func removeNonAlphanumericUnderscore(s string) string {
-//	re := regexp.MustCompile(`[^a-zA-Z0-9_]`)
-//	return re.ReplaceAllString(s, "_")
-//}
-
 func getHost(r *http.Request) string {
 	bflName := r.Header.Get("X-Bfl-User")
-	url := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
+	hostUrl := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
 
-	resp, err := http.Get(url)
+	resp, err := http.Get(hostUrl)
 	if err != nil {
 		fmt.Println("Error making GET request:", err)
 		return ""
