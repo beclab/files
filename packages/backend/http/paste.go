@@ -83,8 +83,8 @@ func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInf
 		Modify:     true,
 		Expand:     true,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		Checker:    d,
-		Content:    true,
+		//Checker:    d,
+		Content: true,
 	})
 	if err != nil {
 		return file, errToStatus(err), err
@@ -255,9 +255,9 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		return http.StatusInternalServerError, err
 	}
 
-	if !d.Check(targetPath) {
-		return http.StatusForbidden, nil
-	}
+	//if !d.Check(targetPath) {
+	//	return http.StatusForbidden, nil
+	//}
 
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
@@ -271,7 +271,7 @@ func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		Checker:    d,
+		//Checker:    d,
 	})
 
 	err = ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
@@ -294,7 +294,7 @@ func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, 
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		Checker:    d,
+		//Checker:    d,
 	})
 	if err != nil {
 		return errToStatus(err), err
@@ -357,9 +357,9 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 }
 
 func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *data) (int, error) {
-	if !d.Check(targetPath) {
-		return http.StatusForbidden, nil
-	}
+	//if !d.Check(targetPath) {
+	//	return http.StatusForbidden, nil
+	//}
 
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
@@ -373,7 +373,7 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		Checker:    d,
+		//Checker:    d,
 	})
 
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
@@ -934,9 +934,9 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		fmt.Println("dst:", dst)
 		dst, err = unescapeURLIfEscaped(dst)
 		fmt.Println("dst:", dst, "err:", err)
-		if !d.Check(src) || !d.Check(dst) {
-			return http.StatusForbidden, nil
-		}
+		//if !d.Check(src) || !d.Check(dst) {
+		//	return http.StatusForbidden, nil
+		//}
 		if err != nil {
 			return errToStatus(err), err
 		}

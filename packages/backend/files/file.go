@@ -25,7 +25,6 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/filebrowser/filebrowser/v2/errors"
-	"github.com/filebrowser/filebrowser/v2/rules"
 )
 
 var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), common.RootPrefix)
@@ -63,8 +62,8 @@ type FileOptions struct {
 	Expand     bool
 	ReadHeader bool
 	Token      string
-	Checker    rules.Checker
-	Content    bool
+	//Checker    rules.Checker
+	Content bool
 }
 
 var TerminusdHost = os.Getenv("TERMINUSD_HOST")
@@ -269,9 +268,9 @@ func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{},
 // object will be automatically filled depending on if it is a directory
 // or a file. If it's a video file, it will also detect any subtitles.
 func NewFileInfo(opts FileOptions) (*FileInfo, error) {
-	if !opts.Checker.Check(opts.Path) {
-		return nil, os.ErrPermission
-	}
+	//if !opts.Checker.Check(opts.Path) {
+	//	return nil, os.ErrPermission
+	//}
 
 	file, err := stat(opts)
 	if err != nil {
@@ -280,7 +279,8 @@ func NewFileInfo(opts FileOptions) (*FileInfo, error) {
 
 	if opts.Expand {
 		if file.IsDir {
-			if err := file.readListing(opts.Checker, opts.ReadHeader); err != nil { //nolint:govet
+			//if err := file.readListing(opts.Checker, opts.ReadHeader); err != nil { //nolint:govet
+			if err := file.readListing(opts.ReadHeader); err != nil { //nolint:govet
 				return nil, err
 			}
 			return file, nil
@@ -296,9 +296,9 @@ func NewFileInfo(opts FileOptions) (*FileInfo, error) {
 }
 
 func NewFileInfoWithDiskInfo(opts FileOptions, mountedData []DiskInfo) (*FileInfo, error) {
-	if !opts.Checker.Check(opts.Path) {
-		return nil, os.ErrPermission
-	}
+	//if !opts.Checker.Check(opts.Path) {
+	//	return nil, os.ErrPermission
+	//}
 
 	file, err := stat(opts)
 	if err != nil {
@@ -307,7 +307,7 @@ func NewFileInfoWithDiskInfo(opts FileOptions, mountedData []DiskInfo) (*FileInf
 
 	if opts.Expand {
 		if file.IsDir {
-			if err := file.readListingWithDiskInfo(opts.Checker, opts.ReadHeader, mountedData); err != nil { //nolint:govet
+			if err := file.readListingWithDiskInfo(opts.ReadHeader, mountedData); err != nil { //nolint:govet
 				return nil, err
 			}
 			return file, nil
@@ -534,7 +534,8 @@ func (i *FileInfo) detectSubtitles() {
 	}
 }
 
-func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
+// func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
+func (i *FileInfo) readListing(readHeader bool) error {
 	afs := &afero.Afero{Fs: i.Fs}
 	dir, err := afs.ReadDir(i.Path)
 	if err != nil {
@@ -554,9 +555,9 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 		name := f.Name()
 		fPath := path.Join(i.Path, name)
 
-		if !checker.Check(fPath) {
-			continue
-		}
+		//if !checker.Check(fPath) {
+		//	continue
+		//}
 
 		isSymlink, isInvalidLink := false, false
 		if IsSymlink(f.Mode()) {
@@ -606,7 +607,7 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool) error {
 	return nil
 }
 
-func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader bool, mountedData []DiskInfo) error {
+func (i *FileInfo) readListingWithDiskInfo(readHeader bool, mountedData []DiskInfo) error {
 	afs := &afero.Afero{Fs: i.Fs}
 	dir, err := afs.ReadDir(i.Path)
 	if err != nil {
@@ -626,9 +627,9 @@ func (i *FileInfo) readListingWithDiskInfo(checker rules.Checker, readHeader boo
 		name := f.Name()
 		fPath := path.Join(i.Path, name)
 
-		if !checker.Check(fPath) {
-			continue
-		}
+		//if !checker.Check(fPath) {
+		//	continue
+		//}
 
 		isSymlink, isInvalidLink := false, false
 		if IsSymlink(f.Mode()) {

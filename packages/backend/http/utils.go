@@ -53,8 +53,8 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 					Modify:     true,
 					Expand:     true,
 					ReadHeader: d.server.TypeDetectionByHeader,
-					Checker:    d,
-					Content:    true,
+					//Checker:    d,
+					Content: true,
 				}, mountedData)
 			} else {
 				file, err = files.NewFileInfo(files.FileOptions{
@@ -63,8 +63,8 @@ func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataC
 					Modify:     true,
 					Expand:     true,
 					ReadHeader: d.server.TypeDetectionByHeader,
-					Checker:    d,
-					Content:    true,
+					//Checker:    d,
+					Content: true,
 				})
 			}
 			if err != nil {

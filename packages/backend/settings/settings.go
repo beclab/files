@@ -3,27 +3,25 @@ package settings
 import (
 	"crypto/rand"
 	"strings"
-
-	"github.com/filebrowser/filebrowser/v2/rules"
 )
 
-const DefaultUsersHomeBasePath = "/users"
+//const DefaultUsersHomeBasePath = "/users"
 
 // Settings contain the main settings of the application.
-type Settings struct {
-	Key              []byte              `json:"key"`
-	Signup           bool                `json:"signup"`
-	CreateUserDir    bool                `json:"createUserDir"`
-	UserHomeBasePath string              `json:"userHomeBasePath"`
-	Commands         map[string][]string `json:"commands"`
-	Shell            []string            `json:"shell"`
-	Rules            []rules.Rule        `json:"rules"`
-}
+//type Settings struct {
+//	Key              []byte              `json:"key"`
+//	Signup           bool                `json:"signup"`
+//	CreateUserDir    bool                `json:"createUserDir"`
+//	UserHomeBasePath string              `json:"userHomeBasePath"`
+//	Commands         map[string][]string `json:"commands"`
+//	Shell            []string            `json:"shell"`
+//	Rules            []rules.Rule        `json:"rules"`
+//}
 
 // GetRules implements rules.Provider.
-func (s *Settings) GetRules() []rules.Rule {
-	return s.Rules
-}
+//func (s *Settings) GetRules() []rules.Rule {
+//	return s.Rules
+//}
 
 // Server specific settings.
 type Server struct {
