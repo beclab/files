@@ -18,12 +18,6 @@ func checkErr(err error) {
 	}
 }
 
-//func generateKey() []byte {
-//	k, err := settings.GenerateKey()
-//	checkErr(err)
-//	return k
-//}
-
 type cobraFunc func(cmd *cobra.Command, args []string)
 type pythonFunc func(cmd *cobra.Command, args []string, data pythonData)
 
@@ -47,7 +41,7 @@ func dbExists(path string) (bool, error) {
 		d := filepath.Dir(path)
 		_, err = os.Stat(d)
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(d, 0700); err != nil { //nolint:govet,gomnd
+			if err := os.MkdirAll(d, 0700); err != nil {
 				return false, err
 			}
 			return false, nil

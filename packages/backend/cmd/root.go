@@ -67,10 +67,10 @@ func addServerFlags(flags *pflag.FlagSet) {
 	flags.StringP("key", "k", "", "tls key")
 	flags.StringP("root", "r", ".", "root to prepend to relative paths")
 	flags.String("socket", "", "socket to listen to (cannot be used with address, port, cert nor key flags)")
-	flags.Uint32("socket-perm", 0666, "unix socket file permissions") //nolint:gomnd
+	flags.Uint32("socket-perm", 0666, "unix socket file permissions")
 	flags.StringP("baseurl", "b", "", "base url")
 	flags.String("cache-dir", "", "file cache directory (disabled if empty)")
-	flags.Int("img-processors", 4, "image processors count") //nolint:gomnd
+	flags.Int("img-processors", 4, "image processors count")
 	flags.Bool("disable-thumbnails", false, "disable image thumbnails")
 	flags.Bool("disable-preview-resize", false, "disable resize of image previews")
 	flags.Bool("disable-exec", false, "disables Command Runner feature")
@@ -132,7 +132,7 @@ user created with the credentials from options "username" and "password".`,
 
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
 		if diskcache.CacheDir != "" {
-			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil { //nolint:govet,gomnd
+			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil {
 				log.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
 			}
 			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
@@ -234,12 +234,12 @@ user created with the credentials from options "username" and "password".`,
 		case server.Socket != "":
 			listener, err = net.Listen("unix", server.Socket)
 			checkErr(err)
-			socketPerm, err := cmd.Flags().GetUint32("socket-perm") //nolint:govet
+			socketPerm, err := cmd.Flags().GetUint32("socket-perm")
 			checkErr(err)
 			err = os.Chmod(server.Socket, os.FileMode(socketPerm))
 			checkErr(err)
 		case server.TLSKey != "" && server.TLSCert != "":
-			cer, err := tls.LoadX509KeyPair(server.TLSCert, server.TLSKey) //nolint:govet
+			cer, err := tls.LoadX509KeyPair(server.TLSCert, server.TLSKey)
 			checkErr(err)
 			listener, err = tls.Listen("tcp", adr, &tls.Config{
 				MinVersion:   tls.VersionTLS12,
@@ -269,14 +269,13 @@ user created with the credentials from options "username" and "password".`,
 	}, pythonConfig{allowNoDB: true}),
 }
 
-func cleanupHandler(listener net.Listener, c chan os.Signal) { //nolint:interfacer
+func cleanupHandler(listener net.Listener, c chan os.Signal) {
 	sig := <-c
 	log.Printf("Caught signal %s: shutting down.", sig)
 	listener.Close()
 	os.Exit(0)
 }
 
-//nolint:gocyclo
 func getRunParams(flags *pflag.FlagSet, st *storage.Storage) *settings.Server {
 	server, err := st.Settings.GetServer()
 	checkErr(err)
