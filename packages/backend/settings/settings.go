@@ -9,21 +9,15 @@ import (
 
 const DefaultUsersHomeBasePath = "/users"
 
-// AuthMethod describes an authentication method.
-type AuthMethod string
-
 // Settings contain the main settings of the application.
 type Settings struct {
-	Key              []byte `json:"key"`
-	Signup           bool   `json:"signup"`
-	CreateUserDir    bool   `json:"createUserDir"`
-	UserHomeBasePath string `json:"userHomeBasePath"`
-	//Defaults         UserDefaults        `json:"defaults"`
-	//AuthMethod       AuthMethod          `json:"authMethod"`
-	//Branding         Branding            `json:"branding"`
-	Commands map[string][]string `json:"commands"`
-	Shell    []string            `json:"shell"`
-	Rules    []rules.Rule        `json:"rules"`
+	Key              []byte              `json:"key"`
+	Signup           bool                `json:"signup"`
+	CreateUserDir    bool                `json:"createUserDir"`
+	UserHomeBasePath string              `json:"userHomeBasePath"`
+	Commands         map[string][]string `json:"commands"`
+	Shell            []string            `json:"shell"`
+	Rules            []rules.Rule        `json:"rules"`
 }
 
 // GetRules implements rules.Provider.

@@ -49,18 +49,6 @@ func (s *Storage) Save(set *Settings) error {
 		return errors.ErrEmptyKey
 	}
 
-	//if set.Defaults.Locale == "" {
-	//	set.Defaults.Locale = "en"
-	//}
-	//
-	//if set.Defaults.Commands == nil {
-	//	set.Defaults.Commands = []string{}
-	//}
-	//
-	//if set.Defaults.ViewMode == "" {
-	//	set.Defaults.ViewMode = users.MosaicViewMode
-	//}
-
 	if set.Rules == nil {
 		set.Rules = []rules.Rule{}
 	}
