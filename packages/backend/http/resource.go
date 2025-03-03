@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/filebrowser/filebrowser/v2/diskcache"
 	"github.com/filebrowser/filebrowser/v2/my_redis"
 	"io"
 	"io/ioutil"
@@ -753,9 +754,11 @@ func delThumbs(ctx context.Context, fileCache FileCache, file *files.FileInfo) e
 		if err := fileCache.Delete(ctx, cacheKey); err != nil {
 			return err
 		}
-		err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
-		if err != nil {
-			return err
+		if diskcache.CacheDir != "" {
+			err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
