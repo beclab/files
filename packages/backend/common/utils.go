@@ -41,15 +41,6 @@ func Md5File(filepath string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-//func Md5File(f io.Reader) string {
-//	hasher := md5.New()
-//	if _, err := io.Copy(hasher, f); err != nil {
-//		log.Error().Msgf("Md5 file error %v", err)
-//		return ""
-//	}
-//	return hex.EncodeToString(hasher.Sum(nil))
-//}
-
 func Md5String(s string) string {
 	hasher := md5.New()
 	hasher.Write([]byte(s))

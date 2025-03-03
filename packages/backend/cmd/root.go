@@ -25,7 +25,6 @@ import (
 	v "github.com/spf13/viper"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/filebrowser/filebrowser/v2/auth"
 	"github.com/filebrowser/filebrowser/v2/diskcache"
 
 	//"github.com/filebrowser/filebrowser/v2/frontend"
@@ -34,7 +33,6 @@ import (
 	"github.com/filebrowser/filebrowser/v2/rpc"
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/storage"
-	"github.com/filebrowser/filebrowser/v2/users"
 )
 
 var (
@@ -69,10 +67,10 @@ func addServerFlags(flags *pflag.FlagSet) {
 	flags.StringP("key", "k", "", "tls key")
 	flags.StringP("root", "r", ".", "root to prepend to relative paths")
 	flags.String("socket", "", "socket to listen to (cannot be used with address, port, cert nor key flags)")
-	flags.Uint32("socket-perm", 0666, "unix socket file permissions") //nolint:gomnd
+	flags.Uint32("socket-perm", 0666, "unix socket file permissions")
 	flags.StringP("baseurl", "b", "", "base url")
 	flags.String("cache-dir", "", "file cache directory (disabled if empty)")
-	flags.Int("img-processors", 4, "image processors count") //nolint:gomnd
+	flags.Int("img-processors", 4, "image processors count")
 	flags.Bool("disable-thumbnails", false, "disable image thumbnails")
 	flags.Bool("disable-preview-resize", false, "disable resize of image previews")
 	flags.Bool("disable-exec", false, "disables Command Runner feature")
@@ -133,11 +131,8 @@ user created with the credentials from options "username" and "password".`,
 		imgSvc := img.New(workersCount)
 
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
-		// cacheDir, err := cmd.Flags().GetString("cache-dir")
-		//cacheDir := "/data/file_cache"
-		//checkErr(err)
 		if diskcache.CacheDir != "" {
-			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil { //nolint:govet,gomnd
+			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil {
 				log.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
 			}
 			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
@@ -156,15 +151,7 @@ user created with the credentials from options "username" and "password".`,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
-			//url := os.Getenv("ZINC_URI")
-			zincHost := os.Getenv("ZINC_HOST")
-			zincPort := os.Getenv("ZINC_PORT")
-			url := "http://" + zincHost + ":" + zincPort
-			if zincHost == "" || zincPort == "" {
-				url = "http://localhost:4080"
-			}
-			url = "http://localhost:4080"
+			url := "http://localhost:4080"
 
 			watchDirStr := os.Getenv("WATCH_DIR")
 			//var watchDirs []string
@@ -247,12 +234,12 @@ user created with the credentials from options "username" and "password".`,
 		case server.Socket != "":
 			listener, err = net.Listen("unix", server.Socket)
 			checkErr(err)
-			socketPerm, err := cmd.Flags().GetUint32("socket-perm") //nolint:govet
+			socketPerm, err := cmd.Flags().GetUint32("socket-perm")
 			checkErr(err)
 			err = os.Chmod(server.Socket, os.FileMode(socketPerm))
 			checkErr(err)
 		case server.TLSKey != "" && server.TLSCert != "":
-			cer, err := tls.LoadX509KeyPair(server.TLSCert, server.TLSKey) //nolint:govet
+			cer, err := tls.LoadX509KeyPair(server.TLSCert, server.TLSKey)
 			checkErr(err)
 			listener, err = tls.Listen("tcp", adr, &tls.Config{
 				MinVersion:   tls.VersionTLS12,
@@ -268,12 +255,6 @@ user created with the credentials from options "username" and "password".`,
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 		go cleanupHandler(listener, sigc)
 
-		//assetsFs, err := fs.Sub(frontend.Assets(), "dist")
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		//handler, err := fbhttp.NewHandler(imgSvc, fileCache, d.store, server, assetsFs)
 		handler, err := fbhttp.NewHandler(imgSvc, fileCache, d.store, server)
 		checkErr(err)
 
@@ -288,14 +269,13 @@ user created with the credentials from options "username" and "password".`,
 	}, pythonConfig{allowNoDB: true}),
 }
 
-func cleanupHandler(listener net.Listener, c chan os.Signal) { //nolint:interfacer
+func cleanupHandler(listener net.Listener, c chan os.Signal) {
 	sig := <-c
 	log.Printf("Caught signal %s: shutting down.", sig)
 	listener.Close()
 	os.Exit(0)
 }
 
-//nolint:gocyclo
 func getRunParams(flags *pflag.FlagSet, st *storage.Storage) *settings.Server {
 	server, err := st.Settings.GetServer()
 	checkErr(err)
@@ -412,46 +392,6 @@ func setupLog(logMethod string) {
 }
 
 func quickSetup(flags *pflag.FlagSet, d pythonData) {
-	set := &settings.Settings{
-		Key:              generateKey(),
-		Signup:           false,
-		CreateUserDir:    false,
-		UserHomeBasePath: settings.DefaultUsersHomeBasePath,
-		Defaults: settings.UserDefaults{
-			Scope:       ".",
-			Locale:      "en",
-			SingleClick: false,
-			Perm: users.Permissions{
-				Admin:    false,
-				Execute:  true,
-				Create:   true,
-				Rename:   true,
-				Modify:   true,
-				Delete:   true,
-				Share:    true,
-				Download: true,
-			},
-		},
-		AuthMethod: "",
-		Branding:   settings.Branding{},
-		Commands:   nil,
-		Shell:      nil,
-		Rules:      nil,
-	}
-
-	var err error
-	if _, noauth := getParamB(flags, "noauth"); noauth {
-		set.AuthMethod = auth.MethodNoAuth
-		err = d.store.Auth.Save(&auth.NoAuth{})
-	} else {
-		set.AuthMethod = auth.MethodJSONAuth
-		err = d.store.Auth.Save(&auth.JSONAuth{})
-	}
-
-	checkErr(err)
-	err = d.store.Settings.Save(set)
-	checkErr(err)
-
 	ser := &settings.Server{
 		BaseURL: getParam(flags, "baseurl"),
 		Port:    getParam(flags, "port"),
@@ -462,31 +402,7 @@ func quickSetup(flags *pflag.FlagSet, d pythonData) {
 		Root:    getParam(flags, "root"),
 	}
 
-	err = d.store.Settings.SaveServer(ser)
-	checkErr(err)
-
-	username := getParam(flags, "username")
-	password := getParam(flags, "password")
-
-	if password == "" {
-		password, err = users.HashPwd("admin")
-		checkErr(err)
-	}
-
-	if username == "" || password == "" {
-		log.Fatal("username and password cannot be empty during quick setup")
-	}
-
-	user := &users.User{
-		Username:     username,
-		Password:     password,
-		LockPassword: false,
-	}
-
-	set.Defaults.Apply(user)
-	user.Perm.Admin = true
-
-	err = d.store.Users.Save(user)
+	err := d.store.Settings.SaveServer(ser)
 	checkErr(err)
 }
 

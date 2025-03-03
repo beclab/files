@@ -42,7 +42,6 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
 	tempFilePath := filepath.Join(dir, tempFileName)
 
-	//err = fs.MkdirAll(filepath.Dir(targetPath), 0755)
 	err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755)
 	if err != nil {
 		return err
@@ -77,29 +76,6 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 // CopyFile copies a file from source to dest and returns
 // an error if any.
 func CopyFile(fs afero.Fs, source, dest string) error {
-	// Open the source file.
-	//src, err := fs.Open(source)
-	//if err != nil {
-	//	return err
-	//}
-	//defer src.Close()
-
-	// Makes the directory needed to create the dst
-	// file.
-	//err = fs.MkdirAll(filepath.Dir(dest), 0666) //nolint:gomnd
-	//if err != nil {
-	//	return err
-	//}
-
-	// Create the destination file.
-	//dst, err := fs.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775) //nolint:gomnd
-	//if err != nil {
-	//	return err
-	//}
-	//defer dst.Close()
-
-	// Copy the contents of the file.
-	//_, err = io.Copy(dst, src)
 	err := ioCopyFileWithBuffer(fs, source, dest, 8*1024*1024)
 	if err != nil {
 		return err

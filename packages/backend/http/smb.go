@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var smbHistoryGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")
@@ -44,7 +44,7 @@ var smbHistoryGetHandler = withUser(func(w http.ResponseWriter, r *http.Request,
 	}
 
 	return renderJSON(w, r, result)
-})
+}
 
 type SMBHistoryData struct {
 	URL      string `json:"url"`
@@ -52,7 +52,7 @@ type SMBHistoryData struct {
 	Password string `json:"password,omitempty"`
 }
 
-var smbHistoryPutHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func smbHistoryPutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")
@@ -82,17 +82,9 @@ var smbHistoryPutHandler = withUser(func(w http.ResponseWriter, r *http.Request,
 	}
 
 	return renderJSON(w, r, "Successfully added/updated SMB history and hash")
-})
+}
 
-//func stringSliceToInterfaceSlice(strings []string) []interface{} {
-//	interfaces := make([]interface{}, len(strings))
-//	for i, str := range strings {
-//		interfaces[i] = str
-//	}
-//	return interfaces
-//}
-
-var smbHistoryDeleteHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func smbHistoryDeleteHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")
@@ -120,4 +112,4 @@ var smbHistoryDeleteHandler = withUser(func(w http.ResponseWriter, r *http.Reque
 	}
 
 	return renderJSON(w, r, "Successfully deleted SMB history")
-})
+}

@@ -14,7 +14,6 @@ import (
 
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/fileutils"
-	"github.com/filebrowser/filebrowser/v2/users"
 )
 
 func slashClean(name string) string {
@@ -24,7 +23,7 @@ func slashClean(name string) string {
 	return gopath.Clean(name)
 }
 
-func parseQueryFiles(r *http.Request, f *files.FileInfo, _ *users.User) ([]string, error) {
+func parseQueryFiles(r *http.Request, f *files.FileInfo) ([]string, error) {
 	var fileSlice []string
 	names := strings.Split(r.URL.Query().Get("files"), ",")
 
@@ -32,7 +31,7 @@ func parseQueryFiles(r *http.Request, f *files.FileInfo, _ *users.User) ([]strin
 		fileSlice = append(fileSlice, f.Path)
 	} else {
 		for _, name := range names {
-			name, err := url.QueryUnescape(strings.Replace(name, "+", "%2B", -1)) //nolint:govet
+			name, err := url.QueryUnescape(strings.Replace(name, "+", "%2B", -1))
 			if err != nil {
 				return nil, err
 			}
@@ -45,9 +44,7 @@ func parseQueryFiles(r *http.Request, f *files.FileInfo, _ *users.User) ([]strin
 	return fileSlice, nil
 }
 
-// nolint: goconst
 func parseQueryAlgorithm(r *http.Request) (string, archiver.Writer, error) {
-	// TODO: use enum
 	switch r.URL.Query().Get("algo") {
 	case "zip", "true", "":
 		return ".zip", archiver.NewZip(), nil
@@ -77,11 +74,7 @@ func setContentDisposition(w http.ResponseWriter, r *http.Request, file *files.F
 	}
 }
 
-var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	if !d.user.Perm.Download {
-		return http.StatusAccepted, nil
-	}
-
+func rawHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return http.StatusNotImplemented, nil
@@ -112,12 +105,11 @@ var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) 
 	}
 
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         d.user.Fs,
+		Fs:         files.DefaultFs,
 		Path:       r.URL.Path,
-		Modify:     d.user.Perm.Modify,
+		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.server.TypeDetectionByHeader,
-		Checker:    d,
 	})
 	if err != nil {
 		return errToStatus(err), err
@@ -133,14 +125,10 @@ var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) 
 	}
 
 	return rawDirHandler(w, r, d, file)
-})
+}
 
 func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
-	if !d.Check(path) {
-		return nil
-	}
-
-	info, err := d.user.Fs.Stat(path)
+	info, err := files.DefaultFs.Stat(path)
 	if err != nil {
 		return err
 	}
@@ -149,7 +137,7 @@ func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
 		return nil
 	}
 
-	file, err := d.user.Fs.Open(path)
+	file, err := files.DefaultFs.Open(path)
 	if err != nil {
 		return err
 	}
@@ -189,7 +177,7 @@ func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
 }
 
 func rawDirHandler(w http.ResponseWriter, r *http.Request, d *data, file *files.FileInfo) (int, error) {
-	filenames, err := parseQueryFiles(r, file, d.user)
+	filenames, err := parseQueryFiles(r, file)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
