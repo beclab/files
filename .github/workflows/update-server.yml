@@ -10,7 +10,6 @@ on:
     branches:
       - "main"
       - "dev"
-      - "clean_code"
     tags:
       - 'v*'
 
@@ -54,20 +53,20 @@ jobs:
         uses: "WyriHaximus/github-action-get-previous-tag@v1"
         id: get-latest-tag
         with:
-          fallback: clean # latest
+          fallback: latest
 
 #      - name: Build
 #        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
 
       - name: Build
         run: |
-          cd packages/backend/
           go mod tidy
+          cd cmd/backend
           for GOOS in linux; do
             for GOARCH in amd64 arm64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
-              make build-backend
+              go build -o filebrowser main.go
               mkdir -p dist/$GOOS-$GOARCH
               mv filebrowser dist/$GOOS-$GOARCH/
             done
