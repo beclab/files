@@ -1,4 +1,4 @@
-package my_redis
+package redisutils
 
 import (
 	"crypto/sha1"
@@ -23,7 +23,7 @@ func DelThumbRedisKey(key string) error {
 	cleanupMux.Lock()
 	defer cleanupMux.Unlock()
 
-	err := RedisZRem(zsetKey, []string{key})
+	err := RedisClient.ZRem(key, []string{key}).Err()
 	if err != nil {
 		fmt.Println("Error removing file from Redis:", err)
 		return err
@@ -53,18 +53,25 @@ func CleanupOldFilesAndRedisEntries(duration time.Duration) {
 	cutoffTime := time.Now().Add(-duration).Unix()
 	cutoffTimeStr := strconv.FormatInt(cutoffTime, 10)
 
-	results := RedisZRangeByScore(zsetKey, "-inf", cutoffTimeStr)
+	results, err := RedisClient.ZRangeByScore(zsetKey, redis.ZRangeBy{
+		Min: "-inf",
+		Max: cutoffTimeStr,
+	}).Result()
+	if err != nil {
+		fmt.Println("get members in a given range from zset failed: ", err)
+		return
+	}
 
 	for _, member := range results {
 		fileName := member
 		filePath := filepath.Join(folderPath, fileName)
 
-		err := os.Remove(filePath)
+		err = os.Remove(filePath)
 		if err != nil {
 			fmt.Println("Error deleting file:", err)
 		}
 
-		err = RedisZRem(zsetKey, []string{fileName})
+		err = RedisClient.ZRem(zsetKey, []string{fileName}).Err()
 		if err != nil {
 			fmt.Println("Error removing file from Redis:", err)
 			continue
@@ -82,7 +89,7 @@ func GetFileName(key string) string {
 func UpdateFileAccessTimeToRedis(fileName string) error {
 	key := fileName
 	currentTime := time.Now().Unix()
-	err := RedisZAdd(zsetKey, key, float64(currentTime))
+	err := RedisClient.ZAdd(zsetKey, redis.Z{Score: float64(currentTime), Member: key}).Err()
 	return err
 }
 
@@ -95,16 +102,20 @@ func InitFolderAndRedis() {
 		if !info.IsDir() {
 			fileName := filepath.Base(path)
 
-			exists, err := RedisZScore(zsetKey, fileName)
+			var exists float64
+			exists, err = RedisClient.ZScore(zsetKey, fileName).Result()
 			if err == redis.Nil {
 				err = UpdateFileAccessTimeToRedis(fileName)
 				if err != nil {
 					fmt.Println("Error adding file to Redis:", err)
+					return err
 				}
 			} else if err != nil {
 				fmt.Println("Error checking file in Redis:", err)
+				return err
 			} else {
 				fmt.Printf("File %s already exists in Redis with score %f\n", fileName, exists)
+				return nil
 			}
 		}
 
@@ -113,15 +124,26 @@ func InitFolderAndRedis() {
 
 	if err != nil {
 		fmt.Println("Error initializing folder and Redis:", err)
+		return
 	}
 
-	results := RedisZRange(zsetKey, 0, -1)
+	var results []string
+	results, err = RedisClient.ZRange(zsetKey, 0, -1).Result()
+	if err != nil {
+		fmt.Println("get range member of zset failed: ", err)
+		return
+	}
 
 	for _, member := range results {
 		fmt.Println("filename=", member)
-		score, err := RedisZScore(zsetKey, member)
+		var score float64
+		score, err = RedisClient.ZScore(zsetKey, member).Result()
 		if err != nil {
-			fmt.Println("Error fetching file from Redis:", err)
+			if err == redis.Nil {
+				fmt.Errorf("member %s doesn't exist in zset %s", member, zsetKey)
+				return
+			}
+			fmt.Errorf("get score for member from zset failed: %v", err)
 			return
 		}
 		fmt.Println("score=", score)

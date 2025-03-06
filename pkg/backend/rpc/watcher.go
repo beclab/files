@@ -2,8 +2,8 @@ package rpc
 
 import (
 	"files/pkg/backend/files"
-	"files/pkg/backend/my_redis"
 	"files/pkg/backend/parser"
+	"files/pkg/backend/redisutils"
 	"fmt"
 	"io/fs"
 	"k8s.io/klog/v2"
@@ -76,13 +76,28 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 	var err error
 	if watcher == nil {
 		addPaths = dedupArray(addPaths, PathPrefix)
-		my_redis.RedisSet("indexing_status", 0, time.Duration(0))
-		my_redis.RedisSet("indexing_error", false, time.Duration(0))
-		my_redis.RedisSet("paths", strings.Join(addPaths, ","), time.Duration(0))
+		err = redisutils.RedisClient.Set("indexing_status", 0, time.Duration(0)).Err()
+		if err != nil {
+			fmt.Println("Set key value failed: ", err)
+			return
+		}
+		err = redisutils.RedisClient.Set("indexing_error", false, time.Duration(0)).Err()
+		if err != nil {
+			fmt.Println("Set key value failed: ", err)
+			return
+		}
+		err = redisutils.RedisClient.Set("paths", strings.Join(addPaths, ","), time.Duration(0)).Err()
+		if err != nil {
+			fmt.Println("Set key value failed: ", err)
+			return
+		}
 
 		watcher, err = jfsnotify.NewWatcher("filesWatcher")
 		if err != nil {
-			my_redis.RedisSet("indexing_error", true, time.Duration(0))
+			subErr := redisutils.RedisClient.Set("indexing_error", true, time.Duration(0)).Err()
+			if subErr != nil {
+				fmt.Println("Set key value failed: ", subErr)
+			}
 			panic(err)
 		}
 
@@ -92,14 +107,22 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 	}
 
 	currentTime := time.Now().Format(time.RFC3339)
-	my_redis.RedisSet("last_update_time", currentTime, time.Duration(0))
+	err = redisutils.RedisClient.Set("last_update_time", currentTime, time.Duration(0)).Err()
 	if err != nil {
 		fmt.Println("write to redis failed:", err)
-		my_redis.RedisSet("indexing_error", true, time.Duration(0))
+		subErr := redisutils.RedisClient.Set("indexing_error", true, time.Duration(0)).Err()
+		if subErr != nil {
+			fmt.Println("Set key value failed: ", subErr)
+		}
 		return
 	}
 
-	my_redis.RedisAddInt("indexing_status", 1, time.Duration(0))
+	err = redisutils.RedisClient.IncrBy("indexing_status", 1).Err()
+	if err != nil {
+		fmt.Println("write to redis failed:", err)
+		return
+	}
+
 	for _, path := range deletePaths {
 		err = filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
 			if err != nil {
@@ -115,8 +138,14 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 			return nil
 		})
 		if err != nil {
-			my_redis.RedisSet("indexing_error", true, time.Duration(0))
-			my_redis.RedisAddInt("indexing_status", -1, time.Duration(0))
+			subErr := redisutils.RedisClient.Set("indexing_error", true, time.Duration(0)).Err()
+			if subErr != nil {
+				fmt.Println("Set key value failed: ", subErr)
+			}
+			subErr = redisutils.RedisClient.DecrBy("indexing_status", 1).Err()
+			if subErr != nil {
+				fmt.Println("write to redis failed:", subErr)
+			}
 			panic(err)
 		}
 	}
@@ -165,13 +194,27 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 			return nil
 		})
 		if err != nil {
-			my_redis.RedisSet("indexing_error", true, time.Duration(0))
-			my_redis.RedisAddInt("indexing_status", -1, time.Duration(0))
+			subErr := redisutils.RedisClient.Set("indexing_error", true, time.Duration(0)).Err()
+			if subErr != nil {
+				fmt.Println("Set key value failed: ", subErr)
+			}
+			subErr = redisutils.RedisClient.DecrBy("indexing_status", 1).Err()
+			if subErr != nil {
+				fmt.Println("write to redis failed:", subErr)
+			}
 			panic(err)
 		}
 	}
-	my_redis.RedisSet("indexing_error", false, time.Duration(0))
-	my_redis.RedisAddInt("indexing_status", -1, time.Duration(0))
+	err = redisutils.RedisClient.Set("indexing_error", true, time.Duration(0)).Err()
+	if err != nil {
+		fmt.Println("Set key value failed: ", err)
+		panic(err)
+	}
+	err = redisutils.RedisClient.DecrBy("indexing_status", 1).Err()
+	if err != nil {
+		fmt.Println("write to redis failed:", err)
+		panic(err)
+	}
 
 	fmt.Println("Finished watching path setup.")
 }

@@ -7,7 +7,7 @@ import (
 	"files/pkg/backend/diskcache"
 	"files/pkg/backend/files"
 	"files/pkg/backend/img"
-	"files/pkg/backend/my_redis"
+	"files/pkg/backend/redisutils"
 	"fmt"
 	"github.com/gorilla/mux"
 	"io"
@@ -123,7 +123,7 @@ func handleImagePreview(
 	}
 
 	if diskcache.CacheDir != "" {
-		my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
+		redisutils.UpdateFileAccessTimeToRedis(redisutils.GetFileName(cacheKey))
 	}
 
 	w.Header().Set("Cache-Control", "private")

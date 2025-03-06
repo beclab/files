@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"files/pkg/backend/common"
-	"files/pkg/backend/my_redis"
+	"files/pkg/backend/redisutils"
 	"fmt"
 	"io"
 	"log"
@@ -137,11 +137,11 @@ user created with the credentials from options "username" and "password".`,
 			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
 		}
 
-		// my_redis for watcher
-		my_redis.InitRedis()
+		// redisutils for watcher
+		redisutils.InitRedis()
 		if diskcache.CacheDir != "" {
-			my_redis.InitFolderAndRedis()
-			go my_redis.StartDailyCleanup()
+			redisutils.InitFolderAndRedis()
+			go redisutils.StartDailyCleanup()
 		}
 
 		// rpcServer for zinc

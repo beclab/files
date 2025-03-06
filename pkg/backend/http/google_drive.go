@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	e "errors"
 	"files/pkg/backend/img"
-	"files/pkg/backend/my_redis"
+	"files/pkg/backend/redisutils"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -1416,7 +1416,7 @@ func handleImagePreviewGoogle(
 		}
 	}
 
-	err = my_redis.UpdateFileAccessTimeToRedis(my_redis.GetFileName(cacheKey))
+	err = redisutils.UpdateFileAccessTimeToRedis(redisutils.GetFileName(cacheKey))
 	if err != nil {
 		return errToStatus(err), err
 	}
@@ -1462,7 +1462,7 @@ func delThumbsGoogle(ctx context.Context, fileCache FileCache, src string, w htt
 		if err := fileCache.Delete(ctx, cacheKey); err != nil {
 			return err
 		}
-		err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
+		err := redisutils.DelThumbRedisKey(redisutils.GetFileName(cacheKey))
 		if err != nil {
 			return err
 		}

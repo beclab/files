@@ -3,7 +3,9 @@ package http
 import (
 	"encoding/json"
 	"errors"
-	"files/pkg/backend/my_redis"
+	"files/pkg/backend/redisutils"
+	"fmt"
+	"github.com/go-redis/redis"
 	"net/http"
 	"time"
 )
@@ -16,21 +18,22 @@ func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 
 	key := bflName + "_smb_history"
 
-	zset, err := my_redis.RedisZRevRangeWithScores(key, 0, -1)
+	zset, err := redisutils.RedisClient.ZRevRangeWithScores(key, 0, -1).Result()
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return errToStatus(err), fmt.Errorf("get reverse range with scores from zset failed: %v", err)
 	}
 
 	var result []map[string]interface{}
 
 	for _, entry := range zset {
-		member := entry.Value
+		member := entry.Member.(string) // entry.Value
 		score := entry.Score
 
 		hashKey := key + "_url_details:" + member
-		urlInfo, err := my_redis.RedisHGetAll(hashKey)
+		var urlInfo map[string]string
+		urlInfo, err = redisutils.RedisClient.HGetAll(hashKey).Result()
 		if err != nil {
-			return http.StatusInternalServerError, err
+			return errToStatus(err), err
 		}
 
 		item := map[string]interface{}{
@@ -66,18 +69,26 @@ func smbHistoryPutHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 	}
 
 	score := float64(time.Now().Unix())
-	for _, data := range requestData {
-		if err := my_redis.RedisZAdd(key, data.URL, score); err != nil {
-			return http.StatusInternalServerError, err
+	for _, datum := range requestData {
+		err := redisutils.RedisClient.ZAdd(key, redis.Z{Score: score, Member: datum.URL}).Err()
+		if err != nil {
+			fmt.Println("add new member to zset failed: ", err)
+			return errToStatus(err), err
 		}
 
-		hashKey := key + "_url_details:" + data.URL
-		if err := my_redis.RedisHMSet(hashKey, map[string]interface{}{
-			"url":      data.URL,
-			"username": data.Username,
-			"password": data.Password,
-		}); err != nil {
-			return http.StatusInternalServerError, err
+		hashKey := key + "_url_details:" + datum.URL
+
+		var fields = map[string]interface{}{
+			"url":      datum.URL,
+			"username": datum.Username,
+			"password": datum.Password,
+		}
+		for field, value := range fields {
+			_, err = redisutils.RedisClient.HSet(hashKey, field, value).Result()
+			if err != nil {
+				fmt.Printf("set hash field '%s' failed: %v\n", field, err)
+				return errToStatus(err), err
+			}
 		}
 	}
 
@@ -98,17 +109,21 @@ func smbHistoryDeleteHandler(w http.ResponseWriter, r *http.Request, d *data) (i
 	}
 
 	var urls []string
-	for _, data := range requestData {
-		urls = append(urls, data.URL)
+	for _, datum := range requestData {
+		urls = append(urls, datum.URL)
 
-		hashKey := key + "_url_details:" + data.URL
-		if err := my_redis.RedisDelKey(hashKey); err != nil {
-			return http.StatusInternalServerError, err
+		hashKey := key + "_url_details:" + datum.URL
+		_, err := redisutils.RedisClient.Del(hashKey).Result()
+		if err != nil {
+			fmt.Printf("Delete key failed: %v\n", err)
+			return errToStatus(err), err
 		}
 	}
 
-	if err := my_redis.RedisZRem(key, urls); err != nil {
-		return http.StatusInternalServerError, err
+	err := redisutils.RedisClient.ZRem(key, urls).Err()
+	if err != nil {
+		fmt.Println("remove member for zset failed: ", err)
+		return errToStatus(err), err
 	}
 
 	return renderJSON(w, r, "Successfully deleted SMB history")

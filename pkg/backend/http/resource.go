@@ -5,7 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"files/pkg/backend/diskcache"
-	"files/pkg/backend/my_redis"
+	"files/pkg/backend/redisutils"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -621,7 +621,7 @@ func delThumbs(ctx context.Context, fileCache FileCache, file *files.FileInfo) e
 			return err
 		}
 		if diskcache.CacheDir != "" {
-			err := my_redis.DelThumbRedisKey(my_redis.GetFileName(cacheKey))
+			err := redisutils.DelThumbRedisKey(redisutils.GetFileName(cacheKey))
 			if err != nil {
 				return err
 			}

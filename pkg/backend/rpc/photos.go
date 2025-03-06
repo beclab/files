@@ -3,9 +3,10 @@ package rpc
 import (
 	"encoding/json"
 	"files/pkg/backend/common"
-	"files/pkg/backend/my_redis"
+	"files/pkg/backend/redisutils"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis"
 	"github.com/rs/zerolog/log"
 	"net/http"
 	"os"
@@ -89,7 +90,15 @@ func checkOrUpdatePhotosRedis(filepath, fileMd5 string, op int) error {
 }
 
 func addOrUploadPhotoRedis(hashName, filepath, filepathMd5, fileMd5 string, uploading bool) error {
-	redisValue := my_redis.RedisHGet(hashName, filepathMd5)
+	redisValue, err := redisutils.RedisClient.HGet(hashName, filepathMd5).Result()
+	if err != nil {
+		if err != redis.Nil {
+			fmt.Println("get key value of Hash table failed: ", err)
+			return err
+		}
+		fmt.Println("Hash table ", hashName, " and field ", filepathMd5, "doesn't exist")
+		return err
+	}
 
 	// only response for add when no redis value yet
 	if redisValue == "" {
@@ -100,14 +109,18 @@ func addOrUploadPhotoRedis(hashName, filepath, filepathMd5, fileMd5 string, uplo
 				"deleted":  false,
 			}
 
-			my_redis.RedisHSet(hashName, filepathMd5, photoObject)
+			err = redisutils.RedisClient.HSet(hashName, filepathMd5, photoObject).Err()
+			if err != nil {
+				fmt.Println("Set key value of Hash table failed: ", err)
+				return err
+			}
 
 			log.Debug().Msgf("Added new photo entry for %s in Redis", filepath)
 		}
 	} else {
 		// can response for add and upload when redis value existed, both updating md5 (given warning if not match)
 		var redisData map[string]interface{}
-		err := json.Unmarshal([]byte(redisValue), &redisData)
+		err = json.Unmarshal([]byte(redisValue), &redisData)
 		if err != nil {
 			log.Error().Msgf("Failed to unmarshal Redis data for file %s: %v", filepath, err)
 			return err
@@ -122,13 +135,18 @@ func addOrUploadPhotoRedis(hashName, filepath, filepathMd5, fileMd5 string, uplo
 			log.Warn().Msgf("MD5 mismatch for file %s: Redis MD5=%s, File MD5=%s", filepath, redisMd5, fileMd5)
 
 			redisData["md5"] = fileMd5
-			newData, err := json.Marshal(redisData)
+			var newData []byte
+			newData, err = json.Marshal(redisData)
 			if err != nil {
 				log.Error().Msgf("Failed to marshal updated Redis data for file %s: %v", filepath, err)
 				return err
 			}
 
-			my_redis.RedisHSet(hashName, filepathMd5, string(newData))
+			err = redisutils.RedisClient.HSet(hashName, filepathMd5, string(newData)).Err()
+			if err != nil {
+				fmt.Println("Set key value of Hash table failed: ", err)
+				return err
+			}
 
 			log.Debug().Msgf("Updated MD5 for file %s in Redis", filepath)
 		}
@@ -137,14 +155,22 @@ func addOrUploadPhotoRedis(hashName, filepath, filepathMd5, fileMd5 string, uplo
 }
 
 func markPhotoAsDeleted(hashName, filepathMd5 string, status bool) error {
-	redisValue := my_redis.RedisHGet(hashName, filepathMd5)
+	redisValue, err := redisutils.RedisClient.HGet(hashName, filepathMd5).Result()
+	if err != nil {
+		if err != redis.Nil {
+			fmt.Println("get key value of Hash table failed: ", err)
+			return err
+		}
+		fmt.Println("Hash table ", hashName, " and field ", filepathMd5, "doesn't exist")
+		return err
+	}
 	if redisValue == "" {
 		log.Warn().Msgf("No entry found for %s in Redis when marking as deleted", filepathMd5)
 		return nil
 	}
 
 	var redisData map[string]interface{}
-	err := json.Unmarshal([]byte(redisValue), &redisData)
+	err = json.Unmarshal([]byte(redisValue), &redisData)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal Redis data: %v", err)
 	}
@@ -155,7 +181,11 @@ func markPhotoAsDeleted(hashName, filepathMd5 string, status bool) error {
 		return fmt.Errorf("failed to marshal updated Redis data: %v", err)
 	}
 
-	my_redis.RedisHSet(hashName, filepathMd5, string(newData))
+	err = redisutils.RedisClient.HSet(hashName, filepathMd5, string(newData)).Err()
+	if err != nil {
+		fmt.Println("Set key value of Hash table failed: ", err)
+		return err
+	}
 
 	log.Debug().Msgf("Marked photo %s as deleted in Redis", filepathMd5)
 	return nil
