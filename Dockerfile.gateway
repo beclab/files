@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.20 as builder
+FROM golang:1.23 as builder
 
 WORKDIR /workspace
 # COPY packages/gateway/go.mod packages/gateway/go.sum ./
