@@ -67,7 +67,7 @@ jobs:
             for GOARCH in amd64 arm64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
-              go build -o .
+              go build -o filebrowser main.go
               mkdir -p dist/$GOOS-$GOARCH
               mv filebrowser dist/$GOOS-$GOARCH/
             done
