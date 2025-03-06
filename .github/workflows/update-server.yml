@@ -62,11 +62,12 @@ jobs:
       - name: Build
         run: |
           go mod tidy
+          cd cmd/backend
           for GOOS in linux; do
             for GOARCH in amd64 arm64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
-              go build -o . cmd/backend/main
+              go build -o .
               mkdir -p dist/$GOOS-$GOARCH
               mv filebrowser dist/$GOOS-$GOARCH/
             done
