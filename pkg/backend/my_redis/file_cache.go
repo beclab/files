@@ -3,8 +3,8 @@ package my_redis
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"files/pkg/backend/diskcache"
 	"fmt"
-	"github.com/beclab/files/pkg/backend/diskcache"
 	"github.com/go-redis/redis"
 	"os"
 	"path/filepath"

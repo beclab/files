@@ -1,14 +1,14 @@
 package app
 
 import (
+	"files/pkg/backend/storage/bolt"
 	"fmt"
-	"github.com/beclab/files/pkg/backend/storage/bolt"
 	"github.com/spf13/cobra"
 	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/beclab/files/pkg/backend/storage"
+	"files/pkg/backend/storage"
 )
 
 func checkErr(err error) {

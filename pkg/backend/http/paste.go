@@ -23,8 +23,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/beclab/files/pkg/backend/errors"
-	"github.com/beclab/files/pkg/backend/files"
+	"files/pkg/backend/errors"
+	"files/pkg/backend/files"
 	"github.com/spf13/afero"
 )
 

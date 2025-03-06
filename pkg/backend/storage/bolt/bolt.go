@@ -3,8 +3,8 @@ package bolt
 import (
 	"github.com/asdine/storm/v3"
 
-	"github.com/beclab/files/pkg/backend/settings"
-	"github.com/beclab/files/pkg/backend/storage"
+	"files/pkg/backend/settings"
+	"files/pkg/backend/storage"
 )
 
 // NewStorage creates a storage.Storage based on Bolt DB.

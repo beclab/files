@@ -1,10 +1,10 @@
 package rpc
 
 import (
+	"files/pkg/backend/files"
+	"files/pkg/backend/my_redis"
+	"files/pkg/backend/parser"
 	"fmt"
-	"github.com/beclab/files/pkg/backend/files"
-	"github.com/beclab/files/pkg/backend/my_redis"
-	"github.com/beclab/files/pkg/backend/parser"
 	"io/fs"
 	"k8s.io/klog/v2"
 	"os"

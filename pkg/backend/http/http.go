@@ -1,15 +1,15 @@
 package http
 
 import (
+	"files/pkg/backend/rpc"
 	"fmt"
-	"github.com/beclab/files/pkg/backend/rpc"
 	"github.com/gin-gonic/gin"
 	"net/http"
 
 	"github.com/gorilla/mux"
 
-	"github.com/beclab/files/pkg/backend/settings"
-	"github.com/beclab/files/pkg/backend/storage"
+	"files/pkg/backend/settings"
+	"files/pkg/backend/storage"
 )
 
 func NewHandler(

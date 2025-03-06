@@ -7,8 +7,8 @@ import (
 
 	"github.com/tomasen/realip"
 
-	"github.com/beclab/files/pkg/backend/settings"
-	"github.com/beclab/files/pkg/backend/storage"
+	"files/pkg/backend/settings"
+	"files/pkg/backend/storage"
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *data) (int, error)

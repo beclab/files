@@ -2,9 +2,9 @@ package rpc
 
 import (
 	"encoding/json"
+	"files/pkg/backend/common"
+	"files/pkg/backend/my_redis"
 	"fmt"
-	"github.com/beclab/files/pkg/backend/common"
-	"github.com/beclab/files/pkg/backend/my_redis"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 	"net/http"

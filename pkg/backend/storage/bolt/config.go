@@ -3,7 +3,7 @@ package bolt
 import (
 	"github.com/asdine/storm/v3"
 
-	"github.com/beclab/files/pkg/backend/settings"
+	"files/pkg/backend/settings"
 )
 
 type settingsBackend struct {

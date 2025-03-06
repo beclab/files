@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"github.com/beclab/files/pkg/backend/settings"
+	"files/pkg/backend/settings"
 )
 
 // Storage is a storage powered by a Backend which makes the necessary

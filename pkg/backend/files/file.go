@@ -8,8 +8,8 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"files/pkg/backend/common"
 	"fmt"
-	"github.com/beclab/files/pkg/backend/common"
 	"hash"
 	"io"
 	"io/ioutil"
@@ -24,7 +24,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	"github.com/beclab/files/pkg/backend/errors"
+	"files/pkg/backend/errors"
 )
 
 var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), common.RootPrefix)

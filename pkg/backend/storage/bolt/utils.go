@@ -1,8 +1,8 @@
 package bolt
 
 import (
+	"files/pkg/backend/errors"
 	"github.com/asdine/storm/v3"
-	"github.com/beclab/files/pkg/backend/errors"
 )
 
 func get(db *storm.DB, name string, to interface{}) error {

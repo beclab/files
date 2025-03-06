@@ -16,9 +16,8 @@ package proxy
 
 import (
 	"context"
-	"fmt"
-	//"github.com/beclab/files/pkg/gateway/appdata"
 	"files/pkg/gateway/appdata"
+	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"k8s.io/client-go/kubernetes"

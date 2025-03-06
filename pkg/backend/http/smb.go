@@ -3,7 +3,7 @@ package http
 import (
 	"encoding/json"
 	"errors"
-	"github.com/beclab/files/pkg/backend/my_redis"
+	"files/pkg/backend/my_redis"
 	"net/http"
 	"time"
 )

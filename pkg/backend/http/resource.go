@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"files/pkg/backend/diskcache"
+	"files/pkg/backend/my_redis"
 	"fmt"
-	"github.com/beclab/files/pkg/backend/diskcache"
-	"github.com/beclab/files/pkg/backend/my_redis"
 	"io"
 	"io/ioutil"
 	"log"
@@ -20,9 +20,9 @@ import (
 
 	"github.com/spf13/afero"
 
-	"github.com/beclab/files/pkg/backend/errors"
-	"github.com/beclab/files/pkg/backend/files"
-	"github.com/beclab/files/pkg/backend/fileutils"
+	"files/pkg/backend/errors"
+	"files/pkg/backend/files"
+	"files/pkg/backend/fileutils"
 )
 
 func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {

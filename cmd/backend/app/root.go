@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"files/pkg/backend/common"
+	"files/pkg/backend/my_redis"
 	"fmt"
-	"github.com/beclab/files/pkg/backend/common"
-	"github.com/beclab/files/pkg/backend/my_redis"
 	"io"
 	"log"
 	"net"
@@ -25,13 +25,13 @@ import (
 	v "github.com/spf13/viper"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/beclab/files/pkg/backend/diskcache"
+	"files/pkg/backend/diskcache"
 
-	fbhttp "github.com/beclab/files/pkg/backend/http"
-	"github.com/beclab/files/pkg/backend/img"
-	"github.com/beclab/files/pkg/backend/rpc"
-	"github.com/beclab/files/pkg/backend/settings"
-	"github.com/beclab/files/pkg/backend/storage"
+	fbhttp "files/pkg/backend/http"
+	"files/pkg/backend/img"
+	"files/pkg/backend/rpc"
+	"files/pkg/backend/settings"
+	"files/pkg/backend/storage"
 )
 
 var (

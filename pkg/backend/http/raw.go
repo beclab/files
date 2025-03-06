@@ -12,8 +12,8 @@ import (
 
 	"github.com/mholt/archiver/v3"
 
-	"github.com/beclab/files/pkg/backend/files"
-	"github.com/beclab/files/pkg/backend/fileutils"
+	"files/pkg/backend/files"
+	"files/pkg/backend/fileutils"
 )
 
 func slashClean(name string) string {
