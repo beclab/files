@@ -3,6 +3,7 @@ package app
 import (
 	"files/pkg/backend/storage/bolt"
 	"fmt"
+	"github.com/asdine/storm/v3"
 	"github.com/spf13/cobra"
 	"log"
 	"os"
