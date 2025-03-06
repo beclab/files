@@ -1,6 +1,8 @@
 module files
 
-go 1.23.3
+go 1.23.0
+
+toolchain go1.23.3
 
 replace github.com/beclab/files => .
 
