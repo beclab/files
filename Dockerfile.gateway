@@ -22,10 +22,10 @@ RUN \
 	go mod download
 
 # COPY packages/gateway/ ./
-COPY cmd/gateway ./cmd
-COPY pkg/gateway ./pkg
+COPY cmd/gateway ./cmd/gateway
+COPY pkg/gateway ./pkg/gateway
 
-RUN CGO_ENABLED=0 go build -o appdata-gateway cmd/main.go
+RUN CGO_ENABLED=0 go build -o appdata-gateway cmd/gateway/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

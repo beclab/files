@@ -17,8 +17,10 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/beclab/files/pkg/gateway/proxy"
-	"github.com/beclab/files/pkg/gateway/signals"
+	//"github.com/beclab/files/pkg/gateway/proxy"
+	//"github.com/beclab/files/pkg/gateway/signals"
+	"files/pkg/gateway/proxy"
+	"files/pkg/gateway/signals"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
