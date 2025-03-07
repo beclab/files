@@ -9,13 +9,13 @@ import (
 	"github.com/gorilla/mux"
 
 	"files/pkg/backend/settings"
-	"files/pkg/backend/storage"
+	//"files/pkg/backend/storage"
 )
 
 func NewHandler(
 	imgSvc ImgService,
 	fileCache FileCache,
-	store *storage.Storage,
+	//store *storage.Storage,
 	server *settings.Server,
 ) (http.Handler, error) {
 	server.Clean()
@@ -34,7 +34,7 @@ func NewHandler(
 	r = r.SkipClean(true)
 
 	monkey := func(fn handleFunc, prefix string) http.Handler {
-		return handle(fn, prefix, store, server)
+		return handle(fn, prefix, server) //store, server)
 	}
 
 	r.HandleFunc("/health", healthHandler)
