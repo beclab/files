@@ -8,23 +8,23 @@ import (
 	"github.com/tomasen/realip"
 
 	"files/pkg/backend/settings"
-	//"files/pkg/backend/storage"
+	"files/pkg/backend/storage"
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *data) (int, error)
 
 type data struct {
 	server *settings.Server
-	//store  *storage.Storage
-	raw interface{}
+	store  *storage.Storage
+	raw    interface{}
 }
 
-func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler { // store *storage.Storage, server *settings.Server) http.Handler {
+func handle(fn handleFunc, prefix string, store *storage.Storage, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
 		status, err := fn(w, r, &data{
-			//store:  store,
+			store:  store,
 			server: server,
 		})
 

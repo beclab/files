@@ -21,24 +21,6 @@ type Server struct {
 	AuthHook              string `json:"authHook"`
 }
 
-func NewDefaultServer() *Server {
-	return &Server{
-		Root:                  "/srv",
-		BaseURL:               "",
-		Socket:                "",
-		TLSKey:                "",
-		TLSCert:               "",
-		Port:                  "8110",
-		Address:               "",
-		Log:                   "stdout",
-		EnableThumbnails:      true,
-		ResizePreview:         false,
-		EnableExec:            false,
-		TypeDetectionByHeader: true,
-		AuthHook:              "",
-	}
-}
-
 // Clean cleans any variables that might need cleaning.
 func (s *Server) Clean() {
 	s.BaseURL = strings.TrimSuffix(s.BaseURL, "/")
