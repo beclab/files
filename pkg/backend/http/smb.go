@@ -3,12 +3,42 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"files/pkg/backend/files"
 	"files/pkg/backend/redisutils"
 	"fmt"
 	"github.com/go-redis/redis"
 	"net/http"
 	"time"
 )
+
+func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	respJson, err := files.MountPathIncluster(r)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	return renderJSON(w, r, respJson)
+}
+
+func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:         files.DefaultFs,
+		Path:       r.URL.Path,
+		Modify:     true,
+		Expand:     false,
+		ReadHeader: d.server.TypeDetectionByHeader,
+	})
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	respJson, err := files.UnmountPathIncluster(r, file.Path)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	return renderJSON(w, r, respJson)
+}
 
 func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")

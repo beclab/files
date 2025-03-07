@@ -21,24 +21,6 @@ import (
 	"files/pkg/backend/fileutils"
 )
 
-type ResourceGetHandlerInterface interface {
-	Handle(w http.ResponseWriter, r *http.Request, stream, meta int, d *data) (int, error)
-}
-
-func getResourceHandler(srcType string) (ResourceGetHandlerInterface, error) {
-	switch srcType {
-	case "sync":
-		return &resourceGetSyncHandler{}, nil
-	case "google":
-		return &resourceGetGoogleHandler{}, nil
-	case "cloud", "awss3", "tencent", "dropbox":
-		return &resourceGetCloudDriveHandler{}, nil
-	default:
-		return &resourceGetDriveCacheHandler{}, nil
-		// return nil, fmt.Errorf("unsupported srcType: %s", srcType)
-	}
-}
-
 func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	start := time.Now()
 	fmt.Println("Function resourceGetHandler starts at", start)
@@ -118,35 +100,6 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 
 		return http.StatusOK, nil
 	}
-}
-
-func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	respJson, err := files.MountPathIncluster(r)
-	if err != nil {
-		return errToStatus(err), err
-	}
-
-	return renderJSON(w, r, respJson)
-}
-
-func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs,
-		Path:       r.URL.Path,
-		Modify:     true,
-		Expand:     false,
-		ReadHeader: d.server.TypeDetectionByHeader,
-	})
-	if err != nil {
-		return errToStatus(err), err
-	}
-
-	respJson, err := files.UnmountPathIncluster(r, file.Path)
-	if err != nil {
-		return errToStatus(err), err
-	}
-
-	return renderJSON(w, r, respJson)
 }
 
 func resourcePostHandler(fileCache FileCache) handleFunc {
