@@ -919,6 +919,12 @@ func parseCloudDrivePath(src string, trimSuffix bool) (drive, name, path string)
 	return drive, name, path
 }
 
+type resourceGetCloudDriveHandler struct{}
+
+func (h *resourceGetCloudDriveHandler) Handle(w http.ResponseWriter, r *http.Request, stream, meta int, d *data) (int, error) {
+	return resourceGetCloudDrive(w, r, stream, meta)
+}
+
 func resourceGetCloudDrive(w http.ResponseWriter, r *http.Request, stream int, meta int) (int, error) {
 	src := r.URL.Path
 	fmt.Println("src Path:", src)

@@ -1096,6 +1096,12 @@ func parseGoogleDrivePath(path string) (drive, name, dir, filename string) {
 	return drive, name, dir, filename
 }
 
+type resourceGetGoogleHandler struct{}
+
+func (h *resourceGetGoogleHandler) Handle(w http.ResponseWriter, r *http.Request, stream, meta int, d *data) (int, error) {
+	return resourceGetGoogle(w, r, stream, meta)
+}
+
 func resourceGetGoogle(w http.ResponseWriter, r *http.Request, stream int, meta int) (int, error) {
 	src := r.URL.Path
 	fmt.Println("src Path:", src)

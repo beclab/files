@@ -1,15 +1,11 @@
 package http
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"files/pkg/backend/diskcache"
 	"files/pkg/backend/redisutils"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"path"
@@ -25,116 +21,34 @@ import (
 	"files/pkg/backend/fileutils"
 )
 
-func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, error) {
-	src := r.URL.Path
-	src, err := unescapeURLIfEscaped(src)
-	if err != nil {
-		return http.StatusBadRequest, err
+type ResourceGetHandlerInterface interface {
+	Handle(w http.ResponseWriter, r *http.Request, stream, meta int, d *data) (int, error)
+}
+
+func getResourceHandler(srcType string) (ResourceGetHandlerInterface, error) {
+	switch srcType {
+	case "sync":
+		return &resourceGetSyncHandler{}, nil
+	case "google":
+		return &resourceGetGoogleHandler{}, nil
+	case "cloud", "awss3", "tencent", "dropbox":
+		return &resourceGetCloudDriveHandler{}, nil
+	default:
+		return &resourceGetDriveCacheHandler{}, nil
+		// return nil, fmt.Errorf("unsupported srcType: %s", srcType)
 	}
-	fmt.Println("src Path:", src)
-	src = strings.Trim(src, "/") + "/"
-
-	firstSlashIdx := strings.Index(src, "/")
-
-	repoID := src[:firstSlashIdx]
-
-	lastSlashIdx := strings.LastIndex(src, "/")
-
-	// won't use, because this func is only used for folders
-	filename := src[lastSlashIdx+1:]
-
-	prefix := ""
-	if firstSlashIdx != lastSlashIdx {
-		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
-	}
-	if prefix == "" {
-		prefix = "/"
-	}
-	prefix = escapeURLWithSpace(prefix)
-
-	fmt.Println("repo-id:", repoID)
-	fmt.Println("prefix:", prefix)
-	fmt.Println("filename:", filename)
-
-	url := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + prefix + "&with_thumbnail=true"
-	fmt.Println(url)
-
-	request, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return errToStatus(err), err
-	}
-
-	request.Header = r.Header
-
-	client := http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return errToStatus(err), err
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return response.StatusCode, nil
-	}
-
-	// SSE
-	if stream == 1 {
-		var body []byte
-		if response.Header.Get("Content-Encoding") == "gzip" {
-			reader, err := gzip.NewReader(response.Body)
-			defer reader.Close()
-			if err != nil {
-				fmt.Println("Error creating gzip reader:", err)
-				return errToStatus(err), err
-			}
-
-			body, err = ioutil.ReadAll(reader)
-			if err != nil {
-				fmt.Println("Error reading gzipped response body:", err)
-				reader.Close()
-				return errToStatus(err), err
-			}
-		} else {
-			body, err = ioutil.ReadAll(response.Body)
-			if err != nil {
-				fmt.Println("Error reading response body:", err)
-				return errToStatus(err), err
-			}
-		}
-		streamSyncDirents(w, r, body, repoID)
-		return 0, nil
-	}
-
-	// non-SSE
-	var responseBody io.Reader = response.Body
-	if response.Header.Get("Content-Encoding") == "gzip" {
-		reader, err := gzip.NewReader(response.Body)
-		if err != nil {
-			fmt.Println("Error creating gzip reader:", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return errToStatus(err), err
-		}
-		defer reader.Close()
-		responseBody = reader
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, err = io.Copy(w, responseBody)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return errToStatus(err), err
-	}
-
-	return 0, nil
 }
 
 func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	start := time.Now()
 	fmt.Println("Function resourceGetHandler starts at", start)
+	defer func() {
+		elapsed := time.Since(start)
+		fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
+	}()
 
 	streamStr := r.URL.Query().Get("stream")
 	stream := 0
-
 	var err error
 	if streamStr != "" {
 		stream, err = strconv.Atoi(streamStr)
@@ -155,198 +69,13 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 	fmt.Println("meta: ", meta)
 
 	srcType := r.URL.Query().Get("src")
-	if srcType == "sync" {
-		return resourceGetSync(w, r, stream)
-	} else if srcType == "google" {
-		return resourceGetGoogle(w, r, stream, meta)
-	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-		return resourceGetCloudDrive(w, r, stream, meta)
-	}
 
-	xBflUser := r.Header.Get("X-Bfl-User")
-	fmt.Println("X-Bfl-User: ", xBflUser)
-
-	//olaresVersion := os.Getenv("OLARES_VERSION")
-	//if olaresVersion == "" {
-	//	olaresVersion = "1.11"
-	//}
-	//
-	//olaresVersionFloat, err := strconv.ParseFloat(olaresVersion, 64)
-	//if err != nil {
-	//	fmt.Println("Error parsing version:", err)
-	//	return http.StatusBadRequest, err
-	//}
-
-	var mountedData []files.DiskInfo = nil
-	if files.TerminusdHost != "" {
-		//if olaresVersionFloat >= 1.12 {
-		// for 1.12: path-incluster URL exists, won't err in normal condition
-		// for 1.11: path-incluster URL may not exist, if err, use usb-incluster and hdd-incluster for system functional
-		url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
-
-		headers := r.Header.Clone()
-		headers.Set("Content-Type", "application/json")
-		headers.Set("X-Signature", "temp_signature")
-
-		mountedData, err = files.FetchDiskInfo(url, headers)
-		if err != nil {
-			log.Printf("Failed to fetch data from %s: %v", url, err)
-			usbUrl := "http://" + files.TerminusdHost + "/system/mounted-usb-incluster"
-
-			usbHeaders := r.Header.Clone()
-			usbHeaders.Set("Content-Type", "application/json")
-			usbHeaders.Set("X-Signature", "temp_signature")
-
-			usbData, err := files.FetchDiskInfo(usbUrl, usbHeaders)
-			if err != nil {
-				log.Printf("Failed to fetch data from %s: %v", usbUrl, err)
-			}
-
-			fmt.Println("USB Data:", usbData)
-
-			hddUrl := "http://" + files.TerminusdHost + "/system/mounted-hdd-incluster"
-
-			hddHeaders := r.Header.Clone()
-			hddHeaders.Set("Content-Type", "application/json")
-			hddHeaders.Set("X-Signature", "temp_signature")
-
-			hddData, err := files.FetchDiskInfo(hddUrl, hddHeaders)
-			if err != nil {
-				log.Printf("Failed to fetch data from %s: %v", hddUrl, err)
-			}
-
-			fmt.Println("HDD Data:", hddData)
-
-			for _, item := range usbData {
-				item.Type = "usb"
-				mountedData = append(mountedData, item)
-			}
-
-			for _, item := range hddData {
-				item.Type = "hdd"
-				mountedData = append(mountedData, item)
-			}
-		}
-		fmt.Println("Mounted Data:", mountedData)
-	}
-
-	var file *files.FileInfo
-	if mountedData != nil {
-		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-			Fs:         files.DefaultFs,
-			Path:       r.URL.Path,
-			Modify:     true,
-			Expand:     true,
-			ReadHeader: d.server.TypeDetectionByHeader,
-			Content:    true,
-		}, mountedData)
-	} else {
-		file, err = files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs,
-			Path:       r.URL.Path,
-			Modify:     true,
-			Expand:     true,
-			ReadHeader: d.server.TypeDetectionByHeader,
-			Content:    true,
-		})
-	}
+	handler, err := getResourceHandler(srcType)
 	if err != nil {
-		if errToStatus(err) == http.StatusNotFound && r.URL.Path == "/External/" {
-			listing := &files.Listing{
-				Items:         []*files.FileInfo{},
-				NumDirs:       0,
-				NumFiles:      0,
-				NumTotalFiles: 0,
-				Size:          0,
-				FileSize:      0,
-			}
-			file = &files.FileInfo{
-				Path:         "/External/",
-				Name:         "External",
-				Size:         0,
-				FileSize:     0,
-				Extension:    "",
-				ModTime:      time.Now(),
-				Mode:         os.FileMode(2147484141),
-				IsDir:        true,
-				IsSymlink:    false,
-				Type:         "",
-				ExternalType: "others",
-				Subtitles:    []string{},
-				Checksums:    make(map[string]string),
-				Listing:      listing,
-				Fs:           nil,
-			}
-
-			return renderJSON(w, r, file)
-		}
-		return errToStatus(err), err
+		return http.StatusBadRequest, err
 	}
 
-	if file.IsDir {
-		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
-			file.ExternalType = files.GetExternalType(file.Path, mountedData)
-		}
-		file.Listing.Sorting = files.DefaultSorting
-		file.Listing.ApplySort()
-		if stream == 1 {
-			streamListingItems(w, r, file.Listing, d, mountedData)
-			elapsed := time.Since(start)
-			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
-			return 0, nil
-		} else {
-			elapsed := time.Since(start)
-			fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
-			return renderJSON(w, r, file)
-		}
-	}
-
-	if checksum := r.URL.Query().Get("checksum"); checksum != "" {
-		err := file.Checksum(checksum)
-		if err == errors.ErrInvalidOption {
-			return http.StatusBadRequest, nil
-		} else if err != nil {
-			return http.StatusInternalServerError, err
-		}
-
-		// do not waste bandwidth if we just want the checksum
-		file.Content = ""
-	}
-
-	if file.Type == "video" {
-		osSystemServer := "system-server.user-system-" + xBflUser
-
-		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer)
-
-		fmt.Println("HTTP JSON POST URL:", httpposturl)
-
-		var jsonData = []byte(`{
-			"action": "view",
-			"category": "video",
-			"data": {
-				"name": "` + file.Name + `",
-				"path": "` + file.Path + `",
-				"extention": "` + file.Extension + `"
-			}
-		}`)
-		request, error := http.NewRequest("POST", httpposturl, bytes.NewBuffer(jsonData))
-		request.Header.Set("Content-Type", "application/json; charset=UTF-8")
-
-		client := &http.Client{}
-		response, error := client.Do(request)
-		if error != nil {
-			panic(error)
-		}
-		defer response.Body.Close()
-
-		fmt.Println("response Status:", response.Status)
-		fmt.Println("response Headers:", response.Header)
-		body, _ := ioutil.ReadAll(response.Body)
-		fmt.Println("response Body:", string(body))
-	}
-	elapsed := time.Since(start)
-	fmt.Printf("Function resourceGetHandler execution time: %v\n", elapsed)
-	return renderJSON(w, r, file)
+	return handler.Handle(w, r, stream, meta, d)
 }
 
 func resourceDeleteHandler(fileCache FileCache) handleFunc {
