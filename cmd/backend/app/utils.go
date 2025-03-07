@@ -71,7 +71,7 @@ func python(fn pythonFunc, cfg pythonConfig) cobraFunc {
 		//var db settings.StorageBackend
 		//data.store, err = storage.NewStorage(db) // bolt.NewStorage(db)
 		//checkErr(err)
-		//fn(cmd, args, data)
+		fn(cmd, args) //, data)
 	}
 }
 
