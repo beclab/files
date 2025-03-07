@@ -9,13 +9,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -70,108 +67,6 @@ func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
 	return os.Rename(tempFilePath, targetPath)
 }
 
-func generateBufferFileName(originalFilePath, bflName string, extRemains bool) (string, error) {
-	timestamp := time.Now().Unix()
-
-	extension := filepath.Ext(originalFilePath)
-
-	originalFileName := strings.TrimSuffix(filepath.Base(originalFilePath), extension)
-
-	var bufferFileName string
-	var bufferFolderPath string
-	if extRemains {
-		bufferFileName = originalFileName + extension
-		bufferFolderPath = "/data/" + bflName + "/buffer/" + fmt.Sprintf("%d", timestamp)
-	} else {
-		bufferFileName = fmt.Sprintf("%d_%s.bin", timestamp, originalFileName)
-		bufferFolderPath = "/data/" + bflName + "/buffer"
-	}
-
-	err := os.MkdirAll(bufferFolderPath, 0755)
-	if err != nil {
-		return "", err
-	}
-	bufferFilePath := filepath.Join(bufferFolderPath, bufferFileName)
-
-	return bufferFilePath, nil
-}
-
-func generateBufferFolder(originalFilePath, bflName string) (string, error) {
-	timestamp := time.Now().Unix()
-
-	rand.Seed(time.Now().UnixNano())
-	randomNumber := rand.Intn(10000000000)
-	randomNumberString := fmt.Sprintf("%010d", randomNumber)
-
-	timestampPlus := fmt.Sprintf("%d%s", timestamp, randomNumberString)
-
-	originalPathName := filepath.Base(strings.TrimSuffix(originalFilePath, "/"))
-	extension := filepath.Ext(originalPathName)
-	if len(extension) > 0 {
-		originalPathName = strings.TrimSuffix(originalPathName, extension) + "_" + extension[1:]
-	}
-
-	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
-	bufferPathName = removeSlash(bufferPathName)
-	bufferFolderPath := "/data/" + bflName + "/buffer" + "/" + bufferPathName
-	err := os.MkdirAll(bufferFolderPath, 0755)
-	if err != nil {
-		return "", err
-	}
-	return bufferFolderPath, nil
-}
-
-func makeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		fmt.Println("Failed to create buffer file:", err)
-		return err
-	}
-	defer file.Close()
-
-	if err = file.Truncate(bufferSize); err != nil {
-		fmt.Println("Failed to truncate buffer file:", err)
-		return err
-	}
-
-	fileInfo, err := file.Stat()
-	if err != nil {
-		fmt.Println("Failed to get buffer file info:", err)
-		return err
-	}
-	fmt.Println("Buffer file size:", fileInfo.Size(), "bytes")
-
-	if delete {
-		err = os.Remove(filePath)
-		if err != nil {
-			fmt.Printf("Error removing test buffer: %v\n", err)
-			return err
-		}
-
-		fmt.Println("Test buffer removed successfully")
-	}
-	return nil
-}
-
-func removeDiskBuffer(filePath string, srcType string) {
-	fmt.Println("Removing buffer file:", filePath)
-	err := os.Remove(filePath)
-	if err != nil {
-		fmt.Println("Failed to delete buffer file:", err)
-		return
-	}
-	if srcType == "google" || srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-		dir := filepath.Dir(filePath)
-		err = os.Remove(dir)
-		if err != nil {
-			fmt.Println("Failed to delete buffer file dir:", err)
-			return
-		}
-	}
-
-	fmt.Println("Buffer file deleted.")
-}
-
 func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
 	counter := 1
 	dir, name := path.Split(source)
@@ -195,44 +90,6 @@ func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 	}
 
 	return source
-}
-
-func isURLEscaped(s string) bool {
-	escapePattern := `%[0-9A-Fa-f]{2}`
-	re := regexp.MustCompile(escapePattern)
-
-	if re.MatchString(s) {
-		decodedStr, err := url.QueryUnescape(s)
-		if err != nil {
-			return false
-		}
-		return decodedStr != s
-	}
-	return false
-}
-
-func unescapeURLIfEscaped(s string) (string, error) {
-	var result = s
-	var err error
-	if isURLEscaped(s) {
-		result, err = url.QueryUnescape(s)
-		if err != nil {
-			return "", err
-		}
-	}
-	return result, nil
-}
-
-func escapeURLWithSpace(s string) string {
-	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
-}
-
-func escapeAndJoin(input string, delimiter string) string {
-	segments := strings.Split(input, delimiter)
-	for i, segment := range segments {
-		segments[i] = escapeURLWithSpace(segment)
-	}
-	return strings.Join(segments, delimiter)
 }
 
 func resourcePasteHandler(fileCache FileCache) handleFunc {

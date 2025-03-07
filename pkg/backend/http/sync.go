@@ -16,6 +16,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -126,6 +127,166 @@ func resourceGetSync(w http.ResponseWriter, r *http.Request, stream int) (int, e
 	}
 
 	return 0, nil
+}
+
+type Dirent struct {
+	Type                 string `json:"type"`
+	ID                   string `json:"id"`
+	Name                 string `json:"name"`
+	Mtime                int64  `json:"mtime"`
+	Permission           string `json:"permission"`
+	ParentDir            string `json:"parent_dir"`
+	Size                 int64  `json:"size"`
+	FileSize             int64  `json:"fileSize,omitempty"`
+	NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
+	NumFiles             int    `json:"numFiles,omitempty"`
+	NumDirs              int    `json:"numDirs,omitempty"`
+	Path                 string `json:"path"`
+	Starred              bool   `json:"starred"`
+	ModifierEmail        string `json:"modifier_email,omitempty"`
+	ModifierName         string `json:"modifier_name,omitempty"`
+	ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
+}
+
+type DirentResponse struct {
+	UserPerm   string   `json:"user_perm"`
+	DirID      string   `json:"dir_id"`
+	DirentList []Dirent `json:"dirent_list"`
+	sync.Mutex
+}
+
+func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- string, r *http.Request, repoID string) {
+	defer close(dataChan)
+
+	var bodyJson DirentResponse
+	if err := json.Unmarshal(body, &bodyJson); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var A []Dirent
+	bodyJson.Lock()
+	A = append(A, bodyJson.DirentList...)
+	bodyJson.Unlock()
+
+	for len(A) > 0 {
+		fmt.Println("len(A): ", len(A))
+		firstItem := A[0]
+		fmt.Println("firstItem Path: ", firstItem.Path)
+		fmt.Println("firstItem Name:", firstItem.Name)
+
+		if firstItem.Type == "dir" {
+			path := firstItem.Path
+			if path != "/" {
+				path += "/"
+			}
+			path = escapeURLWithSpace(path)
+			firstUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + path + "&with_thumbnail=true"
+			fmt.Println(firstUrl)
+
+			firstRequest, err := http.NewRequest("GET", firstUrl, nil)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			firstRequest.Header = r.Header
+
+			client := http.Client{}
+			firstResponse, err := client.Do(firstRequest)
+			if err != nil {
+				return
+			}
+
+			if firstResponse.StatusCode != http.StatusOK {
+				fmt.Println(firstResponse.StatusCode)
+				return
+			}
+
+			var firstRespBody []byte
+			var reader *gzip.Reader = nil
+			if firstResponse.Header.Get("Content-Encoding") == "gzip" {
+				reader, err = gzip.NewReader(firstResponse.Body)
+				if err != nil {
+					fmt.Println("Error creating gzip reader:", err)
+					return
+				}
+
+				firstRespBody, err = ioutil.ReadAll(reader)
+				if err != nil {
+					fmt.Println("Error reading gzipped response body:", err)
+					reader.Close()
+					return
+				}
+			} else {
+				firstRespBody, err = ioutil.ReadAll(firstResponse.Body)
+				if err != nil {
+					fmt.Println("Error reading response body:", err)
+					firstResponse.Body.Close()
+					return
+				}
+			}
+
+			var firstBodyJson DirentResponse
+			if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			A = append(firstBodyJson.DirentList, A[1:]...)
+
+			if reader != nil {
+				reader.Close()
+			}
+			firstResponse.Body.Close()
+		} else {
+			dataChan <- formatSSEvent(firstItem)
+
+			A = A[1:]
+		}
+
+		select {
+		case <-stopChan:
+			return
+		default:
+		}
+	}
+}
+
+func streamSyncDirents(w http.ResponseWriter, r *http.Request, body []byte, repoID string) {
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	stopChan := make(chan struct{})
+	dataChan := make(chan string)
+
+	go generateDirentsData(body, stopChan, dataChan, r, repoID)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+		return
+	}
+
+	for {
+		select {
+		case event, ok := <-dataChan:
+			if !ok {
+				return
+			}
+			_, err := w.Write([]byte(event))
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			flusher.Flush()
+
+		case <-r.Context().Done():
+			close(stopChan)
+			return
+		}
+	}
 }
 
 func syncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) error {

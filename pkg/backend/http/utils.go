@@ -1,19 +1,17 @@
 package http
 
 import (
-	"compress/gzip"
 	"encoding/json"
 	"errors"
 	libErrors "files/pkg/backend/errors"
-	"files/pkg/backend/files"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 )
 
@@ -30,267 +28,6 @@ func renderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, 
 	}
 
 	return 0, nil
-}
-
-func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *data, mountedData []files.DiskInfo) {
-	defer close(dataChan)
-
-	var A []*files.FileInfo
-	listing.Lock()
-	A = append(A, listing.Items...)
-	listing.Unlock()
-
-	for len(A) > 0 {
-		firstItem := A[0]
-
-		if firstItem.IsDir {
-			var file *files.FileInfo
-			var err error
-			if mountedData != nil {
-				file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-					Fs:         files.DefaultFs,
-					Path:       firstItem.Path,
-					Modify:     true,
-					Expand:     true,
-					ReadHeader: d.server.TypeDetectionByHeader,
-					Content:    true,
-				}, mountedData)
-			} else {
-				file, err = files.NewFileInfo(files.FileOptions{
-					Fs:         files.DefaultFs,
-					Path:       firstItem.Path,
-					Modify:     true,
-					Expand:     true,
-					ReadHeader: d.server.TypeDetectionByHeader,
-					Content:    true,
-				})
-			}
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			var nestedItems []*files.FileInfo
-			if file.Listing != nil {
-				nestedItems = append(nestedItems, file.Listing.Items...)
-			}
-			A = append(nestedItems, A[1:]...)
-		} else {
-			dataChan <- formatSSEvent(firstItem)
-
-			A = A[1:]
-		}
-
-		select {
-		case <-stopChan:
-			return
-		default:
-		}
-	}
-}
-
-func formatSSEvent(data interface{}) string {
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return ""
-	}
-	return fmt.Sprintf("data: %s\n\n", jsonData)
-}
-
-func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.Listing, d *data, mountedData []files.DiskInfo) {
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	stopChan := make(chan struct{})
-	dataChan := make(chan string)
-
-	go generateListingData(listing, stopChan, dataChan, d, mountedData)
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
-		return
-	}
-
-	for {
-		select {
-		case event, ok := <-dataChan:
-			if !ok {
-				return
-			}
-			_, err := w.Write([]byte(event))
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			flusher.Flush()
-
-		case <-r.Context().Done():
-			close(stopChan)
-			return
-		}
-	}
-}
-
-type Dirent struct {
-	Type                 string `json:"type"`
-	ID                   string `json:"id"`
-	Name                 string `json:"name"`
-	Mtime                int64  `json:"mtime"`
-	Permission           string `json:"permission"`
-	ParentDir            string `json:"parent_dir"`
-	Size                 int64  `json:"size"`
-	FileSize             int64  `json:"fileSize,omitempty"`
-	NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
-	NumFiles             int    `json:"numFiles,omitempty"`
-	NumDirs              int    `json:"numDirs,omitempty"`
-	Path                 string `json:"path"`
-	Starred              bool   `json:"starred"`
-	ModifierEmail        string `json:"modifier_email,omitempty"`
-	ModifierName         string `json:"modifier_name,omitempty"`
-	ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
-}
-
-type DirentResponse struct {
-	UserPerm   string   `json:"user_perm"`
-	DirID      string   `json:"dir_id"`
-	DirentList []Dirent `json:"dirent_list"`
-	sync.Mutex
-}
-
-func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- string, r *http.Request, repoID string) {
-	defer close(dataChan)
-
-	var bodyJson DirentResponse
-	if err := json.Unmarshal(body, &bodyJson); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	var A []Dirent
-	bodyJson.Lock()
-	A = append(A, bodyJson.DirentList...)
-	bodyJson.Unlock()
-
-	for len(A) > 0 {
-		fmt.Println("len(A): ", len(A))
-		firstItem := A[0]
-		fmt.Println("firstItem Path: ", firstItem.Path)
-		fmt.Println("firstItem Name:", firstItem.Name)
-
-		if firstItem.Type == "dir" {
-			path := firstItem.Path
-			if path != "/" {
-				path += "/"
-			}
-			path = escapeURLWithSpace(path)
-			firstUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + path + "&with_thumbnail=true"
-			fmt.Println(firstUrl)
-
-			firstRequest, err := http.NewRequest("GET", firstUrl, nil)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			firstRequest.Header = r.Header
-
-			client := http.Client{}
-			firstResponse, err := client.Do(firstRequest)
-			if err != nil {
-				return
-			}
-
-			if firstResponse.StatusCode != http.StatusOK {
-				fmt.Println(firstResponse.StatusCode)
-				return
-			}
-
-			var firstRespBody []byte
-			var reader *gzip.Reader = nil
-			if firstResponse.Header.Get("Content-Encoding") == "gzip" {
-				reader, err = gzip.NewReader(firstResponse.Body)
-				if err != nil {
-					fmt.Println("Error creating gzip reader:", err)
-					return
-				}
-
-				firstRespBody, err = ioutil.ReadAll(reader)
-				if err != nil {
-					fmt.Println("Error reading gzipped response body:", err)
-					reader.Close()
-					return
-				}
-			} else {
-				firstRespBody, err = ioutil.ReadAll(firstResponse.Body)
-				if err != nil {
-					fmt.Println("Error reading response body:", err)
-					firstResponse.Body.Close()
-					return
-				}
-			}
-
-			var firstBodyJson DirentResponse
-			if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			A = append(firstBodyJson.DirentList, A[1:]...)
-
-			if reader != nil {
-				reader.Close()
-			}
-			firstResponse.Body.Close()
-		} else {
-			dataChan <- formatSSEvent(firstItem)
-
-			A = A[1:]
-		}
-
-		select {
-		case <-stopChan:
-			return
-		default:
-		}
-	}
-}
-
-func streamSyncDirents(w http.ResponseWriter, r *http.Request, body []byte, repoID string) {
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	stopChan := make(chan struct{})
-	dataChan := make(chan string)
-
-	go generateDirentsData(body, stopChan, dataChan, r, repoID)
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
-		return
-	}
-
-	for {
-		select {
-		case event, ok := <-dataChan:
-			if !ok {
-				return
-			}
-			_, err := w.Write([]byte(event))
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			flusher.Flush()
-
-		case <-r.Context().Done():
-			close(stopChan)
-			return
-		}
-	}
 }
 
 func errToStatus(err error) int {
@@ -408,23 +145,6 @@ func formatBytes(bytes int64) string {
 	return result
 }
 
-func checkBufferDiskSpace(diskSize int64) (bool, error) {
-	spaceOk, needs, avails, reserved, err := checkDiskSpace("/data", diskSize)
-	if err != nil {
-		return false, err
-	}
-	needsStr := formatBytes(needs)
-	availsStr := formatBytes(avails)
-	reservedStr := formatBytes(reserved)
-	if spaceOk {
-		return true, nil
-	} else {
-		errorMessage := fmt.Sprintf("Insufficient disk space available. This file still requires: %s, but only %s is available (with an additional %s reserved for the system).",
-			needsStr, availsStr, reservedStr)
-		return false, errors.New(errorMessage)
-	}
-}
-
 func removeSlash(s string) string {
 	s = strings.TrimSuffix(s, "/")
 	return strings.ReplaceAll(s, "/", "_")
@@ -480,4 +200,42 @@ func getHost(r *http.Request) string {
 	modifiedTerminusName := strings.Replace(responseObj.Data.TerminusName, "@", ".", 1)
 	fmt.Println(modifiedTerminusName)
 	return "https://files." + modifiedTerminusName
+}
+
+func isURLEscaped(s string) bool {
+	escapePattern := `%[0-9A-Fa-f]{2}`
+	re := regexp.MustCompile(escapePattern)
+
+	if re.MatchString(s) {
+		decodedStr, err := url.QueryUnescape(s)
+		if err != nil {
+			return false
+		}
+		return decodedStr != s
+	}
+	return false
+}
+
+func unescapeURLIfEscaped(s string) (string, error) {
+	var result = s
+	var err error
+	if isURLEscaped(s) {
+		result, err = url.QueryUnescape(s)
+		if err != nil {
+			return "", err
+		}
+	}
+	return result, nil
+}
+
+func escapeURLWithSpace(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+}
+
+func escapeAndJoin(input string, delimiter string) string {
+	segments := strings.Split(input, delimiter)
+	for i, segment := range segments {
+		segments[i] = escapeURLWithSpace(segment)
+	}
+	return strings.Join(segments, delimiter)
 }

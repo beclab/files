@@ -9,13 +9,11 @@ import (
 	"github.com/gorilla/mux"
 
 	"files/pkg/backend/settings"
-	//"files/pkg/backend/storage"
 )
 
 func NewHandler(
 	imgSvc ImgService,
 	fileCache FileCache,
-	//store *storage.Storage,
 	server *settings.Server,
 ) (http.Handler, error) {
 	server.Clean()
