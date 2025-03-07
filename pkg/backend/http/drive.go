@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"files/pkg/backend/errors"
 	"files/pkg/backend/files"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -188,4 +190,137 @@ func resourceGetDriveCache(w http.ResponseWriter, r *http.Request, stream int, d
 		fmt.Println("response Body:", string(body))
 	}
 	return renderJSON(w, r, file)
+}
+
+func resourceDriveGetInfo(path string, r *http.Request, d *data) (*files.FileInfo, int, error) {
+	xBflUser := r.Header.Get("X-Bfl-User")
+	fmt.Println("X-Bfl-User: ", xBflUser)
+
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:         files.DefaultFs,
+		Path:       path,
+		Modify:     true,
+		Expand:     true,
+		ReadHeader: d.server.TypeDetectionByHeader,
+		Content:    true,
+	})
+	if err != nil {
+		return file, errToStatus(err), err
+	}
+
+	if file.IsDir {
+		file.Listing.Sorting = files.DefaultSorting
+		file.Listing.ApplySort()
+		return file, http.StatusOK, nil
+	}
+
+	if file.Type == "video" {
+		osSystemServer := "system-server.user-system-" + xBflUser
+
+		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer)
+
+		var jsonData = []byte(`{
+			"action": "view",
+			"category": "video",
+			"data": {
+				"name": "` + file.Name + `",
+				"path": "` + file.Path + `",
+				"extention": "` + file.Extension + `"
+			}
+		}`)
+		request, error := http.NewRequest("POST", httpposturl, bytes.NewBuffer(jsonData))
+		request.Header.Set("Content-Type", "application/json; charset=UTF-8")
+
+		client := &http.Client{}
+		response, error := client.Do(request)
+		if error != nil {
+			panic(error)
+		}
+		defer response.Body.Close()
+
+		body, _ := ioutil.ReadAll(response.Body)
+		fmt.Println("response Body:", string(body))
+	}
+
+	return file, http.StatusOK, nil
+}
+
+func driveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
+	path, err := unescapeURLIfEscaped(file.Path)
+	if err != nil {
+		return err
+	}
+	fmt.Println("file.Path:", file.Path, ", path:", path)
+
+	err = ioCopyFileWithBuffer("/data"+path, bufferFilePath, 8*1024*1024)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func driveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *data) (int, error) {
+	fmt.Println("***driveBufferToFile!")
+	fmt.Println("*** bufferFilePath:", bufferFilePath)
+	fmt.Println("*** targetPath:", targetPath)
+
+	var err error
+	targetPath, err = unescapeURLIfEscaped(targetPath)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	// Directories creation on POST.
+	if strings.HasSuffix(targetPath, "/") {
+		err = files.DefaultFs.MkdirAll(targetPath, mode)
+		return errToStatus(err), err
+	}
+
+	_, err = files.NewFileInfo(files.FileOptions{
+		Fs:         files.DefaultFs,
+		Path:       targetPath,
+		Modify:     true,
+		Expand:     false,
+		ReadHeader: d.server.TypeDetectionByHeader,
+	})
+
+	err = ioCopyFileWithBuffer(bufferFilePath, "/data"+targetPath, 8*1024*1024)
+
+	if err != nil {
+		_ = files.DefaultFs.RemoveAll(targetPath)
+	}
+
+	return errToStatus(err), err
+}
+
+func resourceDriveDelete(fileCache FileCache, path string, ctx context.Context, d *data) (int, error) {
+	if path == "/" {
+		return http.StatusForbidden, nil
+	}
+
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:         files.DefaultFs,
+		Path:       path,
+		Modify:     true,
+		Expand:     false,
+		ReadHeader: d.server.TypeDetectionByHeader,
+	})
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	// delete thumbnails
+	err = delThumbs(ctx, fileCache, file)
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	err = files.DefaultFs.RemoveAll(path)
+
+	if err != nil {
+		return errToStatus(err), err
+	}
+
+	return http.StatusOK, nil
 }
