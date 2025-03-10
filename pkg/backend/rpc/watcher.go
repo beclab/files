@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"files/pkg/backend/common"
 	"files/pkg/backend/files"
 	"files/pkg/backend/parser"
 	"files/pkg/backend/redisutils"
@@ -22,9 +23,57 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var WatcherEnabled = os.Getenv("WATCHER_ENABLED")
+
+var PathPrefix = os.Getenv("PATH_PREFIX") // "/Home"
+
+var RootPrefix = os.Getenv("ROOT_PREFIX") // "/data"
+
+var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
+
+var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
+
 var watcher *jfsnotify.Watcher = nil
 var WatchDirs []string     // focused dirs
 var BaseWatchDirs []string // like /data, /appcache
+
+func InitWatcher() {
+	watchDirStr := os.Getenv("WATCH_DIR")
+
+	if watchDirStr == "" {
+		WatchDirs = append(WatchDirs, "./Home/Documents")
+	} else {
+		WatchDirs = strings.Split(watchDirStr, ",")
+		for i, dir := range WatchDirs {
+			WatchDirs[i] = strings.TrimSpace(dir)
+		}
+	}
+	fmt.Println("original watchDirs = ", WatchDirs)
+
+	if RootPrefix == "" {
+		RootPrefix = "/data"
+	}
+	if common.RootPrefix == "" {
+		common.RootPrefix = "/data"
+	}
+	if ContentPath == "" {
+		ContentPath = "/Home/Documents"
+	}
+
+	//watchDirs = rpc.ExpandPaths(watchDirs, RootPrefix)
+	fmt.Println("focused watchDirs = ", WatchDirs)
+
+	BaseWatchDirs = []string{RootPrefix}
+	if CacheRootPath != "" {
+		BaseWatchDirs = append(BaseWatchDirs, CacheRootPath)
+	}
+
+	fmt.Println("baseWatchDirs = ", BaseWatchDirs)
+
+	if WatcherEnabled == "True" {
+		go WatchPath(BaseWatchDirs, nil, WatchDirs)
+	}
+}
 
 func checkString(s string) bool {
 	hasBase := false

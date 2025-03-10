@@ -35,6 +35,10 @@ type Data struct {
 	Meta            map[string]interface{} `json:"meta"`
 }
 
+func InitSearch3() {
+
+}
+
 func fetchDocumentByResourceUri(resourceUri, bflName string) (string, string, error) {
 	baseURL := "http://search3.os-system:80/document/get_by_resource_uri"
 	query := url.Values{}

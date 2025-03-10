@@ -6,26 +6,17 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"os"
-	ctrl "sigs.k8s.io/controller-runtime"
-
 	"log"
 	"net/http"
+	"os"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 )
 
-var WatcherEnabled = os.Getenv("WATCHER_ENABLED")
-
-var PathPrefix = os.Getenv("PATH_PREFIX") // "/Home"
-
-var RootPrefix = os.Getenv("ROOT_PREFIX") // "/data"
-
-var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
-
-var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
+const DefaultPort = "6317"
 
 var PhotosEnabled = os.Getenv("PHOTOS_ENABLED")
 
@@ -50,20 +41,20 @@ type Service struct {
 	k8sClient        *kubernetes.Clientset
 }
 
-func InitRpcService(url, port, username, password string, bsModelConfig map[string]string) {
-	once.Do(func() {
-		ctxTemp := context.WithValue(context.Background(), "Username", username)
-		ctx := context.WithValue(ctxTemp, "Password", password)
+func InitRpcService() {
+	fmt.Println("Init RPCSERVER!")
 
+	port := os.Getenv("W_PORT")
+	if port == "" {
+		port = DefaultPort
+	}
+
+	once.Do(func() {
 		config := ctrl.GetConfigOrDie()
 		k8sClient := kubernetes.NewForConfigOrDie(config)
 
 		RpcServer = &Service{
 			port:             port,
-			zincUrl:          url,
-			username:         username,
-			password:         password,
-			context:          ctx,
 			maxPendingLength: maxPendingLength,
 			KubeConfig:       config,
 			k8sClient:        k8sClient,
@@ -74,7 +65,40 @@ func InitRpcService(url, port, username, password string, bsModelConfig map[stri
 		//load routes
 		RpcServer.loadRoutes()
 	})
+
+	fmt.Println("RPCSERVER to start!")
+	rpcErr := RpcServer.Start()
+
+	if rpcErr != nil {
+		panic(rpcErr)
+	}
 }
+
+//func InitRpcService(url, port, username, password string, bsModelConfig map[string]string) {
+//	once.Do(func() {
+//		ctxTemp := context.WithValue(context.Background(), "Username", username)
+//		ctx := context.WithValue(ctxTemp, "Password", password)
+//
+//		config := ctrl.GetConfigOrDie()
+//		k8sClient := kubernetes.NewForConfigOrDie(config)
+//
+//		RpcServer = &Service{
+//			port:             port,
+//			zincUrl:          url,
+//			username:         username,
+//			password:         password,
+//			context:          ctx,
+//			maxPendingLength: maxPendingLength,
+//			KubeConfig:       config,
+//			k8sClient:        k8sClient,
+//		}
+//		PVCs = NewPVCCache(RpcServer)
+//		BflPVCs = NewBflPVCCache(RpcServer)
+//
+//		//load routes
+//		RpcServer.loadRoutes()
+//	})
+//}
 
 type LoggerMy struct {
 }
@@ -94,7 +118,7 @@ type Resp struct {
 
 var RpcEngine *gin.Engine
 
-func (c *Service) Start(ctx context.Context) error {
+func (c *Service) Start() error {
 	address := "0.0.0.0:" + c.port
 	go RpcEngine.Run(address)
 	log.Printf("start rpc on port:%s", c.port)

@@ -1,13 +1,10 @@
 package app
 
 import (
-	"context"
 	"crypto/tls"
 	"errors"
-	"files/pkg/backend/common"
 	"files/pkg/backend/postgres"
 	"files/pkg/backend/redisutils"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -117,7 +114,18 @@ user created with the credentials from options "username" and "password".`,
 	Run: python(func(cmd *cobra.Command, args []string) {
 		log.Println(cfgFile)
 
-		// build img service
+		// Step1：Init postgres (including migration).
+		// For share, search and other features in the future
+		postgres.InitPostgres()
+
+		// Step2: Init redis
+		// For watcher, preview, smb and other features in the future
+		redisutils.InitRedis()
+		if diskcache.CacheDir != "" {
+			redisutils.InitFolderAndRedis()
+		}
+
+		// Step3-1: Build IMG service
 		workersCount, err := cmd.Flags().GetInt("img-processors")
 		checkErr(err)
 		if workersCount < 1 {
@@ -125,6 +133,7 @@ user created with the credentials from options "username" and "password".`,
 		}
 		imgSvc := img.New(workersCount)
 
+		// Step3-2: Build file cache
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
 		if diskcache.CacheDir != "" {
 			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil {
@@ -133,89 +142,27 @@ user created with the credentials from options "username" and "password".`,
 			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
 		}
 
-		// redisutils for watcher
-		redisutils.InitRedis()
+		// step4: Crontab
 		if diskcache.CacheDir != "" {
-			redisutils.InitFolderAndRedis()
 			go redisutils.StartDailyCleanup()
 		}
 
-		// postgres for share, search3 and other features in the future
-		postgres.InitPostgres()
-
-		// rpcServer for zinc
 		var wg sync.WaitGroup
-
 		wg.Add(1)
+
+		// step5-1: rpcServer
 		go func() {
 			defer wg.Done()
-			url := "http://localhost:4080"
-
-			watchDirStr := os.Getenv("WATCH_DIR")
-
-			if watchDirStr == "" {
-				rpc.WatchDirs = append(rpc.WatchDirs, "./Home/Documents")
-			} else {
-				rpc.WatchDirs = strings.Split(watchDirStr, ",")
-				for i, dir := range rpc.WatchDirs {
-					rpc.WatchDirs[i] = strings.TrimSpace(dir)
-				}
-			}
-			fmt.Println("original watchDirs = ", rpc.WatchDirs)
-
-			if rpc.RootPrefix == "" {
-				rpc.RootPrefix = "/data"
-			}
-			if common.RootPrefix == "" {
-				common.RootPrefix = "/data"
-			}
-			//if rpc.CacheRootPath == "" {
-			//	rpc.CacheRootPath = "/appcache"
-			//}
-			if rpc.ContentPath == "" {
-				rpc.ContentPath = "/Home/Documents"
-			}
-
-			//watchDirs = rpc.ExpandPaths(watchDirs, rpc.RootPrefix)
-			fmt.Println("focused watchDirs = ", rpc.WatchDirs)
-
-			rpc.BaseWatchDirs = []string{rpc.RootPrefix}
-			if rpc.CacheRootPath != "" {
-				rpc.BaseWatchDirs = append(rpc.BaseWatchDirs, rpc.CacheRootPath)
-			}
-
-			fmt.Println("baseWatchDirs = ", rpc.BaseWatchDirs)
-
-			port := os.Getenv("W_PORT")
-			if port == "" {
-				port = DefaultPort
-			}
-			username := os.Getenv("ZINC_USER")
-			if username == "" {
-				username = "admin"
-			}
-			password := os.Getenv("ZINC_PASSWORD")
-			if password == "" {
-				password = "User#123"
-			}
-
-			fmt.Println("Init RPCSERVER!")
-			rpc.InitRpcService(url, port, username, password, map[string]string{})
-
-			if rpc.WatcherEnabled == "True" {
-				go rpc.WatchPath(rpc.BaseWatchDirs, nil, rpc.WatchDirs)
-			}
-
-			fmt.Println("RPCSERVER to start!")
-			contx := context.Background()
-			rpcErr := rpc.RpcServer.Start(contx)
-
-			if rpcErr != nil {
-				panic(rpcErr)
-			}
+			rpc.InitRpcService()
 		}()
-		// rpc server end
 
+		// step5-2: Base Watcher (search3 supporting for the time being)
+		rpc.InitWatcher()
+
+		// TODO: step6: init transmition for search3
+		rpc.InitSearch3()
+
+		// step7: run http server
 		server := getRunParams(cmd.Flags())
 		setupLog(server.Log)
 
