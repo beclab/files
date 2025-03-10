@@ -96,7 +96,6 @@ func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, 
 		return http.StatusBadRequest, err
 	}
 
-	//fmt.Fprintf(w, "Received status: %d\n", requestBody.Status)
 	if requestBody.Status != postgres.STATUS_PRIVATE &&
 		requestBody.Status != postgres.STATUS_PUBLIC &&
 		requestBody.Status != postgres.STATUS_DELETED {
@@ -252,7 +251,6 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 		return http.StatusBadRequest, err
 	}
 
-	//fmt.Fprintf(w, "Received status: %d\n", requestBody.Status)
 	if requestBody.Permission != postgres.PERMISSION_READONLY && requestBody.Permission != postgres.PERMISSION_UPLOADABLE {
 		http.Error(w, "Invalid permission", http.StatusForbidden)
 		return http.StatusForbidden, nil

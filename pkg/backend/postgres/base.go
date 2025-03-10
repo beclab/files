@@ -19,7 +19,7 @@ func InitPostgres() {
 	var err error
 
 	if PGHOST == "" || PGPORT == "" || PGUSER == "" || PGPASSWORD == "" || PGDB1 == "" {
-		fmt.Println("Error: Some required environment variables are not set.")
+		fmt.Println("Postgres Database required environment variables are not set. Won't link to database.")
 		return
 	}
 

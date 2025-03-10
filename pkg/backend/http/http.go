@@ -32,7 +32,7 @@ func NewHandler(
 	r = r.SkipClean(true)
 
 	monkey := func(fn handleFunc, prefix string) http.Handler {
-		return handle(fn, prefix, server) //store, server)
+		return handle(fn, prefix, server)
 	}
 
 	r.HandleFunc("/health", healthHandler)

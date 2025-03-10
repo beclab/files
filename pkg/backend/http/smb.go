@@ -56,7 +56,7 @@ func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 	var result []map[string]interface{}
 
 	for _, entry := range zset {
-		member := entry.Member.(string) // entry.Value
+		member := entry.Member.(string)
 		score := entry.Score
 
 		hashKey := key + "_url_details:" + member

@@ -32,7 +32,6 @@ import (
 	"files/pkg/backend/img"
 	"files/pkg/backend/rpc"
 	"files/pkg/backend/settings"
-	//"files/pkg/backend/storage"
 )
 
 var (
@@ -115,12 +114,8 @@ set FB_DATABASE.
 Also, if the database path doesn't exist, File Browser will enter into
 the quick setup mode and a new database will be bootstraped and a new
 user created with the credentials from options "username" and "password".`,
-	Run: python(func(cmd *cobra.Command, args []string) { //, d pythonData) {
+	Run: python(func(cmd *cobra.Command, args []string) {
 		log.Println(cfgFile)
-
-		//if !d.hadDB {
-		//	quickSetup(cmd.Flags(), d)
-		//}
 
 		// build img service
 		workersCount, err := cmd.Flags().GetInt("img-processors")
@@ -145,7 +140,7 @@ user created with the credentials from options "username" and "password".`,
 			go redisutils.StartDailyCleanup()
 		}
 
-		// postgres for share
+		// postgres for share, search3 and other features in the future
 		postgres.InitPostgres()
 
 		// rpcServer for zinc
@@ -157,7 +152,6 @@ user created with the credentials from options "username" and "password".`,
 			url := "http://localhost:4080"
 
 			watchDirStr := os.Getenv("WATCH_DIR")
-			//var watchDirs []string
 
 			if watchDirStr == "" {
 				rpc.WatchDirs = append(rpc.WatchDirs, "./Home/Documents")
@@ -222,7 +216,7 @@ user created with the credentials from options "username" and "password".`,
 		}()
 		// rpc server end
 
-		server := getRunParams(cmd.Flags()) // , d.store)
+		server := getRunParams(cmd.Flags())
 		setupLog(server.Log)
 
 		root, err := filepath.Abs(server.Root)
@@ -258,7 +252,7 @@ user created with the credentials from options "username" and "password".`,
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 		go cleanupHandler(listener, sigc)
 
-		handler, err := fbhttp.NewHandler(imgSvc, fileCache, server) // d.store, server)
+		handler, err := fbhttp.NewHandler(imgSvc, fileCache, server)
 		checkErr(err)
 
 		defer listener.Close()
@@ -280,10 +274,6 @@ func cleanupHandler(listener net.Listener, c chan os.Signal) {
 }
 
 func getRunParams(flags *pflag.FlagSet) *settings.Server {
-	//func getRunParams(flags *pflag.FlagSet, st *storage.Storage) *settings.Server {
-	//server, err := st.Settings.GetServer()
-	//checkErr(err)
-
 	server := settings.NewDefaultServer()
 
 	if val, set := getParamB(flags, "root"); set {
@@ -396,21 +386,6 @@ func setupLog(logMethod string) {
 		})
 	}
 }
-
-//func quickSetup(flags *pflag.FlagSet, d pythonData) {
-//	ser := &settings.Server{
-//		BaseURL: getParam(flags, "baseurl"),
-//		Port:    getParam(flags, "port"),
-//		Log:     getParam(flags, "log"),
-//		TLSKey:  getParam(flags, "key"),
-//		TLSCert: getParam(flags, "cert"),
-//		Address: getParam(flags, "address"),
-//		Root:    getParam(flags, "root"),
-//	}
-//
-//	err := d.store.Settings.SaveServer(ser)
-//	checkErr(err)
-//}
 
 func initConfig() {
 	if cfgFile == "" {

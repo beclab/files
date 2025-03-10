@@ -1,8 +1,6 @@
 package app
 
 import (
-	//"files/pkg/backend/settings"
-	//"files/pkg/backend/storage"
 	"fmt"
 	"github.com/spf13/cobra"
 	"log"
@@ -17,17 +15,12 @@ func checkErr(err error) {
 }
 
 type cobraFunc func(cmd *cobra.Command, args []string)
-type pythonFunc func(cmd *cobra.Command, args []string) //, data pythonData)
+type pythonFunc func(cmd *cobra.Command, args []string)
 
 type pythonConfig struct {
 	noDB      bool
 	allowNoDB bool
 }
-
-//type pythonData struct {
-//	hadDB bool
-//	store *storage.Storage
-//}
 
 func dbExists(path string) (bool, error) {
 	stat, err := os.Stat(path)
@@ -51,8 +44,6 @@ func dbExists(path string) (bool, error) {
 
 func python(fn pythonFunc, cfg pythonConfig) cobraFunc {
 	return func(cmd *cobra.Command, args []string) {
-		//data := pythonData{hadDB: true}
-
 		path := getParam(cmd.Flags(), "database")
 		exists, err := dbExists(path)
 
@@ -64,14 +55,7 @@ func python(fn pythonFunc, cfg pythonConfig) cobraFunc {
 			log.Fatal(path + " does not exist. Please run 'filebrowser config init' first.")
 		}
 
-		//data.hadDB = exists
-		//db, err := storm.Open(path)
-		//checkErr(err)
-		//defer db.Close()
-		//var db settings.StorageBackend
-		//data.store, err = storage.NewStorage(db) // bolt.NewStorage(db)
-		//checkErr(err)
-		fn(cmd, args) //, data)
+		fn(cmd, args)
 	}
 }
 
