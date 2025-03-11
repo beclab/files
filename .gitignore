@@ -37,3 +37,4 @@ yarn-error.log*
 *.sw*
 bin/
 build/
+/pkg/backend/img/testdata/
