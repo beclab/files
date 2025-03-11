@@ -1,8 +1,3 @@
-#FROM alpine:latest
-#RUN apk --update add ca-certificates \
-#                     mailcap \
-#                     curl
-
 FROM ubuntu:24.04
 
 RUN apt-get update && \
@@ -16,10 +11,10 @@ HEALTHCHECK --start-period=2s --interval=5s --timeout=3s \
 VOLUME /srv
 EXPOSE 8110
 
-COPY packages/backend/docker_config.json /.filebrowser.json
-#COPY packages/backend/filebrowser /filebrowser
+#COPY packages/backend/docker_config.json /.filebrowser.json
 RUN mkdir dist
-COPY packages/backend/dist dist
+#COPY packages/backend/dist dist
+COPY cmd/backend/dist dist
 
 # Detect the CPU architecture and copy the appropriate binary
 RUN if [ "$(uname -m)" = "x86_64" ]; then \

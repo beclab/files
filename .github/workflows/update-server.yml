@@ -60,13 +60,13 @@ jobs:
 
       - name: Build
         run: |
-          cd packages/backend/
           go mod tidy
+          cd cmd/backend
           for GOOS in linux; do
             for GOARCH in amd64 arm64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
-              make build-backend
+              go build -o filebrowser main.go
               mkdir -p dist/$GOOS-$GOARCH
               mv filebrowser dist/$GOOS-$GOARCH/
             done

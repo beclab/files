@@ -12,17 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.20 as builder
+FROM golang:1.23 as builder
 
 WORKDIR /workspace
-COPY packages/gateway/go.mod packages/gateway/go.sum ./
+# COPY packages/gateway/go.mod packages/gateway/go.sum ./
+COPY go.mod go.sum ./
 RUN \
 	echo ">> Downloading go modules..." && \
 	go mod download
 
-COPY packages/gateway/ ./
+# COPY packages/gateway/ ./
+COPY cmd/gateway ./cmd/gateway
+COPY pkg/gateway ./pkg/gateway
 
-RUN CGO_ENABLED=0 go build -o appdata-gateway cmd/main.go
+RUN CGO_ENABLED=0 go build -o appdata-gateway cmd/gateway/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
