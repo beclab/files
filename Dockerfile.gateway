@@ -15,15 +15,15 @@
 FROM golang:1.23 as builder
 
 WORKDIR /workspace
-# COPY packages/gateway/go.mod packages/gateway/go.sum ./
 COPY go.mod go.sum ./
 RUN \
 	echo ">> Downloading go modules..." && \
 	go mod download
 
-# COPY packages/gateway/ ./
 COPY cmd/gateway ./cmd/gateway
-COPY pkg/gateway ./pkg/gateway
+COPY pkg/appdata ./pkg/appdata
+COPY pkg/proxy ./pkg/proxy
+COPY pkg/signals ./pkg/signals
 
 RUN CGO_ENABLED=0 go build -o appdata-gateway cmd/gateway/main.go
 

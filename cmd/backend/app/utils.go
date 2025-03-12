@@ -3,14 +3,14 @@ package app
 import (
 	"fmt"
 	"github.com/spf13/cobra"
-	"log"
+	"k8s.io/klog/v2"
 	"os"
 	"path/filepath"
 )
 
 func checkErr(err error) {
 	if err != nil {
-		log.Fatal(err)
+		klog.Fatal(err)
 	}
 }
 
@@ -50,9 +50,9 @@ func python(fn pythonFunc, cfg pythonConfig) cobraFunc {
 		if err != nil {
 			panic(err)
 		} else if exists && cfg.noDB {
-			log.Fatal(path + " already exists")
+			klog.Fatal(path + " already exists")
 		} else if !exists && !cfg.noDB && !cfg.allowNoDB {
-			log.Fatal(path + " does not exist. Please run 'filebrowser config init' first.")
+			klog.Fatal(path + " does not exist. Please run 'filebrowser config init' first.")
 		}
 
 		fn(cmd, args)
