@@ -2,8 +2,9 @@ package http
 
 import (
 	"context"
-	"files/pkg/diskcache"
-	"files/pkg/redisutils"
+	"files/pkg/common"
+	"files/pkg/drives"
+	"files/pkg/preview"
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
@@ -22,7 +23,7 @@ import (
 	"files/pkg/fileutils"
 )
 
-func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	start := time.Now()
 	klog.Infoln("Function resourceGetHandler starts at", start)
 	defer func() {
@@ -30,47 +31,28 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 		klog.Infof("Function resourceGetHandler execution time: %v\n", elapsed)
 	}()
 
-	streamStr := r.URL.Query().Get("stream")
-	stream := 0
-	var err error
-	if streamStr != "" {
-		stream, err = strconv.Atoi(streamStr)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-	}
-
-	metaStr := r.URL.Query().Get("meta")
-	meta := 0
-	if metaStr != "" {
-		meta, err = strconv.Atoi(metaStr)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-	}
-
 	srcType := r.URL.Query().Get("src")
 
-	handler, err := getResourceHandler(srcType)
+	handler, err := drives.GetResourceService(srcType)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	return handler.Handle(w, r, stream, meta, d)
+	return handler.GetHandler(w, r, d)
 }
 
-func resourceDeleteHandler(fileCache FileCache) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		if r.URL.Path == "/" {
 			return http.StatusForbidden, nil
 		}
 
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
-			_, status, err := resourceDeleteGoogle(fileCache, "", w, r, false)
+			_, status, err := drives.ResourceDeleteGoogle(fileCache, "", w, r, false)
 			return status, err
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, status, err := resourceDeleteCloudDrive(fileCache, "", w, r, false)
+			_, status, err := drives.ResourceDeleteCloudDrive(fileCache, "", w, r, false)
 			return status, err
 		}
 
@@ -79,36 +61,36 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			Path:       r.URL.Path,
 			Modify:     true,
 			Expand:     false,
-			ReadHeader: d.server.TypeDetectionByHeader,
+			ReadHeader: d.Server.TypeDetectionByHeader,
 		})
 		if err != nil {
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 
 		// delete thumbnails
-		err = delThumbs(r.Context(), fileCache, file)
+		err = preview.DelThumbs(r.Context(), fileCache, file)
 		if err != nil {
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 
 		err = files.DefaultFs.RemoveAll(r.URL.Path)
 
 		if err != nil {
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 
 		return http.StatusOK, nil
 	}
 }
 
-func resourcePostHandler(fileCache FileCache) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourcePostHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
-			_, status, err := resourcePostGoogle("", w, r, false)
+			_, status, err := drives.ResourcePostGoogle("", w, r, false)
 			return status, err
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, status, err := resourcePostCloudDrive("", w, r, false)
+			_, status, err := drives.ResourcePostCloudDrive("", w, r, false)
 			return status, err
 		}
 
@@ -124,7 +106,7 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 		// Directories creation on POST.
 		if strings.HasSuffix(r.URL.Path, "/") {
 			err := files.DefaultFs.MkdirAll(r.URL.Path, fileMode)
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 
 		file, err := files.NewFileInfo(files.FileOptions{
@@ -132,15 +114,15 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			Path:       r.URL.Path,
 			Modify:     true,
 			Expand:     false,
-			ReadHeader: d.server.TypeDetectionByHeader,
+			ReadHeader: d.Server.TypeDetectionByHeader,
 		})
 		if err == nil {
 			if r.URL.Query().Get("override") != "true" {
 				return http.StatusConflict, nil
 			}
-			err = delThumbs(r.Context(), fileCache, file)
+			err = preview.DelThumbs(r.Context(), fileCache, file)
 			if err != nil {
-				return errToStatus(err), err
+				return common.ErrToStatus(err), err
 			}
 		}
 
@@ -152,11 +134,11 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			_ = files.DefaultFs.RemoveAll(r.URL.Path)
 		}
 
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 }
 
-func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	// Only allow PUT for files.
 	if strings.HasSuffix(r.URL.Path, "/") {
 		return http.StatusMethodNotAllowed, nil
@@ -174,25 +156,25 @@ func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, e
 	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
 	w.Header().Set("ETag", etag)
 
-	return errToStatus(err), err
+	return common.ErrToStatus(err), err
 }
 
-func resourcePatchHandler(fileCache FileCache) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourcePatchHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		srcType := r.URL.Query().Get("src")
 		if srcType == "google" {
-			return resourcePatchGoogle(fileCache, w, r)
+			return drives.ResourcePatchGoogle(fileCache, w, r)
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			return resourcePatchCloudDrive(fileCache, w, r)
+			return drives.ResourcePatchCloudDrive(fileCache, w, r)
 		}
 
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		action := r.URL.Query().Get("action")
-		dst, err := unescapeURLIfEscaped(dst)
+		dst, err := common.UnescapeURLIfEscaped(dst)
 
 		if err != nil {
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 		if dst == "/" || src == "/" {
 			return http.StatusForbidden, nil
@@ -222,7 +204,7 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		klog.Infoln("Before patch action:", src, dst, action, override, rename)
 		err = patchAction(r.Context(), action, src, dst, d, fileCache)
 
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 }
 
@@ -294,25 +276,7 @@ func writeFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 	return info, nil
 }
 
-func delThumbs(ctx context.Context, fileCache FileCache, file *files.FileInfo) error {
-	for _, previewSizeName := range PreviewSizeNames() {
-		size, _ := ParsePreviewSize(previewSizeName)
-		cacheKey := previewCacheKey(file, size)
-		if err := fileCache.Delete(ctx, cacheKey); err != nil {
-			return err
-		}
-		if diskcache.CacheDir != "" {
-			err := redisutils.DelThumbRedisKey(redisutils.GetFileName(cacheKey))
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func patchAction(ctx context.Context, action, src, dst string, d *data, fileCache FileCache) error {
+func patchAction(ctx context.Context, action, src, dst string, d *common.Data, fileCache fileutils.FileCache) error {
 	switch action {
 	case "copy":
 		return fileutils.Copy(files.DefaultFs, src, dst)
@@ -332,7 +296,7 @@ func patchAction(ctx context.Context, action, src, dst string, d *data, fileCach
 		}
 
 		// delete thumbnails
-		err = delThumbs(ctx, fileCache, file)
+		err = preview.DelThumbs(ctx, fileCache, file)
 		if err != nil {
 			return err
 		}

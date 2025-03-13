@@ -2,12 +2,12 @@ package fileutils
 
 import (
 	"fmt"
+	"github.com/spf13/afero"
 	"io"
+	"k8s.io/klog/v2"
 	"os"
 	"path"
 	"path/filepath"
-
-	"github.com/spf13/afero"
 )
 
 // MoveFile moves file from src to dst.
@@ -29,7 +29,56 @@ func MoveFile(fs afero.Fs, src, dst string) error {
 	return nil
 }
 
-func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize int) error {
+func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error {
+	klog.Infoln("***IoCopyFileWithBufferOs")
+	klog.Infoln("***sourcePath:", sourcePath)
+	klog.Infoln("***targetPath:", targetPath)
+
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	dir := filepath.Dir(targetPath)
+	baseName := filepath.Base(targetPath)
+
+	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
+	tempFilePath := filepath.Join(dir, tempFileName)
+	klog.Infoln("***tempFilePath:", tempFilePath)
+	klog.Infoln("***tempFileName:", tempFileName)
+
+	targetFile, err := os.OpenFile(tempFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer targetFile.Close()
+
+	buf := make([]byte, bufferSize)
+	for {
+		n, err := sourceFile.Read(buf)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if n == 0 {
+			break
+		}
+		if _, err := targetFile.Write(buf[:n]); err != nil {
+			return err
+		}
+	}
+
+	if err := targetFile.Sync(); err != nil {
+		return err
+	}
+	return os.Rename(tempFilePath, targetPath)
+}
+
+func IoCopyFileWithBufferFs(fs afero.Fs, sourcePath, targetPath string, bufferSize int) error {
+	klog.Infoln("***IoCopyFileWithBufferFs")
+	klog.Infoln("***sourcePath:", sourcePath)
+	klog.Infoln("***targetPath:", targetPath)
+
 	sourceFile, err := fs.Open(sourcePath)
 	if err != nil {
 		return err
@@ -41,6 +90,8 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 
 	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
 	tempFilePath := filepath.Join(dir, tempFileName)
+	klog.Infoln("***tempFilePath:", tempFilePath)
+	klog.Infoln("***tempFileName:", tempFileName)
 
 	err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755)
 	if err != nil {
@@ -76,7 +127,7 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 // CopyFile copies a file from source to dest and returns
 // an error if any.
 func CopyFile(fs afero.Fs, source, dest string) error {
-	err := ioCopyFileWithBuffer(fs, source, dest, 8*1024*1024)
+	err := IoCopyFileWithBufferFs(fs, source, dest, 8*1024*1024)
 	if err != nil {
 		return err
 	}

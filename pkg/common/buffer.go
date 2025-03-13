@@ -1,4 +1,4 @@
-package http
+package common
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func checkBufferDiskSpace(diskSize int64) (bool, error) {
+func CheckBufferDiskSpace(diskSize int64) (bool, error) {
 	spaceOk, needs, avails, reserved, err := checkDiskSpace("/data", diskSize)
 	if err != nil {
 		return false, err
@@ -28,7 +28,7 @@ func checkBufferDiskSpace(diskSize int64) (bool, error) {
 	}
 }
 
-func generateBufferFileName(originalFilePath, bflName string, extRemains bool) (string, error) {
+func GenerateBufferFileName(originalFilePath, bflName string, extRemains bool) (string, error) {
 	timestamp := time.Now().Unix()
 
 	extension := filepath.Ext(originalFilePath)
@@ -54,7 +54,7 @@ func generateBufferFileName(originalFilePath, bflName string, extRemains bool) (
 	return bufferFilePath, nil
 }
 
-func generateBufferFolder(originalFilePath, bflName string) (string, error) {
+func GenerateBufferFolder(originalFilePath, bflName string) (string, error) {
 	timestamp := time.Now().Unix()
 
 	rand.Seed(time.Now().UnixNano())
@@ -70,7 +70,7 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	}
 
 	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
-	bufferPathName = removeSlash(bufferPathName)
+	bufferPathName = RemoveSlash(bufferPathName)
 	bufferFolderPath := "/data/" + bflName + "/buffer" + "/" + bufferPathName
 	err := os.MkdirAll(bufferFolderPath, 0755)
 	if err != nil {
@@ -79,7 +79,7 @@ func generateBufferFolder(originalFilePath, bflName string) (string, error) {
 	return bufferFolderPath, nil
 }
 
-func makeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
+func MakeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		klog.Errorln("Failed to create buffer file:", err)
@@ -111,7 +111,7 @@ func makeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
 	return nil
 }
 
-func removeDiskBuffer(filePath string, srcType string) {
+func RemoveDiskBuffer(filePath string, srcType string) {
 	klog.Infoln("Removing buffer file:", filePath)
 	err := os.Remove(filePath)
 	if err != nil {
