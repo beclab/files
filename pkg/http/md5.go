@@ -73,7 +73,7 @@ func md5Sync(w http.ResponseWriter, r *http.Request) (int, error) {
 	if !strings.Contains(src, "/") {
 		err := errors.New("invalid path format: path must contain at least one '/'")
 		klog.Errorln("Error:", err)
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
 	firstSlashIdx := strings.Index(src, "/")
@@ -98,12 +98,12 @@ func md5Sync(w http.ResponseWriter, r *http.Request) (int, error) {
 
 	md5, err := downloadAndComputeMD5(r, url)
 	if err != nil {
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
 	responseData := make(map[string]interface{})
 	responseData["md5"] = md5
-	return renderJSON(w, r, responseData)
+	return common.RenderJSON(w, r, responseData)
 }
 
 func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo) (int, error) {
@@ -113,10 +113,10 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
-	return renderJSON(w, r, responseData)
+	return common.RenderJSON(w, r, responseData)
 }
 
-func md5Handler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func md5Handler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return md5Sync(w, r)
@@ -127,10 +127,10 @@ func md5Handler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		Path:       r.URL.Path,
 		Modify:     true,
 		Expand:     false,
-		ReadHeader: d.server.TypeDetectionByHeader,
+		ReadHeader: d.Server.TypeDetectionByHeader,
 	})
 	if err != nil {
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
 	if file.IsDir {

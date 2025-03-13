@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	e "errors"
+	"files/pkg/common"
+	"files/pkg/drives"
+	"files/pkg/fileutils"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,50 +26,50 @@ import (
 	"github.com/spf13/afero"
 )
 
-func ioCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
-	klog.Infoln("***ioCopyFileWithBuffer")
-	klog.Infoln("***sourcePath:", sourcePath)
-	klog.Infoln("***targetPath:", targetPath)
-
-	sourceFile, err := os.Open(sourcePath)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-
-	dir := filepath.Dir(targetPath)
-	baseName := filepath.Base(targetPath)
-
-	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
-	tempFilePath := filepath.Join(dir, tempFileName)
-	klog.Infoln("***tempFilePath:", tempFilePath)
-	klog.Infoln("***tempFileName:", tempFileName)
-
-	targetFile, err := os.OpenFile(tempFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
-	if err != nil {
-		return err
-	}
-	defer targetFile.Close()
-
-	buf := make([]byte, bufferSize)
-	for {
-		n, err := sourceFile.Read(buf)
-		if err != nil && err != io.EOF {
-			return err
-		}
-		if n == 0 {
-			break
-		}
-		if _, err := targetFile.Write(buf[:n]); err != nil {
-			return err
-		}
-	}
-
-	if err := targetFile.Sync(); err != nil {
-		return err
-	}
-	return os.Rename(tempFilePath, targetPath)
-}
+//func IoCopyFileWithBuffer(sourcePath, targetPath string, bufferSize int) error {
+//	klog.Infoln("***IoCopyFileWithBuffer")
+//	klog.Infoln("***sourcePath:", sourcePath)
+//	klog.Infoln("***targetPath:", targetPath)
+//
+//	sourceFile, err := os.Open(sourcePath)
+//	if err != nil {
+//		return err
+//	}
+//	defer sourceFile.Close()
+//
+//	dir := filepath.Dir(targetPath)
+//	baseName := filepath.Base(targetPath)
+//
+//	tempFileName := fmt.Sprintf(".uploading_%s", baseName)
+//	tempFilePath := filepath.Join(dir, tempFileName)
+//	klog.Infoln("***tempFilePath:", tempFilePath)
+//	klog.Infoln("***tempFileName:", tempFileName)
+//
+//	targetFile, err := os.OpenFile(tempFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+//	if err != nil {
+//		return err
+//	}
+//	defer targetFile.Close()
+//
+//	buf := make([]byte, bufferSize)
+//	for {
+//		n, err := sourceFile.Read(buf)
+//		if err != nil && err != io.EOF {
+//			return err
+//		}
+//		if n == 0 {
+//			break
+//		}
+//		if _, err := targetFile.Write(buf[:n]); err != nil {
+//			return err
+//		}
+//	}
+//
+//	if err := targetFile.Sync(); err != nil {
+//		return err
+//	}
+//	return os.Rename(tempFilePath, targetPath)
+//}
 
 func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
 	counter := 1
@@ -93,8 +96,8 @@ func pasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 	return source
 }
 
-func resourcePasteHandler(fileCache FileCache) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		srcType := r.URL.Query().Get("src_type")
@@ -133,13 +136,13 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		action := r.URL.Query().Get("action")
 		var err error
 		klog.Infoln("src:", src)
-		src, err = unescapeURLIfEscaped(src)
+		src, err = common.UnescapeURLIfEscaped(src)
 		klog.Infoln("src:", src, "err:", err)
 		klog.Infoln("dst:", dst)
-		dst, err = unescapeURLIfEscaped(dst)
+		dst, err = common.UnescapeURLIfEscaped(dst)
 		klog.Infoln("dst:", dst, "err:", err)
 		if err != nil {
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 		if dst == "/" || src == "/" {
 			return http.StatusForbidden, nil
@@ -150,7 +153,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 				"code": -1,
 				"msg":  "Sync does not support directory entries with backslashes in their names.",
 			}
-			return renderJSON(w, r, response)
+			return common.RenderJSON(w, r, response)
 		}
 
 		override := r.URL.Query().Get("override") == "true"
@@ -161,12 +164,12 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 			}
 		}
 		if srcType == "google" && dstType != "google" {
-			srcInfo, err := getGoogleDriveIdFocusedMetaInfos(src, w, r)
+			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(src, w, r)
 			if err != nil {
 				return http.StatusInternalServerError, err
 			}
 			srcName := srcInfo.Name
-			formattedSrcName := removeSlash(srcName)
+			formattedSrcName := common.RemoveSlash(srcName)
 			dst = strings.ReplaceAll(dst, srcName, formattedSrcName)
 
 			if !srcInfo.CanDownload {
@@ -177,7 +180,7 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 						"code": -1,
 						"msg":  "Google drive cannot export this file.",
 					}
-					return renderJSON(w, r, response)
+					return common.RenderJSON(w, r, response)
 				}
 			}
 		}
@@ -192,14 +195,14 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		// all cloud drives of two users must be seen as diff archs
 		var srcName, dstName string
 		if srcType == "google" {
-			_, srcName, _, _ = parseGoogleDrivePath(src)
+			_, srcName, _, _ = drives.ParseGoogleDrivePath(src)
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, srcName, _ = parseCloudDrivePath(src, true)
+			_, srcName, _ = drives.ParseCloudDrivePath(src, true)
 		}
 		if dstType == "google" {
-			_, dstName, _, _ = parseGoogleDrivePath(dst)
+			_, dstName, _, _ = drives.ParseGoogleDrivePath(dst)
 		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, dstName, _ = parseCloudDrivePath(dst, true)
+			_, dstName, _ = drives.ParseCloudDrivePath(dst, true)
 		}
 		if srcName != dstName {
 			same = false
@@ -210,16 +213,16 @@ func resourcePasteHandler(fileCache FileCache) handleFunc {
 		} else {
 			err = pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
 		}
-		if errToStatus(err) == http.StatusRequestEntityTooLarge {
+		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
 			fmt.Fprintln(w, err.Error())
 		}
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 }
 
 func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
 	// we need only size, fileMode and isDir for the time being for all arch
-	src, err := unescapeURLIfEscaped(src)
+	src, err := common.UnescapeURLIfEscaped(src)
 	if err != nil {
 		return nil, 0, 0, false, err
 	}
@@ -234,20 +237,20 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 		if !strings.HasSuffix(src, "/") {
 			src += "/"
 		}
-		metaInfo, err := getGoogleDriveIdFocusedMetaInfos(src, w, r)
+		metaInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(src, w, r)
 		if err != nil {
 			return nil, 0, 0, false, err
 		}
 		return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		src = strings.TrimSuffix(src, "/")
-		metaInfo, err := getCloudDriveFocusedMetaInfos(src, w, r)
+		metaInfo, err := drives.GetCloudDriveFocusedMetaInfos(src, w, r)
 		if err != nil {
 			return nil, 0, 0, false, err
 		}
 		return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
 	} else if srcType == "cache" {
-		infoURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(src)
+		infoURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(src)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
@@ -321,7 +324,7 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
 		}
 
-		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + escapeURLWithSpace("/"+prefix) + "&with_thumbnail=true"
+		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace("/"+prefix) + "&with_thumbnail=true"
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
@@ -401,7 +404,7 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 			}
 		}
 		if found {
-			mode := syncPermToMode(fileInfo.Permission)
+			mode := drives.SyncPermToMode(fileInfo.Permission)
 			isDir := false
 			if fileInfo.Type == "dir" {
 				isDir = true
@@ -419,7 +422,7 @@ func getStat(fs afero.Fs, srcType, src string, w http.ResponseWriter, r *http.Re
 // CopyDir copies a directory from source to dest and all
 // of its sub-directories. It doesn't stop if it finds an error
 // during the copy. Returns an error if any.
-func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode os.FileMode, w http.ResponseWriter,
+func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, driveIdCache map[string]string) error {
 	var mode os.FileMode = 0
 	// Get properties of source.
@@ -440,8 +443,8 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			return err
 		}
 	} else if dstType == "google" {
-		respBody, _, err := resourcePostGoogle(dst, w, r, true)
-		var bodyJson GoogleDrivePostResponse
+		respBody, _, err := drives.ResourcePostGoogle(dst, w, r, true)
+		var bodyJson drives.GoogleDrivePostResponse
 		if err = json.Unmarshal(respBody, &bodyJson); err != nil {
 			klog.Error(err)
 			return err
@@ -451,17 +454,17 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			return err
 		}
 	} else if dstType == "cloud" || dstType == "awss3" || dstType == "tencent" || dstType == "dropbox" {
-		_, _, err := resourcePostCloudDrive(dst, w, r, false)
+		_, _, err := drives.ResourcePostCloudDrive(dst, w, r, false)
 		if err != nil {
 			return err
 		}
 	} else if dstType == "cache" {
-		err := cacheMkdirAll(dst, fileMode, r)
+		err := drives.CacheMkdirAll(dst, fileMode, r)
 		if err != nil {
 			return err
 		}
 	} else if dstType == "sync" {
-		err := syncMkdirAll(dst, fileMode, true, r)
+		err := drives.SyncMkdirAll(dst, fileMode, true, r)
 		if err != nil {
 			return err
 		}
@@ -512,9 +515,9 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			src += "/"
 		}
 
-		srcDrive, srcName, pathId, _ := parseGoogleDrivePath(src)
+		srcDrive, srcName, pathId, _ := drives.ParseGoogleDrivePath(src)
 
-		param := GoogleDriveListParam{
+		param := drives.GoogleDriveListParam{
 			Path:  pathId,
 			Drive: srcDrive,
 			Name:  srcName,
@@ -527,12 +530,12 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		}
 		klog.Infoln("Google Drive List Params:", string(jsonBody))
 		var respBody []byte
-		respBody, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+		respBody, err = drives.GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
 		if err != nil {
 			klog.Errorln("Error calling drive/ls:", err)
 			return err
 		}
-		var bodyJson GoogleDriveListResponse
+		var bodyJson drives.GoogleDriveListResponse
 		if err = json.Unmarshal(respBody, &bodyJson); err != nil {
 			klog.Error(err)
 			return err
@@ -555,9 +558,9 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			}
 		}
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-		srcDrive, srcName, srcPath := parseCloudDrivePath(src, true)
+		srcDrive, srcName, srcPath := drives.ParseCloudDrivePath(src, true)
 
-		param := CloudDriveListParam{
+		param := drives.CloudDriveListParam{
 			Path:  srcPath,
 			Drive: srcDrive,
 			Name:  srcName,
@@ -570,12 +573,12 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 		}
 		klog.Infoln("Cloud Drive List Params:", string(jsonBody))
 		var respBody []byte
-		respBody, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+		respBody, err = drives.CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
 		if err != nil {
 			klog.Errorln("Error calling drive/ls:", err)
 			return err
 		}
-		var bodyJson CloudDriveListResponse
+		var bodyJson drives.CloudDriveListResponse
 		if err = json.Unmarshal(respBody, &bodyJson); err != nil {
 			klog.Error(err)
 			return err
@@ -628,7 +631,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			Type      string `json:"type"`
 		}
 
-		infoURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(src)
+		infoURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(src)
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
@@ -734,7 +737,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
 		}
 
-		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + escapeURLWithSpace("/"+prefix+"/"+filename) + "&with_thumbnail=true"
+		infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace("/"+prefix+"/"+filename) + "&with_thumbnail=true"
 
 		client := &http.Client{}
 		request, err := http.NewRequest("GET", infoURL, nil)
@@ -782,12 +785,12 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 			fdst := filepath.Join(fdstBase, item.Name)
 
 			if item.Type == "dir" {
-				err := copyDir(fs, srcType, fsrc, dstType, fdst, d, syncPermToMode(item.Permission), w, r, driveIdCache)
+				err := copyDir(fs, srcType, fsrc, dstType, fdst, d, drives.SyncPermToMode(item.Permission), w, r, driveIdCache)
 				if err != nil {
 					return err
 				}
 			} else {
-				err := copyFile(fs, srcType, fsrc, dstType, fdst, d, syncPermToMode(item.Permission), item.Size, w, r, driveIdCache)
+				err := copyFile(fs, srcType, fsrc, dstType, fdst, d, drives.SyncPermToMode(item.Permission), item.Size, w, r, driveIdCache)
 				if err != nil {
 					return err
 				}
@@ -801,7 +804,7 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *data, fileMode o
 
 // CopyFile copies a file from source to dest and returns
 // an error if any.
-func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.FileMode, diskSize int64,
+func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, mode os.FileMode, diskSize int64,
 	w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
@@ -812,7 +815,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 	var bufferPath string
 	// copy/move
 	if srcType == "drive" {
-		fileInfo, status, err := resourceDriveGetInfo(src, r, d)
+		fileInfo, status, err := drives.ResourceDriveGetInfo(src, r, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -820,105 +823,105 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		diskSize = fileInfo.Size
-		_, err = checkBufferDiskSpace(diskSize)
+		_, err = common.CheckBufferDiskSpace(diskSize)
 		if err != nil {
 			return err
 		}
-		bufferPath, err = generateBufferFileName(src, bflName, extRemains)
+		bufferPath, err = common.GenerateBufferFileName(src, bflName, extRemains)
 		if err != nil {
 			return err
 		}
 
-		err = makeDiskBuffer(bufferPath, diskSize, false)
+		err = common.MakeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
 			return err
 		}
-		err = driveFileToBuffer(fileInfo, bufferPath)
+		err = drives.DriveFileToBuffer(fileInfo, bufferPath)
 		if err != nil {
 			return err
 		}
 	} else if srcType == "google" {
 		var err error
-		_, err = checkBufferDiskSpace(diskSize)
+		_, err = common.CheckBufferDiskSpace(diskSize)
 		if err != nil {
 			return err
 		}
 
-		srcInfo, err := getGoogleDriveIdFocusedMetaInfos(src, w, r)
-		bufferFilePath, err := generateBufferFolder(srcInfo.Path, bflName)
+		srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+		bufferFilePath, err := common.GenerateBufferFolder(srcInfo.Path, bflName)
 		if err != nil {
 			return err
 		}
-		bufferFileName := removeSlash(srcInfo.Name) + srcInfo.ExportSuffix
+		bufferFileName := common.RemoveSlash(srcInfo.Name) + srcInfo.ExportSuffix
 		bufferPath = filepath.Join(bufferFilePath, bufferFileName)
 		klog.Infoln("Buffer file path: ", bufferFilePath)
 		klog.Infoln("Buffer path: ", bufferPath)
-		err = makeDiskBuffer(bufferPath, diskSize, true)
+		err = common.MakeDiskBuffer(bufferPath, diskSize, true)
 		if err != nil {
 			return err
 		}
-		_, err = googleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
+		_, err = drives.GoogleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
 		if err != nil {
 			return err
 		}
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		var err error
-		_, err = checkBufferDiskSpace(diskSize)
+		_, err = common.CheckBufferDiskSpace(diskSize)
 		if err != nil {
 			return err
 		}
 
-		srcInfo, err := getCloudDriveFocusedMetaInfos(src, w, r)
-		bufferFilePath, err := generateBufferFolder(srcInfo.Path, bflName)
+		srcInfo, err := drives.GetCloudDriveFocusedMetaInfos(src, w, r)
+		bufferFilePath, err := common.GenerateBufferFolder(srcInfo.Path, bflName)
 		if err != nil {
 			return err
 		}
 		bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
 		klog.Infoln("Buffer file path: ", bufferFilePath)
 		klog.Infoln("Buffer path: ", bufferPath)
-		err = makeDiskBuffer(bufferPath, diskSize, true)
+		err = common.MakeDiskBuffer(bufferPath, diskSize, true)
 		if err != nil {
 			return err
 		}
-		err = cloudDriveFileToBuffer(src, bufferFilePath, w, r)
+		err = drives.CloudDriveFileToBuffer(src, bufferFilePath, w, r)
 		if err != nil {
 			return err
 		}
 	} else if srcType == "cache" {
 		var err error
-		_, err = checkBufferDiskSpace(diskSize)
+		_, err = common.CheckBufferDiskSpace(diskSize)
 		if err != nil {
 			return err
 		}
-		bufferPath, err = generateBufferFileName(src, bflName, extRemains)
+		bufferPath, err = common.GenerateBufferFileName(src, bflName, extRemains)
 		if err != nil {
 			return err
 		}
 
-		err = makeDiskBuffer(bufferPath, diskSize, false)
+		err = common.MakeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
 			return err
 		}
-		err = cacheFileToBuffer(src, bufferPath)
+		err = drives.CacheFileToBuffer(src, bufferPath)
 		if err != nil {
 			return err
 		}
 	} else if srcType == "sync" {
 		var err error
-		_, err = checkBufferDiskSpace(diskSize)
+		_, err = common.CheckBufferDiskSpace(diskSize)
 		if err != nil {
 			return err
 		}
-		bufferPath, err = generateBufferFileName(src, bflName, extRemains)
+		bufferPath, err = common.GenerateBufferFileName(src, bflName, extRemains)
 		if err != nil {
 			return err
 		}
 
-		err = makeDiskBuffer(bufferPath, diskSize, false)
+		err = common.MakeDiskBuffer(bufferPath, diskSize, false)
 		if err != nil {
 			return err
 		}
-		err = syncFileToBuffer(src, bufferPath, r)
+		err = drives.SyncFileToBuffer(src, bufferPath, r)
 		if err != nil {
 			return err
 		}
@@ -931,18 +934,18 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 
 	// paste
 	if dstType == "drive" {
-		status, err := driveBufferToFile(bufferPath, dst, mode, d)
+		status, err := drives.DriveBufferToFile(bufferPath, dst, mode, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
 		if err != nil {
 			return err
 		}
-		removeDiskBuffer(bufferPath, srcType)
+		common.RemoveDiskBuffer(bufferPath, srcType)
 	} else if dstType == "google" {
 		klog.Infoln("Begin to paste!")
 		klog.Infoln("dst: ", dst)
-		status, err := googleBufferToFile(bufferPath, dst, w, r)
+		status, err := drives.GoogleBufferToFile(bufferPath, dst, w, r)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -950,11 +953,11 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		klog.Infoln("Begin to remove buffer")
-		removeDiskBuffer(bufferPath, srcType)
+		common.RemoveDiskBuffer(bufferPath, srcType)
 	} else if dstType == "cloud" || dstType == "awss3" || dstType == "tencent" || dstType == "dropbox" {
 		klog.Infoln("Begin to paste!")
 		klog.Infoln("dst: ", dst)
-		status, err := cloudDriveBufferToFile(bufferPath, dst, w, r)
+		status, err := drives.CloudDriveBufferToFile(bufferPath, dst, w, r)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -962,23 +965,23 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		klog.Infoln("Begin to remove buffer")
-		removeDiskBuffer(bufferPath, srcType)
+		common.RemoveDiskBuffer(bufferPath, srcType)
 	} else if dstType == "cache" {
-		status, err := cacheBufferToFile(bufferPath, dst, mode, d)
+		status, err := drives.CacheBufferToFile(bufferPath, dst, mode, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
 		if err != nil {
 			return err
 		}
-		removeDiskBuffer(bufferPath, srcType)
+		common.RemoveDiskBuffer(bufferPath, srcType)
 	} else if dstType == "sync" {
 		klog.Infoln("Begin to sync paste!")
-		err := syncMkdirAll(dst, mode, false, r)
+		err := drives.SyncMkdirAll(dst, mode, false, r)
 		if err != nil {
 			return err
 		}
-		status, err := syncBufferToFile(bufferPath, dst, diskSize, r)
+		status, err := drives.SyncBufferToFile(bufferPath, dst, diskSize, r)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -987,12 +990,12 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *data, mode os.F
 			return err
 		}
 		klog.Infoln("Begin to remove buffer")
-		removeDiskBuffer(bufferPath, srcType)
+		common.RemoveDiskBuffer(bufferPath, srcType)
 	}
 	return nil
 }
 
-func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *data, w http.ResponseWriter, r *http.Request) error {
+func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	// path.Clean, only operate on string level, so it fits every src/dst type.
 	if src = path.Clean("/" + src); src == "" {
 		return os.ErrNotExist
@@ -1030,9 +1033,9 @@ func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *data, w http.Res
 	return nil
 }
 
-func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d *data, w http.ResponseWriter, r *http.Request) error {
+func moveDelete(fileCache fileutils.FileCache, srcType, src string, ctx context.Context, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	if srcType == "drive" {
-		status, err := resourceDriveDelete(fileCache, src, ctx, d)
+		status, err := drives.ResourceDriveDelete(fileCache, src, ctx, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -1041,7 +1044,7 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 		}
 		return nil
 	} else if srcType == "google" {
-		_, status, err := resourceDeleteGoogle(fileCache, src, w, r, true)
+		_, status, err := drives.ResourceDeleteGoogle(fileCache, src, w, r, true)
 		if status != http.StatusOK && status != 0 {
 			return os.ErrInvalid
 		}
@@ -1050,7 +1053,7 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 		}
 		return nil
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-		_, status, err := resourceDeleteCloudDrive(fileCache, src, w, r, true)
+		_, status, err := drives.ResourceDeleteCloudDrive(fileCache, src, w, r, true)
 		if status != http.StatusOK && status != 0 {
 			return os.ErrInvalid
 		}
@@ -1059,7 +1062,7 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 		}
 		return nil
 	} else if srcType == "cache" {
-		status, err := resourceCacheDelete(fileCache, src, ctx, d)
+		status, err := drives.ResourceCacheDelete(fileCache, src, ctx, d)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -1068,7 +1071,7 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 		}
 		return nil
 	} else if srcType == "sync" {
-		status, err := resourceSyncDelete(src, r)
+		status, err := drives.ResourceSyncDelete(src, r)
 		if status != http.StatusOK {
 			return os.ErrInvalid
 		}
@@ -1080,11 +1083,11 @@ func moveDelete(fileCache FileCache, srcType, src string, ctx context.Context, d
 	return os.ErrInvalid
 }
 
-func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *data, fileCache FileCache, override, rename bool, w http.ResponseWriter, r *http.Request) error {
+func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, override, rename bool, w http.ResponseWriter, r *http.Request) error {
 	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
 	klog.Infoln("src: ", src, ", dst: ", dst, ", override: ", override)
 	if srcType == "drive" || srcType == "cache" {
-		patchUrl := "http://127.0.0.1:80/api/resources/" + escapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + escapeURLWithSpace(dst) + "&override=" + strconv.FormatBool(override) + "&rename=" + strconv.FormatBool(rename)
+		patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&override=" + strconv.FormatBool(override) + "&rename=" + strconv.FormatBool(rename)
 		method := "PATCH"
 		payload := []byte(``)
 		klog.Infoln(patchUrl)
@@ -1114,20 +1117,20 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			if !strings.HasSuffix(src, "/") {
 				src += "/"
 			}
-			metaInfo, err := getGoogleDriveIdFocusedMetaInfos(src, w, r)
+			metaInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(src, w, r)
 			if err != nil {
 				return err
 			}
 
 			if metaInfo.IsDir {
-				return copyGoogleDriveFolder(src, dst, w, r, metaInfo.Path)
+				return drives.CopyGoogleDriveFolder(src, dst, w, r, metaInfo.Path)
 			}
-			return copyGoogleDriveSingleFile(src, dst, w, r)
+			return drives.CopyGoogleDriveSingleFile(src, dst, w, r)
 		case "rename":
 			if !strings.HasSuffix(src, "/") {
 				src += "/"
 			}
-			return moveGoogleDriveFolderOrFiles(src, dst, w, r)
+			return drives.MoveGoogleDriveFolderOrFiles(src, dst, w, r)
 		}
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		switch action {
@@ -1135,20 +1138,20 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 			if strings.HasSuffix(src, "/") {
 				src = strings.TrimSuffix(src, "/")
 			}
-			metaInfo, err := getCloudDriveFocusedMetaInfos(src, w, r)
+			metaInfo, err := drives.GetCloudDriveFocusedMetaInfos(src, w, r)
 			if err != nil {
 				return err
 			}
 
 			if metaInfo.IsDir {
-				return copyCloudDriveFolder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
+				return drives.CopyCloudDriveFolder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
 			}
-			return copyCloudDriveSingleFile(src, dst, w, r)
+			return drives.CopyCloudDriveSingleFile(src, dst, w, r)
 		case "rename":
 			if !strings.HasSuffix(src, "/") {
 				src += "/"
 			}
-			return moveCloudDriveFolderOrFiles(src, dst, w, r)
+			return drives.MoveCloudDriveFolderOrFiles(src, dst, w, r)
 		}
 	} else if srcType == "sync" {
 		var apiName string
@@ -1162,7 +1165,7 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		}
 
 		// It seems that we can't mkdir althrough when using sync-bacth-copy/move-item, so we must use false for isDir here.
-		err := syncMkdirAll(dst, 0, false, r)
+		err := drives.SyncMkdirAll(dst, 0, false, r)
 		if err != nil {
 			return err
 		}
@@ -1267,7 +1270,7 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 	return nil
 }
 
-func pasteActionDiffArch(ctx context.Context, action, srcType, src, dstType, dst string, d *data, fileCache FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionDiffArch(ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	// In this function, context if tied up to src, because src is in the URL
 	switch action {
 	case "copy":

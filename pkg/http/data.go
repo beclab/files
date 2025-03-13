@@ -7,22 +7,18 @@ import (
 
 	"github.com/tomasen/realip"
 
+	"files/pkg/common"
 	"files/pkg/settings"
 )
 
-type handleFunc func(w http.ResponseWriter, r *http.Request, d *data) (int, error)
-
-type data struct {
-	server *settings.Server
-	raw    interface{}
-}
+type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
 
 func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-		status, err := fn(w, r, &data{
-			server: server,
+		status, err := fn(w, r, &common.Data{
+			Server: server,
 		})
 
 		if status >= 400 || err != nil {

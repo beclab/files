@@ -20,7 +20,7 @@ type ShareablePutRequestBody struct {
 	Status int `json:"status"`
 }
 
-func shareableGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func shareableGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -71,10 +71,10 @@ func shareableGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	return renderJSON(w, r, pathInfos)
+	return common.RenderJSON(w, r, pathInfos)
 }
 
-func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -142,10 +142,10 @@ func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, 
 			klog.Infoln("No need to update record.")
 		}
 	}
-	return errToStatus(err), err
+	return common.ErrToStatus(err), err
 }
 
-func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	if r.URL.Path != "" {
 		exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
 		if err != nil {
@@ -197,7 +197,7 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	return renderJSON(w, r, shareLinks)
+	return common.RenderJSON(w, r, shareLinks)
 }
 
 type ShareLinkPostRequestBody struct {
@@ -226,8 +226,8 @@ func checkPathAndConvertToPathID(path, ownerID string) (uint64, error) {
 	}
 }
 
-func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	host := getHost(r)
+func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	host := common.GetHost(r)
 	ownerID, ownerName := getOwner(r)
 
 	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
@@ -300,7 +300,7 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 	return http.StatusOK, nil
 }
 
-func shareLinkDeleteHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func shareLinkDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	linkIDStr := r.URL.Query().Get("link_id")
 	if linkIDStr == "" {
 		return http.StatusBadRequest, nil

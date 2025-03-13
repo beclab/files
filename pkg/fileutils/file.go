@@ -29,7 +29,7 @@ func MoveFile(fs afero.Fs, src, dst string) error {
 	return nil
 }
 
-func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize int) error {
+func IoCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize int) error {
 	sourceFile, err := fs.Open(sourcePath)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func ioCopyFileWithBuffer(fs afero.Fs, sourcePath, targetPath string, bufferSize
 // CopyFile copies a file from source to dest and returns
 // an error if any.
 func CopyFile(fs afero.Fs, source, dest string) error {
-	err := ioCopyFileWithBuffer(fs, source, dest, 8*1024*1024)
+	err := IoCopyFileWithBuffer(fs, source, dest, 8*1024*1024)
 	if err != nil {
 		return err
 	}

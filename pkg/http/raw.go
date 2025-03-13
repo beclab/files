@@ -2,6 +2,8 @@ package http
 
 import (
 	"errors"
+	"files/pkg/common"
+	"files/pkg/drives"
 	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
@@ -73,34 +75,34 @@ func setContentDisposition(w http.ResponseWriter, r *http.Request, file *files.F
 	}
 }
 
-func rawHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func rawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	srcType := r.URL.Query().Get("src")
 	if srcType == "sync" {
 		return http.StatusNotImplemented, nil
 	} else if srcType == "google" {
 		bflName := r.Header.Get("X-Bfl-User")
 		src := r.URL.Path
-		metaData, err := getGoogleDriveMetadata(src, w, r)
+		metaData, err := drives.GetGoogleDriveMetadata(src, w, r)
 		if err != nil {
 			klog.Error(err)
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 		if metaData.IsDir {
 			return http.StatusNotImplemented, errors.New("doesn't support directory download for google drive now")
 		}
-		return rawFileHandlerGoogle(src, w, r, metaData, bflName)
+		return drives.RawFileHandlerGoogle(src, w, r, metaData, bflName)
 	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
 		bflName := r.Header.Get("X-Bfl-User")
 		src := r.URL.Path
-		metaData, err := getCloudDriveMetadata(src, w, r)
+		metaData, err := drives.GetCloudDriveMetadata(src, w, r)
 		if err != nil {
 			klog.Error(err)
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 		if metaData.IsDir {
 			return http.StatusNotImplemented, errors.New("doesn't support directory download for " + srcType + " drive now")
 		}
-		return rawFileHandlerCloudDrive(src, w, r, metaData, bflName)
+		return drives.RawFileHandlerCloudDrive(src, w, r, metaData, bflName)
 	}
 
 	file, err := files.NewFileInfo(files.FileOptions{
@@ -108,10 +110,10 @@ func rawHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		Path:       r.URL.Path,
 		Modify:     true,
 		Expand:     false,
-		ReadHeader: d.server.TypeDetectionByHeader,
+		ReadHeader: d.Server.TypeDetectionByHeader,
 	})
 	if err != nil {
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
 	if files.IsNamedPipe(file.Mode) {
@@ -126,7 +128,7 @@ func rawHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	return rawDirHandler(w, r, d, file)
 }
 
-func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
+func addFile(ar archiver.Writer, d *common.Data, path, commonPath string) error {
 	info, err := files.DefaultFs.Stat(path)
 	if err != nil {
 		return err
@@ -175,7 +177,7 @@ func addFile(ar archiver.Writer, d *data, path, commonPath string) error {
 	return nil
 }
 
-func rawDirHandler(w http.ResponseWriter, r *http.Request, d *data, file *files.FileInfo) (int, error) {
+func rawDirHandler(w http.ResponseWriter, r *http.Request, d *common.Data, file *files.FileInfo) (int, error) {
 	filenames, err := parseQueryFiles(r, file)
 	if err != nil {
 		return http.StatusInternalServerError, err
