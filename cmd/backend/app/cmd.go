@@ -1,12 +1,12 @@
 package app
 
 import (
-	"log"
+	"k8s.io/klog/v2"
 )
 
 // Execute executes the commands.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		klog.Fatal(err)
 	}
 }

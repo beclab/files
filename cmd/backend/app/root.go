@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"files/pkg/backend/background_task"
-	"files/pkg/backend/crontab"
-	"files/pkg/backend/postgres"
-	"files/pkg/backend/redisutils"
+	"files/pkg/background_task"
+	"files/pkg/crontab"
+	"files/pkg/postgres"
+	"files/pkg/redisutils"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
-	"log"
+	"k8s.io/klog/v2"
 	"net"
 	"net/http"
 	"os"
@@ -18,19 +19,17 @@ import (
 	"strings"
 	"syscall"
 
+	"files/pkg/diskcache"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	v "github.com/spf13/viper"
-	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
-	"files/pkg/backend/diskcache"
-
-	fbhttp "files/pkg/backend/http"
-	"files/pkg/backend/img"
-	"files/pkg/backend/rpc"
-	"files/pkg/backend/settings"
+	fbhttp "files/pkg/http"
+	"files/pkg/img"
+	"files/pkg/rpc"
+	"files/pkg/settings"
 )
 
 var (
@@ -73,6 +72,7 @@ func addServerFlags(flags *pflag.FlagSet) {
 	flags.Bool("disable-preview-resize", false, "disable resize of image previews")
 	flags.Bool("disable-exec", false, "disables Command Runner feature")
 	flags.Bool("disable-type-detection-by-header", false, "disables type detection by reading file headers")
+	flags.Int("v", 2, "verbosity level") // for klog?
 }
 
 var rootCmd = &cobra.Command{
@@ -114,7 +114,11 @@ Also, if the database path doesn't exist, File Browser will enter into
 the quick setup mode and a new database will be bootstraped and a new
 user created with the credentials from options "username" and "password".`,
 	Run: python(func(cmd *cobra.Command, args []string) {
-		log.Println(cfgFile)
+		// step0: prepare server and log
+		//server := getRunParams(cmd.Flags())
+		//setupLog(server.Log)
+
+		klog.Infoln(cfgFile)
 
 		// Step1：Init postgres (including migration).
 		// For share, search and other features in the future
@@ -131,7 +135,7 @@ user created with the credentials from options "username" and "password".`,
 		workersCount, err := cmd.Flags().GetInt("img-processors")
 		checkErr(err)
 		if workersCount < 1 {
-			log.Fatal("Image resize workers count could not be < 1")
+			klog.Fatal("Image resize workers count could not be < 1")
 		}
 		imgSvc := img.New(workersCount)
 
@@ -139,7 +143,7 @@ user created with the credentials from options "username" and "password".`,
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
 		if diskcache.CacheDir != "" {
 			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil {
-				log.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
+				klog.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
 			}
 			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
 		}
@@ -200,16 +204,16 @@ user created with the credentials from options "username" and "password".`,
 
 		defer listener.Close()
 
-		log.Println("Listening on", listener.Addr().String())
+		klog.Infoln("Listening on", listener.Addr().String())
 		if err := http.Serve(listener, handler); err != nil {
-			log.Fatal(err)
+			klog.Fatal(err)
 		}
 	}, pythonConfig{allowNoDB: true}),
 }
 
 func cleanupHandler(listener net.Listener, c chan os.Signal) {
 	sig := <-c
-	log.Printf("Caught signal %s: shutting down.", sig)
+	klog.Infof("Caught signal %s: shutting down.", sig)
 	listener.Close()
 	os.Exit(0)
 }
@@ -311,15 +315,17 @@ func getParam(flags *pflag.FlagSet, key string) string {
 }
 
 func setupLog(logMethod string) {
+	klog.Infof("Klog set to %s", logMethod)
+
 	switch logMethod {
 	case "stdout":
-		log.SetOutput(os.Stdout)
+		klog.SetOutput(io.Writer(os.Stdout))
 	case "stderr":
-		log.SetOutput(os.Stderr)
+		klog.SetOutput(io.Writer(os.Stderr))
 	case "":
-		log.SetOutput(io.Discard)
+		klog.SetOutput(io.Discard)
 	default:
-		log.SetOutput(&lumberjack.Logger{
+		klog.SetOutput(&lumberjack.Logger{
 			Filename:   logMethod,
 			MaxSize:    100,
 			MaxAge:     14,

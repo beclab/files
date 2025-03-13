@@ -16,8 +16,8 @@ package main
 
 import (
 	"context"
-	"files/pkg/gateway/proxy"
-	"files/pkg/gateway/signals"
+	"files/pkg/proxy"
+	"files/pkg/signals"
 	"flag"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
