@@ -393,8 +393,11 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fil
 
 	// Create the destination directory.
 	if dstType == "drive" {
-		err := fs.MkdirAll(dst, mode)
-		if err != nil {
+		if err := fs.MkdirAll(dst, mode); err != nil {
+			return err
+		}
+		if err := fileutils.Chown(fs, dst, 1000, 1000); err != nil {
+			klog.Errorf("can't chown directory %s to user %d: %s", dst, 1000, err)
 			return err
 		}
 	} else if dstType == "google" {
@@ -414,15 +417,15 @@ func copyDir(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fil
 			return err
 		}
 	} else if dstType == "cache" {
-		err := drives.CacheMkdirAll(dst, fileMode, r)
-		if err != nil {
+		if err := drives.CacheMkdirAll(dst, fileMode, r); err != nil {
 			return err
 		}
+		// cache chown in the function of itself
 	} else if dstType == "sync" {
-		err := drives.SyncMkdirAll(dst, fileMode, true, r)
-		if err != nil {
+		if err := drives.SyncMkdirAll(dst, fileMode, true, r); err != nil {
 			return err
 		}
+		// sync doesn't need to chown
 	}
 
 	var fdstBase string = dst
@@ -932,8 +935,7 @@ func copyFile(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, mo
 		common.RemoveDiskBuffer(bufferPath, srcType)
 	} else if dstType == "sync" {
 		klog.Infoln("Begin to sync paste!")
-		err := drives.SyncMkdirAll(dst, mode, false, r)
-		if err != nil {
+		if err := drives.SyncMkdirAll(dst, mode, false, r); err != nil {
 			return err
 		}
 		status, err := drives.SyncBufferToFile(bufferPath, dst, diskSize, r)
@@ -1120,8 +1122,7 @@ func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst
 		}
 
 		// It seems that we can't mkdir althrough when using sync-bacth-copy/move-item, so we must use false for isDir here.
-		err := drives.SyncMkdirAll(dst, 0, false, r)
-		if err != nil {
+		if err := drives.SyncMkdirAll(dst, 0, false, r); err != nil {
 			return err
 		}
 

@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
+	"files/pkg/fileutils"
 	"github.com/spf13/afero"
 	"io"
 	"k8s.io/klog/v2"
@@ -40,6 +41,10 @@ func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
 	fileName := f.getFileName(key)
 	klog.Infoln("key: ", key, " fileName: ", fileName, " filePath: ", filepath.Dir(fileName))
 	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil {
+		return err
+	}
+	if err := fileutils.Chown(f.fs, filepath.Dir(fileName), 1000, 1000); err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", filepath.Dir(fileName), 1000, err)
 		return err
 	}
 
