@@ -49,7 +49,7 @@ func CacheFileToBuffer(src string, bufferFilePath string) error {
 	}
 	klog.Infoln("newSrc:", newSrc, ", newPath:", newPath)
 
-	err = fileutils.IoCopyFileWithBuffer(files.DefaultFs, newPath, bufferFilePath, 8*1024*1024)
+	err = fileutils.IoCopyFileWithBufferOs(newPath, bufferFilePath, 8*1024*1024)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func CacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	})
 
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
-	err = fileutils.IoCopyFileWithBuffer(files.DefaultFs, bufferFilePath, newTargetPath, 8*1024*1024)
+	err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, newTargetPath, 8*1024*1024)
 
 	if err != nil {
 		err = os.RemoveAll(newTargetPath)

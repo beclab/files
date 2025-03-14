@@ -182,7 +182,7 @@ func DriveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
 	}
 	klog.Infoln("file.Path:", file.Path, ", path:", path)
 
-	err = fileutils.IoCopyFileWithBuffer(files.DefaultFs, "/data"+path, bufferFilePath, 8*1024*1024)
+	err = fileutils.IoCopyFileWithBufferOs("/data"+path, bufferFilePath, 8*1024*1024)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func DriveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		ReadHeader: d.Server.TypeDetectionByHeader,
 	})
 
-	err = fileutils.IoCopyFileWithBuffer(files.DefaultFs, bufferFilePath, "/data"+targetPath, 8*1024*1024)
+	err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, "/data"+targetPath, 8*1024*1024)
 
 	if err != nil {
 		_ = files.DefaultFs.RemoveAll(targetPath)
