@@ -2,9 +2,9 @@ package rpc
 
 import (
 	"files/pkg/files"
+	"files/pkg/fileutils"
 	"files/pkg/parser"
 	"files/pkg/redisutils"
-	"fmt"
 	"io/fs"
 	"k8s.io/klog/v2"
 	"os"
@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"bytetrade.io/web3os/fs-lib/jfsnotify"
@@ -479,20 +478,6 @@ func printTime(s string, args ...interface{}) {
 	klog.Infof(time.Now().Format("15:04:05.0000")+" "+s+"\n", args...)
 }
 
-func getFileOwnerUID(filename string) (uint32, error) {
-	fileInfo, err := os.Stat(filename)
-	if err != nil {
-		return 0, err
-	}
-
-	statT, ok := fileInfo.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, fmt.Errorf("unable to convert Sys() type to *syscall.Stat_t")
-	}
-
-	return statT.Uid, nil
-}
-
 func checkPathPrefix(filepath, prefix string) bool {
 	parts := strings.Split(filepath, "/")
 
@@ -576,7 +561,7 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 	if err == nil {
 		size = int(fileInfo.Size())
 	}
-	ownerUID, err := getFileOwnerUID(filepath)
+	ownerUID, err := fileutils.GetUID(nil, filepath)
 	if err != nil {
 		return err
 	}
@@ -585,7 +570,7 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 		doc = map[string]interface{}{
 			"title":        filename,
 			"content":      content,
-			"owner_userid": strconv.Itoa(int(ownerUID)),
+			"owner_userid": strconv.Itoa(ownerUID),
 			"resource_uri": filepath,
 			"service":      "files",
 			"meta": map[string]interface{}{
@@ -599,7 +584,7 @@ func updateOrInputDocSearch3(filepath, bflName string) error {
 		doc = map[string]interface{}{
 			"title":        filename,
 			"content":      "-",
-			"owner_userid": strconv.Itoa(int(ownerUID)),
+			"owner_userid": strconv.Itoa(ownerUID),
 			"resource_uri": filepath,
 			"service":      "files",
 			"meta": map[string]interface{}{

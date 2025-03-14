@@ -37,6 +37,7 @@ const (
 	API_MD5_PREFIX           = "/api/md5/AppData"
 	API_PREVIEW_THUMB_PREFIX = "/api/preview/thumb/AppData"
 	API_PREVIEW_BIG_PREFIX   = "/api/preview/big/AppData"
+	API_PERMISSION_PREFIX    = "/api/permission/AppData"
 	NODE_HEADER              = "X-Terminus-Node"
 	BFL_HEADER               = "X-Bfl-User"
 	API_PREFIX               = "/api"
@@ -86,6 +87,8 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	backendProxy.addHandlers(API_PREVIEW_THUMB_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_PREVIEW_BIG_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_PREVIEW_BIG_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PERMISSION_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PERMISSION_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 
@@ -121,6 +124,7 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 			!regexp.MustCompile("^"+API_MD5_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_PREVIEW_THUMB_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_PREVIEW_BIG_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+API_PERMISSION_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+UPLOADER_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+MEDIA_PREFIX+".*").Match([]byte(path)) &&
@@ -135,6 +139,7 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 			!strings.HasPrefix(path, API_MD5_PREFIX) &&
 			!strings.HasPrefix(path, API_PREVIEW_THUMB_PREFIX) &&
 			!strings.HasPrefix(path, API_PREVIEW_BIG_PREFIX) &&
+			!strings.HasPrefix(path, API_PERMISSION_PREFIX) &&
 			!strings.HasPrefix(path, API_CACHE_PREFIX) {
 			return next(c)
 		}
@@ -157,7 +162,7 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		switch {
 		case path != API_RESOURCES_PREFIX && path != API_RAW_PREFIX && path != API_MD5_PREFIX &&
-			path != API_PREVIEW_THUMB_PREFIX && path != API_PREVIEW_BIG_PREFIX:
+			path != API_PREVIEW_THUMB_PREFIX && path != API_PREVIEW_BIG_PREFIX && path != API_PERMISSION_PREFIX:
 			if _, ok := c.Request().Header[NODE_HEADER]; !ok {
 				klog.Error("node info not found from header")
 				return c.String(http.StatusBadRequest, "node not found")
@@ -391,6 +396,8 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_THUMB_PREFIX)
 		} else if strings.HasPrefix(path, API_PREVIEW_BIG_PREFIX) {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_BIG_PREFIX)
+		} else if strings.HasPrefix(path, API_PERMISSION_PREFIX) {
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PERMISSION_PREFIX)
 		}
 		host = appdata.GetAppDataServiceEndpoint(p.k8sClient, node[0])
 		klog.Info("host: ", host)

@@ -2,6 +2,7 @@ package fileutils
 
 import (
 	"errors"
+	"k8s.io/klog/v2"
 
 	"github.com/spf13/afero"
 )
@@ -17,8 +18,11 @@ func CopyDir(fs afero.Fs, source, dest string) error {
 	}
 
 	// Create the destination directory.
-	err = fs.MkdirAll(dest, srcinfo.Mode())
-	if err != nil {
+	if err = fs.MkdirAll(dest, srcinfo.Mode()); err != nil {
+		return err
+	}
+	if err = Chown(fs, dest, 1000, 1000); err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", dest, 1000, err)
 		return err
 	}
 

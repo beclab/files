@@ -6,6 +6,7 @@ import (
 	"errors"
 	"files/pkg/background_task"
 	"files/pkg/crontab"
+	"files/pkg/fileutils"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -72,7 +73,6 @@ func addServerFlags(flags *pflag.FlagSet) {
 	flags.Bool("disable-preview-resize", false, "disable resize of image previews")
 	flags.Bool("disable-exec", false, "disables Command Runner feature")
 	flags.Bool("disable-type-detection-by-header", false, "disables type detection by reading file headers")
-	flags.Int("v", 2, "verbosity level") // for klog?
 }
 
 var rootCmd = &cobra.Command{
@@ -144,6 +144,9 @@ user created with the credentials from options "username" and "password".`,
 		if diskcache.CacheDir != "" {
 			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil {
 				klog.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
+			}
+			if err := fileutils.Chown(nil, diskcache.CacheDir, 1000, 1000); err != nil {
+				klog.Fatalf("can't chown directory %s to user %d: %s", diskcache.CacheDir, 1000, err)
 			}
 			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
 		}

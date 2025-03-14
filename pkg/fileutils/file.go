@@ -8,6 +8,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"syscall"
+	"time"
 )
 
 // MoveFile moves file from src to dst.
@@ -93,8 +95,11 @@ func IoCopyFileWithBufferFs(fs afero.Fs, sourcePath, targetPath string, bufferSi
 	klog.Infoln("***tempFilePath:", tempFilePath)
 	klog.Infoln("***tempFileName:", tempFileName)
 
-	err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755)
-	if err != nil {
+	if err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755); err != nil {
+		return err
+	}
+	if err = Chown(fs, filepath.Dir(tempFilePath), 1000, 1000); err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", filepath.Dir(tempFilePath), 1000, err)
 		return err
 	}
 
@@ -199,4 +204,46 @@ func CommonPrefix(sep byte, paths ...string) string {
 	}
 
 	return string(c)
+}
+
+func Chown(fs afero.Fs, path string, uid, gid int) error {
+	start := time.Now()
+	klog.Infoln("Function Chown starts at", start)
+	defer func() {
+		elapsed := time.Since(start)
+		klog.Infof("Function Chown execution time: %v\n", elapsed)
+	}()
+
+	if fs == nil {
+		return os.Chown(path, uid, gid)
+	}
+	return fs.Chown(path, uid, gid)
+}
+
+func GetUID(fs afero.Fs, path string) (int, error) {
+	start := time.Now()
+	klog.Infoln("Function GetUID starts at", start)
+	defer func() {
+		elapsed := time.Since(start)
+		klog.Infof("Function GetUID execution time: %v\n", elapsed)
+	}()
+
+	var fileInfo os.FileInfo
+	var err error
+	if fs == nil {
+		if fileInfo, err = os.Stat(path); err != nil {
+			return 0, err
+		}
+	} else {
+		if fileInfo, err = fs.Stat(path); err != nil {
+			return 0, err
+		}
+	}
+
+	statT, ok := fileInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, fmt.Errorf("unable to convert Sys() type to *syscall.Stat_t")
+	}
+
+	return int(statT.Uid), nil
 }

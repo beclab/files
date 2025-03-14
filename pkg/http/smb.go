@@ -10,6 +10,7 @@ import (
 	"github.com/go-redis/redis"
 	"k8s.io/klog/v2"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,15 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 		return common.ErrToStatus(err), err
 	}
 
+	if int(respJson["code"].(float64)) != http.StatusOK {
+		klog.Warningf(respJson["message"].(string))
+		if strings.Contains(respJson["message"].(string), "mount error(13)") {
+			respJson["message"] = "Incorrect username or password"
+		}
+		if strings.Contains(respJson["message"].(string), "mount error(115)") {
+			respJson["message"] = "Cannot connect to samba server"
+		}
+	}
 	return common.RenderJSON(w, r, respJson)
 }
 

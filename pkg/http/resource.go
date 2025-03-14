@@ -83,59 +83,38 @@ func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
 	}
 }
 
-func resourcePostHandler(fileCache fileutils.FileCache) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		srcType := r.URL.Query().Get("src")
-		if srcType == "google" {
-			_, status, err := drives.ResourcePostGoogle("", w, r, false)
-			return status, err
-		} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
-			_, status, err := drives.ResourcePostCloudDrive("", w, r, false)
-			return status, err
-		}
+func resourcePostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	srcType := r.URL.Query().Get("src")
+	if srcType == "google" {
+		_, status, err := drives.ResourcePostGoogle("", w, r, false)
+		return status, err
+	} else if srcType == "cloud" || srcType == "awss3" || srcType == "tencent" || srcType == "dropbox" {
+		_, status, err := drives.ResourcePostCloudDrive("", w, r, false)
+		return status, err
+	}
 
-		modeParam := r.URL.Query().Get("mode")
+	modeParam := r.URL.Query().Get("mode")
 
-		mode, err := strconv.ParseUint(modeParam, 8, 32)
-		if err != nil || modeParam == "" {
-			mode = 0775
-		}
+	mode, err := strconv.ParseUint(modeParam, 8, 32)
+	if err != nil || modeParam == "" {
+		mode = 0775
+	}
 
-		fileMode := os.FileMode(mode)
+	fileMode := os.FileMode(mode)
 
-		// Directories creation on POST.
-		if strings.HasSuffix(r.URL.Path, "/") {
-			err := files.DefaultFs.MkdirAll(r.URL.Path, fileMode)
+	// Directories creation on POST.
+	if strings.HasSuffix(r.URL.Path, "/") {
+		if err = files.DefaultFs.MkdirAll(r.URL.Path, fileMode); err != nil {
+			klog.Errorln(err)
 			return common.ErrToStatus(err), err
 		}
-
-		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs,
-			Path:       r.URL.Path,
-			Modify:     true,
-			Expand:     false,
-			ReadHeader: d.Server.TypeDetectionByHeader,
-		})
-		if err == nil {
-			if r.URL.Query().Get("override") != "true" {
-				return http.StatusConflict, nil
-			}
-			err = preview.DelThumbs(r.Context(), fileCache, file)
-			if err != nil {
-				return common.ErrToStatus(err), err
-			}
+		if err = fileutils.Chown(files.DefaultFs, r.URL.Path, 1000, 1000); err != nil {
+			klog.Errorf("can't chown directory %s to user %d: %s", r.URL.Path, 1000, err)
+			return common.ErrToStatus(err), err
 		}
-
-		info, err := writeFile(files.DefaultFs, r.URL.Path, r.Body)
-		etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
-		w.Header().Set("ETag", etag)
-
-		if err != nil {
-			_ = files.DefaultFs.RemoveAll(r.URL.Path)
-		}
-
-		return common.ErrToStatus(err), err
+		return http.StatusOK, nil
 	}
+	return http.StatusBadRequest, fmt.Errorf("%s is not a valid directory path", r.URL.Path)
 }
 
 func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
@@ -247,8 +226,11 @@ func addVersionSuffix(source string, fs afero.Fs, isDir bool) string {
 func writeFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 	klog.Infoln("Before open ", dst)
 	dir, _ := path.Split(dst)
-	err := fs.MkdirAll(dir, 0775)
-	if err != nil {
+	if err := fs.MkdirAll(dir, 0775); err != nil {
+		return nil, err
+	}
+	if err := fileutils.Chown(fs, dir, 1000, 1000); err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", dir, 1000, err)
 		return nil, err
 	}
 

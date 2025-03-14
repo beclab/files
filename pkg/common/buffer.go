@@ -2,6 +2,7 @@ package common
 
 import (
 	"errors"
+	"files/pkg/fileutils"
 	"fmt"
 	"k8s.io/klog/v2"
 	"math/rand"
@@ -45,8 +46,11 @@ func GenerateBufferFileName(originalFilePath, bflName string, extRemains bool) (
 		bufferFolderPath = "/data/" + bflName + "/buffer"
 	}
 
-	err := os.MkdirAll(bufferFolderPath, 0755)
-	if err != nil {
+	if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
+		return "", err
+	}
+	if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
 		return "", err
 	}
 	bufferFilePath := filepath.Join(bufferFolderPath, bufferFileName)
@@ -72,8 +76,11 @@ func GenerateBufferFolder(originalFilePath, bflName string) (string, error) {
 	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
 	bufferPathName = RemoveSlash(bufferPathName)
 	bufferFolderPath := "/data/" + bflName + "/buffer" + "/" + bufferPathName
-	err := os.MkdirAll(bufferFolderPath, 0755)
-	if err != nil {
+	if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
+		return "", err
+	}
+	if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
 		return "", err
 	}
 	return bufferFolderPath, nil
