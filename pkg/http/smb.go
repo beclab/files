@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/redisutils"
 	"fmt"
@@ -12,36 +13,36 @@ import (
 	"time"
 )
 
-func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	respJson, err := files.MountPathIncluster(r)
 	if err != nil {
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
-	return renderJSON(w, r, respJson)
+	return common.RenderJSON(w, r, respJson)
 }
 
-func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         files.DefaultFs,
 		Path:       r.URL.Path,
 		Modify:     true,
 		Expand:     false,
-		ReadHeader: d.server.TypeDetectionByHeader,
+		ReadHeader: d.Server.TypeDetectionByHeader,
 	})
 	if err != nil {
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
 	respJson, err := files.UnmountPathIncluster(r, file.Path)
 	if err != nil {
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
-	return renderJSON(w, r, respJson)
+	return common.RenderJSON(w, r, respJson)
 }
 
-func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")
@@ -51,7 +52,7 @@ func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 
 	zset, err := redisutils.RedisClient.ZRevRangeWithScores(key, 0, -1).Result()
 	if err != nil {
-		return errToStatus(err), fmt.Errorf("get reverse range with scores from zset failed: %v", err)
+		return common.ErrToStatus(err), fmt.Errorf("get reverse range with scores from zset failed: %v", err)
 	}
 
 	var result []map[string]interface{}
@@ -64,7 +65,7 @@ func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 		var urlInfo map[string]string
 		urlInfo, err = redisutils.RedisClient.HGetAll(hashKey).Result()
 		if err != nil {
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 
 		item := map[string]interface{}{
@@ -77,7 +78,7 @@ func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 		result = append(result, item)
 	}
 
-	return renderJSON(w, r, result)
+	return common.RenderJSON(w, r, result)
 }
 
 type SMBHistoryData struct {
@@ -86,7 +87,7 @@ type SMBHistoryData struct {
 	Password string `json:"password,omitempty"`
 }
 
-func smbHistoryPutHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func smbHistoryPutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")
@@ -104,7 +105,7 @@ func smbHistoryPutHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 		err := redisutils.RedisClient.ZAdd(key, redis.Z{Score: score, Member: datum.URL}).Err()
 		if err != nil {
 			klog.Errorln("add new member to zset failed: ", err)
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 
 		hashKey := key + "_url_details:" + datum.URL
@@ -118,15 +119,15 @@ func smbHistoryPutHandler(w http.ResponseWriter, r *http.Request, d *data) (int,
 			_, err = redisutils.RedisClient.HSet(hashKey, field, value).Result()
 			if err != nil {
 				klog.Errorf("set hash field '%s' failed: %v\n", field, err)
-				return errToStatus(err), err
+				return common.ErrToStatus(err), err
 			}
 		}
 	}
 
-	return renderJSON(w, r, "Successfully added/updated SMB history and hash")
+	return common.RenderJSON(w, r, "Successfully added/updated SMB history and hash")
 }
 
-func smbHistoryDeleteHandler(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+func smbHistoryDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")
@@ -147,15 +148,15 @@ func smbHistoryDeleteHandler(w http.ResponseWriter, r *http.Request, d *data) (i
 		_, err := redisutils.RedisClient.Del(hashKey).Result()
 		if err != nil {
 			klog.Errorf("Delete key failed: %v\n", err)
-			return errToStatus(err), err
+			return common.ErrToStatus(err), err
 		}
 	}
 
 	err := redisutils.RedisClient.ZRem(key, urls).Err()
 	if err != nil {
 		klog.Errorln("remove member for zset failed: ", err)
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
-	return renderJSON(w, r, "Successfully deleted SMB history")
+	return common.RenderJSON(w, r, "Successfully deleted SMB history")
 }

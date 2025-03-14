@@ -1,8 +1,10 @@
-package http
+package drives
 
 import (
 	"context"
+	"files/pkg/common"
 	"files/pkg/files"
+	"files/pkg/fileutils"
 	"fmt"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -10,8 +12,12 @@ import (
 	"strings"
 )
 
-func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
-	targetURL := "http://127.0.0.1:80/api/resources" + escapeURLWithSpace(dst) + "/?mode=" + mode.String()
+type CacheResourceService struct {
+	BaseResourceService
+}
+
+func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
+	targetURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(dst) + "/?mode=" + mode.String()
 
 	request, err := http.NewRequest("POST", targetURL, nil)
 	if err != nil {
@@ -35,15 +41,15 @@ func cacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	return nil
 }
 
-func cacheFileToBuffer(src string, bufferFilePath string) error {
+func CacheFileToBuffer(src string, bufferFilePath string) error {
 	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
-	newPath, err := unescapeURLIfEscaped(newSrc)
+	newPath, err := common.UnescapeURLIfEscaped(newSrc)
 	if err != nil {
 		return err
 	}
 	klog.Infoln("newSrc:", newSrc, ", newPath:", newPath)
 
-	err = ioCopyFileWithBuffer(newPath, bufferFilePath, 8*1024*1024)
+	err = fileutils.IoCopyFileWithBufferOs(newPath, bufferFilePath, 8*1024*1024)
 	if err != nil {
 		return err
 	}
@@ -51,11 +57,11 @@ func cacheFileToBuffer(src string, bufferFilePath string) error {
 	return nil
 }
 
-func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *data) (int, error) {
+func CacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data) (int, error) {
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
 		err := files.DefaultFs.MkdirAll(targetPath, mode)
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
 	_, err := files.NewFileInfo(files.FileOptions{
@@ -63,11 +69,11 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		Path:       targetPath,
 		Modify:     true,
 		Expand:     false,
-		ReadHeader: d.server.TypeDetectionByHeader,
+		ReadHeader: d.Server.TypeDetectionByHeader,
 	})
 
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
-	err = ioCopyFileWithBuffer(bufferFilePath, newTargetPath, 8*1024*1024)
+	err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, newTargetPath, 8*1024*1024)
 
 	if err != nil {
 		err = os.RemoveAll(newTargetPath)
@@ -77,10 +83,10 @@ func cacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		klog.Infoln("Rollback success")
 	}
 
-	return errToStatus(err), err
+	return common.ErrToStatus(err), err
 }
 
-func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, d *data) (int, error) {
+func ResourceCacheDelete(fileCache fileutils.FileCache, path string, ctx context.Context, d *common.Data) (int, error) {
 	if path == "/" {
 		return http.StatusForbidden, nil
 	}
@@ -89,7 +95,7 @@ func resourceCacheDelete(fileCache FileCache, path string, ctx context.Context, 
 	err := os.RemoveAll(newTargetPath)
 
 	if err != nil {
-		return errToStatus(err), err
+		return common.ErrToStatus(err), err
 	}
 
 	return http.StatusOK, nil

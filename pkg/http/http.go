@@ -1,6 +1,8 @@
 package http
 
 import (
+	"files/pkg/fileutils"
+	"files/pkg/preview"
 	"files/pkg/rpc"
 	"github.com/gin-gonic/gin"
 	"k8s.io/klog/v2"
@@ -12,8 +14,8 @@ import (
 )
 
 func NewHandler(
-	imgSvc ImgService,
-	fileCache FileCache,
+	imgSvc preview.ImgService,
+	fileCache fileutils.FileCache,
 	server *settings.Server,
 ) (http.Handler, error) {
 	server.Clean()
