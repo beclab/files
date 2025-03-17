@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/postgres"
 	"fmt"
@@ -118,7 +119,7 @@ func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			newPathInfo := postgres.PathInfo{
 				Path:       path,
-				SrcType:    "drive",
+				SrcType:    drives.SrcTypeDrive,
 				MD5:        common.Md5String(path),
 				OwnerID:    ownerID,
 				OwnerName:  ownerName,

@@ -247,3 +247,38 @@ func GetUID(fs afero.Fs, path string) (int, error) {
 
 	return int(statT.Uid), nil
 }
+
+func WriteFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
+	klog.Infoln("Before open ", dst)
+	dir, _ := path.Split(dst)
+	if err := fs.MkdirAll(dir, 0775); err != nil {
+		return nil, err
+	}
+	if err := Chown(fs, dir, 1000, 1000); err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", dir, 1000, err)
+		return nil, err
+	}
+
+	klog.Infoln("Open ", dst)
+	file, err := fs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	klog.Infoln("Copy file!")
+	_, err = io.Copy(file, in)
+	if err != nil {
+		return nil, err
+	}
+
+	klog.Infoln("Get stat")
+	// Gets the info about the file.
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	klog.Infoln(info)
+	return info, nil
+}

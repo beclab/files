@@ -4,21 +4,191 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	e "errors"
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"fmt"
+	"github.com/spf13/afero"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 // if cache logic is same as drive, it will be written in this file
 type DriveResourceService struct {
 	BaseResourceService
+}
+
+func (rs *DriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	return common.PatchAction(r.Context(), action, src, dst, fileCache)
+}
+
+func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	srcinfo, err := fs.Stat(src)
+	if err != nil {
+		return err
+	}
+	mode := srcinfo.Mode()
+
+	handler, err := GetResourceService(dstType)
+	if err != nil {
+		return err
+	}
+
+	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	if err != nil {
+		return err
+	}
+
+	var fdstBase string = dst
+	if driveIdCache[src] != "" {
+		fdstBase = filepath.Dir(filepath.Dir(dst)) + "/" + driveIdCache[src]
+	}
+
+	dir, _ := fs.Open(src)
+	obs, err := dir.Readdir(-1)
+	if err != nil {
+		return err
+	}
+
+	var errs []error
+
+	for _, obj := range obs {
+		fsrc := src + "/" + obj.Name()
+		fdst := fdstBase + "/" + obj.Name()
+
+		if obj.IsDir() {
+			// Create sub-directories, recursively.
+			err = rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), w, r, driveIdCache)
+			if err != nil {
+				errs = append(errs, err)
+			}
+		} else {
+			// Perform the file copy.
+			err = rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), obj.Size(), w, r, driveIdCache)
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	var errString string
+	for _, err := range errs {
+		errString += err.Error() + "\n"
+	}
+
+	if errString != "" {
+		return e.New(errString)
+	}
+	return nil
+}
+
+func (rs *DriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	mode := fileMode
+	if err := fs.MkdirAll(dst, mode); err != nil {
+		return err
+	}
+	if err := fileutils.Chown(fs, dst, 1000, 1000); err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", dst, 1000, err)
+		return err
+	}
+	return nil
+}
+
+func (rs *DriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return os.ErrPermission
+	}
+
+	extRemains := IsThridPartyDrives(dstType)
+	var bufferPath string
+	fileInfo, status, err := ResourceDriveGetInfo(src, r, d)
+	if status != http.StatusOK {
+		return os.ErrInvalid
+	}
+	if err != nil {
+		return err
+	}
+	diskSize = fileInfo.Size
+	_, err = CheckBufferDiskSpace(diskSize)
+	if err != nil {
+		return err
+	}
+	bufferPath, err = GenerateBufferFileName(src, bflName, extRemains)
+	if err != nil {
+		return err
+	}
+
+	err = MakeDiskBuffer(bufferPath, diskSize, false)
+	if err != nil {
+		return err
+	}
+	err = DriveFileToBuffer(fileInfo, bufferPath)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		klog.Infoln("Begin to remove buffer")
+		RemoveDiskBuffer(bufferPath, srcType)
+	}()
+
+	handler, err := GetResourceService(dstType)
+	if err != nil {
+		return err
+	}
+
+	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rs *DriveResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+	r *http.Request, d *common.Data, diskSize int64) error {
+	status, err := DriveBufferToFile(bufferPath, dst, fileMode, d)
+	if status != http.StatusOK {
+		return os.ErrInvalid
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rs *DriveResourceService) GetStat(fs afero.Fs, src string, w http.ResponseWriter,
+	r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
+	src, err := common.UnescapeURLIfEscaped(src)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+
+	info, err := fs.Stat(src)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+	return info, info.Size(), info.Mode(), info.IsDir(), nil
+}
+
+func (rs *DriveResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+	w http.ResponseWriter, r *http.Request) error {
+	status, err := ResourceDriveDelete(fileCache, src, ctx, d)
+	if status != http.StatusOK {
+		return os.ErrInvalid
+	}
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *common.Data, mountedData []files.DiskInfo) {

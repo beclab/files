@@ -3,11 +3,16 @@ package drives
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/md5"
 	"encoding/json"
 	e "errors"
 	"files/pkg/common"
+	"files/pkg/errors"
+	"files/pkg/fileutils"
+	"files/pkg/preview"
 	"fmt"
+	"github.com/spf13/afero"
 	"io"
 	"io/ioutil"
 	"k8s.io/klog/v2"
@@ -16,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -137,6 +143,385 @@ func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	return 0, nil
+}
+
+func (rc *SyncResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		return ResourceSyncDelete(r.URL.Path, r)
+	}
+}
+
+func (rc *SyncResourceService) PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	err := SyncMkdirAll(r.URL.Path, 0, true, r)
+	return common.ErrToStatus(err), err
+}
+
+func (rc *SyncResourceService) PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	// TODO: Sync support editing, but not in this structure for the time being. This func is reserving a slot for sync.
+	return http.StatusNotImplemented, fmt.Errorf("sync drive does not supoort editing files for the time being")
+}
+
+func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		src := r.URL.Path
+		dst := r.URL.Query().Get("destination")
+
+		action := r.URL.Query().Get("action")
+		var err error
+		src, err = common.UnescapeURLIfEscaped(src)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+		dst, err = common.UnescapeURLIfEscaped(dst)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		err = ResourceSyncPatch(action, src, dst, r)
+		return common.ErrToStatus(err), err
+	}
+}
+
+func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	return http.StatusNotImplemented, nil
+}
+
+func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		return http.StatusNotImplemented, nil
+	}
+}
+
+func (rc *SyncResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	return ResourceSyncPatch(action, src, dst, r)
+}
+
+func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	mode := fileMode
+
+	handler, err := GetResourceService(dstType)
+	if err != nil {
+		return err
+	}
+
+	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	if err != nil {
+		return err
+	}
+
+	var fdstBase string = dst
+	if driveIdCache[src] != "" {
+		fdstBase = filepath.Dir(filepath.Dir(dst)) + "/" + driveIdCache[src]
+	}
+
+	type Item struct {
+		Type                 string `json:"type"`
+		Name                 string `json:"name"`
+		ID                   string `json:"id"`
+		Mtime                int64  `json:"mtime"`
+		Permission           string `json:"permission"`
+		Size                 int64  `json:"size,omitempty"`
+		ModifierEmail        string `json:"modifier_email,omitempty"`
+		ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
+		ModifierName         string `json:"modifier_name,omitempty"`
+		Starred              bool   `json:"starred,omitempty"`
+		FileSize             int64  `json:"fileSize,omitempty"`
+		NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
+		NumFiles             int    `json:"numFiles,omitempty"`
+		NumDirs              int    `json:"numDirs,omitempty"`
+		Path                 string `json:"path,omitempty"`
+		EncodedThumbnailSrc  string `json:"encoded_thumbnail_src,omitempty"`
+	}
+
+	type ResponseData struct {
+		UserPerm   string `json:"user_perm"`
+		DirID      string `json:"dir_id"`
+		DirentList []Item `json:"dirent_list"`
+	}
+
+	src = strings.Trim(src, "/")
+	if !strings.Contains(src, "/") {
+		err := e.New("invalid path format: path must contain at least one '/'")
+		klog.Errorln("Error:", err)
+		return err
+	}
+
+	firstSlashIdx := strings.Index(src, "/")
+
+	repoID := src[:firstSlashIdx]
+
+	lastSlashIdx := strings.LastIndex(src, "/")
+
+	filename := src[lastSlashIdx+1:]
+
+	prefix := ""
+	if firstSlashIdx != lastSlashIdx {
+		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
+	}
+
+	infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace("/"+prefix+"/"+filename) + "&with_thumbnail=true"
+
+	client := &http.Client{}
+	request, err := http.NewRequest("GET", infoURL, nil)
+	if err != nil {
+		klog.Errorf("create request failed: %v\n", err)
+		return err
+	}
+
+	request.Header = r.Header
+
+	response, err := client.Do(request)
+	if err != nil {
+		klog.Errorf("request failed: %v\n", err)
+		return err
+	}
+	defer response.Body.Close()
+
+	var bodyReader io.Reader = response.Body
+
+	if response.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(response.Body)
+		if err != nil {
+			klog.Errorf("unzip response failed: %v\n", err)
+			return err
+		}
+		defer gzipReader.Close()
+
+		bodyReader = gzipReader
+	}
+
+	body, err := ioutil.ReadAll(bodyReader)
+	if err != nil {
+		klog.Errorf("read response failed: %v\n", err)
+		return err
+	}
+
+	var data ResponseData
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range data.DirentList {
+		fsrc := filepath.Join(src, item.Name)
+		fdst := filepath.Join(fdstBase, item.Name)
+
+		if item.Type == "dir" {
+			err := rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, SyncPermToMode(item.Permission), w, r, driveIdCache)
+			if err != nil {
+				return err
+			}
+		} else {
+			err := rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, SyncPermToMode(item.Permission), item.Size, w, r, driveIdCache)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (rs *SyncResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	if err := SyncMkdirAll(dst, fileMode, true, r); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rs *SyncResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return os.ErrPermission
+	}
+
+	extRemains := IsThridPartyDrives(dstType)
+	var bufferPath string
+
+	var err error
+	_, err = CheckBufferDiskSpace(diskSize)
+	if err != nil {
+		return err
+	}
+	bufferPath, err = GenerateBufferFileName(src, bflName, extRemains)
+	if err != nil {
+		return err
+	}
+
+	err = MakeDiskBuffer(bufferPath, diskSize, false)
+	if err != nil {
+		return err
+	}
+	err = SyncFileToBuffer(src, bufferPath, r)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		klog.Infoln("Begin to remove buffer")
+		RemoveDiskBuffer(bufferPath, srcType)
+	}()
+
+	handler, err := GetResourceService(dstType)
+	if err != nil {
+		return err
+	}
+
+	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rs *SyncResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+	r *http.Request, d *common.Data, diskSize int64) error {
+	klog.Infoln("Begin to sync paste!")
+	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
+		return err
+	}
+	status, err := SyncBufferToFile(bufferPath, dst, diskSize, r)
+	if status != http.StatusOK {
+		return os.ErrInvalid
+	}
+	if err != nil {
+		klog.Errorln("Sync paste failed! err: ", err)
+		return err
+	}
+	return nil
+}
+
+func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseWriter,
+	r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
+	src, err := common.UnescapeURLIfEscaped(src)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+
+	src = strings.Trim(src, "/")
+	if !strings.Contains(src, "/") {
+		err := e.New("invalid path format: path must contain at least one '/'")
+		klog.Errorln("Error:", err)
+		return nil, 0, 0, false, err
+	}
+
+	firstSlashIdx := strings.Index(src, "/")
+
+	repoID := src[:firstSlashIdx]
+
+	lastSlashIdx := strings.LastIndex(src, "/")
+
+	filename := src[lastSlashIdx+1:]
+
+	prefix := ""
+	if firstSlashIdx != lastSlashIdx {
+		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
+	}
+
+	infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace("/"+prefix) + "&with_thumbnail=true"
+
+	client := &http.Client{}
+	request, err := http.NewRequest("GET", infoURL, nil)
+	if err != nil {
+		klog.Errorf("create request failed: %v\n", err)
+		return nil, 0, 0, false, err
+	}
+
+	request.Header = r.Header
+
+	response, err := client.Do(request)
+	if err != nil {
+		klog.Errorf("request failed: %v\n", err)
+		return nil, 0, 0, false, err
+	}
+	defer response.Body.Close()
+
+	var bodyReader io.Reader = response.Body
+
+	if response.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(response.Body)
+		if err != nil {
+			klog.Errorf("unzip response failed: %v\n", err)
+			return nil, 0, 0, false, err
+		}
+		defer gzipReader.Close()
+
+		bodyReader = gzipReader
+	}
+
+	body, err := ioutil.ReadAll(bodyReader)
+	if err != nil {
+		klog.Errorf("read response failed: %v\n", err)
+		return nil, 0, 0, false, err
+	}
+
+	type Dirent struct {
+		Type                 string `json:"type"`
+		ID                   string `json:"id"`
+		Name                 string `json:"name"`
+		Mtime                int64  `json:"mtime"`
+		Permission           string `json:"permission"`
+		ParentDir            string `json:"parent_dir"`
+		Starred              bool   `json:"starred"`
+		Size                 int64  `json:"size"`
+		FileSize             int64  `json:"fileSize,omitempty"`
+		NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
+		NumFiles             int    `json:"numFiles,omitempty"`
+		NumDirs              int    `json:"numDirs,omitempty"`
+		Path                 string `json:"path,omitempty"`
+		ModifierEmail        string `json:"modifier_email,omitempty"`
+		ModifierName         string `json:"modifier_name,omitempty"`
+		ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
+	}
+
+	type Response struct {
+		UserPerm   string   `json:"user_perm"`
+		DirID      string   `json:"dir_id"`
+		DirentList []Dirent `json:"dirent_list"`
+	}
+
+	var dirResp Response
+	var fileInfo Dirent
+
+	err = json.Unmarshal(body, &dirResp)
+	if err != nil {
+		klog.Errorf("parse response failed: %v\n", err)
+		return nil, 0, 0, false, err
+	}
+
+	var found = false
+	for _, dirent := range dirResp.DirentList {
+		if dirent.Name == filename {
+			fileInfo = dirent
+			found = true
+			break
+		}
+	}
+	if found {
+		mode := SyncPermToMode(fileInfo.Permission)
+		isDir := false
+		if fileInfo.Type == "dir" {
+			isDir = true
+		}
+		return nil, fileInfo.Size, mode, isDir, nil
+	} else {
+		err = e.New("sync file info not found")
+		return nil, 0, 0, false, err
+	}
+}
+
+func (rs *SyncResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+	w http.ResponseWriter, r *http.Request) error {
+	status, err := ResourceSyncDelete(src, r)
+	if status != http.StatusOK {
+		return os.ErrInvalid
+	}
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 type Dirent struct {
@@ -742,4 +1127,118 @@ func SyncPermToMode(permStr string) os.FileMode {
 	}
 
 	return perm
+}
+
+func ResourceSyncPatch(action, src, dst string, r *http.Request) error {
+	var apiName string
+	switch action {
+	case "copy":
+		apiName = "sync-batch-copy-item"
+	case "rename":
+		apiName = "sync-batch-move-item"
+	default:
+		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
+	}
+
+	// It seems that we can't mkdir althrough when using sync-bacth-copy/move-item, so we must use false for isDir here.
+	if err := SyncMkdirAll(dst, 0, false, r); err != nil {
+		return err
+	}
+
+	src = strings.Trim(src, "/")
+	if !strings.Contains(src, "/") {
+		err := e.New("invalid path format: path must contain at least one '/'")
+		klog.Errorln("Error:", err)
+		return err
+	}
+
+	srcFirstSlashIdx := strings.Index(src, "/")
+
+	srcRepoID := src[:srcFirstSlashIdx]
+
+	srcLastSlashIdx := strings.LastIndex(src, "/")
+
+	srcFilename := src[srcLastSlashIdx+1:]
+
+	srcPrefix := ""
+	if srcFirstSlashIdx != srcLastSlashIdx {
+		srcPrefix = src[srcFirstSlashIdx+1 : srcLastSlashIdx+1]
+	}
+
+	if srcPrefix != "" {
+		srcPrefix = "/" + srcPrefix
+	} else {
+		srcPrefix = "/"
+	}
+
+	dst = strings.Trim(dst, "/")
+	if !strings.Contains(dst, "/") {
+		err := e.New("invalid path format: path must contain at least one '/'")
+		klog.Errorln("Error:", err)
+		return err
+	}
+
+	dstFirstSlashIdx := strings.Index(dst, "/")
+
+	dstRepoID := dst[:dstFirstSlashIdx]
+
+	dstLastSlashIdx := strings.LastIndex(dst, "/")
+
+	dstPrefix := ""
+	if dstFirstSlashIdx != dstLastSlashIdx {
+		dstPrefix = dst[dstFirstSlashIdx+1 : dstLastSlashIdx+1]
+	}
+
+	if dstPrefix != "" {
+		dstPrefix = "/" + dstPrefix
+	} else {
+		dstPrefix = "/"
+	}
+
+	targetURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + apiName + "/"
+	requestBody := map[string]interface{}{
+		"dst_parent_dir": dstPrefix,
+		"dst_repo_id":    dstRepoID,
+		"src_dirents":    []string{srcFilename},
+		"src_parent_dir": srcPrefix,
+		"src_repo_id":    srcRepoID,
+	}
+	klog.Infoln(requestBody)
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return err
+	}
+
+	request, err := http.NewRequest("POST", targetURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return err
+	}
+
+	request.Header = r.Header
+	request.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	// Read the response body as a string
+	postBody, err := io.ReadAll(response.Body)
+	klog.Infoln("ReadAll")
+	if err != nil {
+		klog.Errorln("ReadAll error: ", err)
+		return err
+	}
+
+	if response.StatusCode != http.StatusOK {
+		klog.Infoln(string(postBody))
+		return fmt.Errorf("file paste failed with status: %d", response.StatusCode)
+	}
+
+	return nil
 }

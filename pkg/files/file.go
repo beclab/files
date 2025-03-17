@@ -8,7 +8,6 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
-	"files/pkg/common"
 	"fmt"
 	"hash"
 	"io"
@@ -27,7 +26,7 @@ import (
 	"files/pkg/errors"
 )
 
-var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), common.RootPrefix)
+var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), os.Getenv("ROOT_PREFIX"))
 var DefaultSorting = Sorting{
 	By:  "name",
 	Asc: true,

@@ -13,6 +13,8 @@ import (
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -661,7 +663,7 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 		if len(taskRespJson.Data) == 0 {
 			return e.New("Task Info Not Found")
 		}
-		if srcDrive == "tencent" && taskRespJson.Data[0].FailedReason != nil && *taskRespJson.Data[0].FailedReason == "Invalid task" {
+		if srcDrive == SrcTypeTencent && taskRespJson.Data[0].FailedReason != nil && *taskRespJson.Data[0].FailedReason == "Invalid task" {
 			return nil
 		}
 		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
@@ -740,7 +742,7 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 			err = e.New("Task Info Not Found")
 			return common.ErrToStatus(err), err
 		}
-		if dstDrive == "tencent" && taskRespJson.Data[0].FailedReason != nil && *taskRespJson.Data[0].FailedReason == "Invalid task" {
+		if dstDrive == SrcTypeTencent && taskRespJson.Data[0].FailedReason != nil && *taskRespJson.Data[0].FailedReason == "Invalid task" {
 			return http.StatusOK, nil
 		}
 		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
@@ -983,6 +985,288 @@ func (rc *CloudDriveResourceService) GetHandler(w http.ResponseWriter, r *http.R
 	return 0, nil
 }
 
+func (rc *CloudDriveResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		_, status, err := ResourceDeleteCloudDrive(fileCache, r.URL.Path, w, r, true)
+		return status, err
+	}
+}
+
+func (rc *CloudDriveResourceService) PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	_, status, err := ResourcePostCloudDrive(r.URL.Path, w, r, true)
+	return status, err
+}
+
+func (rc *CloudDriveResourceService) PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	// not public api for cloud drive, so it is not implemented
+	return http.StatusNotImplemented, fmt.Errorf("cloud drive does not supoort editing files")
+}
+
+func (rc *CloudDriveResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		return ResourcePatchCloudDrive(fileCache, w, r)
+	}
+}
+
+func (rs *CloudDriveResourceService) RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	bflName := r.Header.Get("X-Bfl-User")
+	src := r.URL.Path
+	metaData, err := GetCloudDriveMetadata(src, w, r)
+	if err != nil {
+		klog.Error(err)
+		return common.ErrToStatus(err), err
+	}
+	if metaData.IsDir {
+		return http.StatusNotImplemented, fmt.Errorf("doesn't support directory download for cloud drive now")
+	}
+	return RawFileHandlerCloudDrive(src, w, r, metaData, bflName)
+}
+
+func (rs *CloudDriveResourceService) PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		vars := mux.Vars(r)
+
+		previewSize, err := preview.ParsePreviewSize(vars["size"])
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		path := "/" + vars["path"]
+
+		return PreviewGetCloudDrive(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
+	}
+}
+
+func (rc *CloudDriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	switch action {
+	case "copy":
+		if strings.HasSuffix(src, "/") {
+			src = strings.TrimSuffix(src, "/")
+		}
+		metaInfo, err := GetCloudDriveFocusedMetaInfos(src, w, r)
+		if err != nil {
+			return err
+		}
+
+		if metaInfo.IsDir {
+			return CopyCloudDriveFolder(src, dst, w, r, metaInfo.Path, metaInfo.Name)
+		}
+		return CopyCloudDriveSingleFile(src, dst, w, r)
+	case "rename":
+		if !strings.HasSuffix(src, "/") {
+			src += "/"
+		}
+		return MoveCloudDriveFolderOrFiles(src, dst, w, r)
+	default:
+		return fmt.Errorf("unknown action: %s", action)
+	}
+}
+
+func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	mode := fileMode
+
+	handler, err := GetResourceService(dstType)
+	if err != nil {
+		return err
+	}
+
+	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	if err != nil {
+		return err
+	}
+
+	var fdstBase string = dst
+	if driveIdCache[src] != "" {
+		fdstBase = filepath.Dir(filepath.Dir(dst)) + "/" + driveIdCache[src]
+	}
+
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+
+	param := CloudDriveListParam{
+		Path:  srcPath,
+		Drive: srcDrive,
+		Name:  srcName,
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		klog.Errorln("Error marshalling JSON:", err)
+		return err
+	}
+	klog.Infoln("Cloud Drive List Params:", string(jsonBody))
+	var respBody []byte
+	respBody, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+	if err != nil {
+		klog.Errorln("Error calling drive/ls:", err)
+		return err
+	}
+	var bodyJson CloudDriveListResponse
+	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
+		klog.Error(err)
+		return err
+	}
+	for _, item := range bodyJson.Data {
+		fsrc := filepath.Join(src, item.Name)
+		fdst := filepath.Join(fdstBase, item.Name)
+		klog.Infoln(fsrc, fdst)
+		if item.IsDir {
+			err = rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (rs *CloudDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	_, _, err := ResourcePostCloudDrive(dst, w, r, false)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rs *CloudDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	bflName := r.Header.Get("X-Bfl-User")
+	if bflName == "" {
+		return os.ErrPermission
+	}
+
+	var bufferPath string
+
+	var err error
+	_, err = CheckBufferDiskSpace(diskSize)
+	if err != nil {
+		return err
+	}
+
+	srcInfo, err := GetCloudDriveFocusedMetaInfos(src, w, r)
+	bufferFilePath, err := GenerateBufferFolder(srcInfo.Path, bflName)
+	if err != nil {
+		return err
+	}
+	bufferPath = filepath.Join(bufferFilePath, srcInfo.Name)
+	klog.Infoln("Buffer file path: ", bufferFilePath)
+	klog.Infoln("Buffer path: ", bufferPath)
+	err = MakeDiskBuffer(bufferPath, diskSize, true)
+	if err != nil {
+		return err
+	}
+	err = CloudDriveFileToBuffer(src, bufferFilePath, w, r)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		klog.Infoln("Begin to remove buffer")
+		RemoveDiskBuffer(bufferPath, srcType)
+	}()
+
+	handler, err := GetResourceService(dstType)
+	if err != nil {
+		return err
+	}
+
+	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rs *CloudDriveResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+	r *http.Request, d *common.Data, diskSize int64) error {
+	klog.Infoln("Begin to paste!")
+	klog.Infoln("dst: ", dst)
+	status, err := CloudDriveBufferToFile(bufferPath, dst, w, r)
+	if status != http.StatusOK {
+		return os.ErrInvalid
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rs *CloudDriveResourceService) GetStat(fs afero.Fs, src string, w http.ResponseWriter,
+	r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
+	src, err := common.UnescapeURLIfEscaped(src)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+
+	src = strings.TrimSuffix(src, "/")
+	metaInfo, err := GetCloudDriveFocusedMetaInfos(src, w, r)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+	return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
+}
+
+func (rs *CloudDriveResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+	w http.ResponseWriter, r *http.Request) error {
+	_, status, err := ResourceDeleteCloudDrive(fileCache, src, w, r, true)
+	if status != http.StatusOK && status != 0 {
+		return os.ErrInvalid
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
+	if src == "" {
+		src = r.URL.Path
+	}
+	klog.Infoln("src Path:", src)
+	if strings.HasSuffix(src, "/") {
+		src = strings.TrimSuffix(src, "/")
+	}
+
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+
+	param := CloudDriveDeleteParam{
+		Path:  srcPath,
+		Drive: srcDrive, // "my_drive",
+		Name:  srcName,  // "file_name",
+	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		klog.Errorln("Error marshalling JSON:", err)
+		return nil, common.ErrToStatus(err), err
+	}
+	klog.Infoln("Cloud Drive Delete Params:", string(jsonBody))
+
+	// del thumbnails for Cloud Drive
+	err = delThumbsCloudDrive(r.Context(), fileCache, src, w, r)
+	if err != nil {
+		return nil, common.ErrToStatus(err), err
+	}
+
+	var respBody []byte = nil
+	if returnResp {
+		respBody, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, true)
+		klog.Infoln(string(respBody))
+	} else {
+		_, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, false)
+	}
+	if err != nil {
+		klog.Errorln("Error calling drive/delete:", err)
+		return nil, common.ErrToStatus(err), err
+	}
+	return respBody, 0, nil
+}
+
 func ResourcePostCloudDrive(src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
 	if src == "" {
 		src = r.URL.Path
@@ -1058,50 +1342,6 @@ func ResourcePatchCloudDrive(fileCache fileutils.FileCache, w http.ResponseWrite
 	return 0, nil
 }
 
-func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
-	if src == "" {
-		src = r.URL.Path
-	}
-	klog.Infoln("src Path:", src)
-	if strings.HasSuffix(src, "/") {
-		src = strings.TrimSuffix(src, "/")
-	}
-
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
-
-	param := CloudDriveDeleteParam{
-		Path:  srcPath,
-		Drive: srcDrive, // "my_drive",
-		Name:  srcName,  // "file_name",
-	}
-
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return nil, common.ErrToStatus(err), err
-	}
-	klog.Infoln("Cloud Drive Delete Params:", string(jsonBody))
-
-	// del thumbnails for Cloud Drive
-	err = delThumbsCloudDrive(r.Context(), fileCache, src, w, r)
-	if err != nil {
-		return nil, common.ErrToStatus(err), err
-	}
-
-	var respBody []byte = nil
-	if returnResp {
-		respBody, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, true)
-		klog.Infoln(string(respBody))
-	} else {
-		_, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, false)
-	}
-	if err != nil {
-		klog.Errorln("Error calling drive/delete:", err)
-		return nil, common.ErrToStatus(err), err
-	}
-	return respBody, 0, nil
-}
-
 func setContentDispositionCloudDrive(w http.ResponseWriter, r *http.Request, fileName string) {
 	if r.URL.Query().Get("inline") == "true" {
 		w.Header().Set("Content-Disposition", "inline")
@@ -1131,19 +1371,19 @@ func createPreviewCloudDrive(w http.ResponseWriter, r *http.Request, src string,
 
 	var err error
 	diskSize := file.Size
-	_, err = common.CheckBufferDiskSpace(diskSize)
+	_, err = CheckBufferDiskSpace(diskSize)
 	if err != nil {
 		return nil, err
 	}
 
-	bufferFilePath, err := common.GenerateBufferFolder(file.Path, bflName)
+	bufferFilePath, err := GenerateBufferFolder(file.Path, bflName)
 	if err != nil {
 		return nil, err
 	}
 	bufferPath := filepath.Join(bufferFilePath, file.Name)
 	klog.Infoln("Buffer file path: ", bufferFilePath)
 	klog.Infoln("Buffer path: ", bufferPath)
-	err = common.MakeDiskBuffer(bufferPath, diskSize, true)
+	err = MakeDiskBuffer(bufferPath, diskSize, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1190,26 +1430,26 @@ func createPreviewCloudDrive(w http.ResponseWriter, r *http.Request, src string,
 	}()
 
 	klog.Infoln("Begin to remove buffer")
-	common.RemoveDiskBuffer(bufferPath, "cloud")
+	RemoveDiskBuffer(bufferPath, SrcTypeCloud)
 	return buf.Bytes(), nil
 }
 
 func RawFileHandlerCloudDrive(src string, w http.ResponseWriter, r *http.Request, file *CloudDriveMetaResponseData, bflName string) (int, error) {
 	var err error
 	diskSize := file.Size
-	_, err = common.CheckBufferDiskSpace(diskSize)
+	_, err = CheckBufferDiskSpace(diskSize)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
 
-	bufferFilePath, err := common.GenerateBufferFolder(file.Path, bflName)
+	bufferFilePath, err := GenerateBufferFolder(file.Path, bflName)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
 	bufferPath := filepath.Join(bufferFilePath, file.Name)
 	klog.Infoln("Buffer file path: ", bufferFilePath)
 	klog.Infoln("Buffer path: ", bufferPath)
-	err = common.MakeDiskBuffer(bufferPath, diskSize, true)
+	err = MakeDiskBuffer(bufferPath, diskSize, true)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
@@ -1230,7 +1470,7 @@ func RawFileHandlerCloudDrive(src string, w http.ResponseWriter, r *http.Request
 	http.ServeContent(w, r, file.Name, ParseTimeString(file.Modified), fd)
 
 	klog.Infoln("Begin to remove buffer")
-	common.RemoveDiskBuffer(bufferPath, "cloud")
+	RemoveDiskBuffer(bufferPath, SrcTypeCloud)
 	return 0, nil
 }
 

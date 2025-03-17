@@ -2,24 +2,52 @@ package drives
 
 import (
 	"bytes"
+	"context"
 	"files/pkg/common"
 	"files/pkg/errors"
 	"files/pkg/files"
+	"files/pkg/fileutils"
+	"files/pkg/preview"
 	"fmt"
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
+type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+
 type ResourceService interface {
+	// resource handlers
 	GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-	//PutHandle(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-	//PostHandle(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-	//PatchHandle(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-	//DeleteHandle(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+	DeleteHandler(fileCache fileutils.FileCache) handleFunc
+	PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+	PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+	PatchHandler(fileCache fileutils.FileCache) handleFunc
+
+	// raw handler
+	RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+
+	// preview handler
+	PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc
+
+	// paste funcs
+	PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
+	PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode, w http.ResponseWriter,
+		r *http.Request, driveIdCache map[string]string) error
+	PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
+		d *common.Data, driveIdCache map[string]string) error
+	PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, mode os.FileMode, diskSize int64,
+		w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
+	PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
+		d *common.Data, diskSize int64) error
+	GetStat(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error)
+	MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data, w http.ResponseWriter, r *http.Request) error
 }
 
 var (
@@ -42,6 +70,17 @@ const (
 	SrcTypeDropbox = "dropbox"
 )
 
+var ValidSrcTypes = map[string]bool{
+	SrcTypeDrive:   true,
+	SrcTypeCache:   true,
+	SrcTypeSync:    true,
+	SrcTypeGoogle:  true,
+	SrcTypeCloud:   true,
+	SrcTypeAWSS3:   true,
+	SrcTypeTencent: true,
+	SrcTypeDropbox: true,
+}
+
 func GetResourceService(srcType string) (ResourceService, error) {
 	switch srcType {
 	case SrcTypeDrive:
@@ -56,6 +95,26 @@ func GetResourceService(srcType string) (ResourceService, error) {
 		return CloudDriveService, nil
 	default:
 		return BaseService, nil
+	}
+}
+
+func IsThridPartyDrives(dstType string) bool {
+	switch dstType {
+	case SrcTypeDrive, SrcTypeCache, SrcTypeSync:
+		return false
+	case SrcTypeGoogle, SrcTypeCloud, SrcTypeAWSS3, SrcTypeTencent, SrcTypeDropbox:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsCloudDrives(dstType string) bool {
+	switch dstType {
+	case SrcTypeCloud, SrcTypeAWSS3, SrcTypeTencent, SrcTypeDropbox:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -238,4 +297,209 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		klog.Infoln("response Body:", string(body))
 	}
 	return common.RenderJSON(w, r, file)
+}
+
+func (rs *BaseResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		if r.URL.Path == "/" {
+			return http.StatusForbidden, nil
+		}
+
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:         files.DefaultFs,
+			Path:       r.URL.Path,
+			Modify:     true,
+			Expand:     false,
+			ReadHeader: d.Server.TypeDetectionByHeader,
+		})
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		// delete thumbnails
+		err = preview.DelThumbs(r.Context(), fileCache, file)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		err = files.DefaultFs.RemoveAll(r.URL.Path)
+
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		return http.StatusOK, nil
+	}
+}
+
+func (rs *BaseResourceService) PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	modeParam := r.URL.Query().Get("mode")
+
+	mode, err := strconv.ParseUint(modeParam, 8, 32)
+	if err != nil || modeParam == "" {
+		mode = 0775
+	}
+
+	fileMode := os.FileMode(mode)
+
+	// Directories creation on POST.
+	if strings.HasSuffix(r.URL.Path, "/") {
+		if err = files.DefaultFs.MkdirAll(r.URL.Path, fileMode); err != nil {
+			klog.Errorln(err)
+			return common.ErrToStatus(err), err
+		}
+		if err = fileutils.Chown(files.DefaultFs, r.URL.Path, 1000, 1000); err != nil {
+			klog.Errorf("can't chown directory %s to user %d: %s", r.URL.Path, 1000, err)
+			return common.ErrToStatus(err), err
+		}
+		return http.StatusOK, nil
+	}
+	return http.StatusBadRequest, fmt.Errorf("%s is not a valid directory path", r.URL.Path)
+}
+
+func (rs *BaseResourceService) PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	// Only allow PUT for files.
+	if strings.HasSuffix(r.URL.Path, "/") {
+		return http.StatusMethodNotAllowed, nil
+	}
+
+	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !exists {
+		return http.StatusNotFound, nil
+	}
+
+	info, err := fileutils.WriteFile(files.DefaultFs, r.URL.Path, r.Body)
+	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
+	w.Header().Set("ETag", etag)
+
+	return common.ErrToStatus(err), err
+}
+
+func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		src := r.URL.Path
+		dst := r.URL.Query().Get("destination")
+		action := r.URL.Query().Get("action")
+		dst, err := common.UnescapeURLIfEscaped(dst)
+
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+		if dst == "/" || src == "/" {
+			return http.StatusForbidden, nil
+		}
+
+		err = common.CheckParent(src, dst)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+
+		rename := r.URL.Query().Get("rename") == "true"
+		if !rename {
+			if _, err = files.DefaultFs.Stat(dst); err == nil {
+				return http.StatusConflict, nil
+			}
+		}
+		if rename {
+			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
+		}
+
+		klog.Infoln("Before patch action:", src, dst, action, rename)
+		err = common.PatchAction(r.Context(), action, src, dst, fileCache)
+
+		return common.ErrToStatus(err), err
+	}
+}
+
+func (rs *BaseResourceService) RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:         files.DefaultFs,
+		Path:       r.URL.Path,
+		Modify:     true,
+		Expand:     false,
+		ReadHeader: d.Server.TypeDetectionByHeader,
+	})
+	if err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	if files.IsNamedPipe(file.Mode) {
+		SetContentDisposition(w, r, file)
+		return 0, nil
+	}
+
+	if !file.IsDir {
+		return RawFileHandler(w, r, file)
+	}
+
+	return RawDirHandler(w, r, d, file)
+}
+
+func (rs *BaseResourceService) PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		vars := mux.Vars(r)
+
+		previewSize, err := preview.ParsePreviewSize(vars["size"])
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		path := "/" + vars["path"]
+
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:         files.DefaultFs,
+			Path:       path,
+			Modify:     true,
+			Expand:     true,
+			ReadHeader: d.Server.TypeDetectionByHeader,
+		})
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		SetContentDisposition(w, r, file)
+
+		switch file.Type {
+		case "image":
+			return HandleImagePreview(w, r, imgSvc, fileCache, file, previewSize, enableThumbnails, resizePreview)
+		default:
+			return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", file.Type)
+		}
+	}
+}
+
+func (rs *BaseResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+	r *http.Request, d *common.Data, diskSize int64) error {
+	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) GetStat(fs afero.Fs, src string, w http.ResponseWriter,
+	r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
+	return nil, 0, 0, false, fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+	w http.ResponseWriter, r *http.Request) error {
+	return fmt.Errorf("Not Implemented")
 }
