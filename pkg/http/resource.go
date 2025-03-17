@@ -164,9 +164,8 @@ func resourcePatchHandler(fileCache fileutils.FileCache) handleFunc {
 			return http.StatusBadRequest, err
 		}
 
-		override := r.URL.Query().Get("override") == "true"
 		rename := r.URL.Query().Get("rename") == "true"
-		if !override && !rename {
+		if !rename {
 			if _, err = files.DefaultFs.Stat(dst); err == nil {
 				return http.StatusConflict, nil
 			}
@@ -175,12 +174,7 @@ func resourcePatchHandler(fileCache fileutils.FileCache) handleFunc {
 			dst = addVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
-		// Permission for overwriting the file
-		if override {
-			return http.StatusForbidden, nil
-		}
-
-		klog.Infoln("Before patch action:", src, dst, action, override, rename)
+		klog.Infoln("Before patch action:", src, dst, action, rename)
 		err = patchAction(r.Context(), action, src, dst, d, fileCache)
 
 		return common.ErrToStatus(err), err

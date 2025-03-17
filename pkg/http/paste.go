@@ -111,9 +111,8 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			return common.RenderJSON(w, r, response)
 		}
 
-		override := r.URL.Query().Get("override") == "true"
 		rename := r.URL.Query().Get("rename") == "true"
-		if !override && !rename {
+		if !rename {
 			if _, err := files.DefaultFs.Stat(dst); err == nil {
 				return http.StatusConflict, nil
 			}
@@ -142,10 +141,6 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		if rename && dstType != "google" {
 			dst = pasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r)
 		}
-		// Permission for overwriting the file
-		if override {
-			return http.StatusForbidden, nil
-		}
 		var same = srcType == dstType
 		// all cloud drives of two users must be seen as diff archs
 		var srcName, dstName string
@@ -164,7 +159,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		}
 
 		if same {
-			err = pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, override, rename, w, r)
+			err = pasteActionSameArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, rename, w, r)
 		} else {
 			err = pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
 		}
@@ -1040,11 +1035,11 @@ func moveDelete(fileCache fileutils.FileCache, srcType, src string, ctx context.
 	return os.ErrInvalid
 }
 
-func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, override, rename bool, w http.ResponseWriter, r *http.Request) error {
+func pasteActionSameArch(ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, rename bool, w http.ResponseWriter, r *http.Request) error {
 	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
-	klog.Infoln("src: ", src, ", dst: ", dst, ", override: ", override)
+	klog.Infoln("src: ", src, ", dst: ", dst)
 	if srcType == "drive" || srcType == "cache" {
-		patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&override=" + strconv.FormatBool(override) + "&rename=" + strconv.FormatBool(rename)
+		patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&rename=" + strconv.FormatBool(rename)
 		method := "PATCH"
 		payload := []byte(``)
 		klog.Infoln(patchUrl)
