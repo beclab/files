@@ -85,6 +85,7 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 	pvc := ""
 	if drives.IsBaseDrives(srcType) {
 		pvc = rpc.ExtractPvcFromURL(src)
+		klog.Infof("pvc: %s", pvc)
 		if !strings.HasPrefix(pvc, "pvc-userspace-"+bfl+"-") && !strings.HasPrefix(pvc, "pvc-appcache-"+bfl+"-") {
 			return false
 		}
@@ -93,6 +94,7 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 	if prefix == "/api/paste" || (prefix == "/api/resources" && r.Method == http.MethodPatch) {
 		if drives.IsBaseDrives(dstType) {
 			pvc = rpc.ExtractPvcFromURL(src)
+			klog.Infof("pvc: %s", pvc)
 			if !strings.HasPrefix(pvc, "pvc-userspace-"+bfl+"-") && !strings.HasPrefix(pvc, "pvc-appcache-"+bfl+"-") {
 				return false
 			}
