@@ -6,6 +6,7 @@ import (
 	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/tomasen/realip"
 
@@ -17,10 +18,7 @@ type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (in
 
 func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		checked, err := CheckPathOwner(r, prefix)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
-		}
+		checked := CheckPathOwner(r, prefix)
 		if !checked {
 			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 		}
@@ -55,13 +53,12 @@ func NeedCheckPrefix(prefix string) bool {
 	}
 }
 
-func CheckPathOwner(r *http.Request, prefix string) (bool, error) {
+func CheckPathOwner(r *http.Request, prefix string) bool {
 	klog.Infof("~~~~Temp log: URL = %s, prefix = %s", r.URL, prefix)
 	if !NeedCheckPrefix(prefix) {
-		return true, nil
+		return true
 	}
 
-	var err error = nil
 	method := r.Method
 	src := r.URL.Path
 
@@ -84,28 +81,22 @@ func CheckPathOwner(r *http.Request, prefix string) (bool, error) {
 
 	klog.Infof("Checking owner for method: %s, prefix: %s, srcType: %s, src: %s, dstType: %s, dst: %s", method, prefix, srcType, src, dstType, dst)
 
-	bflRequest := r.Header.Get("X-Bfl-User")
-	bflParsed := ""
+	bfl := r.Header.Get("X-Bfl-User")
+	pvc := ""
 	if drives.IsBaseDrives(srcType) {
-		bflParsed, err = rpc.PVCs.GetBfl(rpc.ExtractPvcFromURL(src))
-		if err != nil {
-			return false, err
-		}
-		if bflParsed != bflRequest {
-			return false, nil
+		pvc = rpc.ExtractPvcFromURL(src)
+		if !strings.HasPrefix(pvc, "pvc-userspace-"+bfl+"-") && !strings.HasPrefix(pvc, "pvc-appcache-"+bfl+"-") {
+			return false
 		}
 	}
 
 	if prefix == "/api/paste" || (prefix == "/api/resources" && r.Method == http.MethodPatch) {
 		if drives.IsBaseDrives(dstType) {
-			bflParsed, err = rpc.PVCs.GetBfl(rpc.ExtractPvcFromURL(dst))
-			if err != nil {
-				return false, err
-			}
-			if bflParsed != bflRequest {
-				return false, nil
+			pvc = rpc.ExtractPvcFromURL(src)
+			if !strings.HasPrefix(pvc, "pvc-userspace-"+bfl+"-") && !strings.HasPrefix(pvc, "pvc-appcache-"+bfl+"-") {
+				return false
 			}
 		}
 	}
-	return true, nil
+	return true
 }
