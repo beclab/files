@@ -25,6 +25,9 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 		if strings.Contains(respJson["message"].(string), "mount error(13)") {
 			respJson["message"] = "Incorrect username or password"
 		}
+		if strings.Contains(respJson["message"].(string), "mount error(113)") {
+			respJson["message"] = "Unable to find suitable address"
+		}
 		if strings.Contains(respJson["message"].(string), "mount error(115)") {
 			respJson["message"] = "Cannot connect to samba server"
 		}

@@ -155,7 +155,7 @@ const (
 	maxReasonableSpace = 1000 * 1e12 // 1000T
 )
 
-func checkDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
+func CheckDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
 	reservedSpaceStr := os.Getenv("RESERVED_SPACE") // env is MB, default is 10000MB
 	if reservedSpaceStr == "" {
 		reservedSpaceStr = "10000"
@@ -197,7 +197,7 @@ func checkDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, 
 	return false, requiredSpace, availableSpace, reservedSpace, nil
 }
 
-func formatBytes(bytes int64) string {
+func FormatBytes(bytes int64) string {
 	const (
 		KB = 1024
 		MB = KB * 1024

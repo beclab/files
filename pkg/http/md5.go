@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/drives"
 	"files/pkg/files"
 	"fmt"
 	"io"
@@ -118,7 +119,7 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 
 func md5Handler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	srcType := r.URL.Query().Get("src")
-	if srcType == "sync" {
+	if srcType == drives.SrcTypeSync {
 		return md5Sync(w, r)
 	}
 

@@ -17,6 +17,7 @@ package proxy
 import (
 	"context"
 	"files/pkg/appdata"
+	"files/pkg/drives"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -350,21 +351,21 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		klog.Infoln("SRC_TYPE:", srcType)
 		klog.Infoln("DST_TYPE:", dstType)
 
-		if srcType == "drive" {
+		if srcType == drives.SrcTypeDrive {
 			src = rewriteUrl(src, userPvc, "")
-		} else if srcType == "cache" {
+		} else if srcType == drives.SrcTypeCache {
 			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
-		} else if srcType == "sync" {
+		} else if srcType == drives.SrcTypeSync {
 			src = src
 		}
 
-		if dstType == "drive" {
+		if dstType == drives.SrcTypeDrive {
 			dst = rewriteUrl(dst, userPvc, "")
 			query.Set("destination", dst)
-		} else if dstType == "cache" {
+		} else if dstType == drives.SrcTypeCache {
 			dst = rewriteUrl(dst, cachePvc, "/AppData")
 			query.Set("destination", dst)
-		} else if dstType == "sync" {
+		} else if dstType == drives.SrcTypeSync {
 			dst = dst
 		}
 
