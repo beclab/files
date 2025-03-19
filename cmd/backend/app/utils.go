@@ -33,6 +33,7 @@ func dbExists(path string) (bool, error) {
 		d := filepath.Dir(path)
 		_, err = os.Stat(d)
 		if os.IsNotExist(err) {
+			// forced 1000
 			if err = os.MkdirAll(d, 0700); err != nil {
 				return false, err
 			}

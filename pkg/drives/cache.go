@@ -67,7 +67,7 @@ func (rs *CacheResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 
 	var fdstBase string = dst
 	if driveIdCache[src] != "" {
-		fdstBase = filepath.Dir(filepath.Dir(dst)) + "/" + driveIdCache[src]
+		fdstBase = filepath.Join(filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))), driveIdCache[src])
 	}
 
 	type Item struct {
@@ -347,11 +347,8 @@ func CacheFileToBuffer(src string, bufferFilePath string) error {
 func CacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data) (int, error) {
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		if err := files.DefaultFs.MkdirAll(targetPath, mode); err != nil {
-			return common.ErrToStatus(err), err
-		}
-		if err := fileutils.Chown(files.DefaultFs, targetPath, 1000, 1000); err != nil {
-			klog.Errorf("can't chown directory %s to user %d: %s", targetPath, 1000, err)
+		if err := fileutils.MkdirAllWithChown(files.DefaultFs, targetPath, mode); err != nil {
+			klog.Errorln(err)
 			return common.ErrToStatus(err), err
 		}
 	}

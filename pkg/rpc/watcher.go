@@ -26,6 +26,8 @@ var RootPrefix = os.Getenv("ROOT_PREFIX") // "/data"
 
 var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
 
+var AppDataPathPrefix = "/AppData"
+
 var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
 
 var watcher *jfsnotify.Watcher = nil
@@ -221,7 +223,7 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 					search3 = false
 				}
 				if search3 && checkString(path) {
-					bflName, err := PVCs.getBfl(ExtractPvcFromURL(path))
+					bflName, err := PVCs.GetBfl(ExtractPvcFromURL(path))
 					if err != nil {
 						klog.Info(err)
 					} else {
@@ -359,7 +361,7 @@ func handleEvent(e jfsnotify.Event) error {
 	var bflName string
 	var err error
 	if checkString(e.Name) {
-		bflName, err = PVCs.getBfl(ExtractPvcFromURL(e.Name))
+		bflName, err = PVCs.GetBfl(ExtractPvcFromURL(e.Name))
 		if err != nil {
 			klog.Info(err)
 		} else {
