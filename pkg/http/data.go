@@ -64,9 +64,12 @@ func CheckPathOwner(r *http.Request, prefix string) (bool, error) {
 	}
 
 	dst := r.URL.Query().Get("destination")
-	dstType := r.URL.Query().Get("dst_type")
-	if dstType == "" {
-		dstType = drives.SrcTypeDrive
+	dstType := ""
+	if dst != "" {
+		dstType = r.URL.Query().Get("dst_type")
+		if dstType == "" {
+			dstType = drives.SrcTypeDrive
+		}
 	}
 
 	klog.Infof("Checking owner for method: %s, prefix: %s, srcType: %s, src: %s, dstType: %s, dst: %s", method, prefix, srcType, src, dstType, dst)
