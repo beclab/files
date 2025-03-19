@@ -15,6 +15,12 @@ type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (in
 
 func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if prefix == "/api/paste" || (prefix == "/api/resources" && r.Method == http.MethodPatch) {
+			klog.Warningf("Is src and dst yours? We'll check it for %s %s", r.Method, r.URL.Path)
+		} else if prefix == "/api/resources" || prefix == "/api/raw" || prefix == "/api/preview" {
+			klog.Warningf("Is src yours? We'll check it for %s %s", r.Method, r.URL.Path)
+		}
+		
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
 		status, err := fn(w, r, &common.Data{
