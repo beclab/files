@@ -26,6 +26,7 @@ import (
 	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -230,10 +231,10 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 				return path
 			}
 			if splitName == "/Home" {
-				return firstHalf + "/" + pvc + secondHalf
+				return filepath.Join(firstHalf, pvc+secondHalf)
 			} else {
 				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
-				return firstHalf + "/" + pvc + "/Data" + secondHalf
+				return filepath.Join(firstHalf, pvc+"/Data"+secondHalf)
 			}
 		}
 	} else {
@@ -241,7 +242,7 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 		if strings.HasPrefix(pathSuffix, "/"+pvc) {
 			return path
 		}
-		return prefix + "/" + pvc + pathSuffix
+		return filepath.Join(prefix, pvc+pathSuffix)
 	}
 	return path
 }

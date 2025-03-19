@@ -77,7 +77,7 @@ func (p *PVCCache) getBflForCachePVCOrCache(cachePvc string) (string, error) {
 	return bflName, nil
 }
 
-func (p *PVCCache) getBfl(pvc string) (string, error) {
+func (p *PVCCache) GetBfl(pvc string) (string, error) {
 	bflName, err := p.getBflForUserPVCOrCache(pvc)
 	if bflName == "" || err != nil {
 		bflName, err = p.getBflForCachePVCOrCache(pvc)
@@ -115,12 +115,12 @@ func FindStatefulSetByPVCAnnotation(ctx context.Context, client *kubernetes.Clie
 
 func ExtractPvcFromURL(path string) string {
 	splitPrefix := ""
-	if strings.HasPrefix(path, RootPrefix) {
+	if strings.HasPrefix(path, AppDataPathPrefix) {
+		splitPrefix = AppDataPathPrefix
+	} else if strings.HasPrefix(path, RootPrefix) {
 		splitPrefix = RootPrefix
 	} else if strings.HasPrefix(path, CacheRootPath) {
 		splitPrefix = CacheRootPath
-	} else {
-		return ""
 	}
 
 	trimmedPath := strings.TrimPrefix(path, splitPrefix)
