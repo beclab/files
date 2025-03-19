@@ -109,6 +109,15 @@ func IsThridPartyDrives(dstType string) bool {
 	}
 }
 
+func IsBaseDrives(dstType string) bool {
+	switch dstType {
+	case SrcTypeDrive, SrcTypeCache:
+		return true
+	default:
+		return false
+	}
+}
+
 func IsCloudDrives(dstType string) bool {
 	switch dstType {
 	case SrcTypeCloud, SrcTypeAWSS3, SrcTypeTencent, SrcTypeDropbox:

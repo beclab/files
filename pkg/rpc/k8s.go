@@ -77,7 +77,7 @@ func (p *PVCCache) getBflForCachePVCOrCache(cachePvc string) (string, error) {
 	return bflName, nil
 }
 
-func (p *PVCCache) getBfl(pvc string) (string, error) {
+func (p *PVCCache) GetBfl(pvc string) (string, error) {
 	bflName, err := p.getBflForUserPVCOrCache(pvc)
 	if bflName == "" || err != nil {
 		bflName, err = p.getBflForCachePVCOrCache(pvc)
