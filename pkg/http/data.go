@@ -46,8 +46,17 @@ func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler 
 	return stripPrefix(prefix, handler)
 }
 
+func NeedCheckPrefix(prefix string) bool {
+	switch prefix {
+	case "/api/resources", "/api/raw", "/api/preview", "/api/paste", "/api/permission", "/api/share":
+		return true
+	default:
+		return false
+	}
+}
+
 func CheckPathOwner(r *http.Request, prefix string) (bool, error) {
-	if prefix != "/api/resources" && prefix != "/api/raw" && prefix != "/api/preview" && prefix != "/api/paste" {
+	if NeedCheckPrefix(prefix) {
 		return true, nil
 	}
 
