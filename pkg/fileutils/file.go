@@ -290,6 +290,10 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 	vol := ""
 	found := false
 	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		
 		vol = filepath.Join(vol, part)
 
 		if fs == nil {
