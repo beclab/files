@@ -91,13 +91,17 @@ func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 func (rs *DriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	mode := fileMode
-	if err := fs.MkdirAll(dst, mode); err != nil {
+	if err := fileutils.MkdirAllWithChown(fs, dst, mode); err != nil {
+		klog.Errorln(err)
 		return err
 	}
-	if err := fileutils.Chown(fs, dst, 1000, 1000); err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", dst, 1000, err)
-		return err
-	}
+	//if err := fs.MkdirAll(dst, mode); err != nil {
+	//	return err
+	//}
+	//if err := fileutils.Chown(fs, dst, 1000, 1000); err != nil {
+	//	klog.Errorf("can't chown directory %s to user %d: %s", dst, 1000, err)
+	//	return err
+	//}
 	return nil
 }
 
@@ -373,13 +377,17 @@ func DriveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		if err = files.DefaultFs.MkdirAll(targetPath, mode); err != nil {
+		if err = fileutils.MkdirAllWithChown(files.DefaultFs, targetPath, mode); err != nil {
+			klog.Errorln(err)
 			return common.ErrToStatus(err), err
 		}
-		if err = fileutils.Chown(files.DefaultFs, targetPath, 1000, 1000); err != nil {
-			klog.Errorf("can't chown directory %s to user %d: %s", targetPath, 1000, err)
-			return common.ErrToStatus(err), err
-		}
+		//if err = files.DefaultFs.MkdirAll(targetPath, mode); err != nil {
+		//	return common.ErrToStatus(err), err
+		//}
+		//if err = fileutils.Chown(files.DefaultFs, targetPath, 1000, 1000); err != nil {
+		//	klog.Errorf("can't chown directory %s to user %d: %s", targetPath, 1000, err)
+		//	return common.ErrToStatus(err), err
+		//}
 	}
 
 	_, err = files.NewFileInfo(files.FileOptions{

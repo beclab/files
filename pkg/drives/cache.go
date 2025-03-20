@@ -347,13 +347,17 @@ func CacheFileToBuffer(src string, bufferFilePath string) error {
 func CacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data) (int, error) {
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		if err := files.DefaultFs.MkdirAll(targetPath, mode); err != nil {
+		if err := fileutils.MkdirAllWithChown(files.DefaultFs, targetPath, mode); err != nil {
+			klog.Errorln(err)
 			return common.ErrToStatus(err), err
 		}
-		if err := fileutils.Chown(files.DefaultFs, targetPath, 1000, 1000); err != nil {
-			klog.Errorf("can't chown directory %s to user %d: %s", targetPath, 1000, err)
-			return common.ErrToStatus(err), err
-		}
+		//if err := files.DefaultFs.MkdirAll(targetPath, mode); err != nil {
+		//	return common.ErrToStatus(err), err
+		//}
+		//if err := fileutils.Chown(files.DefaultFs, targetPath, 1000, 1000); err != nil {
+		//	klog.Errorf("can't chown directory %s to user %d: %s", targetPath, 1000, err)
+		//	return common.ErrToStatus(err), err
+		//}
 	}
 
 	_, err := files.NewFileInfo(files.FileOptions{

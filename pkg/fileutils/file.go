@@ -73,6 +73,14 @@ func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error
 	if err := targetFile.Sync(); err != nil {
 		return err
 	}
+
+	uid, err := GetUID(nil, dir)
+	if err != nil {
+		return err
+	}
+	if err = Chown(nil, tempFilePath, uid, uid); err != nil {
+		return err
+	}
 	return os.Rename(tempFilePath, targetPath)
 }
 
@@ -95,13 +103,17 @@ func IoCopyFileWithBufferFs(fs afero.Fs, sourcePath, targetPath string, bufferSi
 	klog.Infoln("***tempFilePath:", tempFilePath)
 	klog.Infoln("***tempFileName:", tempFileName)
 
-	if err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755); err != nil {
+	if err = MkdirAllWithChown(fs, filepath.Dir(tempFilePath), 0755); err != nil {
+		klog.Errorln(err)
 		return err
 	}
-	if err = Chown(fs, filepath.Dir(tempFilePath), 1000, 1000); err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", filepath.Dir(tempFilePath), 1000, err)
-		return err
-	}
+	//if err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755); err != nil {
+	//	return err
+	//}
+	//if err = Chown(fs, filepath.Dir(tempFilePath), 1000, 1000); err != nil {
+	//	klog.Errorf("can't chown directory %s to user %d: %s", filepath.Dir(tempFilePath), 1000, err)
+	//	return err
+	//}
 
 	targetFile, err := fs.OpenFile(tempFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
@@ -124,6 +136,14 @@ func IoCopyFileWithBufferFs(fs afero.Fs, sourcePath, targetPath string, bufferSi
 	}
 
 	if err := targetFile.Sync(); err != nil {
+		return err
+	}
+
+	uid, err := GetUID(fs, dir)
+	if err != nil {
+		return err
+	}
+	if err = Chown(fs, tempFilePath, uid, uid); err != nil {
 		return err
 	}
 	return fs.Rename(tempFilePath, targetPath)
@@ -230,13 +250,88 @@ func Chown(fs afero.Fs, path string, uid, gid int) error {
 		klog.Infof("Function Chown execution time: %v\n", elapsed)
 	}()
 
+	var err error = nil
 	if fs == nil {
-		return os.Chown(path, uid, gid)
+		err = os.Chown(path, uid, gid)
+	} else {
+		err = fs.Chown(path, uid, gid)
 	}
-	return fs.Chown(path, uid, gid)
+	if err != nil {
+		klog.Errorf("can't chown directory %s to user %d: %s", path, uid, err)
+	}
+	return err
+}
+
+func createAndChownDir(fs afero.Fs, path string, mode os.FileMode, uid, gid int) error {
+	if fs == nil {
+		if err := os.Mkdir(path, mode); err != nil {
+			return err
+		}
+	} else {
+		if err := fs.Mkdir(path, mode); err != nil {
+			return err
+		}
+	}
+	return Chown(fs, path, uid, gid)
+}
+
+func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
+	if path == "" {
+		return nil
+	}
+
+	var info os.FileInfo
+	var err error
+	var uid int
+	var subErr error
+
+	parts := filepath.SplitList(path)
+	vol := ""
+	var tempMode os.FileMode
+	for _, part := range parts {
+		vol = filepath.Join(vol, part)
+
+		if fs == nil {
+			info, err = os.Stat(vol)
+		} else {
+			info, err = fs.Stat(vol)
+		}
+		if err == nil {
+			if !info.IsDir() {
+				return fmt.Errorf("path %s is not a directory", vol)
+			}
+			tempMode = info.Mode()
+			uid, subErr = GetUID(fs, filepath.Dir(vol))
+			if subErr != nil {
+				return subErr
+			}
+			continue
+		}
+
+		if os.IsNotExist(err) {
+			if filepath.Dir(vol) == "/" {
+				uid = 1000
+			}
+
+			if mode == 0 {
+				mode = tempMode
+			}
+
+			if subErr = createAndChownDir(fs, vol, mode, uid, uid); err != nil {
+				return subErr
+			}
+		} else {
+			return err
+		}
+	}
+	return nil
 }
 
 func GetUID(fs afero.Fs, path string) (int, error) {
+	if path == "/" {
+		return 1000, nil
+	}
+
 	start := time.Now()
 	klog.Infoln("Function GetUID starts at", start)
 	defer func() {
@@ -267,13 +362,17 @@ func GetUID(fs afero.Fs, path string) (int, error) {
 func WriteFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 	klog.Infoln("Before open ", dst)
 	dir, _ := path.Split(dst)
-	if err := fs.MkdirAll(dir, 0775); err != nil {
+	if err := MkdirAllWithChown(fs, dir, 0755); err != nil {
+		klog.Errorln(err)
 		return nil, err
 	}
-	if err := Chown(fs, dir, 1000, 1000); err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", dir, 1000, err)
-		return nil, err
-	}
+	//if err := fs.MkdirAll(dir, 0775); err != nil {
+	//	return nil, err
+	//}
+	//if err := Chown(fs, dir, 1000, 1000); err != nil {
+	//	klog.Errorf("can't chown directory %s to user %d: %s", dir, 1000, err)
+	//	return nil, err
+	//}
 
 	klog.Infoln("Open ", dst)
 	file, err := fs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)

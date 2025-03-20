@@ -88,13 +88,17 @@ func GenerateBufferFileName(originalFilePath, bflName string, extRemains bool) (
 		bufferFolderPath = "/data/" + bflName + "/buffer"
 	}
 
-	if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
+	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
+		klog.Errorln(err)
 		return "", err
 	}
-	if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
-		return "", err
-	}
+	//if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
+	//	return "", err
+	//}
+	//if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
+	//	klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
+	//	return "", err
+	//}
 	bufferFilePath := filepath.Join(bufferFolderPath, bufferFileName)
 
 	return bufferFilePath, nil
@@ -118,13 +122,17 @@ func GenerateBufferFolder(originalFilePath, bflName string) (string, error) {
 	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
 	bufferPathName = common.RemoveSlash(bufferPathName)
 	bufferFolderPath := "/data/" + bflName + "/buffer" + "/" + bufferPathName
-	if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
+	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
+		klog.Errorln(err)
 		return "", err
 	}
-	if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
-		return "", err
-	}
+	//if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
+	//	return "", err
+	//}
+	//if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
+	//	klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
+	//	return "", err
+	//}
 	return bufferFolderPath, nil
 }
 
