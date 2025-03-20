@@ -3,20 +3,17 @@ package http
 import (
 	"files/pkg/common"
 	"files/pkg/drives"
-	"k8s.io/klog/v2"
-	"net/http"
-	"time"
-
 	"files/pkg/fileutils"
+	"net/http"
 )
 
 func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	start := time.Now()
-	klog.Infoln("Function resourceGetHandler starts at", start)
-	defer func() {
-		elapsed := time.Since(start)
-		klog.Infof("Function resourceGetHandler execution time: %v\n", elapsed)
-	}()
+	//start := time.Now()
+	//klog.Infoln("Function resourceGetHandler starts at", start)
+	//defer func() {
+	//	elapsed := time.Since(start)
+	//	klog.Infof("Function resourceGetHandler execution time: %v\n", elapsed)
+	//}()
 
 	srcType := r.URL.Query().Get("src")
 
@@ -30,12 +27,12 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) 
 
 func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		start := time.Now()
-		klog.Infoln("Function resourceDeleteHandler starts at", start)
-		defer func() {
-			elapsed := time.Since(start)
-			klog.Infof("Function resourceDeleteHandler execution time: %v\n", elapsed)
-		}()
+		//start := time.Now()
+		//klog.Infoln("Function resourceDeleteHandler starts at", start)
+		//defer func() {
+		//	elapsed := time.Since(start)
+		//	klog.Infof("Function resourceDeleteHandler execution time: %v\n", elapsed)
+		//}()
 
 		srcType := r.URL.Query().Get("src")
 
@@ -49,12 +46,12 @@ func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
 }
 
 func resourcePostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	start := time.Now()
-	klog.Infoln("Function resourcePostHandler starts at", start)
-	defer func() {
-		elapsed := time.Since(start)
-		klog.Infof("Function resourcePostHandler execution time: %v\n", elapsed)
-	}()
+	//start := time.Now()
+	//klog.Infoln("Function resourcePostHandler starts at", start)
+	//defer func() {
+	//	elapsed := time.Since(start)
+	//	klog.Infof("Function resourcePostHandler execution time: %v\n", elapsed)
+	//}()
 
 	srcType := r.URL.Query().Get("src")
 
@@ -67,12 +64,12 @@ func resourcePostHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 }
 
 func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	start := time.Now()
-	klog.Infoln("Function resourcePostHandler starts at", start)
-	defer func() {
-		elapsed := time.Since(start)
-		klog.Infof("Function resourcePostHandler execution time: %v\n", elapsed)
-	}()
+	//start := time.Now()
+	//klog.Infoln("Function resourcePostHandler starts at", start)
+	//defer func() {
+	//	elapsed := time.Since(start)
+	//	klog.Infof("Function resourcePostHandler execution time: %v\n", elapsed)
+	//}()
 
 	srcType := r.URL.Query().Get("src")
 
@@ -86,12 +83,12 @@ func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) 
 
 func resourcePatchHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		start := time.Now()
-		klog.Infoln("Function resourcePatchHandler starts at", start)
-		defer func() {
-			elapsed := time.Since(start)
-			klog.Infof("Function resourcePatchHandler execution time: %v\n", elapsed)
-		}()
+		//start := time.Now()
+		//klog.Infoln("Function resourcePatchHandler starts at", start)
+		//defer func() {
+		//	elapsed := time.Since(start)
+		//	klog.Infof("Function resourcePatchHandler execution time: %v\n", elapsed)
+		//}()
 
 		srcType := r.URL.Query().Get("src")
 

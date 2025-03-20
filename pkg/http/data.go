@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tomasen/realip"
 
@@ -43,6 +44,19 @@ func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler 
 	})
 
 	return stripPrefix(prefix, handler)
+}
+
+func timingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		klog.Infoln(r.RequestURI, " starts at", start)
+		defer func() {
+			elapsed := time.Since(start)
+			klog.Infof(r.RequestURI, " execution time: %v\n", elapsed)
+		}()
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func NeedCheckPrefix(prefix string) bool {

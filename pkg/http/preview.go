@@ -6,9 +6,7 @@ import (
 	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/preview"
-	"k8s.io/klog/v2"
 	"net/http"
-	"time"
 )
 
 var (
@@ -18,12 +16,12 @@ var (
 
 func previewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		start := time.Now()
-		klog.Infoln("Function previewHandler starts at", start)
-		defer func() {
-			elapsed := time.Since(start)
-			klog.Infof("Function previewHandler execution time: %v\n", elapsed)
-		}()
+		//start := time.Now()
+		//klog.Infoln("Function previewHandler starts at", start)
+		//defer func() {
+		//	elapsed := time.Since(start)
+		//	klog.Infof("Function previewHandler execution time: %v\n", elapsed)
+		//}()
 
 		srcType := r.URL.Query().Get("src")
 		handler, err := drives.GetResourceService(srcType)
