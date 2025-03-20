@@ -317,6 +317,7 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 			if mode == 0 {
 				mode = tempMode
 			}
+			klog.Infoln("~~~Temp log: path %s does not exist", vol, ", will create with uid: ", uid, " and mode: ", mode)
 
 			if subErr = createAndChownDir(fs, vol, mode, uid, uid); err != nil {
 				return subErr
