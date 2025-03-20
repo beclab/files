@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"k8s.io/klog/v2"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -49,10 +50,14 @@ func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler 
 func timingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		klog.Infoln(r.URL.Path, " starts at", start)
+		path, err := url.QueryUnescape(r.URL.Path)
+		if err != nil {
+			klog.Errorf("url decode error: %v", err)
+		}
+		klog.Infof("%s %s starts at %v\n", r.Method, path, start)
 		defer func() {
 			elapsed := time.Since(start)
-			klog.Infof(r.URL.Path, " execution time: %v\n", elapsed)
+			klog.Infof("%s %s execution time: %v\n", r.Method, path, elapsed)
 		}()
 
 		next.ServeHTTP(w, r)
