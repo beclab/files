@@ -49,10 +49,15 @@ func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler 
 func timingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		klog.Infoln(strings.TrimSuffix(r.URL.RawQuery, r.URL.Path), " starts at", start)
+		klog.Infoln("r.URL.Path", r.URL.Path)
+		klog.Infoln("r.URL.RawQuery", r.URL.RawQuery)
+		klog.Infoln("r.URL.Host", r.URL.Host)
+		klog.Infoln("r.URL.RawPath", r.URL.RawPath)
+		klog.Infoln("r.RequestURI", r.RequestURI)
+		klog.Infoln(r.URL.RawQuery, " starts at", start)
 		defer func() {
 			elapsed := time.Since(start)
-			klog.Infof(strings.TrimSuffix(r.URL.RawQuery, r.URL.Path), " execution time: %v\n", elapsed)
+			klog.Infof(r.URL.RawQuery, " execution time: %v\n", elapsed)
 		}()
 
 		next.ServeHTTP(w, r)
