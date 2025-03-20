@@ -115,17 +115,17 @@ func FindStatefulSetByPVCAnnotation(ctx context.Context, client *kubernetes.Clie
 
 func ExtractPvcFromURL(path string) string {
 	splitPrefix := ""
-	if strings.HasPrefix(path, RootPrefix) {
+	if strings.HasPrefix(path, AppDataPathPrefix) {
+		splitPrefix = AppDataPathPrefix
+	} else if strings.HasPrefix(path, RootPrefix) {
 		splitPrefix = RootPrefix
 	} else if strings.HasPrefix(path, CacheRootPath) {
 		splitPrefix = CacheRootPath
-	} else if strings.HasPrefix(path, "/AppData") {
-		splitPrefix = "/AppData"
 	} else {
 		return ""
 	}
 
-	klog.Infoln("~~~~Temp log: path: ", path, ", splitPrefix: ", splitPrefix, ", HasPrefix?: ", strings.HasPrefix(path, "/AppData"))
+	klog.Infoln("~~~~Temp log: path: ", path, ", splitPrefix: ", splitPrefix, ", HasPrefix?: ", strings.HasPrefix(path, AppDataPathPrefix))
 
 	trimmedPath := strings.TrimPrefix(path, splitPrefix)
 	klog.Infoln("~~~~Temp log: trimmedPath: ", trimmedPath)

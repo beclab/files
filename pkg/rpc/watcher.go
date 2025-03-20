@@ -26,6 +26,8 @@ var RootPrefix = os.Getenv("ROOT_PREFIX") // "/data"
 
 var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
 
+var AppDataPathPrefix = "/AppData"
+
 var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
 
 var watcher *jfsnotify.Watcher = nil
