@@ -302,6 +302,7 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 			}
 			tempMode = info.Mode()
 			uid, subErr = GetUID(fs, filepath.Dir(vol))
+			klog.Infoln("~~~Temp log: uid ", uid, " filepath ", filepath.Dir(vol))
 			if subErr != nil {
 				return subErr
 			}
