@@ -126,6 +126,7 @@ func ExtractPvcFromURL(path string) string {
 	}
 
 	trimmedPath := strings.TrimPrefix(path, splitPrefix)
+	klog.Infoln("~~~~Temp log: trimmedPath: ", trimmedPath)
 
 	firstSlash := strings.Index(trimmedPath, "/")
 	if firstSlash == -1 {

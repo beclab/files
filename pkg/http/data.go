@@ -3,6 +3,7 @@ package http
 import (
 	"files/pkg/drives"
 	"files/pkg/rpc"
+	"github.com/gorilla/mux"
 	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"
@@ -60,7 +61,13 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 	}
 
 	method := r.Method
-	src := r.URL.Path
+	src := ""
+	if prefix == "/api/preview" {
+		vars := mux.Vars(r)
+		src = "/" + vars["path"]
+	} else {
+		src = r.URL.Path
+	}
 
 	srcType := r.URL.Query().Get("src_type")
 	if srcType == "" {
