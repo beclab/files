@@ -121,14 +121,9 @@ func ExtractPvcFromURL(path string) string {
 		splitPrefix = RootPrefix
 	} else if strings.HasPrefix(path, CacheRootPath) {
 		splitPrefix = CacheRootPath
-	} else {
-		return ""
 	}
 
-	klog.Infoln("~~~~Temp log: path: ", path, ", splitPrefix: ", splitPrefix, ", HasPrefix?: ", strings.HasPrefix(path, AppDataPathPrefix))
-
 	trimmedPath := strings.TrimPrefix(path, splitPrefix)
-	klog.Infoln("~~~~Temp log: trimmedPath: ", trimmedPath)
 
 	firstSlash := strings.Index(trimmedPath, "/")
 	if firstSlash == -1 {

@@ -55,7 +55,6 @@ func NeedCheckPrefix(prefix string) bool {
 }
 
 func CheckPathOwner(r *http.Request, prefix string) bool {
-	klog.Infof("~~~~Temp log: URL = %s, prefix = %s", r.URL, prefix)
 	if !NeedCheckPrefix(prefix) {
 		return true
 	}
