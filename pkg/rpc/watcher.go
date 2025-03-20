@@ -26,8 +26,6 @@ var RootPrefix = os.Getenv("ROOT_PREFIX") // "/data"
 
 var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
 
-var AppDataRootPath = ""
-
 var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
 
 var watcher *jfsnotify.Watcher = nil
@@ -53,10 +51,6 @@ func InitWatcher() {
 
 	if ContentPath == "" {
 		ContentPath = "/Home/Documents"
-	}
-
-	if AppDataRootPath == "" {
-		AppDataRootPath = "/AppData"
 	}
 
 	//watchDirs = rpc.ExpandPaths(watchDirs, RootPrefix)

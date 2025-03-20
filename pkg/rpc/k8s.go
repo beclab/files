@@ -119,8 +119,8 @@ func ExtractPvcFromURL(path string) string {
 		splitPrefix = RootPrefix
 	} else if strings.HasPrefix(path, CacheRootPath) {
 		splitPrefix = CacheRootPath
-	} else if strings.HasPrefix(path, AppDataRootPath) {
-		splitPrefix = AppDataRootPath
+	} else if strings.HasPrefix(path, "/AppData") {
+		splitPrefix = "/AppData"
 	} else {
 		return ""
 	}
