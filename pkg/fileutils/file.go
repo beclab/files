@@ -288,6 +288,7 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 
 	parts := strings.Split(path, "/")
 	vol := ""
+	found := false
 	for _, part := range parts {
 		vol = filepath.Join(vol, part)
 
@@ -304,14 +305,17 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 		}
 
 		if os.IsNotExist(err) {
-			if filepath.Dir(vol) == "/" {
-				uid = 1000
-			} else {
-				uid, subErr = GetUID(fs, filepath.Dir(vol))
-				klog.Infoln("~~~Temp log: uid ", uid, " filepath ", filepath.Dir(vol))
-				if subErr != nil {
-					return subErr
+			if !found {
+				if filepath.Dir(vol) == "/" {
+					uid = 1000
+				} else {
+					uid, subErr = GetUID(fs, filepath.Dir(vol))
+					klog.Infoln("~~~Temp log: uid ", uid, " filepath ", filepath.Dir(vol))
+					if subErr != nil {
+						return subErr
+					}
 				}
+				found = true
 			}
 			klog.Infoln("~~~Temp log: path %s does not exist", vol, ", will create with uid: ", uid, " and mode: ", mode)
 
