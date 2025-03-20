@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -285,7 +286,7 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 	var uid int
 	var subErr error
 
-	parts := filepath.SplitList(path)
+	parts := strings.Split(path, "/")
 	vol := ""
 	for _, part := range parts {
 		vol = filepath.Join(vol, part)
