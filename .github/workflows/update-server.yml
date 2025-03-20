@@ -54,7 +54,7 @@ jobs:
         uses: "WyriHaximus/github-action-get-previous-tag@v1"
         id: get-latest-tag
         with:
-          fallback: test  # latest
+          fallback: chown-test1  # latest
 
 #      - name: Build
 #        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
