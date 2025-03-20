@@ -26,7 +26,7 @@ var RootPrefix = os.Getenv("ROOT_PREFIX") // "/data"
 
 var CacheRootPath = os.Getenv("CACHE_ROOT_PATH") // "/appcache"
 
-var AppDataRootPath = "/AppData"
+var AppDataRootPath = ""
 
 var ContentPath = os.Getenv("CONTENT_PATH") //	"/Home/Documents"
 
@@ -53,6 +53,10 @@ func InitWatcher() {
 
 	if ContentPath == "" {
 		ContentPath = "/Home/Documents"
+	}
+
+	if AppDataRootPath == "" {
+		AppDataRootPath = "/AppData"
 	}
 
 	//watchDirs = rpc.ExpandPaths(watchDirs, RootPrefix)
