@@ -293,7 +293,6 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 		if part == "" {
 			continue
 		}
-		
 		vol = filepath.Join(vol, part)
 
 		if fs == nil {
@@ -323,7 +322,7 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 			}
 			klog.Infoln("~~~Temp log: path %s does not exist", vol, ", will create with uid: ", uid, " and mode: ", mode)
 
-			if subErr = createAndChownDir(fs, vol, mode, uid, uid); err != nil {
+			if subErr = createAndChownDir(fs, vol, mode, uid, uid); subErr != nil {
 				return subErr
 			}
 		} else {
