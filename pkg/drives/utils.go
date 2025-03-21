@@ -49,7 +49,11 @@ func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 	}
 
 	for {
-		if _, _, _, isDir, err = handler.GetStat(fs, source, w, r); err != nil {
+		statSource := source
+		if suffixSlash {
+			statSource += "/"
+		}
+		if _, _, _, isDir, err = handler.GetStat(fs, statSource, w, r); err != nil {
 			break
 		}
 		if !isDir {
