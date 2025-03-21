@@ -126,13 +126,13 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 
 func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	// path.Clean, only operate on string level, so it fits every src/dst type.
-	if !drives.IsCloudDrives(srcType) {
+	if srcType != drives.SrcTypeAWSS3 {
 		if src = path.Clean("/" + src); src == "" {
 			return os.ErrNotExist
 		}
 	}
 
-	if !drives.IsCloudDrives(dstType) {
+	if dstType != drives.SrcTypeAWSS3 {
 		if dst = path.Clean("/" + dst); dst == "" {
 			return os.ErrNotExist
 		}
