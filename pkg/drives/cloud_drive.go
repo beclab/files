@@ -691,7 +691,10 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 	}
 	dstDir, _ := filepath.Split(dstPath)
 
-	trimmedDstDir := strings.TrimSuffix(dstDir, "/")
+	trimmedDstDir := dstDir
+	if dstDrive != SrcTypeAWSS3 {
+		trimmedDstDir = strings.TrimSuffix(dstDir, "/")
+	}
 	if trimmedDstDir == "" {
 		trimmedDstDir = "/"
 	}
