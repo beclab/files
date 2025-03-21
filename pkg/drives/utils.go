@@ -27,6 +27,10 @@ import (
 func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
 	counter := 1
 	dir, name := path.Split(source)
+	if dstType == SrcTypeAWSS3 && strings.HasSuffix(source, "/") {
+		dir = ""
+		name = source
+	}
 	ext := filepath.Ext(name)
 	base := strings.TrimSuffix(name, ext)
 	renamed := ""
