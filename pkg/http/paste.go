@@ -101,12 +101,12 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		if srcType == drives.SrcTypeGoogle {
 			_, srcName, _, _ = drives.ParseGoogleDrivePath(src)
 		} else if drives.IsCloudDrives(srcType) {
-			_, srcName, _ = drives.ParseCloudDrivePath(src, true)
+			_, srcName, _ = drives.ParseCloudDrivePath(src)
 		}
 		if dstType == drives.SrcTypeGoogle {
 			_, dstName, _, _ = drives.ParseGoogleDrivePath(dst)
 		} else if drives.IsCloudDrives(srcType) {
-			_, dstName, _ = drives.ParseCloudDrivePath(dst, true)
+			_, dstName, _ = drives.ParseCloudDrivePath(dst)
 		}
 		if srcName != dstName {
 			same = false
