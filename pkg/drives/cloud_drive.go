@@ -527,8 +527,18 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 				parentPath = dstDir
 				folderName = dstFilename
 			} else {
-				parentPath = dstPath + strings.TrimPrefix(filepath.Dir(firstItem.Path), srcPath)
-				folderName = filepath.Base(firstItem.Path)
+				suffixSlash := false
+				firstItemPath := firstItem.Path
+				if strings.HasSuffix(firstItem.Path, "/") {
+					firstItemPath = strings.TrimSuffix(firstItem.Path, "/")
+					suffixSlash = true
+				}
+				parentPath = dstPath + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
+				folderName = filepath.Base(firstItemPath)
+				if suffixSlash {
+					parentPath += "/"
+					folderName += "/"
+				}
 			}
 			postParam := CloudDrivePostParam{
 				ParentPath: parentPath,
@@ -541,7 +551,7 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 				klog.Errorln("Error marshalling JSON:", err)
 				return err
 			}
-			klog.Infoln("Google Drive Post Params:", string(postJsonBody))
+			klog.Infoln("Cloud Drive Post Params:", string(postJsonBody))
 			var postRespBody []byte
 			postRespBody, err = CloudDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, true)
 			if err != nil {
