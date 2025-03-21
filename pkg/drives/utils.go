@@ -25,6 +25,12 @@ import (
 )
 
 func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
+	suffixSlash := false
+	if strings.HasSuffix(source, "/") {
+		source = strings.TrimSuffix(source, "/")
+		suffixSlash = true
+	}
+
 	counter := 1
 	dir, name := path.Split(source)
 	if dstType == SrcTypeAWSS3 && strings.HasSuffix(source, "/") {
@@ -49,14 +55,14 @@ func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 		if !isDir {
 			renamed = fmt.Sprintf("%s(%d)%s", base, counter, ext)
 		} else {
-			if strings.HasSuffix(name, "/") {
-				renamed = fmt.Sprintf("%s(%d)/", strings.TrimSuffix(name, "/"), counter)
-			} else {
-				renamed = fmt.Sprintf("%s(%d)", name, counter)
-			}
+			renamed = fmt.Sprintf("%s(%d)", name, counter)
 		}
 		source = path.Join(dir, renamed)
 		counter++
+	}
+
+	if suffixSlash {
+		source += "/"
 	}
 
 	return source
