@@ -306,10 +306,8 @@ func GetCloudDriveFocusedMetaInfos(src string, w http.ResponseWriter, r *http.Re
 	err = nil
 
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
-	if srcDrive != SrcTypeAWSS3 {
-		if strings.HasSuffix(srcPath, "/") {
-			srcPath = strings.TrimSuffix(srcPath, "/")
-		}
+	if srcDrive != SrcTypeAWSS3 && strings.HasSuffix(srcPath, "/") {
+		srcPath = strings.TrimSuffix(srcPath, "/")
 	}
 
 	param := CloudDriveListParam{
@@ -615,10 +613,8 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
-	if srcDrive != SrcTypeAWSS3 {
-		if strings.HasSuffix(srcPath, "/") {
-			srcPath = strings.TrimSuffix(srcPath, "/")
-		}
+	if srcDrive != SrcTypeAWSS3 && strings.HasSuffix(srcPath, "/") {
+		srcPath = strings.TrimSuffix(srcPath, "/")
 	}
 
 	param := CloudDriveDownloadFileParam{
@@ -1248,10 +1244,8 @@ func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.
 	//}
 
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
-	if srcDrive != SrcTypeAWSS3 {
-		if strings.HasSuffix(srcPath, "/") {
-			srcPath = strings.TrimSuffix(srcPath, "/")
-		}
+	if srcDrive != SrcTypeAWSS3 && strings.HasSuffix(srcPath, "/") {
+		srcPath = strings.TrimSuffix(srcPath, "/")
 	}
 
 	param := CloudDriveDeleteParam{
