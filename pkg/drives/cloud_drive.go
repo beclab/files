@@ -1043,9 +1043,9 @@ func (rs *CloudDriveResourceService) PreviewHandler(imgSvc preview.ImgService, f
 func (rc *CloudDriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	switch action {
 	case "copy":
-		if strings.HasSuffix(src, "/") {
-			src = strings.TrimSuffix(src, "/")
-		}
+		//if strings.HasSuffix(src, "/") {
+		//	src = strings.TrimSuffix(src, "/")
+		//}
 		metaInfo, err := GetCloudDriveFocusedMetaInfos(src, w, r)
 		if err != nil {
 			return err
