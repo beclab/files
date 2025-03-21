@@ -271,7 +271,7 @@ type CloudDriveTaskIDResponse struct {
 }
 
 func GetCloudDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*CloudDriveMetaResponseData, error) {
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 
 	param := CloudDriveListParam{
 		Path:  srcPath,
@@ -300,11 +300,11 @@ func GetCloudDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (
 }
 
 func GetCloudDriveFocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request) (info *CloudDriveFocusedMetaInfos, err error) {
-	src = strings.TrimSuffix(src, "/")
+	//src = strings.TrimSuffix(src, "/")
 	info = nil
 	err = nil
 
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 
 	param := CloudDriveListParam{
 		Path:  srcPath,
@@ -438,13 +438,13 @@ func streamCloudDriveFiles(w http.ResponseWriter, r *http.Request, body []byte, 
 }
 
 func CopyCloudDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.Request) error {
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 	klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
-	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst, true)
+	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst, false)
 	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	dstDir, dstFilename := path.Split(dstPath)
 	if dstDir == "" || dstFilename == "" {
@@ -479,7 +479,7 @@ func CopyCloudDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.Re
 }
 
 func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Request, srcPath, srcPathName string) error {
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 	klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
 		klog.Infoln("Src parse failed.")
@@ -491,7 +491,7 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		return nil
 	}
 
-	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst, true)
+	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst, false)
 	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	if dstPath == "" {
 		klog.Infoln("Dst parse failed.")
@@ -603,7 +603,7 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 	if !strings.HasSuffix(bufferFilePath, "/") {
 		bufferFilePath += "/"
 	}
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 	klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
 		klog.Infoln("Src parse failed.")
@@ -676,7 +676,7 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 }
 
 func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *http.Request) (int, error) {
-	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst, true)
+	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst, false)
 	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	if dstPath == "" {
 		klog.Infoln("Src parse failed.")
@@ -756,8 +756,8 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 }
 
 func MoveCloudDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Request) error {
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
-	_, _, dstPath := ParseCloudDrivePath(dst, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
+	_, _, dstPath := ParseCloudDrivePath(dst, false)
 
 	dstDir, _ := filepath.Split(dstPath)
 
@@ -952,7 +952,7 @@ func (rc *CloudDriveResourceService) GetHandler(w http.ResponseWriter, r *http.R
 	src := r.URL.Path
 	klog.Infoln("src Path:", src)
 
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 	klog.Infoln("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
 
 	param := CloudDriveListParam{
@@ -1080,7 +1080,7 @@ func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dst
 		fdstBase = filepath.Dir(filepath.Dir(dst)) + "/" + driveIdCache[src]
 	}
 
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 
 	param := CloudDriveListParam{
 		Path:  srcPath,
@@ -1228,11 +1228,11 @@ func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.
 		src = r.URL.Path
 	}
 	klog.Infoln("src Path:", src)
-	if strings.HasSuffix(src, "/") {
-		src = strings.TrimSuffix(src, "/")
-	}
+	//if strings.HasSuffix(src, "/") {
+	//	src = strings.TrimSuffix(src, "/")
+	//}
 
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 
 	param := CloudDriveDeleteParam{
 		Path:  srcPath,
@@ -1273,7 +1273,7 @@ func ResourcePostCloudDrive(src string, w http.ResponseWriter, r *http.Request, 
 	}
 	klog.Infoln("src Path:", src)
 
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
 	klog.Infoln("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
 	path, newName := path.Split(srcPath)
 
@@ -1308,8 +1308,8 @@ func ResourcePatchCloudDrive(fileCache fileutils.FileCache, w http.ResponseWrite
 	dst := r.URL.Query().Get("destination")
 	dst, err := common.UnescapeURLIfEscaped(dst)
 
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, true)
-	_, _, dstPath := ParseCloudDrivePath(dst, true)
+	srcDrive, srcName, srcPath := ParseCloudDrivePath(src, false)
+	_, _, dstPath := ParseCloudDrivePath(dst, false)
 	klog.Infoln("dstPath=", dstPath)
 	dstDir, dstFilename := path.Split(dstPath)
 	klog.Infoln("dstDir=", dstDir, ", dstFilename=", dstFilename)
