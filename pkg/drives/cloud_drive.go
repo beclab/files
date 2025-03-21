@@ -452,7 +452,10 @@ func CopyCloudDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.Re
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
-	trimmedDstDir := strings.TrimSuffix(dstDir, "/")
+	trimmedDstDir := dstDir
+	if srcDrive != SrcTypeAWSS3 {
+		trimmedDstDir = strings.TrimSuffix(dstDir, "/")
+	}
 	if trimmedDstDir == "" {
 		trimmedDstDir = "/"
 	}
@@ -765,7 +768,10 @@ func MoveCloudDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *http
 
 	dstDir, _ := filepath.Split(dstPath)
 
-	trimmedDstDir := strings.TrimSuffix(dstDir, "/")
+	trimmedDstDir := dstDir
+	if srcDrive != SrcTypeAWSS3 {
+		trimmedDstDir = strings.TrimSuffix(dstDir, "/")
+	}
 	if trimmedDstDir == "" {
 		trimmedDstDir = "/"
 	}
