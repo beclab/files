@@ -1071,9 +1071,9 @@ func (rc *CloudDriveResourceService) PasteSame(action, src, dst string, rename b
 		}
 		return CopyCloudDriveSingleFile(src, dst, w, r)
 	case "rename":
-		if !strings.HasSuffix(src, "/") {
-			src += "/"
-		}
+		//if !strings.HasSuffix(src, "/") {
+		//	src += "/"
+		//}
 		return MoveCloudDriveFolderOrFiles(src, dst, w, r)
 	default:
 		return fmt.Errorf("unknown action: %s", action)
