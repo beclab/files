@@ -1208,7 +1208,7 @@ func (rs *CloudDriveResourceService) GetStat(fs afero.Fs, src string, w http.Res
 		return nil, 0, 0, false, err
 	}
 
-	src = strings.TrimSuffix(src, "/")
+	//src = strings.TrimSuffix(src, "/")
 	metaInfo, err := GetCloudDriveFocusedMetaInfos(src, w, r)
 	if err != nil {
 		return nil, 0, 0, false, err
