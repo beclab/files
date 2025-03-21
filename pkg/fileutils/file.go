@@ -227,18 +227,18 @@ func CommonPrefix(sep byte, paths ...string) string {
 	return string(c)
 }
 
-func ChownRecursive(fs afero.Fs, path string, uid, gid int) error {
+func ChownRecursive(path string, uid, gid int) error {
 	return filepath.Walk(path, func(name string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if err := Chown(fs, name, uid, gid); err != nil {
-			fmt.Printf("Failed to chown %s: %v\n", name, err)
+		if err := Chown(nil, name, uid, gid); err != nil {
+			klog.Errorf("Failed to chown %s: %v\n", name, err)
 			return err
 		}
 
-		fmt.Printf("Chowned %s\n", name)
+		klog.Infof("Chowned %s\n", name)
 		return nil
 	})
 }
