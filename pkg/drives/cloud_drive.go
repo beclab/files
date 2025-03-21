@@ -501,7 +501,15 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
-	dstDir, dstFilename := path.Split(dstPath)
+	suffixSlash := strings.HasSuffix(dstPath, "/")
+	parseDstPath := dstPath
+	if suffixSlash {
+		parseDstPath = strings.TrimSuffix(dstPath, "/")
+	}
+	dstDir, dstFilename := path.Split(parseDstPath)
+	if suffixSlash {
+		dstDir += "/"
+	}
 	if dstDir == "" && dstFilename == "" {
 		klog.Infoln("Dst parse failed.")
 		return nil
@@ -524,6 +532,7 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 			var parentPath string
 			var folderName string
 			if srcPath == recursivePath {
+
 				parentPath = dstDir
 				folderName = dstFilename
 			} else {
