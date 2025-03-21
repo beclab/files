@@ -610,9 +610,6 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
-	if srcDrive != SrcTypeAWSS3 && strings.HasSuffix(srcPath, "/") {
-		srcPath = strings.TrimSuffix(srcPath, "/")
-	}
 
 	param := CloudDriveDownloadFileParam{
 		LocalFolder:   bufferFilePath,
