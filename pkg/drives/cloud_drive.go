@@ -537,7 +537,6 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 				folderName = filepath.Base(firstItemPath)
 				if suffixSlash {
 					parentPath += "/"
-					folderName += "/"
 				}
 			}
 			postParam := CloudDrivePostParam{
