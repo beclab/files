@@ -100,7 +100,11 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 	if dst != "" {
 		dstType = r.URL.Query().Get("dst_type")
 		if dstType == "" {
-			dstType = drives.SrcTypeDrive
+			if prefix == "/api/resources" && r.Method == http.MethodPatch {
+				dstType = srcType
+			} else {
+				dstType = drives.SrcTypeDrive
+			}
 		}
 	}
 
