@@ -529,7 +529,6 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 			var parentPath string
 			var folderName string
 			if srcPath == recursivePath {
-
 				parentPath = dstDir
 				folderName = dstFilename
 			} else {
@@ -539,7 +538,11 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 					firstItemPath = strings.TrimSuffix(firstItem.Path, "/")
 					suffixSlash = true
 				}
-				parentPath = dstPath + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
+				if suffixSlash {
+					parentPath = dstPath + "/" + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
+				} else {
+					parentPath = dstPath + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
+				}
 				folderName = filepath.Base(firstItemPath)
 			}
 			postParam := CloudDrivePostParam{
