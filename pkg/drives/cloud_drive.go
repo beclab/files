@@ -490,7 +490,7 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		return nil
 	}
 	srcDir, srcFilename := path.Split(srcPath)
-	if srcDir == "" || srcFilename == "" {
+	if srcDir == "" && srcFilename == "" {
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
