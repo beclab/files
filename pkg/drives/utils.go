@@ -45,7 +45,11 @@ func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 		if !isDir {
 			renamed = fmt.Sprintf("%s(%d)%s", base, counter, ext)
 		} else {
-			renamed = fmt.Sprintf("%s(%d)", name, counter)
+			if strings.HasSuffix(name, "/") {
+				renamed = fmt.Sprintf("%s(%d)/", strings.TrimSuffix(name, "/"), counter)
+			} else {
+				renamed = fmt.Sprintf("%s(%d)", name, counter)
+			}
 		}
 		source = path.Join(dir, renamed)
 		counter++
