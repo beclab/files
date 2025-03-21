@@ -58,7 +58,7 @@ func permissionPutHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	if recursive == 0 {
 		err = fileutils.Chown(files.DefaultFs, r.URL.Path, uid, gid)
 	} else {
-		err = fileutils.ChownRecursive(nil, "/data"+r.URL.Path, uid, gid)
+		err = fileutils.ChownRecursive("/data"+r.URL.Path, uid, gid)
 	}
 	if err != nil {
 		return http.StatusInternalServerError, err
