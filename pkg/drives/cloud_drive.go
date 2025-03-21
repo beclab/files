@@ -202,6 +202,7 @@ type CloudDriveMoveFileParam struct {
 
 type CloudDriveDownloadFileParam struct {
 	LocalFolder   string `json:"local_folder"`
+	LocalFilename string `json:"local_filename,omitempty"`
 	CloudFilePath string `json:"cloud_file_path"`
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
@@ -615,6 +616,9 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 		CloudFilePath: srcPath,
 		Drive:         srcDrive,
 		Name:          srcName,
+	}
+	if srcDrive == SrcTypeAWSS3 {
+		param.LocalFilename = path.Base(srcPath)
 	}
 
 	jsonBody, err := json.Marshal(param)
