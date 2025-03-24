@@ -448,7 +448,7 @@ func CopyCloudDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.Re
 	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst)
 	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	dstDir, dstFilename := path.Split(dstPath)
-	if dstDir == "" && dstFilename == "" {
+	if dstDir == "" || dstFilename == "" {
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
@@ -489,8 +489,13 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
-	srcDir, srcFilename := path.Split(srcPath)
-	if srcDir == "" && srcFilename == "" {
+	srcSuffixSlash := strings.HasSuffix(srcPath, "/")
+	parseSrcPath := srcPath
+	if srcSuffixSlash {
+		parseSrcPath = strings.TrimSuffix(srcPath, "/")
+	}
+	srcDir, srcFilename := path.Split(parseSrcPath)
+	if srcDir == "" || srcFilename == "" {
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
@@ -501,13 +506,13 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
-	suffixSlash := strings.HasSuffix(dstPath, "/")
+	dstSuffixSlash := strings.HasSuffix(dstPath, "/")
 	parseDstPath := dstPath
-	if suffixSlash {
+	if dstSuffixSlash {
 		parseDstPath = strings.TrimSuffix(dstPath, "/")
 	}
 	dstDir, dstFilename := path.Split(parseDstPath)
-	if dstDir == "" && dstFilename == "" {
+	if dstDir == "" || dstFilename == "" {
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
@@ -535,10 +540,10 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 			} else {
 				suffixSlash := strings.HasSuffix(firstItem.Path, "/")
 				firstItemPath := firstItem.Path
-				parentPath = dstPath + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
+				parentPath = parseDstPath + strings.TrimPrefix(filepath.Dir(firstItemPath), parseSrcPath)
 				if suffixSlash {
 					firstItemPath = strings.TrimSuffix(firstItem.Path, "/")
-					parentPath = strings.TrimSuffix(dstPath, "/") + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
+					//parentPath = strings.TrimSuffix(dstPath, "/") + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
 					suffixSlash = true
 				}
 				folderName = filepath.Base(firstItemPath)
@@ -699,7 +704,7 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst)
 	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	if dstPath == "" {
-		klog.Infoln("Src parse failed.")
+		klog.Infoln("Dst parse failed.")
 		return http.StatusBadRequest, nil
 	}
 	dstDir, _ := filepath.Split(dstPath)
