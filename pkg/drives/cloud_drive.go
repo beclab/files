@@ -543,6 +543,7 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 				parentPath = parseDstPath + strings.TrimPrefix(filepath.Dir(firstItemPath), parseSrcPath)
 				if suffixSlash {
 					firstItemPath = strings.TrimSuffix(firstItem.Path, "/")
+					parentPath += "/"
 					//parentPath = strings.TrimSuffix(dstPath, "/") + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
 					suffixSlash = true
 				}
