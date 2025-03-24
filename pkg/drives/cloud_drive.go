@@ -1151,7 +1151,13 @@ func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dst
 		fdst := filepath.Join(fdstBase, item.Name)
 		klog.Infoln(fsrc, fdst)
 		if item.IsDir {
-			fsrc += "/"
+			//fsrc += "/"
+			if srcType == SrcTypeAWSS3 && !strings.HasPrefix(fsrc, "/") {
+				fsrc += "/"
+			}
+			if dstType == SrcTypeAWSS3 && !strings.HasPrefix(fdst, "/") {
+				fdst += "/"
+			}
 			err = rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
 			if err != nil {
 				return err
