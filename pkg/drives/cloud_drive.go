@@ -1122,6 +1122,9 @@ func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dst
 	}
 
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
+	if srcDrive == SrcTypeAWSS3 && !strings.HasSuffix(srcPath, "/") {
+		srcPath += "/"
+	}
 
 	param := CloudDriveListParam{
 		Path:  srcPath,
