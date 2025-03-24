@@ -961,10 +961,10 @@ func ParseCloudDrivePath(src string) (drive, name, path string) {
 	parts := strings.SplitN(src, "/", 2)
 	drive = parts[0]
 
-	//trimSuffix := true
-	//if drive == SrcTypeAWSS3 {
-	//	trimSuffix = false
-	//}
+	trimSuffix := true
+	if drive == SrcTypeAWSS3 {
+		trimSuffix = false
+	}
 
 	src = "/"
 	if len(parts) > 1 {
@@ -985,11 +985,8 @@ func ParseCloudDrivePath(src string) (drive, name, path string) {
 
 	name = src[1:slashes[1]]
 	path = src[slashes[1]:]
-	//if trimSuffix && path != "/" {
-	//	path = strings.TrimSuffix(path, "/")
-	//}
-	if path != "/" {
-		path = CloudDriveNormalizationPath(path, drive, true, false)
+	if trimSuffix && path != "/" {
+		path = strings.TrimSuffix(path, "/")
 	}
 	return drive, name, path
 }
