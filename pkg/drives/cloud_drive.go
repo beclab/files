@@ -346,7 +346,7 @@ func GetCloudDriveFocusedMetaInfos(src string, w http.ResponseWriter, r *http.Re
 	return
 }
 
-func generateCloudDriveFilesData(body []byte, stopChan <-chan struct{}, dataChan chan<- string,
+func generateCloudDriveFilesData(srcType string, body []byte, stopChan <-chan struct{}, dataChan chan<- string,
 	w http.ResponseWriter, r *http.Request, param CloudDriveListParam) {
 	defer close(dataChan)
 
@@ -366,10 +366,14 @@ func generateCloudDriveFilesData(body []byte, stopChan <-chan struct{}, dataChan
 		firstItem := A[0]
 		klog.Infoln("firstItem Path: ", firstItem.Path)
 		klog.Infoln("firstItem Name:", firstItem.Name)
+		firstItemPath := firstItem.Path
+		if srcType == SrcTypeAWSS3 && !strings.HasSuffix(firstItemPath, "/") {
+			firstItemPath += "/"
+		}
 
 		if firstItem.IsDir {
 			firstParam := CloudDriveListParam{
-				Path:  firstItem.Path,
+				Path:  firstItemPath,
 				Drive: param.Drive,
 				Name:  param.Name,
 			}
@@ -402,7 +406,7 @@ func generateCloudDriveFilesData(body []byte, stopChan <-chan struct{}, dataChan
 	}
 }
 
-func streamCloudDriveFiles(w http.ResponseWriter, r *http.Request, body []byte, param CloudDriveListParam) {
+func streamCloudDriveFiles(w http.ResponseWriter, r *http.Request, srcType string, body []byte, param CloudDriveListParam) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -410,7 +414,7 @@ func streamCloudDriveFiles(w http.ResponseWriter, r *http.Request, body []byte, 
 	stopChan := make(chan struct{})
 	dataChan := make(chan string)
 
-	go generateCloudDriveFilesData(body, stopChan, dataChan, w, r, param)
+	go generateCloudDriveFilesData(srcType, body, stopChan, dataChan, w, r, param)
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -489,9 +493,8 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
-	srcSuffixSlash := strings.HasSuffix(srcPath, "/")
 	parseSrcPath := srcPath
-	if srcSuffixSlash {
+	if srcDrive == SrcTypeAWSS3 {
 		parseSrcPath = strings.TrimSuffix(srcPath, "/")
 	}
 	srcDir, srcFilename := path.Split(parseSrcPath)
@@ -506,9 +509,8 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
-	dstSuffixSlash := strings.HasSuffix(dstPath, "/")
 	parseDstPath := dstPath
-	if dstSuffixSlash {
+	if dstDrive == SrcTypeAWSS3 {
 		parseDstPath = strings.TrimSuffix(dstPath, "/")
 	}
 	dstDir, dstFilename := path.Split(parseDstPath)
@@ -527,7 +529,7 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		if len(A) > 0 {
 			firstItem = A[0]
 			recursivePath = firstItem.Path
-			if srcSuffixSlash {
+			if srcDrive == SrcTypeAWSS3 {
 				recursivePath += "/"
 			}
 			isDir = firstItem.IsDir
@@ -540,21 +542,14 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 				parentPath = dstDir
 				folderName = dstFilename
 			} else {
-				//suffixSlash := strings.HasSuffix(firstItem.Path, "/")
 				firstItemPath := firstItem.Path
-				if strings.HasSuffix(firstItemPath, "/") {
+				if srcDrive == SrcTypeAWSS3 {
 					firstItemPath = strings.TrimSuffix(firstItemPath, "/")
 				}
 				parentPath = parseDstPath + strings.TrimPrefix(filepath.Dir(firstItemPath), parseSrcPath)
-				if !strings.HasSuffix(parentPath, "/") {
+				if dstDrive == SrcTypeAWSS3 {
 					parentPath += "/"
 				}
-				//if suffixSlash {
-				//	firstItemPath = strings.TrimSuffix(firstItem.Path, "/")
-				//	parentPath += "/"
-				//parentPath = strings.TrimSuffix(dstPath, "/") + strings.TrimPrefix(filepath.Dir(firstItemPath), srcPath)
-				//suffixSlash = true
-				//}
 				folderName = filepath.Base(firstItemPath)
 			}
 			postParam := CloudDrivePostParam{
@@ -1016,7 +1011,7 @@ func (rc *CloudDriveResourceService) GetHandler(w http.ResponseWriter, r *http.R
 	if stream == 1 {
 		var body []byte
 		body, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
-		streamCloudDriveFiles(w, r, body, param)
+		streamCloudDriveFiles(w, r, srcDrive, body, param)
 		return 0, nil
 	}
 	if meta == 1 {
