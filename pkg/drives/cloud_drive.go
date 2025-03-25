@@ -1215,6 +1215,7 @@ func (rs *CloudDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fi
 
 func (rs *CloudDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	klog.Infof("~~~Temp log for Cloud Drive PasteFileFrom: srcType: %s, src: %s, dstType: %s, dst: %s", srcType, srcType, dstType, dst)
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
