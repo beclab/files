@@ -48,7 +48,7 @@ func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 
 	var fdstBase string = dst
 	if driveIdCache[src] != "" {
-		fdstBase = filepath.Dir(filepath.Dir(dst)) + "/" + driveIdCache[src]
+		fdstBase = filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))) + "/" + driveIdCache[src]
 	}
 
 	dir, _ := fs.Open(src)

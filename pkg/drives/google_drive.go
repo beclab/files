@@ -1257,7 +1257,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 
 	var fdstBase string = dst
 	if driveIdCache[src] != "" {
-		fdstBase = filepath.Dir(filepath.Dir(dst)) + "/" + driveIdCache[src]
+		fdstBase = filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))) + "/" + driveIdCache[src]
 	}
 
 	if !strings.HasSuffix(src, "/") {
