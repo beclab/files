@@ -60,8 +60,8 @@ func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 	var errs []error
 
 	for _, obj := range obs {
-		fsrc := src + "/" + obj.Name()
-		fdst := fdstBase + "/" + obj.Name()
+		fsrc := filepath.Join(src, obj.Name())
+		fdst := filepath.Join(fdstBase, obj.Name())
 
 		if obj.IsDir() {
 			// Create sub-directories, recursively.
