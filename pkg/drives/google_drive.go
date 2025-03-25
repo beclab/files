@@ -1321,6 +1321,7 @@ func (rs *GoogleDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, f
 	if err != nil {
 		return err
 	}
+	klog.Infof("~~~Temp log for Google Drive PasteDirTo: driveIdCache: %v", driveIdCache)
 	return nil
 }
 
