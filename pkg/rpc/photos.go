@@ -225,14 +225,6 @@ func (s *Service) preCheckHandler(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create and chown directory for " + basePath})
 			return
 		}
-		//if err = os.MkdirAll(basePath, 0755); err != nil {
-		//	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create directory for " + basePath})
-		//	return
-		//}
-		//if err = fileutils.Chown(nil, basePath, 1000, 1000); err != nil {
-		//	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to chown directory for " + basePath})
-		//	return
-		//}
 	}
 
 	var notStoredPaths []string
@@ -248,14 +240,6 @@ func (s *Service) preCheckHandler(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create and chown directory for " + filePath})
 				return
 			}
-			//if err = os.MkdirAll(dirPath, 0755); err != nil {
-			//	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create directory for " + filePath})
-			//	return
-			//}
-			//if err = fileutils.Chown(nil, dirPath, 1000, 1000); err != nil {
-			//	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to chown directory for " + filePath})
-			//	return
-			//}
 		}
 
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {

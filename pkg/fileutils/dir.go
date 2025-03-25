@@ -22,13 +22,6 @@ func CopyDir(fs afero.Fs, source, dest string) error {
 		klog.Errorln(err)
 		return err
 	}
-	//if err = fs.MkdirAll(dest, srcinfo.Mode()); err != nil {
-	//	return err
-	//}
-	//if err = Chown(fs, dest, 1000, 1000); err != nil {
-	//	klog.Errorf("can't chown directory %s to user %d: %s", dest, 1000, err)
-	//	return err
-	//}
 
 	dir, _ := fs.Open(source)
 	obs, err := dir.Readdir(-1)

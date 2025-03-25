@@ -108,13 +108,6 @@ func IoCopyFileWithBufferFs(fs afero.Fs, sourcePath, targetPath string, bufferSi
 		klog.Errorln(err)
 		return err
 	}
-	//if err = fs.MkdirAll(filepath.Dir(tempFilePath), 0755); err != nil {
-	//	return err
-	//}
-	//if err = Chown(fs, filepath.Dir(tempFilePath), 1000, 1000); err != nil {
-	//	klog.Errorf("can't chown directory %s to user %d: %s", filepath.Dir(tempFilePath), 1000, err)
-	//	return err
-	//}
 
 	targetFile, err := fs.OpenFile(tempFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
@@ -371,13 +364,6 @@ func WriteFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 		klog.Errorln(err)
 		return nil, err
 	}
-	//if err := fs.MkdirAll(dir, 0775); err != nil {
-	//	return nil, err
-	//}
-	//if err := Chown(fs, dir, 1000, 1000); err != nil {
-	//	klog.Errorf("can't chown directory %s to user %d: %s", dir, 1000, err)
-	//	return nil, err
-	//}
 
 	klog.Infoln("Open ", dst)
 	file, err := fs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)

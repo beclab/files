@@ -33,10 +33,6 @@ func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 
 	counter := 1
 	dir, name := path.Split(source)
-	//if dstType == SrcTypeAWSS3 && strings.HasSuffix(source, "/") {
-	//	dir = ""
-	//	name = source
-	//}
 	ext := filepath.Ext(name)
 	base := strings.TrimSuffix(name, ext)
 	renamed := ""
@@ -110,13 +106,6 @@ func GenerateBufferFileName(originalFilePath, bflName string, extRemains bool) (
 		klog.Errorln(err)
 		return "", err
 	}
-	//if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
-	//	return "", err
-	//}
-	//if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
-	//	klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
-	//	return "", err
-	//}
 	bufferFilePath := filepath.Join(bufferFolderPath, bufferFileName)
 
 	return bufferFilePath, nil
@@ -144,13 +133,6 @@ func GenerateBufferFolder(originalFilePath, bflName string) (string, error) {
 		klog.Errorln(err)
 		return "", err
 	}
-	//if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
-	//	return "", err
-	//}
-	//if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
-	//	klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
-	//	return "", err
-	//}
 	return bufferFolderPath, nil
 }
 

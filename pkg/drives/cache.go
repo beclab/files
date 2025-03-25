@@ -351,13 +351,6 @@ func CacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 			klog.Errorln(err)
 			return common.ErrToStatus(err), err
 		}
-		//if err := files.DefaultFs.MkdirAll(targetPath, mode); err != nil {
-		//	return common.ErrToStatus(err), err
-		//}
-		//if err := fileutils.Chown(files.DefaultFs, targetPath, 1000, 1000); err != nil {
-		//	klog.Errorf("can't chown directory %s to user %d: %s", targetPath, 1000, err)
-		//	return common.ErrToStatus(err), err
-		//}
 	}
 
 	_, err := files.NewFileInfo(files.FileOptions{
