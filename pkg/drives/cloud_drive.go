@@ -211,6 +211,7 @@ type CloudDriveDownloadFileParam struct {
 type CloudDriveUploadFileParam struct {
 	ParentPath    string `json:"parent_path"`
 	LocalFilePath string `json:"local_file_path"`
+	NewFileName   string `json:"new_file_name,omitempty"`
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
 }
@@ -704,16 +705,28 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 		klog.Infoln("Dst parse failed.")
 		return http.StatusBadRequest, nil
 	}
-	dstDir, _ := filepath.Split(dstPath)
+	dstDir, dstFileName := filepath.Split(dstPath)
 
 	trimmedDstDir := CloudDriveNormalizationPath(dstDir, dstDrive, false, false)
 	if trimmedDstDir == "" {
 		trimmedDstDir = "/"
 	}
 
+	//newBufferFilePath := bufferFilePath
+	//bufferDir, bufferFileName := filepath.Split(bufferFilePath)
+	//if bufferFileName != dstFileName {
+	//	newBufferFilePath = filepath.Join(bufferDir, dstFileName)
+	//	err := os.Rename(bufferFilePath, newBufferFilePath)
+	//	if err != nil {
+	//		klog.Errorln("Error renaming file:", err)
+	//		return common.ErrToStatus(err), err
+	//	}
+	//}
+
 	param := CloudDriveUploadFileParam{
 		ParentPath:    trimmedDstDir,
 		LocalFilePath: bufferFilePath,
+		NewFileName:   dstFileName,
 		Drive:         dstDrive,
 		Name:          dstName,
 	}
