@@ -93,7 +93,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			}
 		}
 		if rename && dstType != drives.SrcTypeGoogle {
-			dst = drives.PasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r)
+			dst = drives.PasteAddVersionSuffix(dst, dstType, strings.HasSuffix(src, "/"), files.DefaultFs, w, r)
 		}
 		var same = srcType == dstType
 		// all cloud drives of two users must be seen as diff archs

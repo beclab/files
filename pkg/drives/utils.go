@@ -24,8 +24,7 @@ import (
 	"time"
 )
 
-func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
-	suffixSlash := false
+func PasteAddVersionSuffix(source string, dstType string, suffixSlash bool, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
 	if strings.HasSuffix(source, "/") {
 		source = strings.TrimSuffix(source, "/")
 		suffixSlash = true

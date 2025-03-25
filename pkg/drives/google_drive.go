@@ -1366,7 +1366,7 @@ func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, d
 	// only srcType == google need this now
 	rename := r.URL.Query().Get("rename") == "true"
 	if rename && dstType != SrcTypeGoogle {
-		dst = PasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r)
+		dst = PasteAddVersionSuffix(dst, dstType, false, files.DefaultFs, w, r)
 	}
 
 	handler, err := GetResourceService(dstType)
