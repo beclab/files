@@ -1129,6 +1129,7 @@ func (rc *CloudDriveResourceService) PasteSame(action, src, dst string, rename b
 
 func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	klog.Infof("~~~Temp log for Cloud Drive PasteDirFrom: srcType: %s, src: %s, dstType: %s, dst: %s", srcType, srcType, dstType, dst)
 	mode := fileMode
 
 	handler, err := GetResourceService(dstType)
