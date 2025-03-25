@@ -1300,6 +1300,7 @@ func ResourcePostCloudDrive(src string, w http.ResponseWriter, r *http.Request, 
 
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
 	klog.Infoln("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
+	srcPath = CloudDriveNormalizationPath(srcPath, srcDrive, true, false)
 	path, newName := path.Split(srcPath)
 
 	param := CloudDrivePostParam{
