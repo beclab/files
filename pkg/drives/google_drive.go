@@ -669,10 +669,10 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
-	//dstFilename = strings.TrimSuffix(dstFilename, "/")
-	if !strings.HasSuffix(dstFilename, "/") {
-		dstFilename += "/"
-	}
+	dstFilename = strings.TrimSuffix(dstFilename, "/")
+	//if !strings.HasSuffix(dstFilename, "/") {
+	//	dstFilename += "/"
+	//}
 
 	param := GoogleDriveCopyFileParam{
 		CloudFilePath:     srcPathId,   // id of "path/to/cloud/file.txt",
