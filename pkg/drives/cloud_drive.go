@@ -512,14 +512,14 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		return nil
 	}
 	//trimmedDstDir := CloudDriveNormalizationPath(dstDir, srcDrive, false, false)
-	trimmedDstDir := strings.TrimSuffix(dstDir, "/")
-	if trimmedDstDir == "" {
-		trimmedDstDir = "/"
-	}
+	//trimmedDstDir := strings.TrimSuffix(dstDir, "/")
+	//if trimmedDstDir == "" {
+	//	trimmedDstDir = "/"
+	//}
 
 	param := CloudDriveCopyFileParam{
 		CloudFilePath:     srcPath,           // id of "path/to/cloud/file.txt",
-		NewCloudDirectory: trimmedDstDir,     // id of "new/cloud/directory",
+		NewCloudDirectory: dstDir,            // id of "new/cloud/directory",
 		NewCloudFileName:  dstFilename + "/", // "new_file_name.txt",
 		Drive:             dstDrive,          // "my_drive",
 		Name:              dstName,           // "file_name",
