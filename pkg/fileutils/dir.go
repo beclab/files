@@ -32,8 +32,8 @@ func CopyDir(fs afero.Fs, source, dest string) error {
 	var errs []error
 
 	for _, obj := range obs {
-		fsource := source + "/" + obj.Name()
-		fdest := dest + "/" + obj.Name()
+		fsource := filepath.Join(source, obj.Name())
+		fdest := filepath.Join(dest, obj.Name())
 
 		if obj.IsDir() {
 			// Create sub-directories, recursively.

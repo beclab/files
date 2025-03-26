@@ -67,7 +67,7 @@ func (rs *CacheResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 
 	var fdstBase string = dst
 	if driveIdCache[src] != "" {
-		fdstBase = filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))) + "/" + driveIdCache[src]
+		fdstBase = filepath.Join(filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))), driveIdCache[src])
 	}
 
 	type Item struct {

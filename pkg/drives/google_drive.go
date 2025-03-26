@@ -669,106 +669,140 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
+	dstFilename = strings.TrimSuffix(dstFilename, "/")
 
-	var CopyTempGoogleDrivePathIdCache = make(map[string]string)
-	var recursivePath = srcPath
-	var recursivePathId = srcPathId
-	var A []*GoogleDriveListResponseFileData
-	for {
-		klog.Infoln("len(A): ", len(A))
-
-		var isDir = true
-		var firstItem *GoogleDriveListResponseFileData
-		if len(A) > 0 {
-			firstItem = A[0]
-			recursivePathId = firstItem.Meta.ID
-			recursivePath = firstItem.Path
-			isDir = firstItem.IsDir
-		}
-
-		if isDir {
-			var parentPathId string
-			var folderName string
-			if srcPathId == recursivePathId {
-				parentPathId = dstPathId
-				folderName = dstFilename
-			} else {
-				parentPathId = CopyTempGoogleDrivePathIdCache[filepath.Dir(firstItem.Path)]
-				folderName = filepath.Base(firstItem.Path)
-			}
-			postParam := GoogleDrivePostParam{
-				ParentPath: parentPathId,
-				FolderName: folderName,
-				Drive:      srcDrive,
-				Name:       srcName,
-			}
-			postJsonBody, err := json.Marshal(postParam)
-			if err != nil {
-				klog.Errorln("Error marshalling JSON:", err)
-				return err
-			}
-			klog.Infoln("Google Drive Post Params:", string(postJsonBody))
-			var postRespBody []byte
-			postRespBody, err = GoogleDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, true)
-			if err != nil {
-				klog.Errorln("Error calling drive/create_folder:", err)
-				return err
-			}
-			var postBodyJson GoogleDrivePostResponse
-			if err = json.Unmarshal(postRespBody, &postBodyJson); err != nil {
-				klog.Error(err)
-				return err
-			}
-			CopyTempGoogleDrivePathIdCache[recursivePath] = postBodyJson.Data.Meta.ID
-
-			// list it and get its sub folders and files
-			firstParam := GoogleDriveListParam{
-				Path:  recursivePathId,
-				Drive: srcDrive,
-				Name:  srcName,
-			}
-
-			klog.Infoln("firstParam pathId:", recursivePathId)
-			var firstJsonBody []byte
-			firstJsonBody, err = json.Marshal(firstParam)
-			if err != nil {
-				klog.Errorln("Error marshalling JSON:", err)
-				return err
-			}
-			var firstRespBody []byte
-			firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
-
-			var firstBodyJson GoogleDriveListResponse
-			if err = json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
-				klog.Error(err)
-				return err
-			}
-
-			if len(A) == 0 {
-				A = firstBodyJson.Data
-			} else {
-				A = append(firstBodyJson.Data, A[1:]...)
-			}
-		} else {
-			if len(A) > 0 {
-				klog.Infoln(CopyTempGoogleDrivePathIdCache)
-				copyPathPrefix := "/Drive/google/" + srcName + "/"
-				copySrc := copyPathPrefix + firstItem.Meta.ID + "/"
-				parentPathId := CopyTempGoogleDrivePathIdCache[filepath.Dir(firstItem.Path)]
-				copyDst := copyPathPrefix + parentPathId + "/" + firstItem.Name
-				klog.Infoln("copySrc: ", copySrc)
-				klog.Infoln("copyDst: ", copyDst)
-				err := CopyGoogleDriveSingleFile(copySrc, copyDst, w, r)
-				if err != nil {
-					return err
-				}
-				A = A[1:]
-			}
-		}
-		if len(A) == 0 {
-			return nil
-		}
+	param := GoogleDriveCopyFileParam{
+		CloudFilePath:     srcPathId,   // id of "path/to/cloud/file.txt",
+		NewCloudDirectory: dstPathId,   // id of "new/cloud/directory",
+		NewCloudFileName:  dstFilename, // "new_file_name.txt",
+		Drive:             dstDrive,    // "my_drive",
+		Name:              dstName,     // "file_name",
 	}
+
+	jsonBody, err := json.Marshal(param)
+	if err != nil {
+		klog.Errorln("Error marshalling JSON:", err)
+		return err
+	}
+	klog.Infoln("Copy File Params:", string(jsonBody))
+	_, err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r, true)
+	if err != nil {
+		klog.Errorln("Error calling drive/copy_file:", err)
+		return err
+	}
+	return nil
+	//srcDrive, srcName, srcPathId, srcFilename := ParseGoogleDrivePath(src)
+	//klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
+	//if srcPathId == "" {
+	//	klog.Infoln("Src parse failed.")
+	//	return nil
+	//}
+	//dstDrive, dstName, dstPathId, dstFilename := ParseGoogleDrivePath(dst)
+	//klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
+	//if dstPathId == "" || dstFilename == "" {
+	//	klog.Infoln("Dst parse failed.")
+	//	return nil
+	//}
+	//
+	//var CopyTempGoogleDrivePathIdCache = make(map[string]string)
+	//var recursivePath = srcPath
+	//var recursivePathId = srcPathId
+	//var A []*GoogleDriveListResponseFileData
+	//for {
+	//	klog.Infoln("len(A): ", len(A))
+	//
+	//	var isDir = true
+	//	var firstItem *GoogleDriveListResponseFileData
+	//	if len(A) > 0 {
+	//		firstItem = A[0]
+	//		recursivePathId = firstItem.Meta.ID
+	//		recursivePath = firstItem.Path
+	//		isDir = firstItem.IsDir
+	//	}
+	//
+	//	if isDir {
+	//		var parentPathId string
+	//		var folderName string
+	//		if srcPathId == recursivePathId {
+	//			parentPathId = dstPathId
+	//			folderName = dstFilename
+	//		} else {
+	//			parentPathId = CopyTempGoogleDrivePathIdCache[filepath.Dir(firstItem.Path)]
+	//			folderName = filepath.Base(firstItem.Path)
+	//		}
+	//		postParam := GoogleDrivePostParam{
+	//			ParentPath: parentPathId,
+	//			FolderName: folderName,
+	//			Drive:      srcDrive,
+	//			Name:       srcName,
+	//		}
+	//		postJsonBody, err := json.Marshal(postParam)
+	//		if err != nil {
+	//			klog.Errorln("Error marshalling JSON:", err)
+	//			return err
+	//		}
+	//		klog.Infoln("Google Drive Post Params:", string(postJsonBody))
+	//		var postRespBody []byte
+	//		postRespBody, err = GoogleDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, true)
+	//		if err != nil {
+	//			klog.Errorln("Error calling drive/create_folder:", err)
+	//			return err
+	//		}
+	//		var postBodyJson GoogleDrivePostResponse
+	//		if err = json.Unmarshal(postRespBody, &postBodyJson); err != nil {
+	//			klog.Error(err)
+	//			return err
+	//		}
+	//		CopyTempGoogleDrivePathIdCache[recursivePath] = postBodyJson.Data.Meta.ID
+	//
+	//		// list it and get its sub folders and files
+	//		firstParam := GoogleDriveListParam{
+	//			Path:  recursivePathId,
+	//			Drive: srcDrive,
+	//			Name:  srcName,
+	//		}
+	//
+	//		klog.Infoln("firstParam pathId:", recursivePathId)
+	//		var firstJsonBody []byte
+	//		firstJsonBody, err = json.Marshal(firstParam)
+	//		if err != nil {
+	//			klog.Errorln("Error marshalling JSON:", err)
+	//			return err
+	//		}
+	//		var firstRespBody []byte
+	//		firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
+	//
+	//		var firstBodyJson GoogleDriveListResponse
+	//		if err = json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
+	//			klog.Error(err)
+	//			return err
+	//		}
+	//
+	//		if len(A) == 0 {
+	//			A = firstBodyJson.Data
+	//		} else {
+	//			A = append(firstBodyJson.Data, A[1:]...)
+	//		}
+	//	} else {
+	//		if len(A) > 0 {
+	//			klog.Infoln(CopyTempGoogleDrivePathIdCache)
+	//			copyPathPrefix := "/Drive/google/" + srcName + "/"
+	//			copySrc := copyPathPrefix + firstItem.Meta.ID + "/"
+	//			parentPathId := CopyTempGoogleDrivePathIdCache[filepath.Dir(firstItem.Path)]
+	//			copyDst := filepath.Join(copyPathPrefix + parentPathId, firstItem.Name)
+	//			klog.Infoln("copySrc: ", copySrc)
+	//			klog.Infoln("copyDst: ", copyDst)
+	//			err := CopyGoogleDriveSingleFile(copySrc, copyDst, w, r)
+	//			if err != nil {
+	//				return err
+	//			}
+	//			A = A[1:]
+	//		}
+	//	}
+	//	if len(A) == 0 {
+	//		return nil
+	//	}
+	//}
 }
 
 func GoogleFileToBuffer(src, bufferFilePath, bufferFileName string, w http.ResponseWriter, r *http.Request) (string, error) {
@@ -1257,7 +1291,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 
 	var fdstBase string = dst
 	if driveIdCache[src] != "" {
-		fdstBase = filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))) + "/" + driveIdCache[src]
+		fdstBase = filepath.Join(filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))), driveIdCache[src])
 	}
 
 	if !strings.HasSuffix(src, "/") {
@@ -1290,7 +1324,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 		return err
 	}
 	for _, item := range bodyJson.Data {
-		fsrc := filepath.Dir(strings.TrimSuffix(src, "/")) + "/" + item.Meta.ID
+		fsrc := filepath.Join(filepath.Dir(strings.TrimSuffix(src, "/")), item.Meta.ID)
 		fdst := filepath.Join(fdstBase, item.Name)
 		klog.Infoln(fsrc, fdst)
 		if item.IsDir {

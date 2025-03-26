@@ -127,7 +127,7 @@ func GenerateBufferFolder(originalFilePath, bflName string) (string, error) {
 
 	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
 	bufferPathName = common.RemoveSlash(bufferPathName)
-	bufferFolderPath := "/data/" + bflName + "/buffer" + "/" + bufferPathName
+	bufferFolderPath := "/data/" + bflName + "/buffer/" + bufferPathName
 	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
 		klog.Errorln(err)
 		return "", err
