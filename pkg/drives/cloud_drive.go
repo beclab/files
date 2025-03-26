@@ -746,7 +746,7 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 		klog.Infoln("Dst parse failed.")
 		return http.StatusBadRequest, nil
 	}
-	dstDir, dstFileName := filepath.Split(dstPath)
+	dstDir, dstFileName := filepath.Split(strings.TrimSuffix(dstPath, "/"))
 
 	trimmedDstDir := CloudDriveNormalizationPath(dstDir, dstDrive, false, false)
 	if trimmedDstDir == "" {
