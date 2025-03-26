@@ -3,6 +3,7 @@ package fileutils
 import (
 	"errors"
 	"k8s.io/klog/v2"
+	"path/filepath"
 
 	"github.com/spf13/afero"
 )
