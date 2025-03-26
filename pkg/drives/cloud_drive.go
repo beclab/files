@@ -506,7 +506,7 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 
 	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst)
 	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
-	dstDir, dstFilename := path.Split(dstPath)
+	dstDir, dstFilename := path.Split(strings.TrimSuffix(dstPath, "/"))
 	if dstDir == "" || dstFilename == "" {
 		klog.Infoln("Dst parse failed.")
 		return nil
