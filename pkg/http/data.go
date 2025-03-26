@@ -39,7 +39,7 @@ func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler 
 
 		if status != 0 {
 			txt := http.StatusText(status)
-			if err != nil {
+			if err != nil && status == 500 {
 				txt = err.Error()
 			}
 			http.Error(w, strconv.Itoa(status)+" "+txt, status)
