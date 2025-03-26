@@ -511,7 +511,8 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
-	trimmedDstDir := CloudDriveNormalizationPath(dstDir, srcDrive, false, false)
+	//trimmedDstDir := CloudDriveNormalizationPath(dstDir, srcDrive, false, false)
+	trimmedDstDir := strings.TrimSuffix(dstDir, "/")
 	if trimmedDstDir == "" {
 		trimmedDstDir = "/"
 	}
