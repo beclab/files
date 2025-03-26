@@ -24,10 +24,9 @@ import (
 	"time"
 )
 
-func PasteAddVersionSuffix(source string, dstType string, suffixSlash bool, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
+func PasteAddVersionSuffix(source string, dstType string, isDir bool, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
 	if strings.HasSuffix(source, "/") {
 		source = strings.TrimSuffix(source, "/")
-		suffixSlash = true
 	}
 
 	counter := 1
@@ -36,7 +35,6 @@ func PasteAddVersionSuffix(source string, dstType string, suffixSlash bool, fs a
 	base := strings.TrimSuffix(name, ext)
 	renamed := ""
 
-	var isDir bool
 	var err error
 	handler, err := GetResourceService(dstType)
 	if err != nil {
@@ -45,10 +43,10 @@ func PasteAddVersionSuffix(source string, dstType string, suffixSlash bool, fs a
 
 	for {
 		statSource := source
-		if suffixSlash {
+		if isDir {
 			statSource += "/"
 		}
-		if _, _, _, isDir, err = handler.GetStat(fs, statSource, w, r); err != nil {
+		if _, _, _, _, err = handler.GetStat(fs, statSource, w, r); err != nil {
 			break
 		}
 		if !isDir {
@@ -60,7 +58,7 @@ func PasteAddVersionSuffix(source string, dstType string, suffixSlash bool, fs a
 		counter++
 	}
 
-	if suffixSlash {
+	if isDir {
 		source += "/"
 	}
 

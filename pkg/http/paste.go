@@ -71,6 +71,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 				return http.StatusConflict, nil
 			}
 		}
+		isDir := strings.HasSuffix(src, "/")
 		if srcType == drives.SrcTypeGoogle && dstType != drives.SrcTypeGoogle {
 			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(src, w, r)
 			if err != nil {
@@ -79,6 +80,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			srcName := srcInfo.Name
 			formattedSrcName := common.RemoveSlash(srcName)
 			dst = strings.ReplaceAll(dst, srcName, formattedSrcName)
+			isDir = srcInfo.IsDir
 
 			if !srcInfo.CanDownload {
 				if srcInfo.CanExport {
@@ -93,7 +95,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			}
 		}
 		if rename && dstType != drives.SrcTypeGoogle {
-			dst = drives.PasteAddVersionSuffix(dst, dstType, strings.HasSuffix(src, "/"), files.DefaultFs, w, r)
+			dst = drives.PasteAddVersionSuffix(dst, dstType, isDir, files.DefaultFs, w, r)
 		}
 		var same = srcType == dstType
 		// all cloud drives of two users must be seen as diff archs
