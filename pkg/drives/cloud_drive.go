@@ -518,11 +518,11 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 	//}
 
 	param := CloudDriveCopyFileParam{
-		CloudFilePath:     srcPath,           // id of "path/to/cloud/file.txt",
-		NewCloudDirectory: dstDir,            // id of "new/cloud/directory",
-		NewCloudFileName:  dstFilename + "/", // "new_file_name.txt",
-		Drive:             dstDrive,          // "my_drive",
-		Name:              dstName,           // "file_name",
+		CloudFilePath:     srcPath,                              // id of "path/to/cloud/file.txt",
+		NewCloudDirectory: dstDir,                               // id of "new/cloud/directory",
+		NewCloudFileName:  strings.TrimSuffix(dstFilename, "/"), // "new_file_name.txt",
+		Drive:             dstDrive,                             // "my_drive",
+		Name:              dstName,                              // "file_name",
 	}
 
 	jsonBody, err := json.Marshal(param)
