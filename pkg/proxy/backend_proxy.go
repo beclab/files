@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -35,19 +34,26 @@ import (
 )
 
 const (
-	API_RESOURCES_PREFIX     = "/api/resources/AppData"
-	API_RAW_PREFIX           = "/api/raw/AppData"
-	API_MD5_PREFIX           = "/api/md5/AppData"
-	API_PREVIEW_THUMB_PREFIX = "/api/preview/thumb/AppData"
-	API_PREVIEW_BIG_PREFIX   = "/api/preview/big/AppData"
-	API_PERMISSION_PREFIX    = "/api/permission/AppData"
-	NODE_HEADER              = "X-Terminus-Node"
-	BFL_HEADER               = "X-Bfl-User"
-	API_PREFIX               = "/api"
-	UPLOADER_PREFIX          = "/upload"
-	MEDIA_PREFIX             = "/videos"
-	API_PASTE_PREFIX         = "/api/paste"
-	API_CACHE_PREFIX         = "/api/cache"
+	API_RESOURCES_PREFIX           = "/api/resources/AppData"
+	API_RAW_PREFIX                 = "/api/raw/AppData"
+	API_MD5_PREFIX                 = "/api/md5/AppData"
+	API_PREVIEW_THUMB_PREFIX       = "/api/preview/thumb/AppData"
+	API_PREVIEW_BIG_PREFIX         = "/api/preview/big/AppData"
+	API_PERMISSION_PREFIX          = "/api/permission/AppData"
+	API_RESOURCES_CACHE_PREFIX     = "/api/resources/cache"
+	API_RAW_CACHE_PREFIX           = "/api/raw/cache"
+	API_MD5_CACHE_PREFIX           = "/api/md5/cache"
+	API_PREVIEW_THUMB_CACHE_PREFIX = "/api/preview/thumb/cache"
+	API_PREVIEW_BIG_CACHE_PREFIX   = "/api/preview/big/cache"
+	API_PERMISSION_CACHE_PREFIX    = "/api/permission/cache"
+	NODE_HEADER                    = "X-Terminus-Node"
+	BFL_HEADER                     = "X-Bfl-User"
+	API_PREFIX                     = "/api"
+	UPLOADER_PREFIX                = "/upload"
+	MEDIA_PREFIX                   = "/videos"
+	API_PASTE_PREFIX               = "/api/paste"
+	API_PASTE_CACHE_PREFIX         = "/api/paste/cache"
+	API_CACHE_PREFIX               = "/api/cache"
 )
 
 var PVCs *PVCCache = nil
@@ -92,6 +98,18 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	backendProxy.addHandlers(API_PREVIEW_BIG_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_PERMISSION_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_PERMISSION_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RESOURCES_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RESOURCES_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RAW_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RAW_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_MD5_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_MD5_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_THUMB_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_THUMB_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_BIG_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_BIG_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PERMISSION_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PERMISSION_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 
@@ -121,6 +139,42 @@ func (p *BackendProxy) Shutdown() {
 func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		path := c.Request().URL.Path
+
+		// deal for new cache method
+		cachePrefixMap := map[string]string{
+			API_RESOURCES_CACHE_PREFIX:     "resources",
+			API_RAW_CACHE_PREFIX:           "raw",
+			API_MD5_CACHE_PREFIX:           "md5",
+			API_PREVIEW_THUMB_CACHE_PREFIX: "preview/thumb",
+			API_PREVIEW_BIG_CACHE_PREFIX:   "preview/big",
+			API_PERMISSION_CACHE_PREFIX:    "permission",
+			API_PASTE_CACHE_PREFIX:         "paste",
+		}
+
+		for prefix, base := range cachePrefixMap {
+			if path == prefix {
+				path = fmt.Sprintf("/api/%s/AppData", base)
+				break
+			} else if path == prefix+"/" {
+				path = fmt.Sprintf("/api/%s/AppData/", base)
+				break
+			} else {
+				if strings.HasPrefix(path, prefix) {
+					suffix := strings.TrimPrefix(path[len(prefix):], "/")
+
+					parts := strings.SplitN(suffix, "/", 2)
+					node := parts[0]
+					remaining := ""
+					if len(parts) > 1 {
+						// remaining = "/" + parts[1]
+						remaining = parts[1]
+					}
+
+					path = fmt.Sprintf("%s/%s/%s/AppData/%s", API_CACHE_PREFIX, node, base, remaining)
+					break
+				}
+			}
+		}
 
 		if !regexp.MustCompile("^"+API_RESOURCES_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_RAW_PREFIX+".*").Match([]byte(path)) &&
@@ -217,13 +271,55 @@ func minWithNegativeOne(a, b int, aName, bName string) (int, string) {
 	}
 }
 
+func FindEarliestIndex(haystack string, needles []string) (int, string) {
+	earliestIndex := -1
+	earliestNeedle := ""
+
+	for _, needle := range needles {
+		if needle == "" {
+			continue
+		}
+
+		currentIndex := strings.Index(haystack, needle)
+
+		if currentIndex >= 0 {
+			if earliestIndex == -1 || currentIndex < earliestIndex {
+				earliestIndex = currentIndex
+				earliestNeedle = needle
+			}
+		}
+	}
+
+	return earliestIndex, earliestNeedle
+}
+
 func rewriteUrl(path string, pvc string, prefix string) string {
 	if prefix == "" {
-		homeIndex := strings.Index(path, "/Home")
-		applicationIndex := strings.Index(path, "/Application")
-		splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
+		externalIndex, externalNeedle := FindEarliestIndex(path, []string{"/External", "/external"})
+		if externalIndex != -1 {
+			if externalNeedle == "/External" {
+				return path
+			}
+
+			firstHalf := path[:externalIndex]
+			//if firstHalf == "" {
+			//	firstHalf = "/"
+			//}
+			secondHalf := "/External" + strings.TrimPrefix(path[externalIndex:], "/external")
+			klog.Info("firstHalf=", firstHalf)
+			klog.Info("secondHalf=", secondHalf)
+
+			return firstHalf + secondHalf
+		}
+
+		homeIndex, homeNeedle := FindEarliestIndex(path, []string{"/Home", "/home"})
+		applicationIndex, applicationNeedle := FindEarliestIndex(path, []string{"/Application", "/data"})
+		splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, homeNeedle, applicationNeedle)
 		if splitIndex != -1 {
 			firstHalf := path[:splitIndex]
+			//if firstHalf == "" {
+			//	firstHalf = "/"
+			//}
 			secondHalf := path[splitIndex:]
 			klog.Info("firstHalf=", firstHalf)
 			klog.Info("secondHalf=", secondHalf)
@@ -232,18 +328,24 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 				return path
 			}
 			if splitName == "/Home" {
-				return filepath.Join(firstHalf, pvc+secondHalf)
+				return firstHalf + "/" + pvc + secondHalf
+			} else if splitName == "/home" {
+				secondHalf = "/Home" + strings.TrimPrefix(path[splitIndex:], "/home")
+				return firstHalf + "/" + pvc + secondHalf
 			} else {
 				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
-				return filepath.Join(firstHalf, pvc+"/Data"+secondHalf)
+				return firstHalf + "/" + pvc + "/Data" + secondHalf
 			}
 		}
 	} else {
 		pathSuffix := strings.TrimPrefix(path, prefix)
+		if strings.HasSuffix(prefix, "/cache") {
+			prefix = strings.TrimSuffix(prefix, "/cache") + "/AppData"
+		}
 		if strings.HasPrefix(pathSuffix, "/"+pvc) {
 			return path
 		}
-		return filepath.Join(prefix, pvc+pathSuffix)
+		return prefix + "/" + pvc + pathSuffix
 	}
 	return path
 }
@@ -382,27 +484,59 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		dst := query.Get("destination")
 		klog.Infoln("DST:", dst)
 
-		srcType := query.Get("src_type")
-		dstType := query.Get("dst_type")
+		//srcType := query.Get("src_type")
+		//dstType := query.Get("dst_type")
+		srcType, err := drives.ParsePathType(strings.TrimPrefix(src, API_PASTE_PREFIX), c.Request(), false, false)
+		if err != nil {
+			klog.Errorln(err)
+			srcType = "Parse Error"
+		}
+		dstType, err := drives.ParsePathType(dst, c.Request(), true, false)
+		if err != nil {
+			klog.Errorln(err)
+			dstType = "Parse Error"
+		}
 		klog.Infoln("SRC_TYPE:", srcType)
 		klog.Infoln("DST_TYPE:", dstType)
 
-		if srcType == drives.SrcTypeDrive {
+		if srcType == drives.SrcTypeDrive || srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
 			src = rewriteUrl(src, userPvc, "")
 		} else if srcType == drives.SrcTypeCache {
 			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
-		} else if srcType == drives.SrcTypeSync {
-			src = src
 		}
 
-		if dstType == drives.SrcTypeDrive {
+		if dstType == drives.SrcTypeDrive || dstType == drives.SrcTypeData || dstType == drives.SrcTypeExternal {
 			dst = rewriteUrl(dst, userPvc, "")
 			query.Set("destination", dst)
 		} else if dstType == drives.SrcTypeCache {
+			if strings.HasPrefix(dst, "/cache") {
+				dst = strings.TrimPrefix(dst, "/cache")
+				var dstNode string
+				dstParts := strings.SplitN(strings.TrimPrefix(dst, "/"), "/", 2)
+
+				if len(dstParts) > 1 {
+					dstNode = dstParts[0] // 修复变量名：dstParts 不是 parts
+					// 添加长度校验
+					if len(dst) > len("/"+dstNode) {
+						dst = "/AppData" + dst[len("/"+dstNode):]
+					} else {
+						dst = "/AppData"
+					}
+					klog.Infoln("Node:", dstNode)
+					klog.Infoln("New dst:", dst)
+				} else if len(dstParts) > 0 { // 修复条件：检查 dstParts 而非未定义的 parts
+					dstNode = dstParts[0]
+					dst = "/AppData"
+					klog.Infoln("Node:", dstNode)
+					klog.Infoln("New dst:", dst)
+				}
+
+				if len(node) == 0 {
+					c.Request().Header.Set(NODE_HEADER, dstNode)
+				}
+			} // only for cache for compatible
 			dst = rewriteUrl(dst, cachePvc, "/AppData")
 			query.Set("destination", dst)
-		} else if dstType == drives.SrcTypeSync {
-			dst = dst
 		}
 
 		newURL := fmt.Sprintf("%s?%s", src, query.Encode())
@@ -418,6 +552,9 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			query := c.Request().URL.Query()
 			dst := query.Get("destination")
 			if dst != "" {
+				if strings.HasPrefix(dst, "/cache") {
+					dst = strings.TrimPrefix(dst, "/cache")
+				} // only for cache for compatible
 				dst = rewriteUrl(dst, cachePvc, "/AppData")
 				dst = strings.Replace(dst, "/"+node[0], "", 1)
 				query.Set("destination", dst)
@@ -447,6 +584,9 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			query := c.Request().URL.Query()
 			dst := query.Get("destination")
 			if dst != "" {
+				if strings.HasPrefix(dst, "/cache") {
+					dst = strings.TrimPrefix(dst, "/cache")
+				} // only for cache for compatible
 				klog.Infoln("DST:", dst)
 				dst = rewriteUrl(dst, userPvc, "")
 				query.Set("destination", dst)
