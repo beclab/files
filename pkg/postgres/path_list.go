@@ -12,7 +12,7 @@ import (
 )
 
 type PathList struct {
-	Drive      string    `gorm:"type:varchar(10);not null;primaryKey"`
+	Drive      string    `gorm:"type:varchar(20);not null;primaryKey"`
 	Path       string    `gorm:"type:text;not null;primaryKey"`
 	MTime      time.Time `gorm:"not null;type:timestamptz"`
 	Status     int       `gorm:"not null"`
@@ -41,7 +41,7 @@ func createPathListTable() {
 func parseDrive(path string) (string, string) {
 	pathSplit := strings.Split(path, "/")
 	if len(pathSplit) < 3 {
-		return "Unknown drive", path
+		return "Unknown", path
 	}
 	if strings.HasPrefix(pathSplit[1], "pvc-userspace-") {
 		if pathSplit[2] == "Data" {
@@ -56,7 +56,7 @@ func parseDrive(path string) (string, string) {
 	if pathSplit[1] == "External" {
 		return "External", filepath.Join(pathSplit[2:]...) // TODO: External types
 	}
-	return "Parse Error", path
+	return "Error", path
 }
 
 func InitDrivePathList() {
