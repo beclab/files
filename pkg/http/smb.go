@@ -1,20 +1,43 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/redisutils"
 	"fmt"
 	"github.com/go-redis/redis"
+	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
+type MountRequestData struct {
+	SMBPath  string `json:"smbPath"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
 func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return common.ErrToStatus(err), err
+	}
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	var data MountRequestData
+	err = json.Unmarshal(bodyBytes, &data)
+	if err != nil {
+		klog.Errorln("Error unmarshalling JSON:", err)
+		return common.ErrToStatus(err), err
+	}
+
 	respJson, err := files.MountPathIncluster(r)
 	if err != nil {
 		return common.ErrToStatus(err), err
@@ -32,10 +55,24 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 			respJson["message"] = "Cannot connect to samba server"
 		}
 	}
+
+	callSendSearch3Mount("smb", data.SMBPath)
 	return common.RenderJSON(w, r, respJson)
 }
 
+func callSendSearch3Mount(externalType, smbPath string) {
+	smbName := filepath.Base(smbPath)
+	parsedPath := "smb/smb_device/smb_partition/" + smbName
+	klog.Infof("%s of external_type %s mounted!", parsedPath, externalType)
+	return
+}
+
 func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	// for compatible
+	if strings.HasPrefix(r.URL.Path, "/external") {
+		r.URL.Path = "/External" + r.URL.Path[len("/external"):]
+	}
+
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         files.DefaultFs,
 		Path:       r.URL.Path,
@@ -52,7 +89,15 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		return common.ErrToStatus(err), err
 	}
 
+	drives.GetMountedData()
+	externalType := r.URL.Query().Get("external_type")
+	callSendSearch3Unmount(externalType, drives.ParseExternalPath(file.Path))
 	return common.RenderJSON(w, r, respJson)
+}
+
+func callSendSearch3Unmount(externalType, externalPath string) {
+	klog.Infof("%s of external_type %s unmounted!", externalPath, externalType)
+	return
 }
 
 func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
