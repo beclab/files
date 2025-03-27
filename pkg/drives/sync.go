@@ -13,6 +13,7 @@ import (
 	"files/pkg/preview"
 	"fmt"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 	"io"
 	"io/ioutil"
 	"k8s.io/klog/v2"
@@ -43,7 +44,7 @@ func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	src := r.URL.Path
+	src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
 	src, err = common.UnescapeURLIfEscaped(src)
 	if err != nil {
 		return http.StatusBadRequest, err
@@ -147,12 +148,12 @@ func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 
 func (rc *SyncResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		return ResourceSyncDelete(r.URL.Path, r)
+		return ResourceSyncDelete(strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync), r)
 	}
 }
 
 func (rc *SyncResourceService) PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	err := SyncMkdirAll(r.URL.Path, 0, true, r)
+	err := SyncMkdirAll(strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync), 0, true, r)
 	return common.ErrToStatus(err), err
 }
 
@@ -163,8 +164,8 @@ func (rc *SyncResourceService) PutHandler(w http.ResponseWriter, r *http.Request
 
 func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		src := r.URL.Path
-		dst := r.URL.Query().Get("destination")
+		src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
+		dst := strings.TrimPrefix(r.URL.Query().Get("destination"), "/"+SrcTypeSync)
 
 		action := r.URL.Query().Get("action")
 		var err error
@@ -193,12 +194,15 @@ func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 }
 
 func (rc *SyncResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
+	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	return ResourceSyncPatch(action, src, dst, r)
 }
 
 func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	mode := fileMode
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 
 	handler, err := GetResourceService(dstType)
 	if err != nil {
@@ -213,31 +217,6 @@ func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, 
 	var fdstBase string = dst
 	if driveIdCache[src] != "" {
 		fdstBase = filepath.Join(filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))), driveIdCache[src])
-	}
-
-	type Item struct {
-		Type                 string `json:"type"`
-		Name                 string `json:"name"`
-		ID                   string `json:"id"`
-		Mtime                int64  `json:"mtime"`
-		Permission           string `json:"permission"`
-		Size                 int64  `json:"size,omitempty"`
-		ModifierEmail        string `json:"modifier_email,omitempty"`
-		ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
-		ModifierName         string `json:"modifier_name,omitempty"`
-		Starred              bool   `json:"starred,omitempty"`
-		FileSize             int64  `json:"fileSize,omitempty"`
-		NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
-		NumFiles             int    `json:"numFiles,omitempty"`
-		NumDirs              int    `json:"numDirs,omitempty"`
-		Path                 string `json:"path,omitempty"`
-		EncodedThumbnailSrc  string `json:"encoded_thumbnail_src,omitempty"`
-	}
-
-	type ResponseData struct {
-		UserPerm   string `json:"user_perm"`
-		DirID      string `json:"dir_id"`
-		DirentList []Item `json:"dirent_list"`
 	}
 
 	src = strings.Trim(src, "/")
@@ -297,7 +276,7 @@ func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, 
 		return err
 	}
 
-	var data ResponseData
+	var data DirentResponse
 	err = json.Unmarshal(body, &data)
 	if err != nil {
 		return err
@@ -324,6 +303,7 @@ func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, 
 
 func (rs *SyncResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	if err := SyncMkdirAll(dst, fileMode, true, r); err != nil {
 		return err
 	}
@@ -332,6 +312,7 @@ func (rs *SyncResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode
 
 func (rs *SyncResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
@@ -379,6 +360,7 @@ func (rs *SyncResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType,
 func (rs *SyncResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	klog.Infoln("Begin to sync paste!")
+	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
 		return err
 	}
@@ -399,6 +381,7 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 	if err != nil {
 		return nil, 0, 0, false, err
 	}
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 
 	src = strings.Trim(src, "/")
 	if !strings.Contains(src, "/") {
@@ -457,32 +440,7 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 		return nil, 0, 0, false, err
 	}
 
-	type Dirent struct {
-		Type                 string `json:"type"`
-		ID                   string `json:"id"`
-		Name                 string `json:"name"`
-		Mtime                int64  `json:"mtime"`
-		Permission           string `json:"permission"`
-		ParentDir            string `json:"parent_dir"`
-		Starred              bool   `json:"starred"`
-		Size                 int64  `json:"size"`
-		FileSize             int64  `json:"fileSize,omitempty"`
-		NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
-		NumFiles             int    `json:"numFiles,omitempty"`
-		NumDirs              int    `json:"numDirs,omitempty"`
-		Path                 string `json:"path,omitempty"`
-		ModifierEmail        string `json:"modifier_email,omitempty"`
-		ModifierName         string `json:"modifier_name,omitempty"`
-		ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
-	}
-
-	type Response struct {
-		UserPerm   string   `json:"user_perm"`
-		DirID      string   `json:"dir_id"`
-		DirentList []Dirent `json:"dirent_list"`
-	}
-
-	var dirResp Response
+	var dirResp DirentResponse
 	var fileInfo Dirent
 
 	err = json.Unmarshal(body, &dirResp)
@@ -514,6 +472,7 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 
 func (rs *SyncResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	status, err := ResourceSyncDelete(src, r)
 	if status != http.StatusOK {
 		return os.ErrInvalid
@@ -522,6 +481,149 @@ func (rs *SyncResourceService) MoveDelete(fileCache fileutils.FileCache, src str
 		return err
 	}
 	return nil
+}
+
+func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, rootPath string, processor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error {
+	if rootPath == "" {
+		rootPath = "/"
+	}
+
+	processedPaths := make(map[string]bool)
+
+	for bflName, cookie := range common.BflCookieCache {
+		klog.Infof("Key: %s, Value: %s\n", bflName, cookie)
+		repoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
+
+		header := make(http.Header)
+
+		header.Set("Content-Type", "application/json")
+		header.Set("X-Bfl-User", bflName)
+		header.Set("Cookie", cookie)
+
+		repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
+		if err != nil {
+			klog.Errorf("SyncCall failed: %v\n", err)
+			return err
+		}
+
+		var data RepoResponse
+		err = json.Unmarshal(repoRespBody, &data)
+		if err != nil {
+			klog.Errorf("unmarshal repo response failed: %v\n", err)
+			return err
+		}
+
+		for _, repo := range data.Repos {
+			klog.Infof("repo=%v", repo)
+
+			url := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repo.RepoID + "/dir/?p=" + rootPath + "&with_thumbnail=true"
+			klog.Infoln(url)
+
+			var direntRespBody []byte
+			direntRespBody, err = syncCall(url, "GET", nil, nil, nil, &header, true)
+			if err != nil {
+				klog.Errorf("fetch repo response failed: %v\n", err)
+				return err
+			}
+
+			generator := walkSyncDirentsGenerator(direntRespBody, &header, nil, repo.RepoID)
+
+			for dirent := range generator {
+				key := fmt.Sprintf("%s:%s", dirent.Drive, dirent.Path)
+				processedPaths[key] = true
+
+				_, err = processor(db, dirent.Drive, dirent.Path, dirent.Mtime)
+				if err != nil {
+					klog.Errorf("generate path list failed: %v\n", err)
+					return err
+				}
+			}
+		}
+	}
+
+	err := recordsStatusProcessor(db, processedPaths, []string{SrcTypeSync}, 1)
+	if err != nil {
+		klog.Errorf("records status processor failed: %v\n", err)
+		return err
+	}
+
+	return nil
+}
+
+// just for complement, no need to use now
+func (rs *SyncResourceService) parsePathToURI(path string) (string, string) {
+	return SrcTypeSync, path
+}
+
+func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) ([]byte, error) {
+	// w is for future use, not used now
+	client := &http.Client{}
+	request, err := http.NewRequest(method, dst, bytes.NewBuffer(reqBodyJson))
+	if err != nil {
+		klog.Errorf("create request failed: %v\n", err)
+		return nil, err
+	}
+
+	if header != nil {
+		request.Header = *header
+	} else {
+		request.Header = r.Header
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		klog.Errorf("request failed: %v\n", err)
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	var bodyReader io.Reader = response.Body
+
+	if response.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(response.Body)
+		if err != nil {
+			klog.Errorf("unzip response failed: %v\n", err)
+			return nil, err
+		}
+		defer gzipReader.Close()
+
+		bodyReader = gzipReader
+	}
+
+	body, err := ioutil.ReadAll(bodyReader)
+	if err != nil {
+		klog.Errorf("read response failed: %v\n", err)
+		return nil, err
+	}
+
+	if returnResp {
+		return body, nil
+	}
+	return nil, nil
+}
+
+type Repo struct {
+	Type                 string    `json:"type"`
+	RepoID               string    `json:"repo_id"`
+	RepoName             string    `json:"repo_name"`
+	OwnerEmail           string    `json:"owner_email"`
+	OwnerName            string    `json:"owner_name"`
+	OwnerContactEmail    string    `json:"owner_contact_email"`
+	LastModified         time.Time `json:"last_modified"`
+	ModifierEmail        string    `json:"modifier_email"`
+	ModifierName         string    `json:"modifier_name"`
+	ModifierContactEmail string    `json:"modifier_contact_email"`
+	Size                 int       `json:"size"`
+	Encrypted            bool      `json:"encrypted"`
+	Permission           string    `json:"permission"`
+	Starred              bool      `json:"starred"`
+	Monitored            bool      `json:"monitored"`
+	Status               string    `json:"status"`
+	Salt                 string    `json:"salt"`
+}
+
+type RepoResponse struct {
+	Repos []Repo `json:"repos"`
 }
 
 type Dirent struct {
@@ -548,6 +650,62 @@ type DirentResponse struct {
 	DirID      string   `json:"dir_id"`
 	DirentList []Dirent `json:"dirent_list"`
 	sync.Mutex
+}
+
+func walkSyncDirentsGenerator(body []byte, header *http.Header, r *http.Request, repoID string) <-chan DirentGeneratedEntry {
+	ch := make(chan DirentGeneratedEntry)
+	go func() {
+		defer close(ch)
+
+		var bodyJson DirentResponse
+		if err := json.Unmarshal(body, &bodyJson); err != nil {
+			klog.Error(err)
+			return
+		}
+
+		queue := make([]Dirent, 0)
+		bodyJson.Lock()
+		queue = append(queue, bodyJson.DirentList...)
+		bodyJson.Unlock()
+
+		for len(queue) > 0 {
+			firstItem := queue[0]
+			queue = queue[1:]
+
+			if firstItem.Type == "dir" {
+				fullPath := filepath.Join(SrcTypeSync, repoID, firstItem.Path, firstItem.Name)
+				klog.Infof("~~~Temp log: sync fullPath = %s", fullPath)
+				entry := DirentGeneratedEntry{
+					Drive: SrcTypeSync,
+					Path:  fullPath,
+					Mtime: time.Unix(firstItem.Mtime, 0),
+				}
+				ch <- entry
+
+				path := firstItem.Path
+				if path != "/" {
+					path += "/"
+				}
+				path = common.EscapeURLWithSpace(path)
+				firstUrl := fmt.Sprintf("http://127.0.0.1:80/seahub/api/v2.1/repos/%s/dir/?p=%s&with_thumbnail=true", repoID, path)
+				klog.Infoln(firstUrl)
+
+				firstRespBody, err := syncCall(firstUrl, "GET", nil, nil, r, header, true)
+				if err != nil {
+					klog.Error(err)
+					continue
+				}
+
+				var firstBodyJson DirentResponse
+				if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
+					klog.Error(err)
+					continue
+				}
+				queue = append(queue, firstBodyJson.DirentList...)
+			}
+		}
+	}()
+	return ch
 }
 
 func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- string, r *http.Request, repoID string) {

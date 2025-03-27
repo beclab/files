@@ -11,6 +11,7 @@ import (
 	"files/pkg/preview"
 	"fmt"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -18,6 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+var mountedData []files.DiskInfo = nil
 
 // if cache logic is same as drive, it will be written in this file
 type DriveResourceService struct {
@@ -189,6 +192,100 @@ func (rs *DriveResourceService) MoveDelete(fileCache fileutils.FileCache, src st
 		return err
 	}
 	return nil
+}
+
+func (rs *DriveResourceService) GeneratePathList(db *gorm.DB, rootPath string, processor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error {
+	if rootPath == "" {
+		rootPath = "/data"
+	}
+	GetMountedData()
+
+	processedPaths := make(map[string]bool)
+	processedPathEntries := make(map[string]ProcessedPathsEntry)
+	var sendS3Files = []os.FileInfo{}
+
+	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			klog.Errorf("Access error: %v\n", err)
+			return nil
+		}
+
+		if info.IsDir() {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return filepath.SkipDir
+			}
+			// Process directory
+			drive, parsedPath := rs.parsePathToURI(path)
+
+			key := fmt.Sprintf("%s:%s", drive, parsedPath)
+			processedPaths[key] = true
+
+			op, err := processor(db, drive, parsedPath, info.ModTime())
+			processedPathEntries[key] = ProcessedPathsEntry{
+				Drive: drive,
+				Path:  parsedPath,
+				Mtime: info.ModTime(),
+				Op:    op,
+			}
+			return err
+		} else {
+			fileDir := filepath.Dir(path)
+			drive, parsedPath := rs.parsePathToURI(fileDir)
+
+			key := fmt.Sprintf("%s:%s", drive, parsedPath)
+
+			if entry, exists := processedPathEntries[key]; exists {
+				if !info.ModTime().Before(entry.Mtime) || entry.Op == 1 { // create need to send to S3
+					sendS3Files = append(sendS3Files, info)
+
+					if len(sendS3Files) == 100 {
+						callSendS3MultiFiles(sendS3Files) // TODO: Just take this position now
+						sendS3Files = sendS3Files[:0]
+					}
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		klog.Errorln("Error walking the path:", err)
+	}
+
+	if len(sendS3Files) > 0 {
+		callSendS3MultiFiles(sendS3Files) // TODO: Just take this position now
+		sendS3Files = sendS3Files[:0]
+	}
+
+	err = recordsStatusProcessor(db, processedPaths, []string{SrcTypeDrive, SrcTypeData, SrcTypeExternal}, 1)
+	if err != nil {
+		klog.Errorf("records status processor failed: %v\n", err)
+		return err
+	}
+	return err
+}
+
+func (rs *DriveResourceService) parsePathToURI(path string) (string, string) {
+	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(pathSplit) < 2 {
+		return "unknown", path
+	}
+	if strings.HasPrefix(pathSplit[1], "pvc-userspace-") {
+		if len(pathSplit) == 2 {
+			return "unknown", path
+		}
+		if pathSplit[2] == "Data" {
+			return "data", filepath.Join(pathSplit[1:]...)
+		} else if pathSplit[2] == "Home" {
+			return "drive", filepath.Join(pathSplit[1:]...)
+		}
+	}
+	if pathSplit[1] == "External" {
+		externalPath := ParseExternalPath(filepath.Join(pathSplit[2:]...))
+		return "external", externalPath
+	}
+	return "error", path
 }
 
 func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *common.Data, mountedData []files.DiskInfo) {
@@ -425,4 +522,37 @@ func ResourceDriveDelete(fileCache fileutils.FileCache, path string, ctx context
 	}
 
 	return http.StatusOK, nil
+}
+
+func GetMountedData() {
+	url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
+
+	headers := make(http.Header)
+	headers.Set("Content-Type", "application/json")
+	headers.Set("X-Signature", "temp_signature")
+
+	tempMountedData, err := files.FetchDiskInfo(url, headers)
+	if err != nil {
+		klog.Errorln(err)
+		return
+	}
+	mountedData = tempMountedData
+	return
+}
+
+func ParseExternalPath(path string) string {
+	for _, datum := range mountedData {
+		if strings.HasPrefix(path, datum.Path) {
+			idSerial := datum.IDSerial
+			if idSerial == "" {
+				idSerial = datum.Type + "_device"
+			}
+			partationUUID := datum.PartitionUUID
+			if partationUUID == "" {
+				partationUUID = datum.Type + "_partition"
+			}
+			return filepath.Join(datum.Type, idSerial, partationUUID, path)
+		}
+	}
+	return ""
 }

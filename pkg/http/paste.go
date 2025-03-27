@@ -18,15 +18,25 @@ import (
 
 func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		var err error
+
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
-		srcType := r.URL.Query().Get("src_type")
-		if srcType == "" {
-			srcType = drives.SrcTypeDrive
+		//srcType := r.URL.Query().Get("src_type")
+		//if srcType == "" {
+		//	srcType = drives.SrcTypeDrive
+		//}
+		srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
+		if err != nil {
+			return http.StatusBadRequest, err
 		}
-		dstType := r.URL.Query().Get("dst_type")
-		if dstType == "" {
-			dstType = drives.SrcTypeDrive
+		//dstType := r.URL.Query().Get("dst_type")
+		//if dstType == "" {
+		//	dstType = drives.SrcTypeDrive
+		//}
+		dstType, err := drives.ParsePathType(r.URL.Query().Get("destination"), r, true, true)
+		if err != nil {
+			return http.StatusBadRequest, err
 		}
 
 		if !drives.ValidSrcTypes[srcType] {
@@ -37,13 +47,21 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			klog.Infoln("Dst type is invalid!")
 			return http.StatusForbidden, nil
 		}
+
+		if srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
+			srcType = drives.SrcTypeDrive // In paste, data and external is dealt as same as drive
+		}
+		if dstType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
+			dstType = drives.SrcTypeDrive // In paste, data and external is dealt as same as drive
+		}
+
 		if srcType == dstType {
 			klog.Infoln("Src and dst are of same arch!")
 		} else {
 			klog.Infoln("Src and dst are of different arches!")
 		}
 		action := r.URL.Query().Get("action")
-		var err error
+
 		klog.Infoln("src:", src)
 		src, err = common.UnescapeURLIfEscaped(src)
 		klog.Infoln("src:", src, "err:", err)

@@ -397,3 +397,75 @@ func HandleImagePreview(
 
 	return 0, nil
 }
+
+func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string, error) {
+	klog.Infof("~~~Temp log: path=%s, isDst=%v, rewritten=%v", path, isDst, rewritten)
+	if path == "" && !isDst {
+		path = r.URL.Path
+	}
+	if path == "" {
+		return "", errors.New("path is empty")
+	}
+
+	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(pathSplit) < 2 {
+		return "", errors.New("invalid path type")
+	}
+
+	switch strings.ToLower(pathSplit[0]) {
+	case "drive": // "Drive" and "drive" both are OK, for compatible
+		if value, exists := ValidSrcTypes[pathSplit[1]]; exists && value {
+			return pathSplit[1], nil
+		}
+		return "", errors.New("invalid path type")
+	case "sync":
+		return SrcTypeSync, nil
+	case "appdata": // AppData
+		return SrcTypeCache, nil
+	case "application": // Application
+		if !rewritten {
+			return SrcTypeData, nil
+		}
+	case "home": // Home
+		if !rewritten {
+			return SrcTypeDrive, nil
+		}
+	case "external": // External
+		return SrcTypeExternal, nil
+	}
+
+	if rewritten {
+		switch pathSplit[1] {
+		case "Data":
+			return SrcTypeData, nil
+		case "Home":
+			return SrcTypeDrive, nil
+		}
+	}
+
+	if r == nil {
+		return "", errors.New("invalid path type")
+	}
+
+	// use src/src_type/dst_type for the last try and compatible
+	if isDst {
+		if value, exists := ValidSrcTypes[r.URL.Query().Get("dst_type")]; exists && value {
+			return r.URL.Query().Get("dst_type"), nil
+		}
+	}
+	if value, exists := ValidSrcTypes[r.URL.Query().Get("src")]; exists && value {
+		return r.URL.Query().Get("src"), nil
+	}
+	if value, exists := ValidSrcTypes[r.URL.Query().Get("src_type")]; exists && value {
+		return r.URL.Query().Get("src_type"), nil
+	}
+	return "", errors.New("invalid path type")
+}
+
+func callSendS3MultiFiles(fileInfos []os.FileInfo) {
+	klog.Infof("~~~Temp log: sending %d infos begins", len(fileInfos))
+	for index, fileInfo := range fileInfos {
+		klog.Infof("~~~Temp log: [%d] %s", index, fileInfo.Name())
+	}
+	klog.Infof("~~~Temp log: sending %d infos ends", len(fileInfos))
+}

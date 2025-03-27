@@ -79,6 +79,19 @@ func timingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func cookieMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bflName := r.Header.Get("X-Bfl-User")
+		oldCookie := common.BflCookieCache[bflName]
+		newCookie := r.Header.Get("Cookie")
+		if newCookie != oldCookie {
+			common.BflCookieCache[bflName] = newCookie
+		}
+		klog.Infof("BflCookieCache= %v", common.BflCookieCache)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func NeedCheckPrefix(prefix string) bool {
 	switch prefix {
 	case "/api/resources", "/api/raw", "/api/preview", "/api/paste", "/api/permission", "/api/share":
@@ -102,26 +115,44 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 		src = r.URL.Path
 	}
 
-	srcType := r.URL.Query().Get("src_type")
-	if srcType == "" {
-		srcType = r.URL.Query().Get("src")
-		if srcType == "" {
-			srcType = drives.SrcTypeDrive
-		}
+	klog.Infof("~~~Temp log: check path owner src=%s", src)
+	srcType, err := drives.ParsePathType(src, r, false, true)
+	if err != nil {
+		//klog.Errorf("ParsePathType error: %v", err)
+		//return false
+		srcType = drives.SrcTypeDrive
 	}
+	//srcType := r.URL.Query().Get("src_type")
+	//if srcType == "" {
+	//	srcType = r.URL.Query().Get("src")
+	//	if srcType == "" {
+	//		srcType = drives.SrcTypeDrive
+	//	}
+	//}
 
 	dst := r.URL.Query().Get("destination")
-	dstType := ""
-	if dst != "" {
-		dstType = r.URL.Query().Get("dst_type")
-		if dstType == "" {
-			if prefix == "/api/resources" && r.Method == http.MethodPatch {
-				dstType = srcType
-			} else {
-				dstType = drives.SrcTypeDrive
-			}
+	klog.Infof("~~~Temp log: check path owner dst=%s", dst)
+	dstType, err := drives.ParsePathType(dst, r, true, true)
+	if err != nil {
+		if prefix == "/api/resources" && r.Method == http.MethodPatch {
+			dstType = srcType
+		} else {
+			//klog.Errorf("ParsePathType error: %v", err)
+			//return false
+			dstType = drives.SrcTypeDrive
 		}
 	}
+	//dstType := ""
+	//if dst != "" {
+	//	dstType = r.URL.Query().Get("dst_type")
+	//	if dstType == "" {
+	//		if prefix == "/api/resources" && r.Method == http.MethodPatch {
+	//			dstType = srcType
+	//		} else {
+	//			dstType = drives.SrcTypeDrive
+	//		}
+	//	}
+	//}
 
 	klog.Infof("Checking owner for method: %s, prefix: %s, srcType: %s, src: %s, dstType: %s, dst: %s", method, prefix, srcType, src, dstType, dst)
 

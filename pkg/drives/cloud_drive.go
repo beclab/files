@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -302,7 +303,7 @@ func GetCloudDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (
 		return nil, err
 	}
 	klog.Infoln("Cloud Drive List Params:", string(jsonBody))
-	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/ls:", err)
 		return nil, err
@@ -334,7 +335,7 @@ func GetCloudDriveFocusedMetaInfos(src string, w http.ResponseWriter, r *http.Re
 		return
 	}
 	klog.Infoln("Cloud Drive CloudDriveMetaResponseMeta Params:", string(jsonBody))
-	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/get_file_meta_data:", err)
 		return
@@ -395,7 +396,7 @@ func generateCloudDriveFilesData(srcType string, body []byte, stopChan <-chan st
 				return
 			}
 			var firstRespBody []byte
-			firstRespBody, err = CloudDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
+			firstRespBody, err = CloudDriveCall("/drive/ls", "POST", firstJsonBody, w, r, nil, true)
 
 			var firstBodyJson CloudDriveListResponse
 			if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
@@ -487,7 +488,7 @@ func CopyCloudDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.Re
 		return err
 	}
 	klog.Infoln("Copy File Params:", string(jsonBody))
-	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, true)
+	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/copy_file:", err)
 		return err
@@ -526,7 +527,7 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		return err
 	}
 	klog.Infoln("Copy File Params:", string(jsonBody))
-	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, true)
+	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/copy_file:", err)
 		return err
@@ -563,7 +564,7 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 	klog.Infoln("Download File Params:", string(jsonBody))
 
 	var respBody []byte
-	respBody, err = CloudDriveCall("/drive/download_async", "POST", jsonBody, w, r, true)
+	respBody, err = CloudDriveCall("/drive/download_async", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/download_async:", err)
 		return err
@@ -588,7 +589,7 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 	for {
 		time.Sleep(1000 * time.Millisecond)
 		var taskRespBody []byte
-		taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
+		taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, nil, true)
 		if err != nil {
 			klog.Errorln("Error calling drive/download_async:", err)
 			return err
@@ -654,7 +655,7 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 	klog.Infoln("Upload File Params:", string(jsonBody))
 
 	var respBody []byte
-	respBody, err = CloudDriveCall("/drive/upload_async", "POST", jsonBody, w, r, true)
+	respBody, err = CloudDriveCall("/drive/upload_async", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/upload_async:", err)
 		return common.ErrToStatus(err), err
@@ -678,7 +679,7 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 	for {
 		time.Sleep(500 * time.Millisecond)
 		var taskRespBody []byte
-		taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
+		taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, nil, true)
 		if err != nil {
 			klog.Errorln("Error calling drive/upload_async:", err)
 			return common.ErrToStatus(err), err
@@ -729,7 +730,7 @@ func MoveCloudDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *http
 		return err
 	}
 	klog.Infoln("Cloud Drive Move File Params:", string(jsonBody))
-	_, err = CloudDriveCall("/drive/move_file", "POST", jsonBody, w, r, false)
+	_, err = CloudDriveCall("/drive/move_file", "POST", jsonBody, w, r, nil, false)
 	if err != nil {
 		klog.Errorln("Error calling drive/move_file:", err)
 		return err
@@ -737,13 +738,18 @@ func MoveCloudDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *http
 	return nil
 }
 
-func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, error) {
-	bflName := r.Header.Get("X-Bfl-User")
+func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) ([]byte, error) {
+	var bflName = ""
+	if header != nil {
+		bflName = header.Get("X-Bfl-User")
+	} else {
+		bflName = r.Header.Get("X-Bfl-User")
+	}
 	if bflName == "" {
 		return nil, os.ErrPermission
 	}
 
-	host := common.GetHost(r)
+	host := common.GetHost(bflName)
 	dstUrl := host + dst
 
 	klog.Infoln("dstUrl:", dstUrl)
@@ -769,8 +775,12 @@ func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrite
 			return nil, err
 		}
 
-		req.Header = r.Header.Clone()
-		req.Header.Set("Content-Type", "application/json")
+		if header != nil {
+			req.Header = *header
+		} else {
+			req.Header = r.Header.Clone()
+			req.Header.Set("Content-Type", "application/json")
+		}
 
 		client := &http.Client{}
 		resp, err = client.Do(req)
@@ -925,14 +935,14 @@ func (rc *CloudDriveResourceService) GetHandler(w http.ResponseWriter, r *http.R
 	klog.Infoln("Cloud Drive List Params:", string(jsonBody))
 	if stream == 1 {
 		var body []byte
-		body, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+		body, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
 		streamCloudDriveFiles(w, r, srcDrive, body, param)
 		return 0, nil
 	}
 	if meta == 1 {
-		_, err = CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, false)
+		_, err = CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, false)
 	} else {
-		_, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, false)
+		_, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, false)
 	}
 	if err != nil {
 		klog.Errorln("Error calling drive/ls:", err)
@@ -1049,7 +1059,7 @@ func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dst
 	}
 	klog.Infoln("Cloud Drive List Params:", string(jsonBody))
 	var respBody []byte
-	respBody, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+	respBody, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/ls:", err)
 		return err
@@ -1179,6 +1189,90 @@ func (rs *CloudDriveResourceService) MoveDelete(fileCache fileutils.FileCache, s
 	return nil
 }
 
+func (rs *CloudDriveResourceService) GeneratePathList(db *gorm.DB, rootPath string, processor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error {
+	if rootPath == "" {
+		rootPath = "/"
+	}
+
+	processedPaths := make(map[string]bool)
+
+	for bflName, cookie := range common.BflCookieCache {
+		klog.Infof("Key: %s, Value: %s\n", bflName, cookie)
+
+		header := make(http.Header)
+
+		header.Set("Content-Type", "application/json")
+		header.Set("X-Bfl-User", bflName)
+		header.Set("Cookie", cookie)
+
+		// /drive/accounts logic is as same as google drive, but a little different from cloud drives. It is used only once, so call GoogleDriveCall here.
+		repoRespBody, err := GoogleDriveCall("/drive/accounts", "POST", nil, nil, nil, &header, true)
+		if err != nil {
+			klog.Errorf("GoogleDriveCall failed: %v\n", err)
+			return err
+		}
+
+		var data DriveAccountsResponse
+		err = json.Unmarshal(repoRespBody, &data)
+		if err != nil {
+			klog.Errorf("unmarshal repo response failed: %v\n", err)
+			return err
+		}
+
+		for _, datum := range data.Data {
+			klog.Infof("datum=%v", datum)
+
+			if datum.Type == SrcTypeGoogle {
+				continue
+			}
+
+			rootParam := CloudDriveListParam{
+				Path:  rootPath,
+				Drive: datum.Type,
+				Name:  datum.Name,
+			}
+			rootJsonBody, err := json.Marshal(rootParam)
+			if err != nil {
+				klog.Errorln("Error marshalling JSON:", err)
+				return err
+			}
+
+			var direntRespBody []byte
+			direntRespBody, err = CloudDriveCall("/drive/ls", "POST", rootJsonBody, nil, nil, &header, true)
+			if err != nil {
+				klog.Errorf("fetch repo response failed: %v\n", err)
+				return err
+			}
+
+			generator := walkCloudDriveDirentsGenerator(direntRespBody, &header, nil, datum)
+
+			for dirent := range generator {
+				key := fmt.Sprintf("%s:%s", dirent.Drive, dirent.Path)
+				processedPaths[key] = true
+
+				_, err = processor(db, dirent.Drive, dirent.Path, dirent.Mtime)
+				if err != nil {
+					klog.Errorf("generate path list failed: %v\n", err)
+					return err
+				}
+			}
+		}
+	}
+
+	err := recordsStatusProcessor(db, processedPaths, []string{SrcTypeCloud, SrcTypeDropbox, SrcTypeAWSS3, SrcTypeTencent}, 1)
+	if err != nil {
+		klog.Errorf("records status processor failed: %v\n", err)
+		return err
+	}
+
+	return nil
+}
+
+// just for complement, no need to use now
+func (rs *CloudDriveResourceService) parsePathToURI(path string) (string, string) {
+	return SrcTypeCloud, path
+}
+
 func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
 	if src == "" {
 		src = r.URL.Path
@@ -1208,10 +1302,10 @@ func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.
 
 	var respBody []byte = nil
 	if returnResp {
-		respBody, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, true)
+		respBody, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, nil, true)
 		klog.Infoln(string(respBody))
 	} else {
-		_, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, false)
+		_, err = CloudDriveCall("/drive/delete", "POST", jsonBody, w, r, nil, false)
 	}
 	if err != nil {
 		klog.Errorln("Error calling drive/delete:", err)
@@ -1246,9 +1340,9 @@ func ResourcePostCloudDrive(src string, w http.ResponseWriter, r *http.Request, 
 	klog.Infoln("Cloud Drive Post Params:", string(jsonBody))
 	var respBody []byte = nil
 	if returnResp {
-		respBody, err = CloudDriveCall("/drive/create_folder", "POST", jsonBody, w, r, true)
+		respBody, err = CloudDriveCall("/drive/create_folder", "POST", jsonBody, w, r, nil, true)
 	} else {
-		_, err = CloudDriveCall("/drive/create_folder", "POST", jsonBody, w, r, false)
+		_, err = CloudDriveCall("/drive/create_folder", "POST", jsonBody, w, r, nil, false)
 	}
 	if err != nil {
 		klog.Errorln("Error calling drive/create_folder:", err)
@@ -1288,7 +1382,7 @@ func ResourcePatchCloudDrive(fileCache fileutils.FileCache, w http.ResponseWrite
 		return common.ErrToStatus(err), err
 	}
 
-	_, err = CloudDriveCall("/drive/rename", "POST", jsonBody, w, r, false)
+	_, err = CloudDriveCall("/drive/rename", "POST", jsonBody, w, r, nil, false)
 	if err != nil {
 		klog.Errorln("Error calling drive/rename:", err)
 		return common.ErrToStatus(err), err
@@ -1522,4 +1616,77 @@ func delThumbsCloudDrive(ctx context.Context, fileCache fileutils.FileCache, src
 	}
 
 	return nil
+}
+
+func walkCloudDriveDirentsGenerator(body []byte, header *http.Header, r *http.Request, datum DrivesAccounsResponseItem) <-chan DirentGeneratedEntry {
+	ch := make(chan DirentGeneratedEntry)
+	go func() {
+		defer close(ch)
+
+		var bodyJson CloudDriveListResponse
+		if err := json.Unmarshal(body, &bodyJson); err != nil {
+			klog.Error(err)
+			return
+		}
+
+		queue := make([]*CloudDriveListResponseFileData, 0)
+		bodyJson.Lock()
+		queue = append(queue, bodyJson.Data...)
+		bodyJson.Unlock()
+
+		for len(queue) > 0 {
+			firstItem := queue[0]
+			queue = queue[1:]
+
+			if firstItem.IsDir {
+				fullPath := filepath.Join(datum.Type, datum.Name, firstItem.Path) + "/"
+				klog.Infof("~~~Temp log: %s fullPath = %s, %s Path = %s", datum.Type, fullPath, datum.Type, firstItem.Path)
+				var parsedTime time.Time
+				var err error
+				if firstItem.Modified != nil && *firstItem.Modified != "" {
+					parsedTime, err = time.Parse(time.RFC3339, *firstItem.Modified)
+					if err != nil {
+						klog.Errorln("Parse time failed:", err)
+						continue
+					}
+					klog.Infoln("Parsed Time:", parsedTime)
+				} else {
+					klog.Warningln("Modified is empty")
+					parsedTime = time.Now()
+				}
+				entry := DirentGeneratedEntry{
+					Drive: datum.Type,
+					Path:  fullPath,
+					Mtime: parsedTime,
+				}
+				ch <- entry
+
+				paramPath := strings.TrimSuffix(firstItem.Path, "/") + "/"
+				firstParam := CloudDriveListParam{
+					Path:  paramPath,
+					Drive: datum.Type,
+					Name:  datum.Name,
+				}
+				firstJsonBody, err := json.Marshal(firstParam)
+				if err != nil {
+					klog.Errorln("Error marshalling JSON:", err)
+					continue
+				}
+
+				firstRespBody, err := CloudDriveCall("/drive/ls", "POST", firstJsonBody, nil, r, header, true)
+				if err != nil {
+					klog.Error(err)
+					continue
+				}
+
+				var firstBodyJson CloudDriveListResponse
+				if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
+					klog.Error(err)
+					continue
+				}
+				queue = append(queue, firstBodyJson.Data...)
+			}
+		}
+	}()
+	return ch
 }
