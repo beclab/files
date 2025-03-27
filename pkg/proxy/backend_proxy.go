@@ -223,6 +223,9 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 		splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
 		if splitIndex != -1 {
 			firstHalf := path[:splitIndex]
+			if firstHalf == "" {
+				firstHalf = "/"
+			}
 			secondHalf := path[splitIndex:]
 			klog.Info("firstHalf=", firstHalf)
 			klog.Info("secondHalf=", secondHalf)
@@ -347,8 +350,18 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		dst := query.Get("destination")
 		klog.Infoln("DST:", dst)
 
-		srcType := query.Get("src_type")
-		dstType := query.Get("dst_type")
+		//srcType := query.Get("src_type")
+		//dstType := query.Get("dst_type")
+		srcType, err := drives.ParsePathType(strings.TrimPrefix(src, API_PASTE_PREFIX), c.Request(), false, false)
+		if err != nil {
+			klog.Errorln(err)
+			srcType = "Parse Error"
+		}
+		dstType, err := drives.ParsePathType(dst, c.Request(), true, false)
+		if err != nil {
+			klog.Errorln(err)
+			dstType = "Parse Error"
+		}
 		klog.Infoln("SRC_TYPE:", srcType)
 		klog.Infoln("DST_TYPE:", dstType)
 
@@ -356,8 +369,6 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			src = rewriteUrl(src, userPvc, "")
 		} else if srcType == drives.SrcTypeCache {
 			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
-		} else if srcType == drives.SrcTypeSync {
-			src = src
 		}
 
 		if dstType == drives.SrcTypeDrive {
@@ -366,8 +377,6 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		} else if dstType == drives.SrcTypeCache {
 			dst = rewriteUrl(dst, cachePvc, "/AppData")
 			query.Set("destination", dst)
-		} else if dstType == drives.SrcTypeSync {
-			dst = dst
 		}
 
 		newURL := fmt.Sprintf("%s?%s", src, query.Encode())
