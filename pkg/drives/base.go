@@ -48,6 +48,8 @@ type ResourceService interface {
 		d *common.Data, diskSize int64) error
 	GetStat(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error)
 	MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data, w http.ResponseWriter, r *http.Request) error
+
+	// path list funcs
 }
 
 var (

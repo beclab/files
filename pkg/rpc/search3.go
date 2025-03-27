@@ -3,6 +3,7 @@ package rpc
 import (
 	"bytes"
 	"encoding/json"
+	"files/pkg/postgres"
 	"fmt"
 	"io/ioutil"
 	"k8s.io/klog/v2"
@@ -36,7 +37,10 @@ type Data struct {
 }
 
 func InitSearch3() {
-
+	klog.Info("~~~!!! Test log: recreating path_list table")
+	postgres.RecreateTable(postgres.DBServer, &postgres.PathList{})
+	klog.Info("~~~!!! Test log: init drive path /data list")
+	postgres.InitDrivePathList()
 }
 
 func fetchDocumentByResourceUri(resourceUri, bflName string) (string, string, error) {
