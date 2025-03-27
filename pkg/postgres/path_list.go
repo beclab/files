@@ -7,6 +7,7 @@ import (
 	"k8s.io/klog/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -37,8 +38,27 @@ func createPathListTable() {
 	klog.Infoln("Database migration succeeded")
 }
 
+func parseDrive(path string) (string, string) {
+	pathSplit := strings.Split(path, "/")
+	if len(pathSplit) < 3 {
+		return "Unknown drive", path
+	}
+	if strings.HasPrefix(pathSplit[1], "pvc-userspace-") {
+		if pathSplit[2] == "Data" {
+			return "data", filepath.Join(pathSplit[1:]...)
+		} else if pathSplit[2] == "Home" {
+			return "drive", filepath.Join(pathSplit[1:]...)
+		}
+	}
+	if pathSplit[1] == "appcache" {
+		return "cache", filepath.Join(pathSplit[2:]...)
+	}
+	if pathSplit[1] == "External" {
+		return "External", filepath.Join(pathSplit[2:]...) // TODO: External types
+	}
+}
+
 func InitDrivePathList() {
-	drive := "drive" // Example drive letter
 	rootPath := "/data"
 
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
@@ -48,7 +68,8 @@ func InitDrivePathList() {
 
 		if info.IsDir() {
 			// Process directory
-			return processDirectory(drive, path, info.ModTime())
+			drive, parsedPath := parseDrive(path)
+			return processDirectory(drive, parsedPath, info.ModTime())
 		}
 
 		// Process file (if needed)
