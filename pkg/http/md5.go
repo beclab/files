@@ -20,7 +20,7 @@ func downloadAndComputeMD5(r *http.Request, url string) (string, error) {
 		return "", err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 
 	client := http.Client{}
 	resp, err := client.Do(request)
@@ -118,7 +118,11 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 }
 
 func md5Handler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	srcType := r.URL.Query().Get("src")
+	srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+
 	if srcType == drives.SrcTypeSync {
 		return md5Sync(w, r)
 	}

@@ -2,8 +2,11 @@ package fileutils
 
 import (
 	"errors"
+	"fmt"
 	"k8s.io/klog/v2"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 )
@@ -61,4 +64,62 @@ func CopyDir(fs afero.Fs, source, dest string) error {
 	}
 
 	return nil
+}
+
+func extractBaseDirectory(fullPath string) (string, error) {
+	if !strings.HasPrefix(fullPath, RootPrefix) {
+		fullPath = RootPrefix + fullPath
+	}
+	if !strings.HasPrefix(fullPath, basePrefix) {
+		return "", fmt.Errorf("path %s is not start with %s", fullPath, basePrefix)
+	}
+
+	start := len(basePrefix)
+
+	if end := strings.Index(fullPath[start:], "/"); end != -1 {
+		return fullPath[:start+end], nil
+	}
+
+	return fullPath, nil
+}
+
+func checkDirectory(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", path)
+	}
+
+	return nil
+}
+
+func FindExistingDir(targetDir string) string {
+	currentDir := filepath.Clean(targetDir)
+
+	for {
+		if dirExists(currentDir) {
+			return currentDir
+		}
+
+		parentDir := filepath.Dir(currentDir)
+
+		if parentDir == currentDir || parentDir == "/" || parentDir == "/data" || parentDir == "/data/External" {
+			break
+		}
+
+		currentDir = parentDir
+	}
+
+	return ""
+}
+
+func dirExists(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fi.IsDir()
 }

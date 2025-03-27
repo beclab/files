@@ -33,7 +33,6 @@ func DelThumbRedisKey(key string) error {
 
 func CleanupOldFilesAndRedisEntries(duration time.Duration) {
 	if diskcache.CacheDir == "" {
-		//klog.Infoln("Cache dir not set, nothing to clean up")
 		return
 	}
 

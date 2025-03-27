@@ -228,7 +228,7 @@ func checkPathAndConvertToPathID(path, ownerID string) (uint64, error) {
 }
 
 func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	host := common.GetHost(r)
+	host := common.GetHost(r.Header.Get("X-Bfl-User"))
 	ownerID, ownerName := getOwner(r)
 
 	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)

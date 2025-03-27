@@ -9,6 +9,7 @@ replace bytetrade.io/web3os/fs-lib => github.com/beclab/fs-lib v0.0.2
 require (
 	bytetrade.io/web3os/fs-lib v0.0.0-00010101000000-000000000000
 	code.sajari.com/docconv v1.3.8
+	github.com/alitto/pond/v2 v2.3.2
 	github.com/disintegration/imaging v1.6.2
 	github.com/dsoprea/go-exif/v3 v3.0.1
 	github.com/gin-gonic/gin v1.10.0
@@ -21,7 +22,6 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/rs/zerolog v1.33.0
 	github.com/spf13/afero v1.12.0
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5

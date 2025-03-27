@@ -1,14 +1,16 @@
 package fileutils
 
 import (
+	"files/pkg/pool"
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 	"os"
 	"path"
-
-	"github.com/spf13/afero"
+	"sync"
 )
 
 // Copy copies a file or folder from one place to another.
-func Copy(fs afero.Fs, src, dst string) error {
+func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	if src = path.Clean("/" + src); src == "" {
 		return os.ErrNotExist
 	}
@@ -18,7 +20,6 @@ func Copy(fs afero.Fs, src, dst string) error {
 	}
 
 	if src == "/" || dst == "/" {
-		// Prohibit copying from or to the virtual root directory.
 		return os.ErrInvalid
 	}
 
@@ -30,10 +31,28 @@ func Copy(fs afero.Fs, src, dst string) error {
 	if err != nil {
 		return err
 	}
+	klog.Infof("copy %v from %s to %s", info, src, dst)
 
-	if info.IsDir() {
-		return CopyDir(fs, src, dst)
+	if task == nil {
+		if info.IsDir() {
+			return CopyDir(fs, src, dst)
+		}
+
+		return CopyFile(fs, src, dst)
 	}
 
-	return CopyFile(fs, src, dst)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var err error
+		err = ExecuteRsync(task, "", "", 0, 99)
+		if err != nil {
+			klog.Errorf("failed to execute rsync: %v\n", err)
+			return
+		}
+		pool.CompleteTask(task.ID)
+	}()
+
+	return nil
 }
