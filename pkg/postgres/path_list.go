@@ -56,6 +56,7 @@ func parseDrive(path string) (string, string) {
 	if pathSplit[1] == "External" {
 		return "External", filepath.Join(pathSplit[2:]...) // TODO: External types
 	}
+	return "Parse Error", path
 }
 
 func InitDrivePathList() {
