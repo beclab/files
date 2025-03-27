@@ -511,11 +511,6 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		klog.Infoln("Dst parse failed.")
 		return nil
 	}
-	//trimmedDstDir := CloudDriveNormalizationPath(dstDir, srcDrive, false, false)
-	//trimmedDstDir := strings.TrimSuffix(dstDir, "/")
-	//if trimmedDstDir == "" {
-	//	trimmedDstDir = "/"
-	//}
 
 	param := CloudDriveCopyFileParam{
 		CloudFilePath:     srcPath,                              // id of "path/to/cloud/file.txt",
@@ -537,127 +532,6 @@ func CopyCloudDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reques
 		return err
 	}
 	return nil
-	//srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
-	//klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
-	//if srcPath == "" {
-	//	klog.Infoln("Src parse failed.")
-	//	return nil
-	//}
-	//parseSrcPath := CloudDriveNormalizationPath(srcPath, srcDrive, true, false)
-	//srcDir, srcFilename := path.Split(parseSrcPath)
-	//if srcDir == "" || srcFilename == "" {
-	//	klog.Infoln("Src parse failed.")
-	//	return nil
-	//}
-	//
-	//dstDrive, dstName, dstPath := ParseCloudDrivePath(dst)
-	//klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
-	//if dstPath == "" {
-	//	klog.Infoln("Dst parse failed.")
-	//	return nil
-	//}
-	//parseDstPath := CloudDriveNormalizationPath(dstPath, dstDrive, true, false)
-	//dstDir, dstFilename := path.Split(parseDstPath)
-	//if dstDir == "" || dstFilename == "" {
-	//	klog.Infoln("Dst parse failed.")
-	//	return nil
-	//}
-	//
-	//var recursivePath = srcPath
-	//var A []*CloudDriveListResponseFileData
-	//for {
-	//	klog.Infoln("len(A): ", len(A))
-	//
-	//	var isDir = true
-	//	var firstItem *CloudDriveListResponseFileData
-	//	if len(A) > 0 {
-	//		firstItem = A[0]
-	//		recursivePath = CloudDriveNormalizationPath(firstItem.Path, srcDrive, true, true)
-	//		isDir = firstItem.IsDir
-	//	}
-	//
-	//	if isDir {
-	//		var parentPath string
-	//		var folderName string
-	//		if srcPath == recursivePath {
-	//			parentPath = dstDir
-	//			folderName = dstFilename
-	//		} else {
-	//			firstItemPath := CloudDriveNormalizationPath(firstItem.Path, srcDrive, true, false)
-	//			parentPath = CloudDriveNormalizationPath(parseDstPath+strings.TrimPrefix(filepath.Dir(firstItemPath), parseSrcPath),
-	//				dstDrive, true, true)
-	//			folderName = filepath.Base(firstItemPath)
-	//		}
-	//		postParam := CloudDrivePostParam{
-	//			ParentPath: parentPath,
-	//			FolderName: folderName,
-	//			Drive:      srcDrive,
-	//			Name:       srcName,
-	//		}
-	//		postJsonBody, err := json.Marshal(postParam)
-	//		if err != nil {
-	//			klog.Errorln("Error marshalling JSON:", err)
-	//			return err
-	//		}
-	//		klog.Infoln("Cloud Drive Post Params:", string(postJsonBody))
-	//		var postRespBody []byte
-	//		postRespBody, err = CloudDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, true)
-	//		if err != nil {
-	//			klog.Errorln("Error calling drive/create_folder:", err)
-	//			return err
-	//		}
-	//		var postBodyJson CloudDrivePostResponse
-	//		if err = json.Unmarshal(postRespBody, &postBodyJson); err != nil {
-	//			klog.Error(err)
-	//			return err
-	//		}
-	//
-	//		firstParam := CloudDriveListParam{
-	//			Path:  recursivePath,
-	//			Drive: srcDrive,
-	//			Name:  srcName,
-	//		}
-	//
-	//		klog.Infoln("firstParam path:", recursivePath)
-	//		var firstJsonBody []byte
-	//		firstJsonBody, err = json.Marshal(firstParam)
-	//		if err != nil {
-	//			klog.Errorln("Error marshalling JSON:", err)
-	//			return err
-	//		}
-	//		var firstRespBody []byte
-	//		firstRespBody, err = CloudDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
-	//
-	//		var firstBodyJson CloudDriveListResponse
-	//		if err = json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
-	//			klog.Error(err)
-	//			return err
-	//		}
-	//
-	//		if len(A) == 0 {
-	//			A = firstBodyJson.Data
-	//		} else {
-	//			A = append(firstBodyJson.Data, A[1:]...)
-	//		}
-	//	} else {
-	//		if len(A) > 0 {
-	//			copyPathPrefix := filepath.Join("/Drive/" + srcDrive, srcName)
-	//			copySrc := copyPathPrefix + firstItem.Path
-	//			parentPath := dstPath + strings.TrimPrefix(filepath.Dir(firstItem.Path), srcPath)
-	//			copyDst := filepath.Join(copyPathPrefix + parentPath, firstItem.Name)
-	//			klog.Infoln("copySrc: ", copySrc)
-	//			klog.Infoln("copyDst: ", copyDst)
-	//			err := CopyCloudDriveSingleFile(copySrc, copyDst, w, r)
-	//			if err != nil {
-	//				return err
-	//			}
-	//			A = A[1:]
-	//		}
-	//	}
-	//	if len(A) == 0 {
-	//		return nil
-	//	}
-	//}
 }
 
 func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *http.Request) error {

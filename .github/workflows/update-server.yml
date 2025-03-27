@@ -11,7 +11,6 @@ on:
       - "main"
       - "dev"
       - "test"
-      - "drives"
     tags:
       - 'v*'
 
@@ -55,7 +54,7 @@ jobs:
         uses: "WyriHaximus/github-action-get-previous-tag@v1"
         id: get-latest-tag
         with:
-          fallback: v0.2.64-fix5  # latest
+          fallback: latest
 
 #      - name: Build
 #        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
