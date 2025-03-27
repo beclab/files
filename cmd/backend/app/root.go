@@ -160,7 +160,7 @@ user created with the credentials from options "username" and "password".`,
 		background_task.InitBackgroundTaskManager(ctx)
 
 		// TODO: step6: init transmition for search3
-		rpc.InitSearch3()
+		go rpc.InitSearch3()
 
 		// step7: run http server
 		server := getRunParams(cmd.Flags())

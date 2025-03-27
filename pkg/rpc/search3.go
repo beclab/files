@@ -3,11 +3,13 @@ package rpc
 import (
 	"bytes"
 	"encoding/json"
+	"files/pkg/postgres"
 	"fmt"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 )
 
@@ -36,7 +38,17 @@ type Data struct {
 }
 
 func InitSearch3() {
-
+	if postgres.DBServer != nil {
+		recreate := os.Getenv("RECREATE_PATH_LIST")
+		if recreate != "" {
+			klog.Info("~~~!!! Test log: recreating path_list table")
+			postgres.RecreateTable(postgres.DBServer, &postgres.PathList{})
+			klog.Info("~~~!!! Test log: init drive path /data list")
+		}
+		postgres.InitDrivePathList()
+	} else {
+		klog.Info("~~~!!! Test log: no postgres server, no need to init path_list for search3")
+	}
 }
 
 func fetchDocumentByResourceUri(resourceUri, bflName string) (string, string, error) {
