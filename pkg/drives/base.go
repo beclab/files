@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -21,6 +22,8 @@ import (
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+type PathProcessor func(*gorm.DB, string, string, time.Time) (int, error)
+type RecordsStatusProcessor func(db *gorm.DB, processedPaths map[string]bool, srcTypes []string, status int) error
 
 type ResourceService interface {
 	// resource handlers
@@ -48,6 +51,10 @@ type ResourceService interface {
 		d *common.Data, diskSize int64) error
 	GetStat(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error)
 	MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data, w http.ResponseWriter, r *http.Request) error
+
+	// path list funcs
+	GeneratePathList(db *gorm.DB, rootPath string, pathProcessor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error
+	parsePathToURI(path string) (string, string)
 }
 
 var (
@@ -60,30 +67,34 @@ var (
 )
 
 const (
-	SrcTypeDrive   = "drive"
-	SrcTypeCache   = "cache"
-	SrcTypeSync    = "sync"
-	SrcTypeGoogle  = "google"
-	SrcTypeCloud   = "cloud"
-	SrcTypeAWSS3   = "awss3"
-	SrcTypeTencent = "tencent"
-	SrcTypeDropbox = "dropbox"
+	SrcTypeDrive    = "drive"
+	SrcTypeData     = "data"
+	SrcTypeExternal = "external"
+	SrcTypeCache    = "cache"
+	SrcTypeSync     = "sync"
+	SrcTypeGoogle   = "google"
+	SrcTypeCloud    = "cloud"
+	SrcTypeAWSS3    = "awss3"
+	SrcTypeTencent  = "tencent"
+	SrcTypeDropbox  = "dropbox"
 )
 
 var ValidSrcTypes = map[string]bool{
-	SrcTypeDrive:   true,
-	SrcTypeCache:   true,
-	SrcTypeSync:    true,
-	SrcTypeGoogle:  true,
-	SrcTypeCloud:   true,
-	SrcTypeAWSS3:   true,
-	SrcTypeTencent: true,
-	SrcTypeDropbox: true,
+	SrcTypeDrive:    true,
+	SrcTypeData:     true,
+	SrcTypeExternal: true,
+	SrcTypeCache:    true,
+	SrcTypeSync:     true,
+	SrcTypeGoogle:   true,
+	SrcTypeCloud:    true,
+	SrcTypeAWSS3:    true,
+	SrcTypeTencent:  true,
+	SrcTypeDropbox:  true,
 }
 
 func GetResourceService(srcType string) (ResourceService, error) {
 	switch srcType {
-	case SrcTypeDrive:
+	case SrcTypeDrive, SrcTypeData, SrcTypeExternal:
 		return DriveService, nil
 	case SrcTypeCache:
 		return CacheService, nil
@@ -100,7 +111,7 @@ func GetResourceService(srcType string) (ResourceService, error) {
 
 func IsThridPartyDrives(dstType string) bool {
 	switch dstType {
-	case SrcTypeDrive, SrcTypeCache, SrcTypeSync:
+	case SrcTypeDrive, SrcTypeData, SrcTypeExternal, SrcTypeCache, SrcTypeSync:
 		return false
 	case SrcTypeGoogle, SrcTypeCloud, SrcTypeAWSS3, SrcTypeTencent, SrcTypeDropbox:
 		return true
@@ -111,7 +122,7 @@ func IsThridPartyDrives(dstType string) bool {
 
 func IsBaseDrives(dstType string) bool {
 	switch dstType {
-	case SrcTypeDrive, SrcTypeCache:
+	case SrcTypeDrive, SrcTypeData, SrcTypeExternal, SrcTypeCache:
 		return true
 	default:
 		return false
@@ -127,15 +138,18 @@ func IsCloudDrives(dstType string) bool {
 	}
 }
 
-func GetMountedData(r *http.Request) []files.DiskInfo {
-	var mountedData []files.DiskInfo = nil
+func GetMountedData() []files.DiskInfo {
+	mu.Lock()
+	defer mu.Unlock()
+
+	//var mountedData []files.DiskInfo = nil
 	var err error = nil
 	if files.TerminusdHost != "" {
 		// for 1.12: path-incluster URL exists, won't err in normal condition
 		// for 1.11: path-incluster URL may not exist, if err, use usb-incluster and hdd-incluster for system functional
 		url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
 
-		headers := r.Header.Clone()
+		headers := make(http.Header)
 		headers.Set("Content-Type", "application/json")
 		headers.Set("X-Signature", "temp_signature")
 
@@ -144,7 +158,7 @@ func GetMountedData(r *http.Request) []files.DiskInfo {
 			klog.Infof("Failed to fetch data from %s: %v", url, err)
 			usbUrl := "http://" + files.TerminusdHost + "/system/mounted-usb-incluster"
 
-			usbHeaders := r.Header.Clone()
+			usbHeaders := headers.Clone()
 			usbHeaders.Set("Content-Type", "application/json")
 			usbHeaders.Set("X-Signature", "temp_signature")
 
@@ -157,7 +171,7 @@ func GetMountedData(r *http.Request) []files.DiskInfo {
 
 			hddUrl := "http://" + files.TerminusdHost + "/system/mounted-hdd-incluster"
 
-			hddHeaders := r.Header.Clone()
+			hddHeaders := headers.Clone()
 			hddHeaders.Set("Content-Type", "application/json")
 			hddHeaders.Set("X-Signature", "temp_signature")
 
@@ -199,7 +213,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	mountedData := GetMountedData(r)
+	GetMountedData()
 
 	var file *files.FileInfo
 	if mountedData != nil {
@@ -419,7 +433,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
-		mountedData := GetMountedData(r)
+		GetMountedData()
 		srcExternalType := files.GetExternalType(src, mountedData)
 		dstExternalType := files.GetExternalType(dst, mountedData)
 
@@ -518,4 +532,12 @@ func (rs *BaseResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 func (rs *BaseResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) GeneratePathList(db *gorm.DB, rootPath string, pathProcessor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error {
+	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) parsePathToURI(path string) (string, string) {
+	return "error", ""
 }

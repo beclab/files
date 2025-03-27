@@ -19,6 +19,8 @@ import (
 
 var RootPrefix = os.Getenv("ROOT_PREFIX")
 
+var BflCookieCache = make(map[string]string)
+
 func init() {
 	if RootPrefix == "" {
 		RootPrefix = "/data"
@@ -99,8 +101,7 @@ func RenderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, 
 	return 0, nil
 }
 
-func GetHost(r *http.Request) string {
-	bflName := r.Header.Get("X-Bfl-User")
+func GetHost(bflName string) string {
 	hostUrl := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
 
 	resp, err := http.Get(hostUrl)

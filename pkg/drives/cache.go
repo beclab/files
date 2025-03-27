@@ -10,6 +10,7 @@ import (
 	"files/pkg/fileutils"
 	"fmt"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 	"io"
 	"io/ioutil"
 	"k8s.io/klog/v2"
@@ -36,7 +37,7 @@ func (*CacheResourceService) PasteSame(action, src, dst string, rename bool, fil
 		return err
 	}
 
-	req.Header = r.Header
+	req.Header = r.Header.Clone()
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -110,7 +111,7 @@ func (rs *CacheResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 		return err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -245,7 +246,7 @@ func (rs *CacheResourceService) GetStat(fs afero.Fs, src string, w http.Response
 		return nil, 0, 0, false, err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -303,6 +304,91 @@ func (rs *CacheResourceService) MoveDelete(fileCache fileutils.FileCache, src st
 	return nil
 }
 
+func (rs *CacheResourceService) GeneratePathList(db *gorm.DB, rootPath string, processor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error {
+	if rootPath == "" {
+		rootPath = "/appcache"
+	}
+
+	processedPaths := make(map[string]bool)
+	processedPathEntries := make(map[string]ProcessedPathsEntry)
+	var sendS3Files = []os.FileInfo{}
+
+	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			klog.Errorf("Access error: %v\n", err)
+			return nil
+		}
+
+		if info.IsDir() {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return filepath.SkipDir
+			}
+			// Process directory
+			drive, parsedPath := rs.parsePathToURI(path)
+
+			key := fmt.Sprintf("%s:%s", drive, parsedPath)
+			processedPaths[key] = true
+
+			op, err := processor(db, drive, parsedPath, info.ModTime())
+			processedPathEntries[key] = ProcessedPathsEntry{
+				Drive: drive,
+				Path:  parsedPath,
+				Mtime: info.ModTime(),
+				Op:    op,
+			}
+			return err
+		} else {
+			fileDir := filepath.Dir(path)
+			drive, parsedPath := rs.parsePathToURI(fileDir)
+
+			key := fmt.Sprintf("%s:%s", drive, parsedPath)
+
+			if entry, exists := processedPathEntries[key]; exists {
+				if !info.ModTime().Before(entry.Mtime) || entry.Op == 1 { // create need to send to S3
+					sendS3Files = append(sendS3Files, info)
+
+					if len(sendS3Files) == 100 {
+						callSendS3MultiFiles(sendS3Files) // TODO: Just take this position now
+						sendS3Files = sendS3Files[:0]
+					}
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		klog.Errorln("Error walking the path:", err)
+	}
+
+	if len(sendS3Files) > 0 {
+		callSendS3MultiFiles(sendS3Files) // TODO: Just take this position now
+		sendS3Files = sendS3Files[:0]
+	}
+
+	err = recordsStatusProcessor(db, processedPaths, []string{SrcTypeCache}, 1)
+	if err != nil {
+		klog.Errorf("records status processor failed: %v\n", err)
+		return err
+	}
+	return err
+}
+
+func (rs *CacheResourceService) parsePathToURI(path string) (string, string) {
+	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(pathSplit) < 2 {
+		return "unknown", path
+	}
+	if strings.HasPrefix(pathSplit[1], "pvc-appcache-") {
+		if len(pathSplit) == 2 {
+			return "unknown", path
+		}
+		return "cache", filepath.Join(pathSplit[1:]...)
+	}
+	return "error", path
+}
+
 func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	targetURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(dst) + "/?mode=" + mode.String()
 
@@ -311,7 +397,7 @@ func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 		return err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 	request.Header.Set("Content-Type", "application/octet-stream")
 
 	client := http.Client{}
