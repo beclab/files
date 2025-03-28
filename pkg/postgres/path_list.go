@@ -1,13 +1,11 @@
 package postgres
 
 import (
+	"files/pkg/drives"
 	"fmt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"k8s.io/klog/v2"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -38,62 +36,23 @@ func createPathListTable() {
 	klog.Infoln("Database migration succeeded")
 }
 
-func parseDrive(path string) (string, string) {
-	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	if len(pathSplit) < 2 {
-		return "Unknown", path
-	}
-	if strings.HasPrefix(pathSplit[1], "pvc-userspace-") {
-		if len(pathSplit) == 2 {
-			return "Unknown", path
-		}
-		if pathSplit[2] == "Data" {
-			return "data", filepath.Join(pathSplit[1:]...)
-		} else if pathSplit[2] == "Home" {
-			return "drive", filepath.Join(pathSplit[1:]...)
-		}
-	}
-	if pathSplit[1] == "appcache" {
-		return "cache", filepath.Join(pathSplit[2:]...)
-	}
-	if pathSplit[1] == "External" {
-		return "External", filepath.Join(pathSplit[2:]...) // TODO: External types
-	}
-	return "Error", path
-}
-
 func InitDrivePathList() {
-	rootPath := "/data"
-
-	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			klog.Errorf("Access error: %v\n", err)
-			return nil
-		}
-
-		if info.IsDir() {
-			if info.Mode()&os.ModeSymlink != 0 {
-				return filepath.SkipDir
-			}
-			// Process directory
-			drive, parsedPath := parseDrive(path)
-			return processDirectory(drive, parsedPath, info.ModTime())
-		}
-
-		// Process file (if needed)
-		// Uncomment the following line if you need to process files
-		// processFile(db, drive, path, info.ModTime())
-
-		return nil
-	})
-
+	rs, err := drives.GetResourceService(drives.SrcTypeDrive)
 	if err != nil {
-		fmt.Println("Error walking the path:", err)
+		klog.Errorf("failed to get resource service: %v", err)
+		return
+	}
+
+	err = rs.GeneratePathList(DBServer, ProcessDirectory)
+	if err != nil {
+		klog.Errorf("failed to generate drive path list: %v", err)
+		return
 	}
 
 	if err = logPathList(); err != nil {
 		fmt.Println("Error logging path list:", err)
 	}
+	return
 }
 
 func logPathList() error {
@@ -111,10 +70,15 @@ func logPathList() error {
 	return nil
 }
 
-func processDirectory(drive, path string, modTime time.Time) error {
+func ProcessDirectory(db *gorm.DB, drive, path string, modTime time.Time) error {
+	if drive == "Unknown" || drive == "error" || path == "" {
+		// won't deal with these on purpose
+		return nil
+	}
+
 	// Get the record from the database
 	var record PathList
-	if err := DBServer.First(&record, "drive = ? AND path = ?", drive, path).Error; err != nil {
+	if err := db.First(&record, "drive = ? AND path = ?", drive, path).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return err
 		}
@@ -128,7 +92,7 @@ func processDirectory(drive, path string, modTime time.Time) error {
 			CreateTime: time.Now(),
 			UpdateTime: time.Now(),
 		}
-		return DBServer.Create(&record).Error
+		return db.Create(&record).Error
 	}
 
 	// If the record exists, check the modification time
@@ -140,7 +104,7 @@ func processDirectory(drive, path string, modTime time.Time) error {
 	// Update the modification time in the database
 	record.MTime = modTime
 	record.UpdateTime = time.Now()
-	return DBServer.Save(&record).Error
+	return db.Save(&record).Error
 }
 
 func processFile(drive, path string, modTime time.Time) {
