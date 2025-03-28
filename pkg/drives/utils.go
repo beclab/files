@@ -24,14 +24,17 @@ import (
 	"time"
 )
 
-func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
+func PasteAddVersionSuffix(source string, dstType string, isDir bool, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
+	if strings.HasSuffix(source, "/") {
+		source = strings.TrimSuffix(source, "/")
+	}
+
 	counter := 1
 	dir, name := path.Split(source)
 	ext := filepath.Ext(name)
 	base := strings.TrimSuffix(name, ext)
 	renamed := ""
 
-	var isDir bool
 	var err error
 	handler, err := GetResourceService(dstType)
 	if err != nil {
@@ -39,7 +42,11 @@ func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 	}
 
 	for {
-		if _, _, _, isDir, err = handler.GetStat(fs, source, w, r); err != nil {
+		statSource := source
+		if isDir {
+			statSource += "/"
+		}
+		if _, _, _, _, err = handler.GetStat(fs, statSource, w, r); err != nil {
 			break
 		}
 		if !isDir {
@@ -49,6 +56,10 @@ func PasteAddVersionSuffix(source string, dstType string, fs afero.Fs, w http.Re
 		}
 		source = path.Join(dir, renamed)
 		counter++
+	}
+
+	if isDir {
+		source += "/"
 	}
 
 	return source
@@ -88,11 +99,8 @@ func GenerateBufferFileName(originalFilePath, bflName string, extRemains bool) (
 		bufferFolderPath = "/data/" + bflName + "/buffer"
 	}
 
-	if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
-		return "", err
-	}
-	if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
+	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
+		klog.Errorln(err)
 		return "", err
 	}
 	bufferFilePath := filepath.Join(bufferFolderPath, bufferFileName)
@@ -117,12 +125,9 @@ func GenerateBufferFolder(originalFilePath, bflName string) (string, error) {
 
 	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
 	bufferPathName = common.RemoveSlash(bufferPathName)
-	bufferFolderPath := "/data/" + bflName + "/buffer" + "/" + bufferPathName
-	if err := os.MkdirAll(bufferFolderPath, 0755); err != nil {
-		return "", err
-	}
-	if err := fileutils.Chown(nil, bufferFolderPath, 1000, 1000); err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", bufferFolderPath, 1000, err)
+	bufferFolderPath := "/data/" + bflName + "/buffer/" + bufferPathName
+	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
+		klog.Errorln(err)
 		return "", err
 	}
 	return bufferFolderPath, nil

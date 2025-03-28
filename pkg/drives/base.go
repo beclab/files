@@ -109,6 +109,15 @@ func IsThridPartyDrives(dstType string) bool {
 	}
 }
 
+func IsBaseDrives(dstType string) bool {
+	switch dstType {
+	case SrcTypeDrive, SrcTypeCache:
+		return true
+	default:
+		return false
+	}
+}
+
 func IsCloudDrives(dstType string) bool {
 	switch dstType {
 	case SrcTypeCloud, SrcTypeAWSS3, SrcTypeTencent, SrcTypeDropbox:
@@ -344,12 +353,8 @@ func (rs *BaseResourceService) PostHandler(w http.ResponseWriter, r *http.Reques
 
 	// Directories creation on POST.
 	if strings.HasSuffix(r.URL.Path, "/") {
-		if err = files.DefaultFs.MkdirAll(r.URL.Path, fileMode); err != nil {
+		if err = fileutils.MkdirAllWithChown(files.DefaultFs, r.URL.Path, fileMode); err != nil {
 			klog.Errorln(err)
-			return common.ErrToStatus(err), err
-		}
-		if err = fileutils.Chown(files.DefaultFs, r.URL.Path, 1000, 1000); err != nil {
-			klog.Errorf("can't chown directory %s to user %d: %s", r.URL.Path, 1000, err)
 			return common.ErrToStatus(err), err
 		}
 		return http.StatusOK, nil

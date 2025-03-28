@@ -4,8 +4,6 @@ go 1.23.0
 
 toolchain go1.23.3
 
-//replace github.com/beclab/files => .
-
 replace bytetrade.io/web3os/fs-lib => github.com/beclab/fs-lib v0.0.2
 
 require (

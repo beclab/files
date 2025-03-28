@@ -71,6 +71,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 				return http.StatusConflict, nil
 			}
 		}
+		isDir := strings.HasSuffix(src, "/")
 		if srcType == drives.SrcTypeGoogle && dstType != drives.SrcTypeGoogle {
 			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(src, w, r)
 			if err != nil {
@@ -79,6 +80,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			srcName := srcInfo.Name
 			formattedSrcName := common.RemoveSlash(srcName)
 			dst = strings.ReplaceAll(dst, srcName, formattedSrcName)
+			isDir = srcInfo.IsDir
 
 			if !srcInfo.CanDownload {
 				if srcInfo.CanExport {
@@ -93,7 +95,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			}
 		}
 		if rename && dstType != drives.SrcTypeGoogle {
-			dst = drives.PasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r)
+			dst = drives.PasteAddVersionSuffix(dst, dstType, isDir, files.DefaultFs, w, r)
 		}
 		var same = srcType == dstType
 		// all cloud drives of two users must be seen as diff archs
@@ -101,12 +103,12 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		if srcType == drives.SrcTypeGoogle {
 			_, srcName, _, _ = drives.ParseGoogleDrivePath(src)
 		} else if drives.IsCloudDrives(srcType) {
-			_, srcName, _ = drives.ParseCloudDrivePath(src, true)
+			_, srcName, _ = drives.ParseCloudDrivePath(src)
 		}
 		if dstType == drives.SrcTypeGoogle {
 			_, dstName, _, _ = drives.ParseGoogleDrivePath(dst)
 		} else if drives.IsCloudDrives(srcType) {
-			_, dstName, _ = drives.ParseCloudDrivePath(dst, true)
+			_, dstName, _ = drives.ParseCloudDrivePath(dst)
 		}
 		if srcName != dstName {
 			same = false
@@ -126,12 +128,16 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 
 func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	// path.Clean, only operate on string level, so it fits every src/dst type.
-	if src = path.Clean("/" + src); src == "" {
-		return os.ErrNotExist
+	if srcType != drives.SrcTypeAWSS3 {
+		if src = path.Clean("/" + src); src == "" {
+			return os.ErrNotExist
+		}
 	}
 
-	if dst = path.Clean("/" + dst); dst == "" {
-		return os.ErrNotExist
+	if dstType != drives.SrcTypeAWSS3 {
+		if dst = path.Clean("/" + dst); dst == "" {
+			return os.ErrNotExist
+		}
 	}
 
 	if src == "/" || dst == "/" {

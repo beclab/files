@@ -755,7 +755,7 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 				copyPathPrefix := "/Drive/google/" + srcName + "/"
 				copySrc := copyPathPrefix + firstItem.Meta.ID + "/"
 				parentPathId := CopyTempGoogleDrivePathIdCache[filepath.Dir(firstItem.Path)]
-				copyDst := copyPathPrefix + parentPathId + "/" + firstItem.Name
+				copyDst := filepath.Join(copyPathPrefix+parentPathId, firstItem.Name)
 				klog.Infoln("copySrc: ", copySrc)
 				klog.Infoln("copyDst: ", copyDst)
 				err := CopyGoogleDriveSingleFile(copySrc, copyDst, w, r)
@@ -1257,7 +1257,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 
 	var fdstBase string = dst
 	if driveIdCache[src] != "" {
-		fdstBase = filepath.Dir(filepath.Dir(dst)) + "/" + driveIdCache[src]
+		fdstBase = filepath.Join(filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))), driveIdCache[src])
 	}
 
 	if !strings.HasSuffix(src, "/") {
@@ -1290,7 +1290,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 		return err
 	}
 	for _, item := range bodyJson.Data {
-		fsrc := filepath.Dir(strings.TrimSuffix(src, "/")) + "/" + item.Meta.ID
+		fsrc := filepath.Join(filepath.Dir(strings.TrimSuffix(src, "/")), item.Meta.ID)
 		fdst := filepath.Join(fdstBase, item.Name)
 		klog.Infoln(fsrc, fdst)
 		if item.IsDir {
@@ -1321,6 +1321,7 @@ func (rs *GoogleDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, f
 	if err != nil {
 		return err
 	}
+	klog.Infof("~~~Temp log for Google Drive PasteDirTo: driveIdCache: %v", driveIdCache)
 	return nil
 }
 
@@ -1365,7 +1366,7 @@ func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, d
 	// only srcType == google need this now
 	rename := r.URL.Query().Get("rename") == "true"
 	if rename && dstType != SrcTypeGoogle {
-		dst = PasteAddVersionSuffix(dst, dstType, files.DefaultFs, w, r)
+		dst = PasteAddVersionSuffix(dst, dstType, false, files.DefaultFs, w, r)
 	}
 
 	handler, err := GetResourceService(dstType)

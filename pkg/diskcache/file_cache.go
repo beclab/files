@@ -40,6 +40,7 @@ func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
 
 	fileName := f.getFileName(key)
 	klog.Infoln("key: ", key, " fileName: ", fileName, " filePath: ", filepath.Dir(fileName))
+	// forced 1000
 	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil {
 		return err
 	}

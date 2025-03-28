@@ -114,10 +114,6 @@ Also, if the database path doesn't exist, File Browser will enter into
 the quick setup mode and a new database will be bootstraped and a new
 user created with the credentials from options "username" and "password".`,
 	Run: python(func(cmd *cobra.Command, args []string) {
-		// step0: prepare server and log
-		//server := getRunParams(cmd.Flags())
-		//setupLog(server.Log)
-
 		klog.Infoln(cfgFile)
 
 		// Step1：Init postgres (including migration).
@@ -142,6 +138,7 @@ user created with the credentials from options "username" and "password".`,
 		// Step3-2: Build file cache
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
 		if diskcache.CacheDir != "" {
+			// forced 1000
 			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil {
 				klog.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
 			}
