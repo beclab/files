@@ -39,11 +39,14 @@ func createPathListTable() {
 }
 
 func parseDrive(path string) (string, string) {
-	pathSplit := strings.Split(path, "/")
-	if len(pathSplit) < 3 {
+	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(pathSplit) < 2 {
 		return "Unknown", path
 	}
 	if strings.HasPrefix(pathSplit[1], "pvc-userspace-") {
+		if len(pathSplit) == 2 {
+			return "Unknown", path
+		}
 		if pathSplit[2] == "Data" {
 			return "data", filepath.Join(pathSplit[1:]...)
 		} else if pathSplit[2] == "Home" {
@@ -64,10 +67,14 @@ func InitDrivePathList() {
 
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			klog.Errorf("Access error: %v\n", err)
+			return nil
 		}
 
 		if info.IsDir() {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return filepath.SkipDir
+			}
 			// Process directory
 			drive, parsedPath := parseDrive(path)
 			return processDirectory(drive, parsedPath, info.ModTime())
