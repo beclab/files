@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"files/pkg/drives"
 	"files/pkg/rpc"
 	"github.com/gorilla/mux"
@@ -38,11 +39,22 @@ func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler 
 		}
 
 		if status != 0 {
-			txt := http.StatusText(status)
-			if err != nil && status == 500 {
-				txt = err.Error()
+			if status == http.StatusInternalServerError {
+				txt := http.StatusText(status)
+				if err != nil {
+					txt = err.Error()
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(status)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"code":    1,
+					"message": txt,
+				})
+			} else {
+				txt := http.StatusText(status)
+				http.Error(w, strconv.Itoa(status)+" "+txt, status)
 			}
-			http.Error(w, strconv.Itoa(status)+" "+txt, status)
 			return
 		}
 	})
