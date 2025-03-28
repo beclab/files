@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+type PathProcessor func(*gorm.DB, string, string, time.Time) error
 
 type ResourceService interface {
 	// resource handlers
@@ -50,6 +52,7 @@ type ResourceService interface {
 	MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data, w http.ResponseWriter, r *http.Request) error
 
 	// path list funcs
+	GeneratePathList(db *gorm.DB, pathProcessor PathProcessor) error
 }
 
 var (
@@ -508,5 +511,9 @@ func (rs *BaseResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 
 func (rs *BaseResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
+	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) GeneratePathList(db *gorm.DB, pathProcessor PathProcessor) error {
 	return fmt.Errorf("Not Implemented")
 }
