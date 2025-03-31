@@ -19,6 +19,8 @@ import (
 
 var RootPrefix = os.Getenv("ROOT_PREFIX")
 
+var BflCookieCache = make(map[string]string)
+
 func init() {
 	if RootPrefix == "" {
 		RootPrefix = "/data"

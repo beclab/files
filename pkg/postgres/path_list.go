@@ -78,7 +78,7 @@ func logPathList() error {
 }
 
 func ProcessDirectory(db *gorm.DB, drive, path string, modTime time.Time) error {
-	if drive == "Unknown" || drive == "error" || path == "" {
+	if drive == "Unknown" || drive == "Error" || path == "" {
 		// won't deal with these on purpose
 		return nil
 	}

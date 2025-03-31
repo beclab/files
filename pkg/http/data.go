@@ -79,6 +79,19 @@ func timingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func cookieMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bflName := r.Header.Get("X-Bfl-User")
+		oldCookie := common.BflCookieCache[bflName]
+		newCookie := r.Header.Get("Cookie")
+		if newCookie != oldCookie {
+			common.BflCookieCache[bflName] = newCookie
+		}
+		klog.Infof("BflCookieCache= %v", common.BflCookieCache)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func NeedCheckPrefix(prefix string) bool {
 	switch prefix {
 	case "/api/resources", "/api/raw", "/api/preview", "/api/paste", "/api/permission", "/api/share":
