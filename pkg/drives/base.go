@@ -53,6 +53,7 @@ type ResourceService interface {
 
 	// path list funcs
 	GeneratePathList(db *gorm.DB, pathProcessor PathProcessor) error
+	parsePathToURI(path string) (string, string)
 }
 
 var (
@@ -516,4 +517,8 @@ func (rs *BaseResourceService) MoveDelete(fileCache fileutils.FileCache, src str
 
 func (rs *BaseResourceService) GeneratePathList(db *gorm.DB, pathProcessor PathProcessor) error {
 	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) parsePathToURI(path string) (string, string) {
+	return "Error", ""
 }

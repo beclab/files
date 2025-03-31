@@ -37,19 +37,26 @@ func createPathListTable() {
 }
 
 func InitDrivePathList() {
-	rs, err := drives.GetResourceService(drives.SrcTypeDrive)
-	if err != nil {
-		klog.Errorf("failed to get resource service: %v", err)
-		return
+	var srcTypeList = []string{
+		drives.SrcTypeDrive,
+		drives.SrcTypeCache,
 	}
 
-	err = rs.GeneratePathList(DBServer, ProcessDirectory)
-	if err != nil {
-		klog.Errorf("failed to generate drive path list: %v", err)
-		return
+	for _, srcType := range srcTypeList {
+		rs, err := drives.GetResourceService(srcType)
+		if err != nil {
+			klog.Errorf("failed to get resource service: %v", err)
+			return
+		}
+
+		err = rs.GeneratePathList(DBServer, ProcessDirectory)
+		if err != nil {
+			klog.Errorf("failed to generate drive path list: %v", err)
+			return
+		}
 	}
 
-	if err = logPathList(); err != nil {
+	if err := logPathList(); err != nil {
 		fmt.Println("Error logging path list:", err)
 	}
 	return

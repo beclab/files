@@ -203,7 +203,7 @@ func (rs *DriveResourceService) GeneratePathList(db *gorm.DB, processor PathProc
 				return filepath.SkipDir
 			}
 			// Process directory
-			drive, parsedPath := parseDrive(path)
+			drive, parsedPath := rs.parsePathToURI(path)
 			return processor(db, drive, parsedPath, info.ModTime())
 		}
 
@@ -218,6 +218,27 @@ func (rs *DriveResourceService) GeneratePathList(db *gorm.DB, processor PathProc
 		fmt.Println("Error walking the path:", err)
 	}
 	return err
+}
+
+func (rs *DriveResourceService) parsePathToURI(path string) (string, string) {
+	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(pathSplit) < 2 {
+		return "Unknown", path
+	}
+	if strings.HasPrefix(pathSplit[1], "pvc-userspace-") {
+		if len(pathSplit) == 2 {
+			return "Unknown", path
+		}
+		if pathSplit[2] == "Data" {
+			return "data", filepath.Join(pathSplit[1:]...)
+		} else if pathSplit[2] == "Home" {
+			return "drive", filepath.Join(pathSplit[1:]...)
+		}
+	}
+	if pathSplit[1] == "External" {
+		return "External", filepath.Join(pathSplit[2:]...) // TODO: External types
+	}
+	return "Error", path
 }
 
 func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *common.Data, mountedData []files.DiskInfo) {
@@ -454,28 +475,4 @@ func ResourceDriveDelete(fileCache fileutils.FileCache, path string, ctx context
 	}
 
 	return http.StatusOK, nil
-}
-
-func parseDrive(path string) (string, string) {
-	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	if len(pathSplit) < 2 {
-		return "Unknown", path
-	}
-	if strings.HasPrefix(pathSplit[1], "pvc-userspace-") {
-		if len(pathSplit) == 2 {
-			return "Unknown", path
-		}
-		if pathSplit[2] == "Data" {
-			return "data", filepath.Join(pathSplit[1:]...)
-		} else if pathSplit[2] == "Home" {
-			return "drive", filepath.Join(pathSplit[1:]...)
-		}
-	}
-	if pathSplit[1] == "appcache" {
-		return "cache", filepath.Join(pathSplit[2:]...)
-	}
-	if pathSplit[1] == "External" {
-		return "External", filepath.Join(pathSplit[2:]...) // TODO: External types
-	}
-	return "Error", path
 }

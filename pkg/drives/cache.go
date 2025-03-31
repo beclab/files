@@ -10,6 +10,7 @@ import (
 	"files/pkg/fileutils"
 	"fmt"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 	"io"
 	"io/ioutil"
 	"k8s.io/klog/v2"
@@ -301,6 +302,51 @@ func (rs *CacheResourceService) MoveDelete(fileCache fileutils.FileCache, src st
 		return err
 	}
 	return nil
+}
+
+func (rs *CacheResourceService) GeneratePathList(db *gorm.DB, processor PathProcessor) error {
+	rootPath := "/appcache"
+
+	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			klog.Errorf("Access error: %v\n", err)
+			return nil
+		}
+
+		if info.IsDir() {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return filepath.SkipDir
+			}
+			// Process directory
+			drive, parsedPath := rs.parsePathToURI(path)
+			return processor(db, drive, parsedPath, info.ModTime())
+		}
+
+		// Process file (if needed)
+		// Uncomment the following line if you need to process files
+		// processFile(db, drive, path, info.ModTime())
+
+		return nil
+	})
+
+	if err != nil {
+		fmt.Println("Error walking the path:", err)
+	}
+	return err
+}
+
+func (rs *CacheResourceService) parsePathToURI(path string) (string, string) {
+	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(pathSplit) < 2 {
+		return "Unknown", path
+	}
+	if strings.HasPrefix(pathSplit[1], "pvc-appcache-") {
+		if len(pathSplit) == 2 {
+			return "Unknown", path
+		}
+		return "cache", filepath.Join(pathSplit[1:]...)
+	}
+	return "Error", path
 }
 
 func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
