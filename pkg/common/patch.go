@@ -97,7 +97,16 @@ func MoveDir(ctx context.Context, fs afero.Fs, source, dest string, fileCache fi
 	}
 
 	if errString != "" {
+		err = fs.Remove(dest)
+		if err != nil {
+			errString += err.Error() + "\n"
+		}
 		return fmt.Errorf(errString)
+	}
+
+	err = fs.Remove(source)
+	if err != nil {
+		return err
 	}
 
 	return nil
