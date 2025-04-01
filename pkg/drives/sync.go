@@ -526,34 +526,214 @@ func (rs *SyncResourceService) MoveDelete(fileCache fileutils.FileCache, src str
 }
 
 func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, processor PathProcessor) error {
-	rootPath := "/data"
+	var mu sync.Mutex
+	cond := sync.NewCond(&mu)
 
-	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			klog.Errorf("Access error: %v\n", err)
-			return nil
-		}
-
-		if info.IsDir() {
-			if info.Mode()&os.ModeSymlink != 0 {
-				return filepath.SkipDir
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			mu.Lock()
+			if len(common.BflCookieCache) > 0 {
+				klog.Info("~~~Temp log: cookie has come")
+				cond.Broadcast()
+			} else {
+				klog.Info("~~~Temp log: cookie hasn't come")
 			}
-			// Process directory
-			drive, parsedPath := rs.parsePathToURI(path)
-			return processor(db, drive, parsedPath, info.ModTime())
+			mu.Unlock()
+		}
+	}()
+
+	type Repo struct {
+		Type                 string    `json:"type"`
+		RepoID               string    `json:"repo_id"`
+		RepoName             string    `json:"repo_name"`
+		OwnerEmail           string    `json:"owner_email"`
+		OwnerName            string    `json:"owner_name"`
+		OwnerContactEmail    string    `json:"owner_contact_email"`
+		LastModified         time.Time `json:"last_modified"`
+		ModifierEmail        string    `json:"modifier_email"`
+		ModifierName         string    `json:"modifier_name"`
+		ModifierContactEmail string    `json:"modifier_contact_email"`
+		Size                 int       `json:"size"`
+		Encrypted            bool      `json:"encrypted"`
+		Permission           string    `json:"permission"`
+		Starred              bool      `json:"starred"`
+		Monitored            bool      `json:"monitored"`
+		Status               string    `json:"status"`
+		Salt                 string    `json:"salt"`
+	}
+
+	type RepoResponse struct {
+		Repos []Repo `json:"repos"`
+	}
+
+	for {
+		mu.Lock()
+		for len(common.BflCookieCache) == 0 {
+			klog.Info("~~~Temp log: waiting for cookie")
+			cond.Wait()
 		}
 
-		// Process file (if needed)
-		// Uncomment the following line if you need to process files
-		// processFile(db, drive, path, info.ModTime())
+		klog.Info("~~~Temp log: cookie ready, run!")
+		for bflName, cookie := range common.BflCookieCache {
+			fmt.Printf("Key: %s, Value: %s\n", bflName, cookie)
+			repoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
 
+			header := make(http.Header)
+
+			header.Set("Content-Type", "application/json")
+			header.Set("Cookie", cookie)
+
+			repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
+
+			var data RepoResponse
+			err = json.Unmarshal(repoRespBody, &data)
+			if err != nil {
+				return err
+			}
+
+			for _, repo := range data.Repos {
+				klog.Infof("repo=%v", repo)
+			}
+		}
+		mu.Unlock()
 		return nil
-	})
-
-	if err != nil {
-		fmt.Println("Error walking the path:", err)
 	}
-	return err
+
+	//type Item struct {
+	//	Type                 string `json:"type"`
+	//	Name                 string `json:"name"`
+	//	ID                   string `json:"id"`
+	//	Mtime                int64  `json:"mtime"`
+	//	Permission           string `json:"permission"`
+	//	Size                 int64  `json:"size,omitempty"`
+	//	ModifierEmail        string `json:"modifier_email,omitempty"`
+	//	ModifierContactEmail string `json:"modifier_contact_email,omitempty"`
+	//	ModifierName         string `json:"modifier_name,omitempty"`
+	//	Starred              bool   `json:"starred,omitempty"`
+	//	FileSize             int64  `json:"fileSize,omitempty"`
+	//	NumTotalFiles        int    `json:"numTotalFiles,omitempty"`
+	//	NumFiles             int    `json:"numFiles,omitempty"`
+	//	NumDirs              int    `json:"numDirs,omitempty"`
+	//	Path                 string `json:"path,omitempty"`
+	//	EncodedThumbnailSrc  string `json:"encoded_thumbnail_src,omitempty"`
+	//}
+	//
+	//type ResponseData struct {
+	//	UserPerm   string `json:"user_perm"`
+	//	DirID      string `json:"dir_id"`
+	//	DirentList []Item `json:"dirent_list"`
+	//}
+	//
+	//src = strings.Trim(src, "/")
+	//if !strings.Contains(src, "/") {
+	//	err := e.New("invalid path format: path must contain at least one '/'")
+	//	klog.Errorln("Error:", err)
+	//	return err
+	//}
+	//
+	//firstSlashIdx := strings.Index(src, "/")
+	//
+	//repoID := src[:firstSlashIdx]
+	//
+	//lastSlashIdx := strings.LastIndex(src, "/")
+	//
+	//filename := src[lastSlashIdx+1:]
+	//
+	//prefix := ""
+	//if firstSlashIdx != lastSlashIdx {
+	//	prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
+	//}
+	//
+	//infoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace("/"+prefix+"/"+filename) + "&with_thumbnail=true"
+	//
+	//client := &http.Client{}
+	//request, err := http.NewRequest("GET", infoURL, nil)
+	//if err != nil {
+	//	klog.Errorf("create request failed: %v\n", err)
+	//	return err
+	//}
+	//
+	//request.Header = r.Header
+	//
+	//response, err := client.Do(request)
+	//if err != nil {
+	//	klog.Errorf("request failed: %v\n", err)
+	//	return err
+	//}
+	//defer response.Body.Close()
+	//
+	//var bodyReader io.Reader = response.Body
+	//
+	//if response.Header.Get("Content-Encoding") == "gzip" {
+	//	gzipReader, err := gzip.NewReader(response.Body)
+	//	if err != nil {
+	//		klog.Errorf("unzip response failed: %v\n", err)
+	//		return err
+	//	}
+	//	defer gzipReader.Close()
+	//
+	//	bodyReader = gzipReader
+	//}
+	//
+	//body, err := ioutil.ReadAll(bodyReader)
+	//if err != nil {
+	//	klog.Errorf("read response failed: %v\n", err)
+	//	return err
+	//}
+	//
+	//var data ResponseData
+	//err = json.Unmarshal(body, &data)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//for _, item := range data.DirentList {
+	//	fsrc := filepath.Join(src, item.Name)
+	//	fdst := filepath.Join(fdstBase, item.Name)
+	//
+	//	if item.Type == "dir" {
+	//		err := rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, SyncPermToMode(item.Permission), w, r, driveIdCache)
+	//		if err != nil {
+	//			return err
+	//		}
+	//	} else {
+	//		err := rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, SyncPermToMode(item.Permission), item.Size, w, r, driveIdCache)
+	//		if err != nil {
+	//			return err
+	//		}
+	//	}
+	//}
+	//return nil
+
+	//rootPath := "/data"
+	//
+	//err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+	//	if err != nil {
+	//		klog.Errorf("Access error: %v\n", err)
+	//		return nil
+	//	}
+	//
+	//	if info.IsDir() {
+	//		if info.Mode()&os.ModeSymlink != 0 {
+	//			return filepath.SkipDir
+	//		}
+	//		// Process directory
+	//		drive, parsedPath := rs.parsePathToURI(path)
+	//		return processor(db, drive, parsedPath, info.ModTime())
+	//	}
+	//
+	//	// Process file (if needed)
+	//	// Uncomment the following line if you need to process files
+	//	// processFile(db, drive, path, info.ModTime())
+	//
+	//	return nil
+	//})
+	//
+	//if err != nil {
+	//	fmt.Println("Error walking the path:", err)
+	//}
+	//return err
 }
 
 func (rs *SyncResourceService) parsePathToURI(path string) (string, string) {
@@ -575,6 +755,53 @@ func (rs *SyncResourceService) parsePathToURI(path string) (string, string) {
 		return "External", filepath.Join(pathSplit[2:]...) // TODO: External types
 	}
 	return "Error", path
+}
+
+func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) ([]byte, error) {
+	// w is for future use, not used now
+	client := &http.Client{}
+	request, err := http.NewRequest(method, dst, bytes.NewBuffer(reqBodyJson))
+	if err != nil {
+		klog.Errorf("create request failed: %v\n", err)
+		return nil, err
+	}
+
+	if header != nil {
+		request.Header = *header
+	} else {
+		request.Header = r.Header
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		klog.Errorf("request failed: %v\n", err)
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	var bodyReader io.Reader = response.Body
+
+	if response.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(response.Body)
+		if err != nil {
+			klog.Errorf("unzip response failed: %v\n", err)
+			return nil, err
+		}
+		defer gzipReader.Close()
+
+		bodyReader = gzipReader
+	}
+
+	body, err := ioutil.ReadAll(bodyReader)
+	if err != nil {
+		klog.Errorf("read response failed: %v\n", err)
+		return nil, err
+	}
+
+	if returnResp {
+		return body, nil
+	}
+	return nil, nil
 }
 
 type Dirent struct {

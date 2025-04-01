@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"files/pkg/drives"
 	"fmt"
 	"gorm.io/gorm"
@@ -59,6 +60,31 @@ func InitDrivePathList() {
 	if err := logPathList(); err != nil {
 		fmt.Println("Error logging path list:", err)
 	}
+	return
+}
+
+func GenerateOtherPathList(ctx context.Context) {
+	var srcTypeList = []string{
+		drives.SrcTypeSync,
+	}
+
+	for _, srcType := range srcTypeList {
+		rs, err := drives.GetResourceService(srcType)
+		if err != nil {
+			klog.Errorf("failed to get resource service: %v", err)
+			return
+		}
+
+		err = rs.GeneratePathList(DBServer, ProcessDirectory)
+		if err != nil {
+			klog.Errorf("failed to generate drive path list: %v", err)
+			return
+		}
+	}
+
+	//if err := logPathList(); err != nil {
+	//	fmt.Println("Error logging path list:", err)
+	//}
 	return
 }
 

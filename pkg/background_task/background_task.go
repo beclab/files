@@ -2,6 +2,7 @@ package background_task
 
 import (
 	"context"
+	"files/pkg/postgres"
 	"files/pkg/rpc"
 	"sync"
 	"time"
@@ -65,8 +66,15 @@ func InitBackgroundTaskManager(ctx context.Context) {
 	manager := NewTaskManager()
 
 	manager.RegisterTask(Task{
-		name:     "OnceTask",
+		name:     "InitRpcService",
 		taskFunc: rpc.InitRpcService,
+		taskType: OnceTask,
+		interval: 0,
+	})
+
+	manager.RegisterTask(Task{
+		name:     "GenerateOtherPathList",
+		taskFunc: postgres.GenerateOtherPathList,
 		taskType: OnceTask,
 		interval: 0,
 	})

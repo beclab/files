@@ -103,6 +103,7 @@ type DiskInfo struct {
 	InodesUsed        int64   `json:"inodesUsed"`
 	InodesFree        int64   `json:"inodesFree"`
 	InodesUsedPercent float64 `json:"inodesUsedPercent"`
+	Invalid           bool    `json:"invalid"`
 }
 
 func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
