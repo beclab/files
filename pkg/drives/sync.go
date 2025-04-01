@@ -526,23 +526,6 @@ func (rs *SyncResourceService) MoveDelete(fileCache fileutils.FileCache, src str
 }
 
 func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, processor PathProcessor) error {
-	var mu sync.Mutex
-	cond := sync.NewCond(&mu)
-
-	go func() {
-		for {
-			time.Sleep(1 * time.Second)
-			mu.Lock()
-			if len(common.BflCookieCache) > 0 {
-				klog.Info("~~~Temp log: cookie has come")
-				cond.Broadcast()
-			} else {
-				klog.Info("~~~Temp log: cookie hasn't come")
-			}
-			mu.Unlock()
-		}
-	}()
-
 	type Repo struct {
 		Type                 string    `json:"type"`
 		RepoID               string    `json:"repo_id"`
@@ -567,38 +550,110 @@ func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, processor PathProce
 		Repos []Repo `json:"repos"`
 	}
 
-	for {
-		mu.Lock()
-		for len(common.BflCookieCache) == 0 {
-			klog.Info("~~~Temp log: waiting for cookie")
-			cond.Wait()
-		}
+	go func() {
+		var mu sync.Mutex
+		cond := sync.NewCond(&mu)
 
-		klog.Info("~~~Temp log: cookie ready, run!")
-		for bflName, cookie := range common.BflCookieCache {
-			fmt.Printf("Key: %s, Value: %s\n", bflName, cookie)
-			repoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
+		go func() {
+			for {
+				time.Sleep(1 * time.Second)
+				mu.Lock()
+				if len(common.BflCookieCache) > 0 {
+					klog.Info("~~~Temp log: cookie has come")
+					cond.Broadcast()
+				} else {
+					klog.Info("~~~Temp log: cookie hasn't come")
+				}
+				mu.Unlock()
+			}
+		}()
 
-			header := make(http.Header)
-
-			header.Set("Content-Type", "application/json")
-			header.Set("Cookie", cookie)
-
-			repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
-
-			var data RepoResponse
-			err = json.Unmarshal(repoRespBody, &data)
-			if err != nil {
-				return err
+		for {
+			mu.Lock()
+			for len(common.BflCookieCache) == 0 {
+				klog.Info("~~~Temp log: waiting for cookie")
+				cond.Wait()
 			}
 
-			for _, repo := range data.Repos {
-				klog.Infof("repo=%v", repo)
+			klog.Info("~~~Temp log: cookie ready, run!")
+			for bflName, cookie := range common.BflCookieCache {
+				fmt.Printf("Key: %s, Value: %s\n", bflName, cookie)
+				repoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
+
+				header := make(http.Header)
+
+				header.Set("Content-Type", "application/json")
+				header.Set("Cookie", cookie)
+
+				repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
+
+				var data RepoResponse
+				err = json.Unmarshal(repoRespBody, &data)
+				if err != nil {
+					klog.Errorf("unmarshal repo response failed: %v\n", err)
+					return
+				}
+
+				for _, repo := range data.Repos {
+					klog.Infof("repo=%v", repo)
+				}
 			}
+			mu.Unlock()
+			return
 		}
-		mu.Unlock()
-		return nil
-	}
+	}()
+
+	return nil
+
+	//var mu sync.Mutex
+	//cond := sync.NewCond(&mu)
+
+	//go func() {
+	//	for {
+	//		time.Sleep(1 * time.Second)
+	//		mu.Lock()
+	//		if len(common.BflCookieCache) > 0 {
+	//			klog.Info("~~~Temp log: cookie has come")
+	//			cond.Broadcast()
+	//		} else {
+	//			klog.Info("~~~Temp log: cookie hasn't come")
+	//		}
+	//		mu.Unlock()
+	//	}
+	//}()
+
+	//for {
+	//	mu.Lock()
+	//	for len(common.BflCookieCache) == 0 {
+	//		klog.Info("~~~Temp log: waiting for cookie")
+	//		cond.Wait()
+	//	}
+	//
+	//	klog.Info("~~~Temp log: cookie ready, run!")
+	//	for bflName, cookie := range common.BflCookieCache {
+	//		fmt.Printf("Key: %s, Value: %s\n", bflName, cookie)
+	//		repoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
+	//
+	//		header := make(http.Header)
+	//
+	//		header.Set("Content-Type", "application/json")
+	//		header.Set("Cookie", cookie)
+	//
+	//		repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
+	//
+	//		var data RepoResponse
+	//		err = json.Unmarshal(repoRespBody, &data)
+	//		if err != nil {
+	//			return err
+	//		}
+	//
+	//		for _, repo := range data.Repos {
+	//			klog.Infof("repo=%v", repo)
+	//		}
+	//	}
+	//	mu.Unlock()
+	//	return nil
+	//}
 
 	//type Item struct {
 	//	Type                 string `json:"type"`
