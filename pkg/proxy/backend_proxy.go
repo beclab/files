@@ -18,6 +18,7 @@ import (
 	"context"
 	"files/pkg/appdata"
 	"files/pkg/drives"
+	libHttp "files/pkg/http"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -347,8 +348,18 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		dst := query.Get("destination")
 		klog.Infoln("DST:", dst)
 
-		srcType := query.Get("src_type")
-		dstType := query.Get("dst_type")
+		//srcType := query.Get("src_type")
+		//dstType := query.Get("dst_type")
+		srcType, err := libHttp.ParsePathType(src, nil, false, false)
+		if err != nil {
+			klog.Errorln(err)
+			srcType = "Parse Error"
+		}
+		dstType, err := libHttp.ParsePathType(dst, nil, true, false)
+		if err != nil {
+			klog.Errorln(err)
+			dstType = "Parse Error"
+		}
 		klog.Infoln("SRC_TYPE:", srcType)
 		klog.Infoln("DST_TYPE:", dstType)
 
@@ -356,8 +367,6 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			src = rewriteUrl(src, userPvc, "")
 		} else if srcType == drives.SrcTypeCache {
 			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
-		} else if srcType == drives.SrcTypeSync {
-			src = src
 		}
 
 		if dstType == drives.SrcTypeDrive {
@@ -366,8 +375,6 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		} else if dstType == drives.SrcTypeCache {
 			dst = rewriteUrl(dst, cachePvc, "/AppData")
 			query.Set("destination", dst)
-		} else if dstType == drives.SrcTypeSync {
-			dst = dst
 		}
 
 		newURL := fmt.Sprintf("%s?%s", src, query.Encode())

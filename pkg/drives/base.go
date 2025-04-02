@@ -67,6 +67,7 @@ var (
 
 const (
 	SrcTypeDrive   = "drive"
+	SrcTypeData    = "data"
 	SrcTypeCache   = "cache"
 	SrcTypeSync    = "sync"
 	SrcTypeGoogle  = "google"
@@ -78,6 +79,7 @@ const (
 
 var ValidSrcTypes = map[string]bool{
 	SrcTypeDrive:   true,
+	SrcTypeData:    true,
 	SrcTypeCache:   true,
 	SrcTypeSync:    true,
 	SrcTypeGoogle:  true,
@@ -89,7 +91,7 @@ var ValidSrcTypes = map[string]bool{
 
 func GetResourceService(srcType string) (ResourceService, error) {
 	switch srcType {
-	case SrcTypeDrive:
+	case SrcTypeDrive, SrcTypeData:
 		return DriveService, nil
 	case SrcTypeCache:
 		return CacheService, nil
@@ -106,7 +108,7 @@ func GetResourceService(srcType string) (ResourceService, error) {
 
 func IsThridPartyDrives(dstType string) bool {
 	switch dstType {
-	case SrcTypeDrive, SrcTypeCache, SrcTypeSync:
+	case SrcTypeDrive, SrcTypeData, SrcTypeCache, SrcTypeSync:
 		return false
 	case SrcTypeGoogle, SrcTypeCloud, SrcTypeAWSS3, SrcTypeTencent, SrcTypeDropbox:
 		return true
@@ -117,7 +119,7 @@ func IsThridPartyDrives(dstType string) bool {
 
 func IsBaseDrives(dstType string) bool {
 	switch dstType {
-	case SrcTypeDrive, SrcTypeCache:
+	case SrcTypeDrive, SrcTypeData, SrcTypeCache:
 		return true
 	default:
 		return false

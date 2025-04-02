@@ -16,7 +16,12 @@ var (
 
 func previewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		srcType := r.URL.Query().Get("src")
+		//srcType := r.URL.Query().Get("src")
+		srcType, err := ParsePathType(r.URL.Path, r, false, true)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+
 		handler, err := drives.GetResourceService(srcType)
 		if err != nil {
 			return http.StatusBadRequest, err

@@ -8,7 +8,11 @@ import (
 )
 
 func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	srcType := r.URL.Query().Get("src")
+	//srcType := r.URL.Query().Get("src")
+	srcType, err := ParsePathType(r.URL.Path, r, false, true)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
 
 	handler, err := drives.GetResourceService(srcType)
 	if err != nil {
@@ -20,7 +24,11 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) 
 
 func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		srcType := r.URL.Query().Get("src")
+		//srcType := r.URL.Query().Get("src")
+		srcType, err := ParsePathType(r.URL.Path, r, false, true)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
 
 		handler, err := drives.GetResourceService(srcType)
 		if err != nil {
@@ -32,7 +40,11 @@ func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
 }
 
 func resourcePostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	srcType := r.URL.Query().Get("src")
+	//srcType := r.URL.Query().Get("src")
+	srcType, err := ParsePathType(r.URL.Path, r, false, true)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
 
 	handler, err := drives.GetResourceService(srcType)
 	if err != nil {
@@ -43,7 +55,11 @@ func resourcePostHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 }
 
 func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	srcType := r.URL.Query().Get("src")
+	//srcType := r.URL.Query().Get("src")
+	srcType, err := ParsePathType(r.URL.Path, r, false, true)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
 
 	handler, err := drives.GetResourceService(srcType)
 	if err != nil {
@@ -55,7 +71,11 @@ func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) 
 
 func resourcePatchHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		srcType := r.URL.Query().Get("src")
+		//srcType := r.URL.Query().Get("src")
+		srcType, err := ParsePathType(r.URL.Path, r, false, true)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
 
 		handler, err := drives.GetResourceService(srcType)
 		if err != nil {
