@@ -9,7 +9,7 @@ import (
 
 func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	//srcType := r.URL.Query().Get("src")
-	srcType, err := ParsePathType(r.URL.Path, r, false, true)
+	srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -25,7 +25,7 @@ func resourceGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) 
 func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		//srcType := r.URL.Query().Get("src")
-		srcType, err := ParsePathType(r.URL.Path, r, false, true)
+		srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
@@ -41,7 +41,7 @@ func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
 
 func resourcePostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	//srcType := r.URL.Query().Get("src")
-	srcType, err := ParsePathType(r.URL.Path, r, false, true)
+	srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -56,7 +56,7 @@ func resourcePostHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 
 func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	//srcType := r.URL.Query().Get("src")
-	srcType, err := ParsePathType(r.URL.Path, r, false, true)
+	srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -72,7 +72,7 @@ func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) 
 func resourcePatchHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		//srcType := r.URL.Query().Get("src")
-		srcType, err := ParsePathType(r.URL.Path, r, false, true)
+		srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}

@@ -2,7 +2,6 @@ package http
 
 import (
 	"encoding/json"
-	"errors"
 	"files/pkg/drives"
 	"files/pkg/rpc"
 	"github.com/gorilla/mux"
@@ -116,7 +115,7 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 		src = r.URL.Path
 	}
 
-	srcType, err := ParsePathType(src, r, false, true)
+	srcType, err := drives.ParsePathType(src, r, false, true)
 	if err != nil {
 		klog.Errorf("ParsePathType error: %v", err)
 		return false
@@ -130,7 +129,7 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 	//}
 
 	dst := r.URL.Query().Get("destination")
-	dstType, err := ParsePathType(dst, r, true, true)
+	dstType, err := drives.ParsePathType(dst, r, true, true)
 	if err != nil {
 		if prefix == "/api/resources" && r.Method == http.MethodPatch {
 			dstType = srcType
@@ -173,60 +172,4 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 		}
 	}
 	return true
-}
-
-func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string, error) {
-	if path == "" && !isDst {
-		path = r.URL.Path
-	}
-	if path == "" {
-		return "", errors.New("path is empty")
-	}
-
-	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	if len(pathSplit) < 2 {
-		return "", errors.New("invalid path type")
-	}
-
-	switch strings.ToLower(pathSplit[0]) {
-	case "drive": // "Drive" and "drive" both are OK, for compatible
-		if drives.ValidSrcTypes[pathSplit[1]] {
-			return pathSplit[1], nil
-		}
-		return "", errors.New("invalid path type")
-	case "sync":
-		return drives.SrcTypeSync, nil
-	case "appdata": // AppData
-		return drives.SrcTypeCache, nil
-	case "application": // Application
-		if !rewritten {
-			return drives.SrcTypeData, nil
-		}
-	case "home": // Home
-		if !rewritten {
-			return drives.SrcTypeDrive, nil
-		}
-	}
-
-	if rewritten {
-		switch pathSplit[1] {
-		case "Data":
-			return drives.SrcTypeData, nil
-		case "Home":
-			return drives.SrcTypeDrive, nil
-		}
-	}
-
-	if isDst {
-		if drives.ValidSrcTypes[r.URL.Query().Get("dst_type")] {
-			return r.URL.Query().Get("dst_type"), nil
-		}
-	}
-	if drives.ValidSrcTypes[r.URL.Query().Get("src")] {
-		return r.URL.Query().Get("src"), nil
-	}
-	if drives.ValidSrcTypes[r.URL.Query().Get("src_type")] {
-		return r.URL.Query().Get("src_type"), nil
-	}
-	return "", errors.New("invalid path type")
 }

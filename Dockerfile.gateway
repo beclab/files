@@ -21,10 +21,9 @@ RUN \
 	go mod download
 
 COPY cmd/gateway ./cmd/gateway
-# COPY pkg/appdata ./pkg/appdata
-# COPY pkg/proxy ./pkg/proxy
-# COPY pkg/signals ./pkg/signals
-COPY pkg ./pkg
+COPY pkg/appdata ./pkg/appdata
+COPY pkg/proxy ./pkg/proxy
+COPY pkg/signals ./pkg/signals
 
 RUN CGO_ENABLED=0 go build -o appdata-gateway cmd/gateway/main.go
 

@@ -397,3 +397,59 @@ func HandleImagePreview(
 
 	return 0, nil
 }
+
+func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string, error) {
+	if path == "" && !isDst {
+		path = r.URL.Path
+	}
+	if path == "" {
+		return "", errors.New("path is empty")
+	}
+
+	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(pathSplit) < 2 {
+		return "", errors.New("invalid path type")
+	}
+
+	switch strings.ToLower(pathSplit[0]) {
+	case "drive": // "Drive" and "drive" both are OK, for compatible
+		if ValidSrcTypes[pathSplit[1]] {
+			return pathSplit[1], nil
+		}
+		return "", errors.New("invalid path type")
+	case "sync":
+		return SrcTypeSync, nil
+	case "appdata": // AppData
+		return SrcTypeCache, nil
+	case "application": // Application
+		if !rewritten {
+			return SrcTypeData, nil
+		}
+	case "home": // Home
+		if !rewritten {
+			return SrcTypeDrive, nil
+		}
+	}
+
+	if rewritten {
+		switch pathSplit[1] {
+		case "Data":
+			return SrcTypeData, nil
+		case "Home":
+			return SrcTypeDrive, nil
+		}
+	}
+
+	if isDst {
+		if ValidSrcTypes[r.URL.Query().Get("dst_type")] {
+			return r.URL.Query().Get("dst_type"), nil
+		}
+	}
+	if ValidSrcTypes[r.URL.Query().Get("src")] {
+		return r.URL.Query().Get("src"), nil
+	}
+	if ValidSrcTypes[r.URL.Query().Get("src_type")] {
+		return r.URL.Query().Get("src_type"), nil
+	}
+	return "", errors.New("invalid path type")
+}

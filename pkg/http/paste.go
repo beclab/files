@@ -26,7 +26,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		//if srcType == "" {
 		//	srcType = drives.SrcTypeDrive
 		//}
-		srcType, err := ParsePathType(r.URL.Path, r, false, true)
+		srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
@@ -34,7 +34,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		//if dstType == "" {
 		//	dstType = drives.SrcTypeDrive
 		//}
-		dstType, err := ParsePathType(r.URL.Query().Get("destination"), r, true, true)
+		dstType, err := drives.ParsePathType(r.URL.Query().Get("destination"), r, true, true)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}

@@ -18,7 +18,6 @@ import (
 	"context"
 	"files/pkg/appdata"
 	"files/pkg/drives"
-	fbhttp "files/pkg/http"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -350,12 +349,12 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 
 		//srcType := query.Get("src_type")
 		//dstType := query.Get("dst_type")
-		srcType, err := fbhttp.ParsePathType(src, nil, false, false)
+		srcType, err := drives.ParsePathType(src, nil, false, false)
 		if err != nil {
 			klog.Errorln(err)
 			srcType = "Parse Error"
 		}
-		dstType, err := fbhttp.ParsePathType(dst, nil, true, false)
+		dstType, err := drives.ParsePathType(dst, nil, true, false)
 		if err != nil {
 			klog.Errorln(err)
 			dstType = "Parse Error"

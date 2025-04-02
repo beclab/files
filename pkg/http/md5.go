@@ -119,7 +119,7 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 
 func md5Handler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	//srcType := r.URL.Query().Get("src")
-	srcType, err := ParsePathType(r.URL.Path, r, false, true)
+	srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
