@@ -2,11 +2,13 @@ package postgres
 
 import (
 	"context"
+	"files/pkg/common"
 	"files/pkg/drives"
 	"fmt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"k8s.io/klog/v2"
+	"sync"
 	"time"
 )
 
@@ -64,23 +66,52 @@ func InitDrivePathList() {
 }
 
 func GenerateOtherPathList(ctx context.Context) {
-	var srcTypeList = []string{
-		drives.SrcTypeSync,
-	}
+	go func() {
+		var mu sync.Mutex
+		cond := sync.NewCond(&mu)
 
-	for _, srcType := range srcTypeList {
-		rs, err := drives.GetResourceService(srcType)
-		if err != nil {
-			klog.Errorf("failed to get resource service: %v", err)
+		go func() {
+			for {
+				time.Sleep(1 * time.Second)
+				mu.Lock()
+				if len(common.BflCookieCache) > 0 {
+					//klog.Info("~~~Temp log: cookie has come")
+					cond.Broadcast()
+				} else {
+					//klog.Info("~~~Temp log: cookie hasn't come")
+				}
+				mu.Unlock()
+			}
+		}()
+
+		for {
+			mu.Lock()
+			for len(common.BflCookieCache) == 0 {
+				//klog.Info("~~~Temp log: waiting for cookie")
+				cond.Wait()
+			}
+
+			var srcTypeList = []string{
+				drives.SrcTypeSync,
+			}
+
+			for _, srcType := range srcTypeList {
+				rs, err := drives.GetResourceService(srcType)
+				if err != nil {
+					klog.Errorf("failed to get resource service: %v", err)
+					return
+				}
+
+				err = rs.GeneratePathList(DBServer, ProcessDirectory)
+				if err != nil {
+					klog.Errorf("failed to generate drive path list: %v", err)
+					return
+				}
+			}
+			mu.Unlock()
 			return
 		}
-
-		err = rs.GeneratePathList(DBServer, ProcessDirectory)
-		if err != nil {
-			klog.Errorf("failed to generate drive path list: %v", err)
-			return
-		}
-	}
+	}()
 
 	//if err := logPathList(); err != nil {
 	//	fmt.Println("Error logging path list:", err)

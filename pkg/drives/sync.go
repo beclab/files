@@ -550,59 +550,29 @@ func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, processor PathProce
 		Repos []Repo `json:"repos"`
 	}
 
-	go func() {
-		var mu sync.Mutex
-		cond := sync.NewCond(&mu)
+	for bflName, cookie := range common.BflCookieCache {
+		fmt.Printf("Key: %s, Value: %s\n", bflName, cookie)
+		repoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
 
-		go func() {
-			for {
-				time.Sleep(1 * time.Second)
-				mu.Lock()
-				if len(common.BflCookieCache) > 0 {
-					klog.Info("~~~Temp log: cookie has come")
-					cond.Broadcast()
-				} else {
-					klog.Info("~~~Temp log: cookie hasn't come")
-				}
-				mu.Unlock()
-			}
-		}()
+		header := make(http.Header)
 
-		for {
-			mu.Lock()
-			for len(common.BflCookieCache) == 0 {
-				klog.Info("~~~Temp log: waiting for cookie")
-				cond.Wait()
-			}
+		header.Set("Content-Type", "application/json")
+		header.Set("X-Bfl-User", bflName)
+		header.Set("Cookie", cookie)
 
-			klog.Info("~~~Temp log: cookie ready, run!")
-			for bflName, cookie := range common.BflCookieCache {
-				fmt.Printf("Key: %s, Value: %s\n", bflName, cookie)
-				repoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
+		repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
 
-				header := make(http.Header)
-
-				header.Set("Content-Type", "application/json")
-				header.Set("X-Bfl-User", bflName)
-				header.Set("Cookie", cookie)
-
-				repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
-
-				var data RepoResponse
-				err = json.Unmarshal(repoRespBody, &data)
-				if err != nil {
-					klog.Errorf("unmarshal repo response failed: %v\n", err)
-					return
-				}
-
-				for _, repo := range data.Repos {
-					klog.Infof("repo=%v", repo)
-				}
-			}
-			mu.Unlock()
-			return
+		var data RepoResponse
+		err = json.Unmarshal(repoRespBody, &data)
+		if err != nil {
+			klog.Errorf("unmarshal repo response failed: %v\n", err)
+			return err
 		}
-	}()
+
+		for _, repo := range data.Repos {
+			klog.Infof("repo=%v", repo)
+		}
+	}
 
 	return nil
 
