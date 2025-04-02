@@ -115,6 +115,7 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 		src = r.URL.Path
 	}
 
+	klog.Infof("~~~Temp log: check path owner src=%s", src)
 	srcType, err := drives.ParsePathType(src, r, false, true)
 	if err != nil {
 		//klog.Errorf("ParsePathType error: %v", err)
@@ -130,6 +131,7 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 	//}
 
 	dst := r.URL.Query().Get("destination")
+	klog.Infof("~~~Temp log: check path owner dst=%s", dst)
 	dstType, err := drives.ParsePathType(dst, r, true, true)
 	if err != nil {
 		if prefix == "/api/resources" && r.Method == http.MethodPatch {
