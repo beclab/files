@@ -583,6 +583,7 @@ func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, processor PathProce
 				header := make(http.Header)
 
 				header.Set("Content-Type", "application/json")
+				header.Set("X-Bfl-User", bflName)
 				header.Set("Cookie", cookie)
 
 				repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
