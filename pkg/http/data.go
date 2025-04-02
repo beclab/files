@@ -117,8 +117,9 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 
 	srcType, err := drives.ParsePathType(src, r, false, true)
 	if err != nil {
-		klog.Errorf("ParsePathType error: %v", err)
-		return false
+		//klog.Errorf("ParsePathType error: %v", err)
+		//return false
+		srcType = drives.SrcTypeDrive
 	}
 	//srcType := r.URL.Query().Get("src_type")
 	//if srcType == "" {
@@ -134,8 +135,9 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 		if prefix == "/api/resources" && r.Method == http.MethodPatch {
 			dstType = srcType
 		} else {
-			klog.Errorf("ParsePathType error: %v", err)
-			return false
+			//klog.Errorf("ParsePathType error: %v", err)
+			//return false
+			dstType = drives.SrcTypeDrive
 		}
 	}
 	//dstType := ""
