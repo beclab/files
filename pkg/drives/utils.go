@@ -413,7 +413,7 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 
 	switch strings.ToLower(pathSplit[0]) {
 	case "drive": // "Drive" and "drive" both are OK, for compatible
-		if ValidSrcTypes[pathSplit[1]] {
+		if value, exists := ValidSrcTypes[pathSplit[1]]; exists && value {
 			return pathSplit[1], nil
 		}
 		return "", errors.New("invalid path type")
@@ -444,14 +444,14 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 
 	// use src/src_type/dst_type for the last try and compatible
 	if isDst {
-		if ValidSrcTypes[r.URL.Query().Get("dst_type")] {
+		if value, exists := ValidSrcTypes[r.URL.Query().Get("dst_type")]; exists && value {
 			return r.URL.Query().Get("dst_type"), nil
 		}
 	}
-	if ValidSrcTypes[r.URL.Query().Get("src")] {
+	if value, exists := ValidSrcTypes[r.URL.Query().Get("src")]; exists && value {
 		return r.URL.Query().Get("src"), nil
 	}
-	if ValidSrcTypes[r.URL.Query().Get("src_type")] {
+	if value, exists := ValidSrcTypes[r.URL.Query().Get("src_type")]; exists && value {
 		return r.URL.Query().Get("src_type"), nil
 	}
 	return "", errors.New("invalid path type")
