@@ -48,11 +48,11 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			return http.StatusForbidden, nil
 		}
 
-		if srcType == drives.SrcTypeData {
-			srcType = drives.SrcTypeDrive // In paste, data is dealt as same as drive
+		if srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
+			srcType = drives.SrcTypeDrive // In paste, data and external is dealt as same as drive
 		}
-		if dstType == drives.SrcTypeData {
-			dstType = drives.SrcTypeDrive // In paste, data is dealt as same as drive
+		if dstType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
+			dstType = drives.SrcTypeDrive // In paste, data and external is dealt as same as drive
 		}
 
 		if srcType == dstType {

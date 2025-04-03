@@ -66,32 +66,34 @@ var (
 )
 
 const (
-	SrcTypeDrive   = "drive"
-	SrcTypeData    = "data"
-	SrcTypeCache   = "cache"
-	SrcTypeSync    = "sync"
-	SrcTypeGoogle  = "google"
-	SrcTypeCloud   = "cloud"
-	SrcTypeAWSS3   = "awss3"
-	SrcTypeTencent = "tencent"
-	SrcTypeDropbox = "dropbox"
+	SrcTypeDrive    = "drive"
+	SrcTypeData     = "data"
+	SrcTypeExternal = "external"
+	SrcTypeCache    = "cache"
+	SrcTypeSync     = "sync"
+	SrcTypeGoogle   = "google"
+	SrcTypeCloud    = "cloud"
+	SrcTypeAWSS3    = "awss3"
+	SrcTypeTencent  = "tencent"
+	SrcTypeDropbox  = "dropbox"
 )
 
 var ValidSrcTypes = map[string]bool{
-	SrcTypeDrive:   true,
-	SrcTypeData:    true,
-	SrcTypeCache:   true,
-	SrcTypeSync:    true,
-	SrcTypeGoogle:  true,
-	SrcTypeCloud:   true,
-	SrcTypeAWSS3:   true,
-	SrcTypeTencent: true,
-	SrcTypeDropbox: true,
+	SrcTypeDrive:    true,
+	SrcTypeData:     true,
+	SrcTypeExternal: true,
+	SrcTypeCache:    true,
+	SrcTypeSync:     true,
+	SrcTypeGoogle:   true,
+	SrcTypeCloud:    true,
+	SrcTypeAWSS3:    true,
+	SrcTypeTencent:  true,
+	SrcTypeDropbox:  true,
 }
 
 func GetResourceService(srcType string) (ResourceService, error) {
 	switch srcType {
-	case SrcTypeDrive, SrcTypeData:
+	case SrcTypeDrive, SrcTypeData, SrcTypeExternal:
 		return DriveService, nil
 	case SrcTypeCache:
 		return CacheService, nil
@@ -108,7 +110,7 @@ func GetResourceService(srcType string) (ResourceService, error) {
 
 func IsThridPartyDrives(dstType string) bool {
 	switch dstType {
-	case SrcTypeDrive, SrcTypeData, SrcTypeCache, SrcTypeSync:
+	case SrcTypeDrive, SrcTypeData, SrcTypeExternal, SrcTypeCache, SrcTypeSync:
 		return false
 	case SrcTypeGoogle, SrcTypeCloud, SrcTypeAWSS3, SrcTypeTencent, SrcTypeDropbox:
 		return true
@@ -119,7 +121,7 @@ func IsThridPartyDrives(dstType string) bool {
 
 func IsBaseDrives(dstType string) bool {
 	switch dstType {
-	case SrcTypeDrive, SrcTypeData, SrcTypeCache:
+	case SrcTypeDrive, SrcTypeData, SrcTypeExternal, SrcTypeCache:
 		return true
 	default:
 		return false

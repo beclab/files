@@ -429,6 +429,8 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 		if !rewritten {
 			return SrcTypeDrive, nil
 		}
+	case "external": // External
+		return SrcTypeExternal, nil
 	}
 
 	if rewritten {
@@ -440,6 +442,7 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 		}
 	}
 
+	// use src/src_type/dst_type for the last try and compatible
 	if isDst {
 		if ValidSrcTypes[r.URL.Query().Get("dst_type")] {
 			return r.URL.Query().Get("dst_type"), nil
