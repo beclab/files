@@ -352,12 +352,12 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 
 		//srcType := query.Get("src_type")
 		//dstType := query.Get("dst_type")
-		srcType, err := drives.ParsePathType(strings.TrimPrefix(src, API_PASTE_PREFIX), nil, false, false)
+		srcType, err := drives.ParsePathType(strings.TrimPrefix(src, API_PASTE_PREFIX), c.Request(), false, false)
 		if err != nil {
 			klog.Errorln(err)
 			srcType = "Parse Error"
 		}
-		dstType, err := drives.ParsePathType(dst, nil, true, false)
+		dstType, err := drives.ParsePathType(dst, c.Request(), true, false)
 		if err != nil {
 			klog.Errorln(err)
 			dstType = "Parse Error"

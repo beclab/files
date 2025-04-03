@@ -448,6 +448,10 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 
 	klog.Infoln("~~~Debug log: rewritten switch not return")
 
+	if r == nil {
+		return "", errors.New("invalid path type")
+	}
+
 	// use src/src_type/dst_type for the last try and compatible
 	if isDst {
 		klog.Infof("~~~Debug log: dst_type=%s", r.URL.Query().Get("dst_type"))
