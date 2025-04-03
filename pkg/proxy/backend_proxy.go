@@ -223,6 +223,9 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 		splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
 		if splitIndex != -1 {
 			firstHalf := path[:splitIndex]
+			if firstHalf == "" {
+				firstHalf = "/"
+			}
 			secondHalf := path[splitIndex:]
 			klog.Info("firstHalf=", firstHalf)
 			klog.Info("secondHalf=", secondHalf)
