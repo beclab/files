@@ -399,6 +399,7 @@ func HandleImagePreview(
 }
 
 func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string, error) {
+	klog.Infof("~~~Debug log: path=%s, isDst=%v, rewritten=%v", path, isDst, rewritten)
 	if path == "" && !isDst {
 		path = r.URL.Path
 	}
@@ -410,6 +411,7 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 	if len(pathSplit) < 2 {
 		return "", errors.New("invalid path type")
 	}
+	klog.Infoln("~~~Debug log: pathSplit=", pathSplit)
 
 	switch strings.ToLower(pathSplit[0]) {
 	case "drive": // "Drive" and "drive" both are OK, for compatible
@@ -433,6 +435,8 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 		return SrcTypeExternal, nil
 	}
 
+	klog.Infoln("~~~Debug log: base switch not return")
+
 	if rewritten {
 		switch pathSplit[1] {
 		case "Data":
@@ -442,17 +446,23 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 		}
 	}
 
+	klog.Infoln("~~~Debug log: rewritten switch not return")
+
 	// use src/src_type/dst_type for the last try and compatible
 	if isDst {
+		klog.Infof("~~~Debug log: dst_type=%s", r.URL.Query().Get("dst_type"))
 		if value, exists := ValidSrcTypes[r.URL.Query().Get("dst_type")]; exists && value {
 			return r.URL.Query().Get("dst_type"), nil
 		}
 	}
+	klog.Infof("~~~Debug log: src=%s", r.URL.Query().Get("src"))
 	if value, exists := ValidSrcTypes[r.URL.Query().Get("src")]; exists && value {
 		return r.URL.Query().Get("src"), nil
 	}
+	klog.Infof("~~~Debug log: src_type=%s", r.URL.Query().Get("src_type"))
 	if value, exists := ValidSrcTypes[r.URL.Query().Get("src_type")]; exists && value {
 		return r.URL.Query().Get("src_type"), nil
 	}
+	klog.Infoln("~~~Debug log: path...parse...failed")
 	return "", errors.New("invalid path type")
 }
