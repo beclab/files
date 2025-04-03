@@ -44,7 +44,7 @@ func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	src := r.URL.Path
+	src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
 	src, err = common.UnescapeURLIfEscaped(src)
 	if err != nil {
 		return http.StatusBadRequest, err
@@ -148,12 +148,12 @@ func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 
 func (rc *SyncResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		return ResourceSyncDelete(r.URL.Path, r)
+		return ResourceSyncDelete(strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync), r)
 	}
 }
 
 func (rc *SyncResourceService) PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	err := SyncMkdirAll(r.URL.Path, 0, true, r)
+	err := SyncMkdirAll(strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync), 0, true, r)
 	return common.ErrToStatus(err), err
 }
 
@@ -164,8 +164,8 @@ func (rc *SyncResourceService) PutHandler(w http.ResponseWriter, r *http.Request
 
 func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		src := r.URL.Path
-		dst := r.URL.Query().Get("destination")
+		src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
+		dst := strings.TrimPrefix(r.URL.Query().Get("destination"), "/"+SrcTypeSync)
 
 		action := r.URL.Query().Get("action")
 		var err error
@@ -194,12 +194,15 @@ func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 }
 
 func (rc *SyncResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
+	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	return ResourceSyncPatch(action, src, dst, r)
 }
 
 func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	mode := fileMode
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 
 	handler, err := GetResourceService(dstType)
 	if err != nil {
@@ -325,6 +328,7 @@ func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, 
 
 func (rs *SyncResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	if err := SyncMkdirAll(dst, fileMode, true, r); err != nil {
 		return err
 	}
@@ -333,6 +337,7 @@ func (rs *SyncResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode
 
 func (rs *SyncResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
@@ -380,6 +385,7 @@ func (rs *SyncResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType,
 func (rs *SyncResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	klog.Infoln("Begin to sync paste!")
+	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
 		return err
 	}
@@ -400,6 +406,7 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 	if err != nil {
 		return nil, 0, 0, false, err
 	}
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 
 	src = strings.Trim(src, "/")
 	if !strings.Contains(src, "/") {
@@ -515,6 +522,7 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 
 func (rs *SyncResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	status, err := ResourceSyncDelete(src, r)
 	if status != http.StatusOK {
 		return os.ErrInvalid
