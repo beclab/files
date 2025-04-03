@@ -108,15 +108,15 @@ func GenerateOtherPathList(ctx context.Context) {
 					return
 				}
 			}
+
+			if err := logPathList(); err != nil {
+				fmt.Println("Error logging path list:", err)
+			}
+
 			mu.Unlock()
 			return
 		}
 	}()
-
-	if err := logPathList(); err != nil {
-		fmt.Println("Error logging path list:", err)
-	}
-	return
 }
 
 func logPathList() error {
