@@ -226,11 +226,11 @@ func (rs *DriveResourceService) GeneratePathList(db *gorm.DB, processor PathProc
 func (rs *DriveResourceService) parsePathToURI(path string) (string, string) {
 	pathSplit := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	if len(pathSplit) < 2 {
-		return "Unknown", path
+		return "unknown", path
 	}
 	if strings.HasPrefix(pathSplit[1], "pvc-userspace-") {
 		if len(pathSplit) == 2 {
-			return "Unknown", path
+			return "unknown", path
 		}
 		if pathSplit[2] == "Data" {
 			return "data", filepath.Join(pathSplit[1:]...)
@@ -240,9 +240,9 @@ func (rs *DriveResourceService) parsePathToURI(path string) (string, string) {
 	}
 	if pathSplit[1] == "External" {
 		externalPath := ParseExternalPath(filepath.Join(pathSplit[2:]...))
-		return "External", externalPath
+		return "external", externalPath
 	}
-	return "Error", path
+	return "error", path
 }
 
 func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *common.Data, mountedData []files.DiskInfo) {
@@ -502,14 +502,14 @@ func ParseExternalPath(path string) string {
 		if strings.HasPrefix(path, datum.Path) {
 			idSerial := datum.IDSerial
 			if idSerial == "" {
-				idSerial = "root"
+				idSerial = datum.Type + "_device"
 			}
 			partationUUID := datum.PartitionUUID
 			if partationUUID == "" {
-				partationUUID = "root"
+				partationUUID = datum.Type + "_partition"
 			}
 			return filepath.Join(datum.Type, idSerial, partationUUID, path)
 		}
 	}
-	return "unknown_type/unknown_device/unknow_partation/" + path
+	return ""
 }

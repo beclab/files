@@ -8,6 +8,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"k8s.io/klog/v2"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -21,6 +24,8 @@ type PathList struct {
 	CreateTime time.Time `gorm:"not null;type:timestamptz;autoCreateTime"`
 	UpdateTime time.Time `gorm:"not null;type:timestamptz;autoUpdateTime"`
 }
+
+var pathListInited bool = false
 
 func createPathListTable() {
 	// Migrate the schema, create the table if it does not exist
@@ -60,6 +65,8 @@ func InitDrivePathList() {
 		}
 	}
 
+	pathListInited = true
+
 	if err := logPathList(); err != nil {
 		fmt.Println("Error logging path list:", err)
 	}
@@ -82,6 +89,12 @@ func GenerateOtherPathList(ctx context.Context) {
 					//klog.Info("~~~Temp log: cookie hasn't come")
 				}
 				mu.Unlock()
+
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 			}
 		}()
 
@@ -89,7 +102,18 @@ func GenerateOtherPathList(ctx context.Context) {
 			mu.Lock()
 			for len(common.BflCookieCache) == 0 {
 				//klog.Info("~~~Temp log: waiting for cookie")
-				cond.Wait()
+				done := ctx.Done()
+				if done != nil {
+					select {
+					case <-done:
+						mu.Unlock()
+						return
+					default:
+						cond.Wait()
+					}
+				} else {
+					cond.Wait()
+				}
 			}
 
 			var srcTypeList = []string{
@@ -136,7 +160,7 @@ func logPathList() error {
 }
 
 func ProcessDirectory(db *gorm.DB, drive, path string, modTime time.Time) error {
-	if drive == "Unknown" || drive == "Error" || path == "" {
+	if drive == "unknown" || drive == "error" || path == "" {
 		// won't deal with these on purpose
 		return nil
 	}
@@ -186,4 +210,71 @@ func batchUpdate(paths []PathList) error {
 			"update_time": paths[0].UpdateTime,
 		}),
 	}).Create(&paths).Error
+}
+
+func CheckAndUpdateStatus(ctx context.Context) {
+	if !pathListInited {
+		return
+	}
+
+	var pathEntries []PathList
+
+	if err := DBServer.WithContext(ctx).Where("drive IN (?, ?, ?, ?)", "drive", "data", "cache", "external").Find(&pathEntries).Error; err != nil {
+		klog.Errorf("failed to query drive path list: %v", err)
+		return
+	}
+
+	for _, entry := range pathEntries {
+		var fullPath string
+		var exists bool
+		var err error
+
+		switch entry.Drive {
+		case "drive":
+			fullPath = "/data/" + entry.Path
+		case "data":
+			fullPath = "/data/" + entry.Path
+		case "cache":
+			fullPath = "/appcache/" + entry.Path
+		case "external":
+			pathSplit := strings.Split(entry.Path, "/")
+			fullPath = "/data/External/" + filepath.Join(pathSplit[3:]...)
+		default:
+			continue
+		}
+
+		exists, err = pathExists(fullPath)
+		if err != nil {
+			klog.Errorf("failed to check if path exists: %v", err)
+			return
+		}
+
+		var newStatus int
+		if exists {
+			newStatus = 0
+		} else {
+			newStatus = 1
+		}
+
+		if entry.Status == newStatus {
+			continue
+		}
+
+		if err := DBServer.WithContext(ctx).Model(&PathList{}).Where("drive = ? AND path = ?", entry.Drive, entry.Path).Update("status", newStatus).Error; err != nil {
+			klog.Errorf("failed to update drive path status: %v", err)
+			return
+		}
+	}
+
+	return
+}
+
+func pathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
 }

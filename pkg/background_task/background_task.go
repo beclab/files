@@ -79,5 +79,12 @@ func InitBackgroundTaskManager(ctx context.Context) {
 		interval: 0,
 	})
 
+	manager.RegisterTask(Task{
+		name:     "CheckAndUpdateStatus",
+		taskFunc: postgres.CheckAndUpdateStatus,
+		taskType: PeriodicTask,
+		interval: 1 * time.Minute,
+	})
+
 	manager.Start(ctx)
 }
