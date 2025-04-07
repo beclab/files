@@ -16,8 +16,9 @@ type PathList struct {
 	Drive      string    `gorm:"type:varchar(20);not null;primaryKey"`
 	Path       string    `gorm:"type:text;not null;primaryKey"`
 	MTime      time.Time `gorm:"not null;type:timestamptz"`
-	Status     int       `gorm:"not null"`
-	CreateTime time.Time `gorm:"not null;type:timestamptz"`
+	ParseDoc   bool      `gorm:"type:boolean;not null;default:false"`
+	Status     int       `gorm:"not null;default:0"`
+	CreateTime time.Time `gorm:"not null;type:timestamptz;autoCreateTime"`
 	UpdateTime time.Time `gorm:"not null;type:timestamptz;autoUpdateTime"`
 }
 
