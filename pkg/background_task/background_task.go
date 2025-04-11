@@ -71,5 +71,26 @@ func InitBackgroundTaskManager(ctx context.Context) {
 		interval: 0,
 	})
 
-	manager.Start(ctx)
+	//manager.RegisterTask(Task{
+	//	name:     "GenerateOtherPathList",
+	//	taskFunc: postgres.GenerateOtherPathList,
+	//	taskType: OnceTask,
+	//	interval: 0,
+	//})
+	//
+	//manager.RegisterTask(Task{
+	//	name:     "PeriodUpdateOtherPathList",
+	//	taskFunc: postgres.PeriodUpdateOtherPathList,
+	//	taskType: PeriodicTask,
+	//	interval: 10 * time.Minute,
+	//})
+	//
+	//manager.RegisterTask(Task{
+	//	name:     "CheckAndUpdateStatus",
+	//	taskFunc: postgres.CheckAndUpdateStatus,
+	//	taskType: PeriodicTask,
+	//	interval: 1 * time.Minute,
+	//})
+
+	go manager.Start(ctx)
 }
