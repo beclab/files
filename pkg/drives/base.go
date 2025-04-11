@@ -2,11 +2,11 @@ package drives
 
 import (
 	"bytes"
-	"context"
 	"files/pkg/common"
 	"files/pkg/errors"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
 	"github.com/gorilla/mux"
@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -40,17 +41,19 @@ type ResourceService interface {
 	PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc
 
 	// paste funcs
-	PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
-	PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode, w http.ResponseWriter,
-		r *http.Request, driveIdCache map[string]string) error
-	PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
+	PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
+	PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode,
+		fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
+	PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request,
 		d *common.Data, driveIdCache map[string]string) error
-	PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, mode os.FileMode, diskSize int64,
-		w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
-	PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
+	PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, mode os.FileMode, diskSize int64,
+		fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
+	PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, left, right int, w http.ResponseWriter, r *http.Request,
 		d *common.Data, diskSize int64) error
 	GetStat(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error)
-	MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data, w http.ResponseWriter, r *http.Request) error
+	MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data, w http.ResponseWriter, r *http.Request) error
+	GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error)
+	GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error)
 
 	// path list funcs
 	GeneratePathList(db *gorm.DB, rootPath string, pathProcessor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error
@@ -438,8 +441,45 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 		dstExternalType := files.GetExternalType(dst, mountedData)
 
 		klog.Infoln("Before patch action:", src, dst, action, rename)
-		err = common.PatchAction(r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 
+		needTaskStr := r.URL.Query().Get("task")
+		needTask := 0
+		if needTaskStr != "" {
+			needTask, err = strconv.Atoi(needTaskStr)
+			if err != nil {
+				klog.Errorln(err)
+				needTask = 0
+			}
+		}
+
+		klog.Infof("~~~Debug Log: needTask:%d, action:%s, rename: %v", needTask, action, rename)
+		var task *pool.Task = nil
+		if needTask != 0 {
+			// only for cache now
+			handler, err := GetResourceService(SrcTypeCache)
+			if err != nil {
+				return http.StatusBadRequest, err
+			}
+			isDir, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, src, w, r)
+
+			taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
+			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache, action, true, false, isDir, fileType, filename)
+			pool.TaskManager.Store(taskID, task)
+
+			pool.WorkerPool.Submit(func() {
+				if loadedTask, ok := pool.TaskManager.Load(taskID); ok {
+					if concreteTask, ok := loadedTask.(*pool.Task); ok {
+						concreteTask.Status = "running"
+						concreteTask.Progress = 0
+
+						executePatchTask(concreteTask, action, SrcTypeCache, SrcTypeCache, rename, d, fileCache, w, r)
+					}
+				}
+			})
+			return common.RenderJSON(w, r, map[string]string{"task_id": taskID})
+		}
+
+		err = common.PatchAction(nil, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 		return common.ErrToStatus(err), err
 	}
 }
@@ -500,26 +540,26 @@ func (rs *BaseResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 	}
 }
 
-func (rs *BaseResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rs *BaseResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+func (rs *BaseResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *BaseResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+func (rs *BaseResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *BaseResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	return fmt.Errorf("Not Implemented")
 }
@@ -529,9 +569,17 @@ func (rs *BaseResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 	return nil, 0, 0, false, fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+func (rs *BaseResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	return 0, fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	return false, "", "", fmt.Errorf("Not Implemented")
 }
 
 func (rs *BaseResourceService) GeneratePathList(db *gorm.DB, rootPath string, pathProcessor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error {
@@ -540,4 +588,90 @@ func (rs *BaseResourceService) GeneratePathList(db *gorm.DB, rootPath string, pa
 
 func (rs *BaseResourceService) parsePathToURI(path string) (string, string) {
 	return "error", ""
+}
+
+func executePatchTask(task *pool.Task, action, srcType, dstType string, rename bool,
+	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+	// only for cache
+	//logChan := make(chan string, 100)
+	//defer close(logChan)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var err error
+		err = common.PatchAction(task, task.Ctx, action, task.Source, task.Dest, "", "", fileCache)
+
+		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
+			fmt.Fprintln(w, err.Error())
+		}
+		if err != nil {
+			klog.Errorln(err)
+		}
+		return
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
+		task.UpdateProgress()
+	}()
+
+	// 等待 ExecuteRsyncSimulated 完成或出错
+	select {
+	case err := <-task.ErrChan:
+		if err != nil {
+			task.LoggingError(fmt.Sprintf("%v", err))
+			klog.Errorf("[ERROR]: %v", err)
+			return
+		}
+	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
+		fmt.Println("ExecuteRsyncWithContext took too long to start, proceeding assuming no initial error.")
+	}
+
+	if task.ProgressChan == nil {
+		klog.Error("progressChan is nil")
+		return
+	}
+
+	// 等待 goroutine 完成
+	wg.Wait()
+
+	// 模拟外部获取进度
+	//ticker := time.NewTicker(1 * time.Second)
+	//defer ticker.Stop()
+	//
+	//done := make(chan bool)
+	//go func() {
+	//	time.Sleep(100 * time.Second) // 模拟一些其他操作
+	//	done <- true
+	//}()
+	//
+	//for {
+	//	select {
+	//	case <-ticker.C:
+	//		if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
+	//			if t, ok := storedTask.(*pool.Task); ok {
+	//				klog.Infof("Task %s Infos: %v\n", t.ID, t)
+	//				fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+	//			}
+	//		}
+	//	case <-done:
+	//		klog.Infoln("Operation completed or stopped.")
+	//		return
+	//	}
+	//}
+
+	//for log := range logChan {
+	//	if t, ok := pool.TaskManager.Load(task.ID); ok {
+	//		if existingTask, ok := t.(*pool.Task); ok {
+	//			newTask := *existingTask
+	//			newTask.Log = append(newTask.Log, log)
+	//			pool.TaskManager.Store(task.ID, &newTask)
+	//		}
+	//	}
+	//}
+	//return
 }

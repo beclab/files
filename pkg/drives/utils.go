@@ -3,12 +3,14 @@ package drives
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/diskcache"
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
@@ -16,6 +18,7 @@ import (
 	"github.com/spf13/afero"
 	"io"
 	"k8s.io/klog/v2"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -36,6 +39,10 @@ func PasteAddVersionSuffix(source string, dstType string, isDir bool, fs afero.F
 	ext := filepath.Ext(name)
 	base := strings.TrimSuffix(name, ext)
 	renamed := ""
+	bubble := ""
+	if dstType == SrcTypeSync {
+		bubble = " "
+	}
 
 	var err error
 	handler, err := GetResourceService(dstType)
@@ -52,9 +59,9 @@ func PasteAddVersionSuffix(source string, dstType string, isDir bool, fs afero.F
 			break
 		}
 		if !isDir {
-			renamed = fmt.Sprintf("%s(%d)%s", base, counter, ext)
+			renamed = fmt.Sprintf("%s%s(%d)%s", base, bubble, counter, ext)
 		} else {
-			renamed = fmt.Sprintf("%s(%d)", name, counter)
+			renamed = fmt.Sprintf("%s%s(%d)", name, bubble, counter)
 		}
 		source = path.Join(dir, renamed)
 		counter++
@@ -95,10 +102,12 @@ func GenerateBufferFileName(originalFilePath, bflName string, extRemains bool) (
 	var bufferFolderPath string
 	if extRemains {
 		bufferFileName = originalFileName + extension
-		bufferFolderPath = "/data/" + bflName + "/buffer/" + fmt.Sprintf("%d", timestamp)
+		bufferFolderPath = "/data/buffer/" + bflName + "/" + fmt.Sprintf("%d", timestamp)
+		//bufferFolderPath = "/data/" + bflName + "/buffer/" + fmt.Sprintf("%d", timestamp)
 	} else {
 		bufferFileName = fmt.Sprintf("%d_%s.bin", timestamp, originalFileName)
-		bufferFolderPath = "/data/" + bflName + "/buffer"
+		//bufferFolderPath = "/data/" + bflName + "/buffer"
+		bufferFolderPath = "/data/buffer/" + bflName
 	}
 
 	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
@@ -127,7 +136,8 @@ func GenerateBufferFolder(originalFilePath, bflName string) (string, error) {
 
 	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
 	bufferPathName = common.RemoveSlash(bufferPathName)
-	bufferFolderPath := "/data/" + bflName + "/buffer/" + bufferPathName
+	//bufferFolderPath := "/data/" + bflName + "/buffer/" + bufferPathName
+	bufferFolderPath := "/data/buffer/" + bflName + "/" + bufferPathName
 	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
 		klog.Errorln(err)
 		return "", err
@@ -167,23 +177,32 @@ func MakeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
 	return nil
 }
 
-func RemoveDiskBuffer(filePath string, srcType string) {
-	klog.Infoln("Removing buffer file:", filePath)
-	err := os.Remove(filePath)
-	if err != nil {
-		klog.Errorln("Failed to delete buffer file:", err)
-		return
+func RemoveDiskBuffer(task *pool.Task, filePath string, srcType string) {
+	if task != nil {
+		defer task.RemoveBuffer(filePath)
 	}
+	//klog.Infoln("Removing buffer file:", filePath)
+	TaskLog(task, "info", "Removing buffer file:", filePath)
+
+	var err error
 	if IsThridPartyDrives(srcType) {
 		dir := filepath.Dir(filePath)
-		err = os.Remove(dir)
+		err = os.RemoveAll(dir)
 		if err != nil {
-			klog.Errorln("Failed to delete buffer file dir:", err)
+			//klog.Errorln("Failed to delete buffer file dir:", err)
+			TaskLog(task, "warning", "Failed to delete buffer file dir:", err)
+			return
+		}
+	} else {
+		err = os.Remove(filePath)
+		if err != nil {
+			//klog.Errorln("Failed to delete buffer file:", err)
+			TaskLog(task, "warning", "Failed to delete buffer file:", err)
 			return
 		}
 	}
-
-	klog.Infoln("Buffer file deleted.")
+	//klog.Infoln("Buffer file deleted.")
+	TaskLog(task, "info", fmt.Sprintf("Buffer file %s deleted.", filePath))
 }
 
 func slashClean(name string) string {
@@ -470,10 +489,10 @@ func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string,
 
 func callSendS3MultiFiles(fileInfos []os.FileInfo) {
 	klog.Infof("~~~Temp log: sending %d infos begins", len(fileInfos))
-	for index, fileInfo := range fileInfos {
-		klog.Infof("~~~Temp log: [%d] %s", index, fileInfo.Name())
-	}
-	klog.Infof("~~~Temp log: sending %d infos ends", len(fileInfos))
+	//for index, fileInfo := range fileInfos {
+	//	klog.Infof("~~~Temp log: [%d] %s", index, fileInfo.Name())
+	//}
+	//klog.Infof("~~~Temp log: sending %d infos ends", len(fileInfos))
 }
 
 func SuitableResponseReader(resp *http.Response) io.ReadCloser {
@@ -503,4 +522,203 @@ type autoCloseReader struct {
 
 func (a *autoCloseReader) Close() error {
 	return a.closer.Close()
+}
+
+func TaskCancellable(srcType, dstType string, same bool) bool {
+	if srcType == SrcTypeSync && dstType == SrcTypeSync {
+		return false
+	}
+	if IsCloudDrives(srcType) && same {
+		return false
+	}
+	if srcType == SrcTypeGoogle && same {
+		return false
+	}
+	return true
+}
+
+func TaskLog(task *pool.Task, level string, args ...interface{}) {
+	switch level {
+	case "info":
+		klog.Infoln(args...)
+	case "warning":
+		klog.Warningln(args...)
+	case "error":
+		klog.Errorln(args...)
+	default:
+		klog.Infoln(args...)
+	}
+
+	if task != nil && task.LogChan != nil {
+		logMsg := fmt.Sprintln(args...)
+
+		select {
+		case <-task.Ctx.Done():
+			klog.Warningln("Task context has been cancelled, only logging to klog")
+		default:
+			klog.Warningln("LogChan is full, only logging to klog")
+			switch level {
+			case "info", "warning":
+				task.Logging(logMsg)
+			case "error":
+				task.LoggingError(logMsg)
+			default:
+			}
+		}
+	}
+}
+
+// CalculateProgressRange calculates the left and right progress values for the current file
+// based on the total progress, total file size, and current file size.
+// The progress range is limited to [0, 99] (inclusive), with left <= right.
+// If the calculated right value exceeds 99, it will be capped at 99.
+//func CalculateProgressRange(taskProgress int, totalFileSize, currentFileSize int64) (left, right int) {
+//	klog.Infof("~~~Debug Log: taskProgress=%d, totalFileSize=%d, currentFileSize=%d", taskProgress, totalFileSize, currentFileSize)
+//	// If total file size is 0 or progress is already complete, return 0-0
+//	if totalFileSize <= 0 {
+//		return 0, 0
+//	}
+//
+//	if taskProgress >= 99 {
+//		return 99, 99
+//	}
+//
+//	// Calculate the proportion of this file's size as a float to avoid integer division issues
+//	sizeProportion := float64(currentFileSize) / float64(totalFileSize) * 100
+//
+//	// Calculate how much progress each percentage point of size represents
+//	// We use 99 as the max progress (since 100 is reserved for completion)
+//	progressPerPercent := 99.0 / 100.0
+//
+//	// Calculate the contribution of this file
+//	contribution := int(math.Floor(sizeProportion * progressPerPercent))
+//
+//	// Calculate left and right values
+//	left = taskProgress
+//	right = taskProgress + contribution
+//
+//	// Ensure we don't exceed 99
+//	if right > 99 {
+//		right = 99
+//		// If we've capped the right value, ensure left doesn't exceed it
+//		if left > right {
+//			left = right
+//		}
+//	}
+//
+//	return left, right
+//}
+
+func CalculateProgressRange(task *pool.Task, currentFileSize int64) (left, mid, right int) {
+	klog.Infof("Debug Log: taskProgress=%d, totalFileSize=%d, currentFileSize=%d, transferred=%d",
+		task.Progress, task.TotalFileSize, currentFileSize, task.Transferred)
+
+	// 处理总文件大小为0或进度已满的情况
+	if task.TotalFileSize <= 0 {
+		return 0, 0, 0
+	}
+	if task.Progress >= 99 {
+		return 99, 99, 99
+	}
+
+	// 计算已传输+当前文件的总大小（防止溢出）
+	sum := task.Transferred + currentFileSize
+	if sum > task.TotalFileSize {
+		sum = task.TotalFileSize
+	}
+
+	// 计算right值（使用浮点运算避免整数除法问题）
+	right = int(math.Floor((float64(sum) / float64(task.TotalFileSize)) * 100))
+
+	// 确保right不超过99%
+	if right > 99 {
+		right = 99
+	}
+
+	// 强制left为taskProgress，但不超过right
+	left = task.Progress
+	if left > right {
+		left = right
+	}
+
+	// 计算mid值（向下取整）
+	mid = (left + right) / 2
+
+	return left, mid, right
+}
+
+func MapProgress(progress float64, left, right int) int {
+	if progress <= 0.0 {
+		return left
+	}
+	if progress >= 100.0 {
+		return right
+	}
+
+	// Calculate the percentage of progress between 0.0 and 100.0
+	percentage := progress / 100.0
+
+	// Map this percentage to the range [left, right]
+	formattedProgress := int(float64(left) + percentage*float64(right-left))
+
+	return formattedProgress
+}
+
+func RemoveAdditionalHeaders(header *http.Header) {
+	header.Del("Traceparent")
+	header.Del("Tracestate")
+	return
+}
+
+func MapProgressByTime(left, right int, size, speed int64, usedTime int) int {
+	transferredBytes := int64(usedTime) * speed
+
+	var progressPercentage int64
+	if size > 0 {
+		progress := transferredBytes * 10000 / size
+		progressPercentage = progress / 100 // Keep all calculations in int64
+	} else {
+		progressPercentage = 0
+	}
+
+	if progressPercentage < 0 {
+		progressPercentage = 0
+	} else if progressPercentage > 100 {
+		progressPercentage = 100
+	}
+
+	// Convert progressPercentage to int for the final mapping
+	mappedProgress := left + (right-left)*int(progressPercentage)/100
+
+	if mappedProgress < left {
+		mappedProgress = left
+	} else if mappedProgress > right {
+		mappedProgress = right
+	}
+
+	return mappedProgress
+}
+
+// SimulateProgress simulates the progress over time by calling MapProgress every second.
+func SimulateProgress(ctx context.Context, left, right int, size, speed int64, task *pool.Task) {
+	startTime := time.Now()
+	for {
+		select {
+		case <-ctx.Done():
+			// Context is canceled, stop simulating progress
+			//close(progressChan)
+			return
+		default:
+			// Simulate progress update
+			usedTime := int(time.Now().Sub(startTime).Seconds())
+			progress := MapProgressByTime(left, right, size, speed, usedTime)
+			//task.ProgressChan <- progress
+			if task.Status == "running" {
+				task.Mu.Lock()
+				task.Progress = progress
+				task.Mu.Unlock()
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}
 }

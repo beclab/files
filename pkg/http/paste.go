@@ -1,19 +1,27 @@
 package http
 
 import (
-	"context"
+	"crypto/rand"
+	"encoding/base64"
+	e "errors"
 	"files/pkg/common"
 	"files/pkg/drives"
 	"files/pkg/errors"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"fmt"
 	"github.com/spf13/afero"
+	"io/fs"
 	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
+	"time"
 )
 
 func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
@@ -47,6 +55,9 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			klog.Infoln("Dst type is invalid!")
 			return http.StatusForbidden, nil
 		}
+
+		detailSrcType := srcType
+		detailDstType := dstType
 
 		if srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
 			srcType = drives.SrcTypeDrive // In paste, data and external is dealt as same as drive
@@ -91,7 +102,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		}
 		isDir := strings.HasSuffix(src, "/")
 		if srcType == drives.SrcTypeGoogle && dstType != drives.SrcTypeGoogle {
-			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
 			if err != nil {
 				return http.StatusInternalServerError, err
 			}
@@ -132,19 +143,273 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			same = false
 		}
 
-		if same {
-			err = pasteActionSameArch(action, srcType, src, dstType, dst, rename, fileCache, w, r)
-		} else {
-			err = pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
+		//if same {
+		//	err = pasteActionSameArch(action, srcType, src, dstType, dst, rename, fileCache, w, r)
+		//} else {
+		//	err = pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
+		//}
+		//if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
+		//	fmt.Fprintln(w, err.Error())
+		//}
+		//return common.ErrToStatus(err), err
+
+		handler, err := drives.GetResourceService(srcType)
+		if err != nil {
+			return http.StatusBadRequest, err
 		}
-		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
-			fmt.Fprintln(w, err.Error())
-		}
-		return common.ErrToStatus(err), err
+		_, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, src, w, r)
+
+		taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
+		task := pool.NewTask(taskID, src, dst, detailSrcType, detailDstType, action, drives.TaskCancellable(srcType, dstType, same), drives.IsThridPartyDrives(srcType), isDir, fileType, filename)
+		pool.TaskManager.Store(taskID, task)
+
+		pool.WorkerPool.Submit(func() {
+			if loadedTask, ok := pool.TaskManager.Load(taskID); ok {
+				if concreteTask, ok := loadedTask.(*pool.Task); ok {
+					concreteTask.Status = "running"
+					concreteTask.Progress = 0
+
+					executePasteTask(concreteTask, same, action, srcType, dstType, rename, d, fileCache, w, r)
+				}
+			}
+		})
+
+		//pool.WorkerPool.Submit(func() {
+		//	ctx, cancel := context.WithCancel(context.Background())
+		//	pool.TaskManager.Store(taskID, &pool.Task{ID: taskID, Status: "running", Progress: 0})
+		//	executePasteTask(ctx, &pool.Task{ID: taskID, Source: src, Dest: dst, Log: task.Log},
+		//		same, action, srcType, dstType, rename, d, fileCache, w, r)
+		//	cancel()
+		//})
+
+		//w.Header().Set("Content-Type", "application/json")
+		//json.NewEncoder(w).Encode(map[string]string{"task_id": taskID})
+		return common.RenderJSON(w, r, map[string]string{"task_id": taskID})
 	}
 }
 
-func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
+func checkDiskSpace(path string) (bool, error) {
+	var stat syscall.Statfs_t
+
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return false, fmt.Errorf("failed to get filesystem stats: %v", err)
+	}
+
+	// Calculate available space in bytes
+	availableBytes := stat.Bavail * uint64(stat.Bsize)
+
+	// Define a threshold for disk space (e.g., 100MB)
+	const threshold = 100 * 1024 * 1024 // 100MB
+
+	if availableBytes < uint64(threshold) {
+		return true, nil // Disk is full or nearly full
+	}
+
+	return false, nil // Disk has sufficient space
+}
+
+func createAndRemoveTempFile(targetDir string) error {
+	dir := fileutils.FindExistingDir(targetDir)
+	if dir == "" {
+		return fmt.Errorf("no writable directory found in path hierarchy of %q", targetDir)
+	}
+
+	// Check if disk is full before proceeding
+	isFull, err := checkDiskSpace(dir)
+	if err != nil {
+		return fmt.Errorf("failed to check disk space: %v", err)
+	}
+	if isFull {
+		return fmt.Errorf("disk full or nearly full in directory %q", dir)
+	}
+
+	timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
+	randomBytes := make([]byte, 8)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return fmt.Errorf("failed to generate random bytes: %v", err)
+	}
+	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:8]
+	filename := fmt.Sprintf("temp_%s_%s.testwriting", timestamp, randomStr)
+	filePath := filepath.Join(dir, filename)
+
+	klog.Infof("Creating temporary file %s", filePath)
+
+	if err := os.WriteFile(filePath, []byte{}, 0o644); err != nil {
+		var pathErr *fs.PathError
+		if e.As(err, &pathErr) {
+			if pathErr.Err == syscall.EACCES || pathErr.Err == syscall.EPERM {
+				return fmt.Errorf("permission denied: failed to create file: %v", err)
+			} else if pathErr.Err == syscall.EROFS {
+				return fmt.Errorf("read-only file system: failed to create file: %v", err)
+			}
+		}
+		return fmt.Errorf("failed to create file: %v", err)
+	}
+
+	if err := os.Remove(filePath); err != nil {
+		return fmt.Errorf("failed to remove file: %v", err)
+	}
+
+	return nil
+}
+
+func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, rename bool,
+	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+	//logChan := make(chan string, 100)
+	//defer close(logChan)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var err error = nil
+
+		if task.DstType == drives.SrcTypeExternal {
+			err = createAndRemoveTempFile(path.Dir(common.RootPrefix + task.Dest))
+			if err != nil {
+				task.ErrChan <- fmt.Errorf("writing test failed: %w", err)
+				task.LogChan <- fmt.Sprintf("writing test failed: %v", err)
+				pool.FailTask(task.ID)
+			}
+		}
+
+		if err == nil {
+			if same {
+				err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
+			} else {
+				err = pasteActionDiffArch(task, action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
+			}
+			if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
+				fmt.Fprintln(w, err.Error())
+			}
+		}
+
+		if err != nil {
+			klog.Errorln(err)
+		}
+		return
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
+		task.UpdateProgress()
+	}()
+
+	select {
+	case err := <-task.ErrChan:
+		if err != nil {
+			task.LoggingError(fmt.Sprintf("%v", err))
+			klog.Errorf("[TASK EXECUTE ERROR]: %v", err)
+			return
+		}
+	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
+		fmt.Println("ExecuteRsyncWithContext took too long to start, proceeding assuming no initial error.")
+	}
+
+	if task.ProgressChan == nil {
+		klog.Error("progressChan is nil")
+		return
+	}
+
+	// 等待 goroutine 完成
+	wg.Wait()
+
+	// 模拟外部获取进度
+	//ticker := time.NewTicker(1 * time.Second)
+	//defer ticker.Stop()
+	//
+	//done := make(chan bool)
+	//go func() {
+	//	time.Sleep(100 * time.Second) // 模拟一些其他操作
+	//	done <- true
+	//}()
+	//
+	//for {
+	//	select {
+	//	case <-ticker.C:
+	//		if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
+	//			if t, ok := storedTask.(*pool.Task); ok {
+	//				klog.Infof("Task %s Infos: %v\n", t.ID, t)
+	//				fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+	//			}
+	//		}
+	//	case <-done:
+	//		klog.Infoln("Operation completed or stopped.")
+	//		return
+	//	}
+	//}
+
+	// 收集日志
+	//for log := range logChan {
+	//	if t, ok := pool.TaskManager.Load(task.ID); ok {
+	//		if existingTask, ok := t.(*pool.Task); ok {
+	//			newTask := *existingTask
+	//			newTask.Log = append(newTask.Log, log)
+	//			pool.TaskManager.Store(task.ID, &newTask)
+	//		}
+	//	}
+	//}
+	//return
+}
+
+//func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, srcType, dstType string, rename bool,
+//	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+//	logChan := make(chan string, 100)
+//	defer close(logChan)
+//
+//	go func() {
+//		var err error
+//		if same {
+//			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
+//		} else {
+//			err = pasteActionDiffArch(task, r.Context(), action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
+//		}
+//		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
+//			fmt.Fprintln(w, err.Error())
+//		}
+//		if err != nil {
+//			klog.Errorln(err)
+//		}
+//		return
+//
+//		//// 子任务 1：本地文件复制
+//		//err := rsyncCopy(ctx, task.Source, task.Dest, logChan)
+//		//if err != nil {
+//		//	taskManager.Store(task.ID, &Task{ID: task.ID, Status: "failed", Log: []string{err.Error()}})
+//		//	return
+//		//}
+//		//
+//		//// 更新进度
+//		//taskManager.Store(task.ID, &Task{ID: task.ID, Status: "running", Progress: 50, Log: append(task.Log, <-logChan)})
+//		//
+//		//// 子任务 2：调用第三方接口上传
+//		//err = uploadToThirdParty(ctx, task.Dest, logChan)
+//		//if err != nil {
+//		//	taskManager.Store(task.ID, &Task{ID: task.ID, Status: "failed", Log: []string{err.Error()}})
+//		//	return
+//		//}
+//		//
+//		//// 更新进度
+//		//taskManager.Store(task.ID, &Task{ID: task.ID, Status: "completed", Progress: 100, Log: append(task.Log, <-logChan)})
+//	}()
+//
+//	// 收集日志
+//	for log := range logChan {
+//		if t, ok := pool.TaskManager.Load(task.ID); ok {
+//			if existingTask, ok := t.(*pool.Task); ok {
+//				newTask := *existingTask
+//				newTask.Log = append(newTask.Log, log)
+//				pool.TaskManager.Store(task.ID, &newTask)
+//			}
+//		}
+//	}
+//	return
+//}
+
+func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	// path.Clean, only operate on string level, so it fits every src/dst type.
 	if srcType != drives.SrcTypeAWSS3 {
 		if src = path.Clean("/" + src); src == "" {
@@ -180,10 +445,16 @@ func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w h
 
 	var copyTempGoogleDrivePathIdCache = make(map[string]string)
 
+	fileCount, err := handler.GetFileCount(fs, src, "size", w, r)
+	if err != nil {
+		klog.Errorln(err) // TODO: remove after all done
+		//return err
+	}
+	task.TotalFileSize = fileCount
 	if isDir {
-		err = handler.PasteDirFrom(fs, srcType, src, dstType, dst, d, mode, w, r, copyTempGoogleDrivePathIdCache)
+		err = handler.PasteDirFrom(task, fs, srcType, src, dstType, dst, d, mode, fileCount, w, r, copyTempGoogleDrivePathIdCache)
 	} else {
-		err = handler.PasteFileFrom(fs, srcType, src, dstType, dst, d, mode, size, w, r, copyTempGoogleDrivePathIdCache)
+		err = handler.PasteFileFrom(task, fs, srcType, src, dstType, dst, d, mode, size, fileCount, w, r, copyTempGoogleDrivePathIdCache)
 	}
 	if err != nil {
 		return err
@@ -191,39 +462,110 @@ func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w h
 	return nil
 }
 
-func pasteActionSameArch(action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
 	klog.Infoln("src: ", src, ", dst: ", dst)
 
-	handler, err := drives.GetResourceService(srcType)
-	if err != nil {
-		return err
-	}
-
-	return handler.PasteSame(action, src, dst, rename, fileCache, w, r)
-}
-
-func pasteActionDiffArch(ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-	// In this function, context if tied up to src, because src is in the URL
-	switch action {
-	case "copy":
-		return doPaste(files.DefaultFs, srcType, src, dstType, dst, d, w, r)
-	case "rename":
-		err := doPaste(files.DefaultFs, srcType, src, dstType, dst, d, w, r)
-		if err != nil {
-			return err
-		}
-
+	err := func() error {
 		handler, err := drives.GetResourceService(srcType)
 		if err != nil {
 			return err
 		}
-		err = handler.MoveDelete(fileCache, src, ctx, d, w, r)
+
+		fileCount, err := handler.GetFileCount(files.DefaultFs, src, "size", w, r)
+		if err != nil {
+			klog.Errorln(err) // TODO: remove after all done
+			return err
+		}
+		task.Mu.Lock()
+		task.TotalFileSize = fileCount
+		task.Mu.Unlock()
+
+		err = handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
 		if err != nil {
 			return err
 		}
+		pool.TaskManager.Store(task.ID, task)
+		return nil
+	}()
+
+	select {
+	case <-task.Ctx.Done():
+		return err
 	default:
-		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
+		// doPaste always set progress to 99 at the end
+		if err != nil {
+			task.ErrChan <- err
+			task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
+			pool.FailTask(task.ID)
+			return err
+		} else {
+			//task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
+			//pool.CompleteTask(task.ID)
+			return nil
+		}
 	}
-	return nil
+}
+
+//func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+//	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
+//	klog.Infoln("src: ", src, ", dst: ", dst)
+//
+//	handler, err := drives.GetResourceService(srcType)
+//	if err != nil {
+//		return err
+//	}
+//
+//	return handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
+//}
+
+func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	// In this function, context if tied up to src, because src is in the URL
+	xTerminusNode := r.Header.Get("X-Terminus-Node")
+	task.Mu.Lock()
+	task.RelationNode = xTerminusNode
+	task.Mu.Unlock()
+
+	var err error
+	switch action {
+	case "copy":
+		err = doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
+	case "rename":
+		err = doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
+		if err != nil {
+			//return err
+			break
+		}
+
+		var handler drives.ResourceService
+		handler, err = drives.GetResourceService(srcType)
+		if err != nil {
+			//return err
+			break
+		}
+		err = handler.MoveDelete(task, fileCache, src, d, w, r)
+		if err != nil {
+			//return err
+			break
+		}
+	default:
+		err = fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
+	}
+
+	select {
+	case <-task.Ctx.Done():
+		return err
+	default:
+		// doPaste always set progress to 99 at the end
+		if err != nil {
+			task.ErrChan <- err
+			task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
+			pool.FailTask(task.ID)
+			return err
+		} else {
+			task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
+			pool.CompleteTask(task.ID)
+			return nil
+		}
+	}
 }
