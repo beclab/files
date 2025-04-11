@@ -7,6 +7,7 @@ import (
 	"files/pkg/background_task"
 	"files/pkg/crontab"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -21,6 +22,7 @@ import (
 	"syscall"
 
 	"files/pkg/diskcache"
+	"github.com/alitto/pond/v2"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -158,6 +160,9 @@ user created with the credentials from options "username" and "password".`,
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		background_task.InitBackgroundTaskManager(ctx)
+
+		pool.WorkerPool = pond.NewPool(5)
+		defer pool.WorkerPool.Stop()
 
 		// TODO: step6: init transmition for search3
 		go rpc.InitSearch3()
