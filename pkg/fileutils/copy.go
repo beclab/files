@@ -1,14 +1,105 @@
 package fileutils
 
 import (
+	"files/pkg/pool"
+	"fmt"
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 	"os"
 	"path"
-
-	"github.com/spf13/afero"
 )
 
 // Copy copies a file or folder from one place to another.
-func Copy(fs afero.Fs, src, dst string) error {
+//func Copy(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst string) error {
+//	if src = path.Clean("/" + src); src == "" {
+//		return os.ErrNotExist
+//	}
+//
+//	if dst = path.Clean("/" + dst); dst == "" {
+//		return os.ErrNotExist
+//	}
+//
+//	if src == "/" || dst == "/" {
+//		return os.ErrInvalid
+//	}
+//
+//	if dst == src {
+//		return os.ErrInvalid
+//	}
+//
+//	info, err := fs.Stat(src)
+//	if err != nil {
+//		return err
+//	}
+//	klog.Infof("copy %v from %s to %s", info, src, dst)
+//
+//	var progressChan chan int // 假设 progressChan 是 int 类型的通道
+//	var errChan chan error    // 用于接收 ExecuteRsyncSimulated 的错误
+//
+//	// 启动一个 goroutine 来执行 ExecuteRsyncSimulated
+//	go func() {
+//		var err error
+//		progressChan, errChan, err = ExecuteRsyncWithContext(ctx, "/data"+task.Source, "/data"+task.Dest)
+//		if err != nil {
+//			errChan <- err
+//		}
+//	}()
+//
+//	// 等待 ExecuteRsyncSimulated 完成或出错
+//	select {
+//	case err := <-errChan:
+//		if err != nil {
+//			fmt.Printf("Failed to execute rsync: %v\n", err)
+//			return err
+//		}
+//	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
+//		fmt.Println("ExecuteRsyncSimulated took too long to start, proceeding assuming no initial error.")
+//		// 在实际应用中，你可能需要更复杂的逻辑来处理这种情况
+//	}
+//
+//	if progressChan == nil {
+//		return fmt.Errorf("progressChan is nil")
+//	}
+//
+//	var wg sync.WaitGroup
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		klog.Infof("~~~Temp log: copy %v from %s to %s, will update progress", info, src, dst)
+//		task.UpdateProgressFromRsync(progressChan)
+//	}()
+//
+//	// 等待 goroutine 完成
+//	//wg.Wait()
+//
+//	// 模拟外部获取进度
+//	ticker := time.NewTicker(1 * time.Second)
+//	defer ticker.Stop()
+//
+//	done := make(chan bool)
+//	go func() {
+//		time.Sleep(100 * time.Second) // 模拟一些其他操作
+//		done <- true
+//	}()
+//
+//	for {
+//		select {
+//		case <-ticker.C:
+//			if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
+//				if t, ok := storedTask.(*pool.Task); ok {
+//					klog.Infof("Task %s Infos: %v\n", t.ID, t)
+//					fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+//				}
+//			}
+//		case <-done:
+//			fmt.Println("Operation completed or stopped.")
+//			return nil
+//		}
+//	}
+//}
+
+// Copy copies a file or folder from one place to another.
+func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	if src = path.Clean("/" + src); src == "" {
 		return os.ErrNotExist
 	}
@@ -18,7 +109,6 @@ func Copy(fs afero.Fs, src, dst string) error {
 	}
 
 	if src == "/" || dst == "/" {
-		// Prohibit copying from or to the virtual root directory.
 		return os.ErrInvalid
 	}
 
@@ -30,10 +120,171 @@ func Copy(fs afero.Fs, src, dst string) error {
 	if err != nil {
 		return err
 	}
+	klog.Infof("copy %v from %s to %s", info, src, dst)
 
-	if info.IsDir() {
-		return CopyDir(fs, src, dst)
+	if task == nil {
+		if info.IsDir() {
+			return CopyDir(fs, src, dst)
+		}
+
+		return CopyFile(fs, src, dst)
 	}
 
-	return CopyFile(fs, src, dst)
+	//var progressChan chan int // 假设 progressChan 是 int 类型的通道
+	//var logChan chan string
+	//var errChan chan error // 用于接收 ExecuteRsyncSimulated 的错误
+
+	// 启动一个 goroutine 来执行 ExecuteRsyncSimulated
+	go func() {
+		var err error
+		//progressChan, logChan, errChan, err = ExecuteRsyncWithContext(task.Ctx, "/data"+task.Source, "/data"+task.Dest)
+		err = ExecuteRsync(task, "", "", 0, 100)
+		if err != nil {
+			// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
+			fmt.Printf("Failed to initialize rsync: %v\n", err)
+			return
+		}
+	}()
+
+	return nil
+	//// 等待 ExecuteRsyncSimulated 完成或出错
+	//select {
+	//case err := <-task.ErrChan:
+	//	if err != nil {
+	//		fmt.Printf("Failed to execute rsync: %v\n", err)
+	//		return err
+	//	}
+	//case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
+	//	fmt.Println("ExecuteRsyncWithContext took too long to start, proceeding assuming no initial error.")
+	//}
+	//
+	//if task.ProgressChan == nil {
+	//	return fmt.Errorf("progressChan is nil")
+	//}
+	//
+	//var wg sync.WaitGroup
+	//wg.Add(1)
+	//go func() {
+	//	defer wg.Done()
+	//	klog.Infof("~~~Temp log: copy %v from %s to %s, will update progress", info, src, dst)
+	//	task.UpdateProgress()
+	//}()
+	//
+	//// 等待 goroutine 完成
+	////wg.Wait()
+	//
+	//// 模拟外部获取进度
+	//ticker := time.NewTicker(1 * time.Second)
+	//defer ticker.Stop()
+	//
+	//done := make(chan bool)
+	//go func() {
+	//	time.Sleep(100 * time.Second) // 模拟一些其他操作
+	//	done <- true
+	//}()
+	//
+	//for {
+	//	select {
+	//	case <-ticker.C:
+	//		if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
+	//			if t, ok := storedTask.(*pool.Task); ok {
+	//				klog.Infof("Task %s Infos: %v\n", t.ID, t)
+	//				fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+	//			}
+	//		}
+	//	case <-done:
+	//		fmt.Println("Operation completed or stopped.")
+	//		return nil
+	//	}
+	//}
 }
+
+//func Copy(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst string) error {
+//	// 清理路径
+//	src = path.Clean("/" + src)
+//	dst = path.Clean("/" + dst)
+//
+//	// 检查路径合法性
+//	if src == "" || dst == "" {
+//		return os.ErrNotExist
+//	}
+//	if src == "/" || dst == "/" {
+//		return os.ErrInvalid
+//	}
+//	if src == dst {
+//		return os.ErrInvalid
+//	}
+//
+//	// 检查源文件是否存在
+//	info, err := fs.Stat(src)
+//	if err != nil {
+//		return fmt.Errorf("failed to stat source: %w", err)
+//	}
+//	klog.Infof("Copying %v from %s to %s", info, src, dst)
+//
+//	// 初始化通道
+//	progressChan := make(chan int, 100)
+//	errChan := make(chan error, 1)
+//
+//	// 启动一个 goroutine 来执行 rsync 操作
+//	go func(pc chan int, ec chan error) {
+//		defer close(pc) // 确保关闭通道，避免死锁
+//		defer close(ec)
+//		_, ec, err = ExecuteRsyncWithContext(ctx, "/data"+src, "/data"+dst) // 假设函数签名需要调整以支持直接返回错误通道
+//		if err != nil {
+//			ec <- err
+//		}
+//		// 如果 ExecuteRsyncWithContext 内部支持 progressChan，则直接使用 pc，无需额外处理
+//	}(progressChan, errChan)
+//
+//	// 等待 rsync 操作完成或出错
+//	var rsyncErr error
+//	select {
+//	case rsyncErr = <-errChan:
+//		if rsyncErr != nil {
+//			klog.Errorf("Failed to execute rsync: %v", rsyncErr)
+//			return rsyncErr
+//		}
+//	case <-ctx.Done():
+//		return ctx.Err()
+//	}
+//
+//	// 使用 goroutine 更新任务进度
+//	var wg sync.WaitGroup
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		klog.Infof("Starting to update progress for task %s", task.ID)
+//		task.UpdateProgressFromRsync(progressChan) // 确保 progressChan 是有效且未关闭的
+//	}()
+//
+//	// 模拟外部获取进度（可选，仅用于演示）
+//	ticker := time.NewTicker(1 * time.Second)
+//	defer ticker.Stop()
+//
+//	done := make(chan bool)
+//	go func() {
+//		time.Sleep(100 * time.Second) // 模拟长时间操作
+//		close(done)                   // 确保关闭通道，避免死锁
+//	}()
+//
+//	for {
+//		select {
+//		case <-ticker.C:
+//			// 打印任务进度（模拟外部获取）
+//			if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
+//				if t, ok := storedTask.(*pool.Task); ok {
+//					klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
+//					fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+//				}
+//			}
+//		case <-done:
+//			fmt.Println("Operation completed or stopped.")
+//			return nil
+//		}
+//	}
+//
+//	// 等待进度更新 goroutine 完成
+//	wg.Wait()
+//	return nil
+//}
