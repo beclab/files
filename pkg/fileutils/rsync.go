@@ -11,8 +11,9 @@ import (
 
 func ExecuteRsync(source, dest string) (chan int, error) {
 	progressChan := make(chan int)
+	bwLimit := 1
 
-	cmd := exec.Command("rsync", "-av", "--info=progress2", source, dest)
+	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
