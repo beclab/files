@@ -14,8 +14,11 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 
 	cmd := exec.Command("rsync", "-av", "--info=progress2", source, dest)
 
-	var stderrBuf bytes.Buffer
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
+
+	fmt.Printf("Starting rsync command: %v\n", cmd.Args)
 
 	err := cmd.Start()
 	if err != nil {
@@ -29,6 +32,7 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 		for scanner.Scan() {
 			line := scanner.Text()
+			fmt.Printf("[RSYNC STDERR] %s\n", line) // 输出 rsync 的 stderr 信息
 			if matches := re.FindStringSubmatch(line); len(matches) > 1 {
 				if p, err := strconv.ParseFloat(matches[1], 64); err == nil {
 					progressChan <- int(p)
@@ -44,6 +48,12 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		err := cmd.Wait()
 		if err != nil {
 			fmt.Printf("Rsync failed: %v\n", err)
+			fmt.Printf("Rsync STDOUT: %s\n", stdoutBuf.String()) // 输出 rsync 的 stdout 信息
+			fmt.Printf("Rsync STDERR: %s\n", stderrBuf.String()) // 再次输出 rsync 的 stderr 信息，确保完整性
+		} else {
+			fmt.Printf("Rsync completed successfully.\n")
+			fmt.Printf("Rsync STDOUT: %s\n", stdoutBuf.String())
+			fmt.Printf("Rsync STDERR: %s\n", stderrBuf.String())
 		}
 	}()
 
