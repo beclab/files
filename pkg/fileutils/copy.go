@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 )
 
 // Copy copies a file or folder from one place to another.
@@ -57,30 +58,30 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	// 如果不需要同步，可以省略 wg.Wait()，但要注意 goroutine 泄漏问题
 	wg.Wait()
 
-	return nil
-}
+	//	return nil
+	//}
 
-//// 模拟外部获取进度
-//ticker := time.NewTicker(1 * time.Second)
-//defer ticker.Stop()
-//
-//done := make(chan bool)
-//go func() {
-//	time.Sleep(10 * time.Second) // 模拟一些其他操作
-//	done <- true
-//}()
-//
-//for {
-//	select {
-//	case <-ticker.C:
-//		if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
-//			if t, ok := storedTask.(*pool.Task); ok {
-//				fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
-//			}
-//		}
-//	case <-done:
-//		fmt.Println("Operation completed or stopped.")
-//		return nil
-//	}
-//}
-//}
+	// 模拟外部获取进度
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	done := make(chan bool)
+	go func() {
+		time.Sleep(10 * time.Second) // 模拟一些其他操作
+		done <- true
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
+				if t, ok := storedTask.(*pool.Task); ok {
+					fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+				}
+			}
+		case <-done:
+			fmt.Println("Operation completed or stopped.")
+			return nil
+		}
+	}
+}
