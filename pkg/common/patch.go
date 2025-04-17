@@ -6,6 +6,7 @@ import (
 	"files/pkg/errors"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
 	"github.com/spf13/afero"
@@ -324,10 +325,10 @@ func Move(ctx context.Context, fs afero.Fs, src, dst, srcExternalType, dstExtern
 	return MoveFile(ctx, fs, src, dst, fileCache, true)
 }
 
-func PatchAction(ctx context.Context, action, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
+func PatchAction(task *pool.Task, ctx context.Context, action, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
 	switch action {
 	case "copy":
-		return fileutils.Copy(files.DefaultFs, src, dst)
+		return fileutils.Copy(files.DefaultFs, task, src, dst)
 	case "rename":
 		return Move(ctx, files.DefaultFs, src, dst, srcExternalType, dstExternalType, fileCache)
 	default:

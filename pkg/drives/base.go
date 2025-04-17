@@ -7,6 +7,7 @@ import (
 	"files/pkg/errors"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
 	"github.com/gorilla/mux"
@@ -40,7 +41,7 @@ type ResourceService interface {
 	PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc
 
 	// paste funcs
-	PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
+	PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
 	PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode, w http.ResponseWriter,
 		r *http.Request, driveIdCache map[string]string) error
 	PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
@@ -138,15 +139,17 @@ func IsCloudDrives(dstType string) bool {
 	}
 }
 
-func GetMountedData(r *http.Request) []files.DiskInfo {
-	var mountedData []files.DiskInfo = nil
+func GetMountedData() []files.DiskInfo {
+	// return value is for unpredictable using in the future which is originally used but not used after URI path unified
+
+	//var mountedData []files.DiskInfo = nil
 	var err error = nil
 	if files.TerminusdHost != "" {
 		// for 1.12: path-incluster URL exists, won't err in normal condition
 		// for 1.11: path-incluster URL may not exist, if err, use usb-incluster and hdd-incluster for system functional
 		url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
 
-		headers := r.Header.Clone()
+		headers := make(http.Header)
 		headers.Set("Content-Type", "application/json")
 		headers.Set("X-Signature", "temp_signature")
 
@@ -155,7 +158,7 @@ func GetMountedData(r *http.Request) []files.DiskInfo {
 			klog.Infof("Failed to fetch data from %s: %v", url, err)
 			usbUrl := "http://" + files.TerminusdHost + "/system/mounted-usb-incluster"
 
-			usbHeaders := r.Header.Clone()
+			usbHeaders := headers.Clone()
 			usbHeaders.Set("Content-Type", "application/json")
 			usbHeaders.Set("X-Signature", "temp_signature")
 
@@ -168,7 +171,7 @@ func GetMountedData(r *http.Request) []files.DiskInfo {
 
 			hddUrl := "http://" + files.TerminusdHost + "/system/mounted-hdd-incluster"
 
-			hddHeaders := r.Header.Clone()
+			hddHeaders := headers.Clone()
 			hddHeaders.Set("Content-Type", "application/json")
 			hddHeaders.Set("X-Signature", "temp_signature")
 
@@ -210,7 +213,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	mountedData := GetMountedData(r)
+	GetMountedData()
 
 	var file *files.FileInfo
 	if mountedData != nil {
@@ -430,12 +433,12 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
-		mountedData := GetMountedData(r)
+		GetMountedData()
 		srcExternalType := files.GetExternalType(src, mountedData)
 		dstExternalType := files.GetExternalType(dst, mountedData)
 
 		klog.Infoln("Before patch action:", src, dst, action, rename)
-		err = common.PatchAction(r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
+		err = common.PatchAction(nil, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 
 		return common.ErrToStatus(err), err
 	}
@@ -497,7 +500,7 @@ func (rs *BaseResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 	}
 }
 
-func (rs *BaseResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rs *BaseResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
 }
 

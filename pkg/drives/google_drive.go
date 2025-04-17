@@ -10,6 +10,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
@@ -1226,7 +1227,7 @@ func (rs *GoogleDriveResourceService) PreviewHandler(imgSvc preview.ImgService, 
 	}
 }
 
-func (rc *GoogleDriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rc *GoogleDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	switch action {
 	case "copy":
 		if !strings.HasSuffix(src, "/") {

@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
 	"github.com/spf13/afero"
@@ -27,11 +28,11 @@ type DriveResourceService struct {
 	BaseResourceService
 }
 
-func (rs *DriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-	mountedData := GetMountedData(r)
+func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	GetMountedData()
 	srcExternalType := files.GetExternalType(src, mountedData)
 	dstExternalType := files.GetExternalType(dst, mountedData)
-	return common.PatchAction(r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
+	return common.PatchAction(task, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 }
 
 func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
@@ -524,21 +525,21 @@ func ResourceDriveDelete(fileCache fileutils.FileCache, path string, ctx context
 	return http.StatusOK, nil
 }
 
-func GetMountedData() {
-	url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
-
-	headers := make(http.Header)
-	headers.Set("Content-Type", "application/json")
-	headers.Set("X-Signature", "temp_signature")
-
-	tempMountedData, err := files.FetchDiskInfo(url, headers)
-	if err != nil {
-		klog.Errorln(err)
-		return
-	}
-	mountedData = tempMountedData
-	return
-}
+//func GetMountedData() {
+//	url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
+//
+//	headers := make(http.Header)
+//	headers.Set("Content-Type", "application/json")
+//	headers.Set("X-Signature", "temp_signature")
+//
+//	tempMountedData, err := files.FetchDiskInfo(url, headers)
+//	if err != nil {
+//		klog.Errorln(err)
+//		return
+//	}
+//	mountedData = tempMountedData
+//	return
+//}
 
 func ParseExternalPath(path string) string {
 	for _, datum := range mountedData {

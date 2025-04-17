@@ -10,6 +10,7 @@ import (
 	"files/pkg/fileutils"
 	"files/pkg/img"
 	"files/pkg/parser"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
@@ -1002,7 +1003,7 @@ func (rs *CloudDriveResourceService) PreviewHandler(imgSvc preview.ImgService, f
 	}
 }
 
-func (rc *CloudDriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	switch action {
 	case "copy":
 		metaInfo, err := GetCloudDriveFocusedMetaInfos(src, w, r)
