@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
 	"github.com/spf13/afero"
@@ -27,8 +28,8 @@ type DriveResourceService struct {
 	BaseResourceService
 }
 
-func (rs *DriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-	return common.PatchAction(r.Context(), action, src, dst, fileCache)
+func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	return common.PatchAction(task, r.Context(), action, src, dst, fileCache)
 }
 
 func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,

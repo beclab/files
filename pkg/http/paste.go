@@ -145,12 +145,13 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		//return common.ErrToStatus(err), err
 
 		taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-		task := &pool.Task{
-			ID:     taskID,
-			Source: src,
-			Dest:   dst,
-			Status: "pending",
-		}
+		//task := &pool.Task{
+		//	ID:     taskID,
+		//	Source: src,
+		//	Dest:   dst,
+		//	Status: "pending",
+		//}
+		task := pool.NewTask(taskID, src, dst)
 		pool.TaskManager.Store(taskID, task)
 
 		// 提交任务到任务队列
@@ -176,9 +177,9 @@ func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, s
 	go func() {
 		var err error
 		if same {
-			err = pasteActionSameArch(action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
+			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
 		} else {
-			err = pasteActionDiffArch(r.Context(), action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
+			err = pasteActionDiffArch(task, r.Context(), action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
 		}
 		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
 			fmt.Fprintln(w, err.Error())
@@ -269,7 +270,7 @@ func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w h
 	return nil
 }
 
-func pasteActionSameArch(action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
 	klog.Infoln("src: ", src, ", dst: ", dst)
 
@@ -278,10 +279,10 @@ func pasteActionSameArch(action, srcType, src, dstType, dst string, rename bool,
 		return err
 	}
 
-	return handler.PasteSame(action, src, dst, rename, fileCache, w, r)
+	return handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
 }
 
-func pasteActionDiffArch(ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionDiffArch(task *pool.Task, ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	// In this function, context if tied up to src, because src is in the URL
 	switch action {
 	case "copy":

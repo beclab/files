@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"fmt"
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
@@ -25,7 +26,7 @@ type CacheResourceService struct {
 	BaseResourceService
 }
 
-func (*CacheResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&rename=" + strconv.FormatBool(rename)
 	method := "PATCH"
 	payload := []byte(``)
