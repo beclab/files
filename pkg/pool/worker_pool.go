@@ -2,6 +2,7 @@ package pool
 
 import (
 	"github.com/alitto/pond/v2"
+	"k8s.io/klog/v2"
 	"sync"
 )
 
@@ -42,6 +43,7 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	t.Log = []string{}
 
 	for progress := range progressChan {
+		klog.Infof("[%d] %s", t.ID, progress)
 		// 对 rsync 的进度进行处理，例如求平方根再乘以 10
 		processedProgress := 0
 		//processedProgress := int(float64(progress)*0.1*float64(progress)*0.1*1000 / 10) // 示例处理逻辑
