@@ -9,11 +9,6 @@ import (
 	"strconv"
 )
 
-func ProcessProgress(progress, progressType int) int {
-	// TODO: define progressType
-	return progress
-}
-
 func ExecuteRsync(source, dest string) (chan int, error) {
 	progressChan := make(chan int)
 

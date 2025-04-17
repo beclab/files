@@ -1,7 +1,6 @@
 package pool
 
 import (
-	"files/pkg/fileutils"
 	"github.com/alitto/pond/v2"
 	"sync"
 )
@@ -30,6 +29,11 @@ func NewTask(id, source, dest string) *Task {
 	}
 }
 
+func ProcessProgress(progress, progressType int) int {
+	// TODO: define progressType
+	return progress
+}
+
 func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -44,7 +48,7 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 		// 更简单的逻辑可以是：processedProgress = int(math.Sqrt(float64(progress)) * 10)
 		// 这里使用一个近似的简单整数运算模拟
 		if progress > 0 {
-			processedProgress = fileutils.ProcessProgress(progress, 0) //int(float64(progress)**0.5 * 10) // 使用平方根乘以10的简化逻辑
+			processedProgress = ProcessProgress(progress, 0) //int(float64(progress)**0.5 * 10) // 使用平方根乘以10的简化逻辑
 		} else {
 			processedProgress = 0
 		}
