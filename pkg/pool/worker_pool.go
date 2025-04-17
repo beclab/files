@@ -36,14 +36,16 @@ func ProcessProgress(progress, progressType int) int {
 }
 
 func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
+	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.Status = "running"
 	t.Progress = 0
 	t.Log = []string{}
+	klog.Infof("~~~Temp log: %v", t)
 
 	for progress := range progressChan {
-		klog.Infof("[%d] %s", t.ID, progress)
+		klog.Infof("[%s] %d", t.ID, progress)
 		// 对 rsync 的进度进行处理，例如求平方根再乘以 10
 		processedProgress := 0
 		//processedProgress := int(float64(progress)*0.1*float64(progress)*0.1*1000 / 10) // 示例处理逻辑
