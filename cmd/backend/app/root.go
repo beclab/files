@@ -31,7 +31,6 @@ import (
 
 	fbhttp "files/pkg/http"
 	"files/pkg/img"
-	"files/pkg/rpc"
 	"files/pkg/settings"
 )
 
@@ -165,7 +164,7 @@ user created with the credentials from options "username" and "password".`,
 		defer pool.WorkerPool.Stop()
 
 		// TODO: step6: init transmition for search3
-		go rpc.InitSearch3()
+		//go rpc.InitSearch3()
 
 		// step7: run http server
 		server := getRunParams(cmd.Flags())
