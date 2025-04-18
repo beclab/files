@@ -186,13 +186,9 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 			return nil, err
 		}
 
-		if resp.StatusCode >= 400 {
+		if resp == nil || resp.StatusCode >= 400 {
 			klog.Errorf("Failed to mount by %s to %s", url, TerminusdHost)
 			continue
-		}
-
-		if resp != nil {
-			defer resp.Body.Close()
 		}
 
 		respBody, err := ioutil.ReadAll(resp.Body)
@@ -206,6 +202,10 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 			return nil, err
 		}
 
+		err = resp.Body.Close()
+		if err != nil {
+			return responseMap, err
+		}
 		return responseMap, nil
 	}
 	return nil, fmt.Errorf("failed to mount samba")
