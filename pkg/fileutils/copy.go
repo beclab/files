@@ -72,7 +72,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	}()
 
 	// 等待 goroutine 完成
-	wg.Wait()
+	//wg.Wait()
 
 	// 模拟外部获取进度
 	ticker := time.NewTicker(1 * time.Second)
