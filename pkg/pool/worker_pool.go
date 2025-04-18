@@ -53,6 +53,7 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 		t.mu.Lock()
 		t.Progress = processedProgress
 		t.mu.Unlock()
+		klog.Infof("[%s] %v", t.ID, t)
 	}
 
 	t.mu.Lock()

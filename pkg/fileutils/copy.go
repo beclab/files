@@ -80,7 +80,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 
 	done := make(chan bool)
 	go func() {
-		time.Sleep(10 * time.Second) // 模拟一些其他操作
+		time.Sleep(100 * time.Second) // 模拟一些其他操作
 		done <- true
 	}()
 
@@ -89,6 +89,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 		case <-ticker.C:
 			if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
 				if t, ok := storedTask.(*pool.Task); ok {
+					klog.Infof("Task %s Infos: %v\n", t.ID, t)
 					fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 				}
 			}
