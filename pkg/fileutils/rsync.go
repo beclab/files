@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"k8s.io/klog/v2"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -20,6 +21,7 @@ func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
 		for i := 0; i <= 100; i++ {
 			select {
 			case progressChan <- i: // 发送进度到通道
+				klog.Infof("Send progress %d", i)
 			case <-time.After(1 * time.Second): // 模拟每秒更新一次（实际上循环本身已经控制了节奏，这里 `time.After` 是冗余保险）
 			}
 		}

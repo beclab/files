@@ -51,6 +51,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		klog.Infof("~~~Temp log: copy %v from %s to %s, will update progress", info, src, dst)
 		task.UpdateProgressFromRsync(progressChan)
 	}()
 
