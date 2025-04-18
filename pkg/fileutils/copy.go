@@ -22,7 +22,6 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	}
 
 	if src == "/" || dst == "/" {
-		// Prohibit copying from or to the virtual root directory.
 		return os.ErrInvalid
 	}
 
@@ -36,11 +35,6 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	}
 	klog.Infof("copy %v from %s to %s", info, src, dst)
 
-	//if info.IsDir() {
-	//	return CopyDir(fs, src, dst)
-	//}
-	//
-	//return CopyFile(fs, src, dst)
 	progressChan, err := ExecuteRsyncSimulated("/data"+task.Source, "/data"+task.Dest)
 	if err != nil {
 		fmt.Printf("Failed to execute rsync: %v\n", err)
@@ -52,15 +46,11 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	go func() {
 		defer wg.Done()
 		klog.Infof("~~~Temp log: copy %v from %s to %s, will update progress", info, src, dst)
-		task.UpdateProgressFromRsync(progressChan)
+		task.UpdateProgressFromRsync(progressChan) // 确保这个方法正确实现
 	}()
 
-	// 等待 goroutine 完成（如果需要同步行为）
-	// 如果不需要同步，可以省略 wg.Wait()，但要注意 goroutine 泄漏问题
-	//wg.Wait()
-
-	//	return nil
-	//}
+	// 等待 goroutine 完成
+	wg.Wait()
 
 	// 模拟外部获取进度
 	ticker := time.NewTicker(1 * time.Second)
