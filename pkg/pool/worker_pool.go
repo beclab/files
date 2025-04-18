@@ -38,25 +38,19 @@ func ProcessProgress(progress, progressType int) int {
 func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.Status = "running"
 	t.Progress = 0
 	t.Log = []string{}
+	t.mu.Unlock()
 	klog.Infof("~~~Temp log: %v", t)
 
 	for progress := range progressChan {
 		klog.Infof("[%s] %d", t.ID, progress)
-		// 对 rsync 的进度进行处理，例如求平方根再乘以 10
 		processedProgress := 0
-		//processedProgress := int(float64(progress)*0.1*float64(progress)*0.1*1000 / 10) // 示例处理逻辑
-		// 更简单的逻辑可以是：processedProgress = int(math.Sqrt(float64(progress)) * 10)
-		// 这里使用一个近似的简单整数运算模拟
 		if progress > 0 {
-			processedProgress = ProcessProgress(progress, 0) //int(float64(progress)**0.5 * 10) // 使用平方根乘以10的简化逻辑
-		} else {
-			processedProgress = 0
+			processedProgress = ProcessProgress(progress, 0)
 		}
-		t.mu.Lock() // 重新锁定以更新进度
+		t.mu.Lock()
 		t.Progress = processedProgress
 		t.mu.Unlock()
 	}
@@ -65,6 +59,37 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	t.Status = "completed"
 	t.mu.Unlock()
 }
+
+//func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
+//	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
+//	t.mu.Lock()
+//	defer t.mu.Unlock()
+//	t.Status = "running"
+//	t.Progress = 0
+//	t.Log = []string{}
+//	klog.Infof("~~~Temp log: %v", t)
+//
+//	for progress := range progressChan {
+//		klog.Infof("[%s] %d", t.ID, progress)
+//		// 对 rsync 的进度进行处理，例如求平方根再乘以 10
+//		processedProgress := 0
+//		//processedProgress := int(float64(progress)*0.1*float64(progress)*0.1*1000 / 10) // 示例处理逻辑
+//		// 更简单的逻辑可以是：processedProgress = int(math.Sqrt(float64(progress)) * 10)
+//		// 这里使用一个近似的简单整数运算模拟
+//		if progress > 0 {
+//			processedProgress = ProcessProgress(progress, 0) //int(float64(progress)**0.5 * 10) // 使用平方根乘以10的简化逻辑
+//		} else {
+//			processedProgress = 0
+//		}
+//		t.mu.Lock() // 重新锁定以更新进度
+//		t.Progress = processedProgress
+//		t.mu.Unlock()
+//	}
+//
+//	t.mu.Lock()
+//	t.Status = "completed"
+//	t.mu.Unlock()
+//}
 
 func (t *Task) Logging(entry string) {
 	t.mu.Lock()
