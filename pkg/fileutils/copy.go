@@ -35,10 +35,32 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	}
 	klog.Infof("copy %v from %s to %s", info, src, dst)
 
-	progressChan, err := ExecuteRsyncSimulated("/data"+task.Source, "/data"+task.Dest)
-	if err != nil {
-		fmt.Printf("Failed to execute rsync: %v\n", err)
-		return err
+	var progressChan chan int // 假设 progressChan 是 int 类型的通道
+	var errChan chan error    // 用于接收 ExecuteRsyncSimulated 的错误
+
+	// 启动一个 goroutine 来执行 ExecuteRsyncSimulated
+	go func() {
+		var err error
+		progressChan, err = ExecuteRsyncSimulated("/data"+task.Source, "/data"+task.Dest)
+		if err != nil {
+			errChan <- err
+		}
+	}()
+
+	// 等待 ExecuteRsyncSimulated 完成或出错
+	select {
+	case err := <-errChan:
+		if err != nil {
+			fmt.Printf("Failed to execute rsync: %v\n", err)
+			return err
+		}
+	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
+		fmt.Println("ExecuteRsyncSimulated took too long to start, proceeding assuming no initial error.")
+		// 在实际应用中，你可能需要更复杂的逻辑来处理这种情况
+	}
+
+	if progressChan == nil {
+		return fmt.Errorf("progressChan is nil")
 	}
 
 	var wg sync.WaitGroup
@@ -46,7 +68,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	go func() {
 		defer wg.Done()
 		klog.Infof("~~~Temp log: copy %v from %s to %s, will update progress", info, src, dst)
-		task.UpdateProgressFromRsync(progressChan) // 确保这个方法正确实现
+		task.UpdateProgressFromRsync(progressChan)
 	}()
 
 	// 等待 goroutine 完成
