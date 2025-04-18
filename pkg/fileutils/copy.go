@@ -41,7 +41,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	//}
 	//
 	//return CopyFile(fs, src, dst)
-	progressChan, err := ExecuteRsync("/data"+task.Source, "/data"+task.Dest)
+	progressChan, err := ExecuteRsyncSimulated("/data"+task.Source, "/data"+task.Dest)
 	if err != nil {
 		fmt.Printf("Failed to execute rsync: %v\n", err)
 		return err

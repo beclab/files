@@ -7,7 +7,28 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	"time"
 )
+
+func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
+	progressChan := make(chan int)
+
+	go func() {
+		defer close(progressChan)
+
+		// 模拟进度从 0 到 100，每秒增加 1
+		for i := 0; i <= 100; i++ {
+			select {
+			case progressChan <- i: // 发送进度到通道
+			case <-time.After(1 * time.Second): // 模拟每秒更新一次（实际上循环本身已经控制了节奏，这里 `time.After` 是冗余保险）
+			}
+		}
+	}()
+
+	// 模拟任务完成后返回（虽然这里没有实际使用 source 和 dest，但函数签名保留了它们）
+	time.Sleep(101 * time.Second) // 确保模拟的任务运行足够长的时间（大于 100 秒）
+	return progressChan, nil
+}
 
 func ExecuteRsync(source, dest string) (chan int, error) {
 	progressChan := make(chan int)
