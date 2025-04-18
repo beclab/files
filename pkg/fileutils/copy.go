@@ -56,7 +56,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 
 	// 等待 goroutine 完成（如果需要同步行为）
 	// 如果不需要同步，可以省略 wg.Wait()，但要注意 goroutine 泄漏问题
-	wg.Wait()
+	//wg.Wait()
 
 	//	return nil
 	//}
