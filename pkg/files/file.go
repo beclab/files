@@ -156,50 +156,66 @@ func GetExternalType(filePath string, mountedData []DiskInfo) string {
 
 func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 	externalType := r.URL.Query().Get("external_type")
-	var url = ""
+	var urls []string
 	if externalType == "smb" {
-		url = "http://" + TerminusdHost + "/command/mount-samba"
+		urls = []string{"http://" + TerminusdHost + "/command/v2/mount-samba", "http://" + TerminusdHost + "/command/mount-samba"}
 	} else {
 		return nil, fmt.Errorf("Unsupported external type: %s", externalType)
 	}
 
-	bodyBytes, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		return nil, err
-	}
-	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	for _, url := range urls {
+		bodyBytes, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	headers := r.Header.Clone()
-	headers.Set("Content-Type", "application/json")
-	headers.Set("X-Signature", "temp_signature")
+		headers := r.Header.Clone()
+		headers.Set("Content-Type", "application/json")
+		headers.Set("X-Signature", "temp_signature")
 
-	client := &http.Client{}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, err
-	}
-	req.Header = headers
+		client := &http.Client{}
+		req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
+		if err != nil {
+			return nil, err
+		}
+		req.Header = headers
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp != nil {
-		defer resp.Body.Close()
-	}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+		if resp == nil {
+			klog.Errorf("not get response from %s", url)
+			continue
+		}
 
-	var responseMap map[string]interface{}
-	err = json.Unmarshal(respBody, &responseMap)
-	if err != nil {
-		return nil, err
-	}
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
 
-	return responseMap, nil
+		var responseMap map[string]interface{}
+		err = json.Unmarshal(respBody, &responseMap)
+		if err != nil {
+			return nil, err
+		}
+
+		err = resp.Body.Close()
+		if err != nil {
+			return responseMap, err
+		}
+
+		if resp.StatusCode >= 400 {
+			klog.Errorf("Failed to mount by %s to %s", url, TerminusdHost)
+			klog.Infof("response status: %d, response body: %v", resp.Status, responseMap)
+			continue
+		}
+
+		return responseMap, nil
+	}
+	return nil, fmt.Errorf("failed to mount samba")
 }
 
 func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{}, error) {
