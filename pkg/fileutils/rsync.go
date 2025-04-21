@@ -3,8 +3,8 @@ package fileutils
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"k8s.io/klog/v2"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -32,45 +32,41 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	progressChan := make(chan int, 100)
 	bwLimit := 1024
 
-	stdoutReader, stdoutWriter := io.Pipe()
 	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
-	cmd.Stdout = stdoutWriter
+	stdoutReader, _ := cmd.StdoutPipe()
 
-	go func() {
-		err := cmd.Start()
-		if err != nil {
-			stdoutWriter.Close()
-			klog.Errorf("Error starting rsync: %v", err)
-			return
-		}
-	}()
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("启动rsync失败: %v", err)
+	}
 
+	// 同时处理输出和进度提取
 	go func() {
-		defer stdoutWriter.Close()
+		defer stdoutReader.Close()
 		defer close(progressChan)
 
-		scanner := bufio.NewScanner(stdoutReader) // 扫描stdout
+		scanner := bufio.NewScanner(stdoutReader)
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
+
 		for scanner.Scan() {
 			line := scanner.Text()
-			klog.Infof("Rsync line: %s", line)
+
+			// 实时输出到stdout
+			fmt.Println(line)
+			os.Stdout.Sync() // 强制刷新
+
+			// 提取百分比进度
 			if matches := re.FindStringSubmatch(line); len(matches) > 1 {
 				if p, err := strconv.ParseFloat(matches[1], 64); err == nil {
 					progressChan <- int(p)
-					klog.Infof("Send progress: %d", int(p))
 				}
 			}
 		}
-		if err := scanner.Err(); err != nil {
-			klog.Errorf("Error reading rsync output: %v", err)
-		}
 	}()
 
-	go func() {
-		if err := cmd.Wait(); err != nil {
-			klog.Errorf("Rsync command failed: %v", err)
-		}
-	}()
+	// 等待命令完成
+	if err := cmd.Wait(); err != nil {
+		return nil, fmt.Errorf("rsync执行失败: %v", err)
+	}
 
 	return progressChan, nil
 }
