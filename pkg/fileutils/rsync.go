@@ -29,7 +29,6 @@ func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
 }
 
 func ExecuteRsync(source, dest string) (chan int, error) {
-	// 使用带缓冲的通道，避免因接收方处理不及时导致的阻塞
 	progressChan := make(chan int, 100) // 缓冲区大小为100
 	bwLimit := 1024
 
@@ -37,13 +36,11 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
 	cmd.Stderr = stderrWriter
 
-	go func() {
-		err := cmd.Start()
-		if err != nil {
-			stderrWriter.Close()
-			klog.Errorf("Error starting rsync: %v", err)
-		}
-	}()
+	err := cmd.Start()
+	if err != nil {
+		stderrWriter.Close()
+		return nil, fmt.Errorf("failed to start rsync: %v", err)
+	}
 
 	go func() {
 		defer stderrWriter.Close()
@@ -53,26 +50,27 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 		for scanner.Scan() {
 			line := scanner.Text()
-			klog.Infof("Rsync line: %s", line)
+			klog.Infof("Rsync line: %s", line) // 确保这一行被执行
 			if matches := re.FindStringSubmatch(line); len(matches) > 1 {
 				if p, err := strconv.ParseFloat(matches[1], 64); err == nil {
-					// 发送进度到通道（带缓冲通道通常不会阻塞）
 					progressChan <- int(p)
 					klog.Infof("Send progress: %d", int(p))
 				}
 			}
 		}
 		if err := scanner.Err(); err != nil {
-			fmt.Printf("Error reading rsync output: %v\n", err)
+			klog.Errorf("Error reading rsync output: %v", err)
 		}
 	}()
 
-	// 确保 cmd.Wait() 不会阻塞主逻辑
 	go func() {
 		if err := cmd.Wait(); err != nil {
-			fmt.Printf("Rsync command failed: %v\n", err)
+			klog.Errorf("Rsync command failed: %v", err)
 		}
 	}()
+
+	// 为了调试，可以添加一个短暂的等待来确保 goroutine 有时间启动（通常不需要，但用于调试）
+	// time.Sleep(100 * time.Millisecond)
 
 	return progressChan, nil
 }
