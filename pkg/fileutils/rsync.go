@@ -29,7 +29,8 @@ func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
 }
 
 func ExecuteRsync(source, dest string) (chan int, error) {
-	progressChan := make(chan int) // 无缓冲通道，确保每次发送都有接收方处理
+	// 使用带缓冲的通道，避免因接收方处理不及时导致的阻塞
+	progressChan := make(chan int, 100) // 缓冲区大小为100
 	bwLimit := 1024
 
 	stderrReader, stderrWriter := io.Pipe()
@@ -53,14 +54,9 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 			klog.Infof("Rsync line: %s", line)
 			if matches := re.FindStringSubmatch(line); len(matches) > 1 {
 				if p, err := strconv.ParseFloat(matches[1], 64); err == nil {
-					// 使用 select 确保非阻塞发送
-					select {
-					case progressChan <- int(p): // 成功发送进度
-						klog.Infof("Send progress: %d", int(p))
-					default:
-						// 如果通道已满，可以选择丢弃数据或记录日志（这里选择丢弃）
-						// fmt.Println("Progress channel is full, dropping progress update")
-					}
+					// 发送进度到通道（带缓冲通道通常不会阻塞）
+					progressChan <- int(p)
+					klog.Infof("Send progress: %d", int(p))
 				}
 			}
 		}
