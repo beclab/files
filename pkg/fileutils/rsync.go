@@ -2,7 +2,6 @@ package fileutils
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
@@ -34,11 +33,8 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	bwLimit := 1024
 
 	stdoutReader, stdoutWriter := io.Pipe()
-	cmd := exec.Command("rsync", "-av", "--info=progress2", "--stats", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
+	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
 	cmd.Stdout = stdoutWriter
-
-	var buf bytes.Buffer
-	var lastProgress int
 
 	go func() {
 		err := cmd.Start()
@@ -53,33 +49,18 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		defer stdoutWriter.Close()
 		defer close(progressChan)
 
-		scanner := bufio.NewScanner(stdoutReader)
-		progressRe := regexp.MustCompile(`(\d+\.?\d*)%`)
-		statsRe := regexp.MustCompile(`Total.*?(\d+\.?\d*)%`)
-
+		scanner := bufio.NewScanner(stdoutReader) // 扫描stdout
+		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 		for scanner.Scan() {
 			line := scanner.Text()
-			buf.WriteString(line + "\n")
-
-			// 从进度行提取
-			if matches := progressRe.FindStringSubmatch(line); len(matches) > 1 {
-				if p, err := strconv.Atoi(matches[1]); err == nil && p != lastProgress {
-					lastProgress = p
-					progressChan <- p
-					klog.Infof("Progress: %d%%", p)
-				}
-			}
-
-			// 从统计行提取（最终进度）
-			if matches := statsRe.FindStringSubmatch(line); len(matches) > 1 {
-				if p, err := strconv.Atoi(matches[1]); err == nil && p != lastProgress {
-					lastProgress = p
-					progressChan <- p
-					klog.Infof("Final progress: %d%%", p)
+			klog.Infof("Rsync line: %s", line)
+			if matches := re.FindStringSubmatch(line); len(matches) > 1 {
+				if p, err := strconv.ParseFloat(matches[1], 64); err == nil {
+					progressChan <- int(p)
+					klog.Infof("Send progress: %d", int(p))
 				}
 			}
 		}
-
 		if err := scanner.Err(); err != nil {
 			klog.Errorf("Error reading rsync output: %v", err)
 		}
@@ -88,8 +69,6 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	go func() {
 		if err := cmd.Wait(); err != nil {
 			klog.Errorf("Rsync command failed: %v", err)
-		} else {
-			progressChan <- 100 // 确保最终进度为100%
 		}
 	}()
 
