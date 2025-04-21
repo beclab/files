@@ -41,7 +41,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	// 启动一个 goroutine 来执行 ExecuteRsyncSimulated
 	go func() {
 		var err error
-		progressChan, err = ExecuteRsyncSimulated("/data"+task.Source, "/data"+task.Dest)
+		progressChan, err = ExecuteRsync("/data"+task.Source, "/data"+task.Dest)
 		if err != nil {
 			errChan <- err
 		}
