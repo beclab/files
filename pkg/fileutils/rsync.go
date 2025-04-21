@@ -29,7 +29,7 @@ func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
 }
 
 func ExecuteRsync(source, dest string) (chan int, error) {
-	progressChan := make(chan int)
+	progressChan := make(chan int) // 无缓冲通道，确保每次发送都有接收方处理
 	bwLimit := 1024
 
 	stderrReader, stderrWriter := io.Pipe()
@@ -50,11 +50,16 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 		for scanner.Scan() {
 			line := scanner.Text()
+			klog.Infof("Rsync line: %s", line)
 			if matches := re.FindStringSubmatch(line); len(matches) > 1 {
 				if p, err := strconv.ParseFloat(matches[1], 64); err == nil {
+					// 使用 select 确保非阻塞发送
 					select {
-					case progressChan <- int(p): // 确保非阻塞发送
-					default: // 防止进度通道阻塞
+					case progressChan <- int(p): // 成功发送进度
+						klog.Infof("Send progress: %d", int(p))
+					default:
+						// 如果通道已满，可以选择丢弃数据或记录日志（这里选择丢弃）
+						// fmt.Println("Progress channel is full, dropping progress update")
 					}
 				}
 			}
@@ -64,6 +69,12 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		}
 	}()
 
-	go func() { cmd.Wait() }() // 确保 cmd.Wait() 不会阻塞主逻辑
+	// 确保 cmd.Wait() 不会阻塞主逻辑
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			fmt.Printf("Rsync command failed: %v\n", err)
+		}
+	}()
+
 	return progressChan, nil
 }
