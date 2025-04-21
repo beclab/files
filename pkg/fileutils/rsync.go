@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
+	"math"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -52,7 +53,7 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
-		re := regexp.MustCompile(`\b(\d+)%\b`)
+		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
 		for {
 			n, err := reader.Read(buffer)
@@ -60,20 +61,34 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 				output := string(buffer[:n])
 				klog.Infoln("Rsync output:", output)
 
-				// 处理行内更新（\r覆盖的情况）
 				lines := strings.Split(output, "\n")
 				for i, line := range lines {
 					if line != "" {
-						// 如果是最后一行（可能未结束），检查是否包含进度
+						// 处理行尾回车符
 						if i == len(lines)-1 && !strings.HasSuffix(line, "\n") {
 							line = strings.TrimSuffix(line, "\r")
 						}
 
-						if matches := re.FindStringSubmatch(line); len(matches) > 1 {
-							if p, err := strconv.Atoi(matches[1]); err == nil {
-								progressChan <- p
-								klog.Infof("Send progress: %d", p)
+						var matched bool
+
+						// 尝试提取百分比
+						matches := re.FindAllStringSubmatch(line, -1)
+						if len(matches) > 0 {
+							for _, match := range matches {
+								if len(match) > 1 {
+									p := int(math.Floor(parseFloat(match[1])))
+									matched = true
+									progressChan <- p
+									fmt.Printf("Progress: %d%%\n", p)
+									klog.Infof("Send progress: %d", p)
+								}
 							}
+						}
+
+						// 未匹配到百分比时的处理
+						if !matched {
+							fmt.Printf("未匹配到百分比: %s\n", line)
+							klog.Infof("未匹配到百分比: %s", line)
 						}
 					}
 				}
@@ -95,4 +110,13 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	}()
 
 	return progressChan, nil
+}
+
+// 辅助函数：将字符串转换为float64，处理可能的格式问题
+func parseFloat(s string) float64 {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return f
 }
