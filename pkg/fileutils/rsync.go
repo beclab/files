@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -49,26 +50,41 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		defer stdoutWriter.Close()
 		defer close(progressChan)
 
-		scanner := bufio.NewScanner(stdoutReader)
-		// 改进的正则表达式：匹配整数百分比（如"7%"）
+		reader := bufio.NewReader(stdoutReader)
+		buffer := make([]byte, 4096)
 		re := regexp.MustCompile(`\b(\d+)%\b`)
 
-		for scanner.Scan() {
-			line := scanner.Text()
-			klog.Infof("Rsync line: %s", line)
+		for {
+			n, err := reader.Read(buffer)
+			if n > 0 {
+				output := string(buffer[:n])
+				klog.Infoln("Rsync output:", output)
 
-			// 查找所有匹配的百分比（progress2可能有多个进度行）
-			for _, match := range re.FindAllStringSubmatch(line, -1) {
-				if len(match) > 1 {
-					if p, err := strconv.Atoi(match[1]); err == nil {
-						progressChan <- p
-						klog.Infof("Send progress: %d", p)
+				// 处理行内更新（\r覆盖的情况）
+				lines := strings.Split(output, "\n")
+				for i, line := range lines {
+					if line != "" {
+						// 如果是最后一行（可能未结束），检查是否包含进度
+						if i == len(lines)-1 && !strings.HasSuffix(line, "\n") {
+							line = strings.TrimSuffix(line, "\r")
+						}
+
+						if matches := re.FindStringSubmatch(line); len(matches) > 1 {
+							if p, err := strconv.Atoi(matches[1]); err == nil {
+								progressChan <- p
+								klog.Infof("Send progress: %d", p)
+							}
+						}
 					}
 				}
 			}
-		}
-		if err := scanner.Err(); err != nil {
-			klog.Errorf("Error reading rsync output: %v", err)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				klog.Errorf("Error reading rsync output: %v", err)
+				break
+			}
 		}
 	}()
 
