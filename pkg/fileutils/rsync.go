@@ -36,11 +36,14 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
 	cmd.Stdout = stdoutWriter // 关键修改：将输出重定向到stdoutWriter
 
-	err := cmd.Start()
-	if err != nil {
-		stdoutWriter.Close()
-		return nil, fmt.Errorf("failed to start rsync: %v", err)
-	}
+	go func() {
+		err := cmd.Start()
+		if err != nil {
+			stdoutWriter.Close()
+			klog.Errorf("Error starting rsync: %v", err)
+			return
+		}
+	}()
 
 	go func() {
 		defer stdoutWriter.Close()
