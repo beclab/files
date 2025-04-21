@@ -29,28 +29,28 @@ func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
 }
 
 func ExecuteRsync(source, dest string) (chan int, error) {
-	progressChan := make(chan int, 100) // 缓冲区大小为100
+	progressChan := make(chan int, 100)
 	bwLimit := 1024
 
-	stderrReader, stderrWriter := io.Pipe()
+	stdoutReader, stdoutWriter := io.Pipe() // 修改为stdout管道
 	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
-	cmd.Stderr = stderrWriter
+	cmd.Stdout = stdoutWriter // 关键修改：将输出重定向到stdoutWriter
 
 	err := cmd.Start()
 	if err != nil {
-		stderrWriter.Close()
+		stdoutWriter.Close()
 		return nil, fmt.Errorf("failed to start rsync: %v", err)
 	}
 
 	go func() {
-		defer stderrWriter.Close()
+		defer stdoutWriter.Close()
 		defer close(progressChan)
 
-		scanner := bufio.NewScanner(stderrReader)
+		scanner := bufio.NewScanner(stdoutReader) // 扫描stdout
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 		for scanner.Scan() {
 			line := scanner.Text()
-			klog.Infof("Rsync line: %s", line) // 确保这一行被执行
+			klog.Infof("Rsync line: %s", line)
 			if matches := re.FindStringSubmatch(line); len(matches) > 1 {
 				if p, err := strconv.ParseFloat(matches[1], 64); err == nil {
 					progressChan <- int(p)
@@ -68,9 +68,6 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 			klog.Errorf("Rsync command failed: %v", err)
 		}
 	}()
-
-	// 为了调试，可以添加一个短暂的等待来确保 goroutine 有时间启动（通常不需要，但用于调试）
-	// time.Sleep(100 * time.Millisecond)
 
 	return progressChan, nil
 }
