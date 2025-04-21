@@ -41,6 +41,7 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	t.Status = "running"
 	t.Progress = 0
 	t.Log = []string{}
+	TaskManager.Store(t.ID, t)
 	t.mu.Unlock()
 	klog.Infof("~~~Temp log: %v", t)
 
@@ -52,12 +53,14 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 		}
 		t.mu.Lock()
 		t.Progress = processedProgress
+		TaskManager.Store(t.ID, t)
 		t.mu.Unlock()
 		klog.Infof("[%s] %v", t.ID, t)
 	}
 
 	t.mu.Lock()
 	t.Status = "completed"
+	TaskManager.Store(t.ID, t)
 	t.mu.Unlock()
 }
 
