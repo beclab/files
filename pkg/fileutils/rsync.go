@@ -37,11 +37,13 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
 	cmd.Stderr = stderrWriter
 
-	err := cmd.Start()
-	if err != nil {
-		stderrWriter.Close()
-		return nil, fmt.Errorf("failed to start rsync: %v", err)
-	}
+	go func() {
+		err := cmd.Start()
+		if err != nil {
+			stderrWriter.Close()
+			klog.Errorf("Error starting rsync: %v", err)
+		}
+	}()
 
 	go func() {
 		defer stderrWriter.Close()
