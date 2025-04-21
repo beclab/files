@@ -49,15 +49,21 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		defer stdoutWriter.Close()
 		defer close(progressChan)
 
-		scanner := bufio.NewScanner(stdoutReader) // 扫描stdout
-		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
+		scanner := bufio.NewScanner(stdoutReader)
+		// 改进的正则表达式：匹配整数百分比（如"7%"）
+		re := regexp.MustCompile(`\b(\d+)%\b`)
+
 		for scanner.Scan() {
 			line := scanner.Text()
 			klog.Infof("Rsync line: %s", line)
-			if matches := re.FindStringSubmatch(line); len(matches) > 1 {
-				if p, err := strconv.ParseFloat(matches[1], 64); err == nil {
-					progressChan <- int(p)
-					klog.Infof("Send progress: %d", int(p))
+
+			// 查找所有匹配的百分比（progress2可能有多个进度行）
+			for _, match := range re.FindAllStringSubmatch(line, -1) {
+				if len(match) > 1 {
+					if p, err := strconv.Atoi(match[1]); err == nil {
+						progressChan <- p
+						klog.Infof("Send progress: %d", p)
+					}
 				}
 			}
 		}
