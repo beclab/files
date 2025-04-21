@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -35,10 +34,11 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	bwLimit := 1024
 
 	stdoutReader, stdoutWriter := io.Pipe()
-	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
+	cmd := exec.Command("rsync", "-av", "--info=progress2", "--stats", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
 	cmd.Stdout = stdoutWriter
 
-	var buf bytes.Buffer // 新增缓冲区
+	var buf bytes.Buffer
+	var lastProgress int
 
 	go func() {
 		err := cmd.Start()
@@ -54,17 +54,28 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 		defer close(progressChan)
 
 		scanner := bufio.NewScanner(stdoutReader)
-		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
+		progressRe := regexp.MustCompile(`(\d+\.?\d*)%`)
+		statsRe := regexp.MustCompile(`Total.*?(\d+\.?\d*)%`)
 
 		for scanner.Scan() {
 			line := scanner.Text()
-			buf.WriteString(line) // 累积输出到缓冲区
+			buf.WriteString(line + "\n")
 
-			// 尝试从缓冲区提取完整进度行
-			if fullLine := extractFullProgressLine(&buf, re); fullLine != "" {
-				if p, err := parseProgress(fullLine, re); err == nil {
+			// 从进度行提取
+			if matches := progressRe.FindStringSubmatch(line); len(matches) > 1 {
+				if p, err := strconv.Atoi(matches[1]); err == nil && p != lastProgress {
+					lastProgress = p
 					progressChan <- p
-					klog.Infof("Send progress: %d", p)
+					klog.Infof("Progress: %d%%", p)
+				}
+			}
+
+			// 从统计行提取（最终进度）
+			if matches := statsRe.FindStringSubmatch(line); len(matches) > 1 {
+				if p, err := strconv.Atoi(matches[1]); err == nil && p != lastProgress {
+					lastProgress = p
+					progressChan <- p
+					klog.Infof("Final progress: %d%%", p)
 				}
 			}
 		}
@@ -77,35 +88,10 @@ func ExecuteRsync(source, dest string) (chan int, error) {
 	go func() {
 		if err := cmd.Wait(); err != nil {
 			klog.Errorf("Rsync command failed: %v", err)
+		} else {
+			progressChan <- 100 // 确保最终进度为100%
 		}
 	}()
 
 	return progressChan, nil
-}
-
-// extractFullProgressLine 尝试从缓冲区提取完整的进度行
-func extractFullProgressLine(buf *bytes.Buffer, re *regexp.Regexp) string {
-	// 查找最后一个换行符
-	lastNewline := bytes.LastIndex(buf.Bytes(), []byte("\n"))
-	if lastNewline == -1 {
-		return "" // 没有完整行
-	}
-
-	// 提取最后一行
-	line := buf.Bytes()[lastNewline+1:]
-
-	// 检查是否包含完整进度信息
-	if re.Match(line) {
-		return string(line)
-	}
-	return ""
-}
-
-// parseProgress 从完整行解析进度值
-func parseProgress(line string, re *regexp.Regexp) (int, error) {
-	matches := re.FindStringSubmatch(line)
-	if len(matches) > 1 {
-		return strconv.Atoi(strings.TrimSuffix(matches[1], "%"))
-	}
-	return 0, fmt.Errorf("no progress found in line: %s", line)
 }
