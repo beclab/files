@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"context"
 	"files/pkg/errors"
 	"files/pkg/files"
@@ -10,9 +11,11 @@ import (
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func CheckParent(src, dst string) error {
@@ -51,7 +54,147 @@ func AddVersionSuffix(source string, fs afero.Fs, isDir bool) string {
 	return source
 }
 
-func MoveDir(ctx context.Context, fs afero.Fs, source, dest string, fileCache fileutils.FileCache) error {
+func pathExistsInLsOutput(path string, isDir bool) (bool, error) {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+
+	cmd := exec.Command("ls", "-l", dir)
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		klog.Errorf("ls -l %s failed: %v, stderr: %s", path, err, stderr.String())
+	}
+
+	lsOutput := out.String()
+
+	lines := strings.Split(lsOutput, "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		fileType := line[:1]
+
+		parts := strings.Fields(line)
+		if len(parts) < 9 {
+			continue
+		}
+		fileName := parts[len(parts)-1]
+
+		if fileName == base {
+			if fileType == "d" && isDir {
+				return true, nil
+			} else if fileType == "-" && !isDir {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func Rmrf(path string) error {
+	for {
+		cmd := exec.Command("rm", "-rf", path)
+
+		//cmdStr := fmt.Sprintf("%s %s", cmd.Path, strings.Join(cmd.Args[1:], " "))
+		//klog.Infoln("~~~Debug log: Executing command:", cmdStr)
+
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		err := cmd.Run()
+		if err != nil {
+			klog.Infoln("Error executing rm -rf:", err)
+		}
+		//klog.Infoln("Command stdout:", stdout.String())
+		//klog.Infoln("Command stderr:", stderr.String())
+
+		exists, err := pathExistsInLsOutput(path, true)
+		if !exists && err == nil {
+			klog.Infoln("Path successfully removed:", path)
+			return nil
+		} else if err != nil {
+			klog.Infoln("Error checking path existence:", err)
+		} else {
+			klog.Infoln("Path still exists, retrying...")
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func safeRemoveAll(fs afero.Fs, source string) error {
+	// TODO: not used for the time being
+	realPath := filepath.Join(RootPrefix, source)
+	for {
+		klog.Infof("~~~Debug log: Attempting to delete folder %s", realPath)
+
+		err := fs.RemoveAll(source)
+		if err != nil {
+			klog.Errorf("Error attempting to delete folder %s: %v", realPath, err)
+		} else {
+			exists, err := pathExistsInLsOutput(filepath.Join(RootPrefix, source), true)
+			if !exists && err == nil {
+				klog.Infof("Successfully deleted folder %s", realPath)
+				return nil
+			} else if err != nil {
+				klog.Errorf("Error checking folder existence after deletion attempt for %s: %v", realPath, err)
+			} else {
+				klog.Warningf("Folder %s still exists after deletion attempt, retrying...", realPath)
+			}
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func MoveDir(ctx context.Context, fs afero.Fs, source, dest, srcExternalType, dstExternalType string, fileCache fileutils.FileCache, delete bool) error {
+	var err error
+	if delete {
+		// first recursively delete all thumbs
+		err = filepath.Walk(RootPrefix+source, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				file, err := files.NewFileInfo(files.FileOptions{
+					Fs:         files.DefaultFs,
+					Path:       path,
+					Modify:     true,
+					Expand:     false,
+					ReadHeader: false,
+				})
+				if err != nil {
+					return err
+				}
+
+				// delete thumbnails
+				err = preview.DelThumbs(ctx, fileCache, file)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			klog.Infoln("Error walking the directory:", err)
+		} else {
+			klog.Infoln("Directory traversal completed.")
+		}
+	}
+
+	// no matter what situation, try to rename all first
+	if fs.Rename(source, dest) == nil {
+		return nil
+	}
+
+	// if rename all failed, recursively do things below, without delthumbs any more
+
 	// Get properties of source.
 	srcinfo, err := fs.Stat(source)
 	if err != nil {
@@ -78,13 +221,13 @@ func MoveDir(ctx context.Context, fs afero.Fs, source, dest string, fileCache fi
 
 		if obj.IsDir() {
 			// Create sub-directories, recursively.
-			err = MoveDir(ctx, fs, fsource, fdest, fileCache)
+			err = MoveDir(ctx, fs, fsource, fdest, srcExternalType, dstExternalType, fileCache, false)
 			if err != nil {
 				errs = append(errs, err)
 			}
 		} else {
 			// Perform the file copy.
-			err = MoveFile(ctx, fs, fsource, fdest, fileCache)
+			err = MoveFile(ctx, fs, fsource, fdest, fileCache, false)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -97,46 +240,61 @@ func MoveDir(ctx context.Context, fs afero.Fs, source, dest string, fileCache fi
 	}
 
 	if errString != "" {
-		err = fs.Remove(dest)
+		klog.Infof("Rollbacking: Dest ExternalType is %s", dstExternalType)
+		if dstExternalType == "smb" {
+			err = Rmrf(RootPrefix + dest)
+		} else {
+			err = fs.RemoveAll(dest)
+		}
 		if err != nil {
 			errString += err.Error() + "\n"
 		}
 		return fmt.Errorf(errString)
 	}
 
-	err = fs.Remove(source)
-	if err != nil {
-		return err
+	// finally delete all for folder is OK
+	if delete {
+		klog.Infof("Moving is going to Delete folder %s with ExternalType %s", RootPrefix+source, srcExternalType)
+		if srcExternalType == "smb" {
+			err = Rmrf(RootPrefix + source)
+		} else {
+			err = fs.RemoveAll(source)
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func MoveFile(ctx context.Context, fs afero.Fs, src, dst string, fileCache fileutils.FileCache) error {
+func MoveFile(ctx context.Context, fs afero.Fs, src, dst string, fileCache fileutils.FileCache, delete bool) error {
 	src = path.Clean("/" + src)
 	dst = path.Clean("/" + dst)
 
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs,
-		Path:       src,
-		Modify:     true,
-		Expand:     false,
-		ReadHeader: false,
-	})
-	if err != nil {
-		return err
-	}
+	if delete {
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:         files.DefaultFs,
+			Path:       src,
+			Modify:     true,
+			Expand:     false,
+			ReadHeader: false,
+		})
+		if err != nil {
+			return err
+		}
 
-	// delete thumbnails
-	err = preview.DelThumbs(ctx, fileCache, file)
-	if err != nil {
-		return err
+		// delete thumbnails
+		err = preview.DelThumbs(ctx, fileCache, file)
+		if err != nil {
+			return err
+		}
 	}
 
 	return fileutils.MoveFile(fs, src, dst)
 }
 
-func Move(ctx context.Context, fs afero.Fs, src, dst string, fileCache fileutils.FileCache) error {
+func Move(ctx context.Context, fs afero.Fs, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
 	if src = path.Clean("/" + src); src == "" {
 		return os.ErrNotExist
 	}
@@ -160,18 +318,18 @@ func Move(ctx context.Context, fs afero.Fs, src, dst string, fileCache fileutils
 	}
 
 	if info.IsDir() {
-		return MoveDir(ctx, fs, src, dst, fileCache)
+		return MoveDir(ctx, fs, src, dst, srcExternalType, dstExternalType, fileCache, true)
 	}
 
-	return MoveFile(ctx, fs, src, dst, fileCache)
+	return MoveFile(ctx, fs, src, dst, fileCache, true)
 }
 
-func PatchAction(ctx context.Context, action, src, dst string, fileCache fileutils.FileCache) error {
+func PatchAction(ctx context.Context, action, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
 	switch action {
 	case "copy":
 		return fileutils.Copy(files.DefaultFs, src, dst)
 	case "rename":
-		return Move(ctx, files.DefaultFs, src, dst, fileCache)
+		return Move(ctx, files.DefaultFs, src, dst, srcExternalType, dstExternalType, fileCache)
 	default:
 		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
 	}

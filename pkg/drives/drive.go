@@ -25,7 +25,10 @@ type DriveResourceService struct {
 }
 
 func (rs *DriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-	return common.PatchAction(r.Context(), action, src, dst, fileCache)
+	mountedData := GetMountedData(r)
+	srcExternalType := files.GetExternalType(src, mountedData)
+	dstExternalType := files.GetExternalType(dst, mountedData)
+	return common.PatchAction(r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 }
 
 func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
