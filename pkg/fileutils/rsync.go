@@ -31,11 +31,11 @@ func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
 
 func ExecuteRsync(source, dest string) (chan int, error) {
 	progressChan := make(chan int, 100)
-	//bwLimit := 1024
+	bwLimit := 1024
 
 	stdoutReader, stdoutWriter := io.Pipe()
-	//cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
-	cmd := exec.Command("rsync", "-av", "--info=progress2", source, dest)
+	cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
+	//cmd := exec.Command("rsync", "-av", "--info=progress2", source, dest)
 	cmd.Stdout = stdoutWriter
 
 	go func() {
