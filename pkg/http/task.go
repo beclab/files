@@ -24,3 +24,33 @@ func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		"task": t,
 	})
 }
+
+func resourceTaskDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	taskID := r.URL.Query().Get("task_id")
+	var t *pool.Task
+	if storedTask, ok := pool.TaskManager.Load(taskID); ok {
+		// for test
+		if t, ok = storedTask.(*pool.Task); ok {
+			klog.Infof("Task %s Infos: %v\n", t.ID, t)
+			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+		}
+
+		pool.TaskManager.Delete(taskID)
+	}
+
+	// for test
+	if storedTask, ok := pool.TaskManager.Load(taskID); ok {
+		if t, ok = storedTask.(*pool.Task); ok {
+			klog.Infof("Task %s Infos: %v\n", t.ID, t)
+			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+		} else {
+			klog.Infof("After cancel, Task %s Infos: %v\n", t.ID, t)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	return common.RenderJSON(w, r, map[string]interface{}{
+		"code": 0,
+		"msg":  "success",
+	})
+}
