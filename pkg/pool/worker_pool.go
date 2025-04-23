@@ -2,6 +2,7 @@ package pool
 
 import (
 	"context"
+	"fmt"
 	"github.com/alitto/pond/v2"
 	"k8s.io/klog/v2"
 	"sync"
@@ -13,15 +14,24 @@ var (
 )
 
 type Task struct {
-	ID       string
-	Source   string
-	Dest     string
-	Status   string
-	Progress int
-	Log      []string
-	mu       sync.Mutex
-	Ctx      context.Context
-	Cancel   context.CancelFunc
+	ID       string             `json:"id"`
+	Source   string             `json:"source"`
+	Dest     string             `json:"dest"`
+	Status   string             `json:"status"`
+	Progress int                `json:"progress"`
+	Log      []string           `json:"log"`
+	mu       sync.Mutex         `json:"-"`
+	Ctx      context.Context    `json:"-"`
+	Cancel   context.CancelFunc `json:"-"`
+}
+
+type FormattedTask struct {
+	Task
+}
+
+func (ft FormattedTask) String() string {
+	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, Status: %s, Progress: %d, Log: %v",
+		ft.ID, ft.Source, ft.Dest, ft.Status, ft.Progress, ft.Log)
 }
 
 func NewTask(id, source, dest string) *Task {
@@ -49,7 +59,7 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	t.Log = []string{}
 	TaskManager.Store(t.ID, t)
 	t.mu.Unlock()
-	klog.Infof("~~~Temp log: %v", t)
+	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
 
 	for {
 		select {
@@ -74,7 +84,7 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 			t.Progress = processedProgress
 			TaskManager.Store(t.ID, t)
 			t.mu.Unlock()
-			klog.Infof("[%s] %v", t.ID, t)
+			klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
 		}
 	}
 }

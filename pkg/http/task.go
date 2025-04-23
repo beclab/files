@@ -12,7 +12,7 @@ func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 	var t *pool.Task
 	if storedTask, ok := pool.TaskManager.Load(taskID); ok {
 		if t, ok = storedTask.(*pool.Task); ok {
-			klog.Infof("Task %s Infos: %v\n", t.ID, t)
+			klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 		}
 	}
@@ -31,10 +31,10 @@ func resourceTaskDeleteHandler(w http.ResponseWriter, r *http.Request, d *common
 	if storedTask, ok := pool.TaskManager.Load(taskID); ok {
 		// for test
 		if t, ok = storedTask.(*pool.Task); ok {
-			klog.Infof("Task %s Infos: %v\n", t.ID, t)
+			klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 			pool.CancelTask(taskID)
-			klog.Infof("Task %s Infos: %v\n", t.ID, t)
+			klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 		}
 
@@ -44,10 +44,10 @@ func resourceTaskDeleteHandler(w http.ResponseWriter, r *http.Request, d *common
 	// for test
 	if storedTask, ok := pool.TaskManager.Load(taskID); ok {
 		if t, ok = storedTask.(*pool.Task); ok {
-			klog.Infof("Task %s Infos: %v\n", t.ID, t)
+			klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 		} else {
-			klog.Infof("After cancel, Task %s Infos: %v\n", t.ID, t)
+			klog.Infof("After cancel, Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 		}
 	}
 

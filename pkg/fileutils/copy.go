@@ -177,7 +177,7 @@ func Copy(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst string) er
 			// 打印任务进度（模拟外部获取）
 			if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
 				if t, ok := storedTask.(*pool.Task); ok {
-					klog.Infof("Task %s Infos: %v\n", t.ID, t)
+					klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 					fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 				}
 			}
