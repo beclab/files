@@ -145,16 +145,9 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		//return common.ErrToStatus(err), err
 
 		taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-		//task := &pool.Task{
-		//	ID:     taskID,
-		//	Source: src,
-		//	Dest:   dst,
-		//	Status: "pending",
-		//}
 		task := pool.NewTask(taskID, src, dst)
 		pool.TaskManager.Store(taskID, task)
 
-		// 提交任务到任务队列
 		pool.WorkerPool.Submit(func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			pool.TaskManager.Store(taskID, &pool.Task{ID: taskID, Status: "running", Progress: 0})
@@ -177,7 +170,7 @@ func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, s
 	go func() {
 		var err error
 		if same {
-			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
+			err = pasteActionSameArch(ctx, task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
 		} else {
 			err = pasteActionDiffArch(task, r.Context(), action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
 		}
@@ -188,26 +181,6 @@ func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, s
 			klog.Errorln(err)
 		}
 		return
-
-		//// 子任务 1：本地文件复制
-		//err := rsyncCopy(ctx, task.Source, task.Dest, logChan)
-		//if err != nil {
-		//	taskManager.Store(task.ID, &Task{ID: task.ID, Status: "failed", Log: []string{err.Error()}})
-		//	return
-		//}
-		//
-		//// 更新进度
-		//taskManager.Store(task.ID, &Task{ID: task.ID, Status: "running", Progress: 50, Log: append(task.Log, <-logChan)})
-		//
-		//// 子任务 2：调用第三方接口上传
-		//err = uploadToThirdParty(ctx, task.Dest, logChan)
-		//if err != nil {
-		//	taskManager.Store(task.ID, &Task{ID: task.ID, Status: "failed", Log: []string{err.Error()}})
-		//	return
-		//}
-		//
-		//// 更新进度
-		//taskManager.Store(task.ID, &Task{ID: task.ID, Status: "completed", Progress: 100, Log: append(task.Log, <-logChan)})
 	}()
 
 	// 收集日志
@@ -222,6 +195,60 @@ func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, s
 	}
 	return
 }
+
+//func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, srcType, dstType string, rename bool,
+//	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+//	logChan := make(chan string, 100)
+//	defer close(logChan)
+//
+//	go func() {
+//		var err error
+//		if same {
+//			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
+//		} else {
+//			err = pasteActionDiffArch(task, r.Context(), action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
+//		}
+//		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
+//			fmt.Fprintln(w, err.Error())
+//		}
+//		if err != nil {
+//			klog.Errorln(err)
+//		}
+//		return
+//
+//		//// 子任务 1：本地文件复制
+//		//err := rsyncCopy(ctx, task.Source, task.Dest, logChan)
+//		//if err != nil {
+//		//	taskManager.Store(task.ID, &Task{ID: task.ID, Status: "failed", Log: []string{err.Error()}})
+//		//	return
+//		//}
+//		//
+//		//// 更新进度
+//		//taskManager.Store(task.ID, &Task{ID: task.ID, Status: "running", Progress: 50, Log: append(task.Log, <-logChan)})
+//		//
+//		//// 子任务 2：调用第三方接口上传
+//		//err = uploadToThirdParty(ctx, task.Dest, logChan)
+//		//if err != nil {
+//		//	taskManager.Store(task.ID, &Task{ID: task.ID, Status: "failed", Log: []string{err.Error()}})
+//		//	return
+//		//}
+//		//
+//		//// 更新进度
+//		//taskManager.Store(task.ID, &Task{ID: task.ID, Status: "completed", Progress: 100, Log: append(task.Log, <-logChan)})
+//	}()
+//
+//	// 收集日志
+//	for log := range logChan {
+//		if t, ok := pool.TaskManager.Load(task.ID); ok {
+//			if existingTask, ok := t.(*pool.Task); ok {
+//				newTask := *existingTask
+//				newTask.Log = append(newTask.Log, log)
+//				pool.TaskManager.Store(task.ID, &newTask)
+//			}
+//		}
+//	}
+//	return
+//}
 
 func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	// path.Clean, only operate on string level, so it fits every src/dst type.
@@ -270,7 +297,7 @@ func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w h
 	return nil
 }
 
-func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionSameArch(ctx context.Context, task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
 	klog.Infoln("src: ", src, ", dst: ", dst)
 
@@ -279,8 +306,20 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 		return err
 	}
 
-	return handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
+	return handler.PasteSame(ctx, task, action, src, dst, rename, fileCache, w, r)
 }
+
+//func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+//	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
+//	klog.Infoln("src: ", src, ", dst: ", dst)
+//
+//	handler, err := drives.GetResourceService(srcType)
+//	if err != nil {
+//		return err
+//	}
+//
+//	return handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
+//}
 
 func pasteActionDiffArch(task *pool.Task, ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	// In this function, context if tied up to src, because src is in the URL

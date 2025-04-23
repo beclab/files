@@ -1003,7 +1003,7 @@ func (rs *CloudDriveResourceService) PreviewHandler(imgSvc preview.ImgService, f
 	}
 }
 
-func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rc *CloudDriveResourceService) PasteSame(ctx context.Context, task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	switch action {
 	case "copy":
 		metaInfo, err := GetCloudDriveFocusedMetaInfos(src, w, r)

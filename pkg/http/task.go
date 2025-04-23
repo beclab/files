@@ -33,6 +33,9 @@ func resourceTaskDeleteHandler(w http.ResponseWriter, r *http.Request, d *common
 		if t, ok = storedTask.(*pool.Task); ok {
 			klog.Infof("Task %s Infos: %v\n", t.ID, t)
 			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+			pool.CancelTask(taskID)
+			klog.Infof("Task %s Infos: %v\n", t.ID, t)
+			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 		}
 
 		pool.TaskManager.Delete(taskID)

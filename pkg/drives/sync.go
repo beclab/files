@@ -194,7 +194,7 @@ func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 	}
 }
 
-func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rc *SyncResourceService) PasteSame(ctx context.Context, task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	return ResourceSyncPatch(action, src, dst, r)

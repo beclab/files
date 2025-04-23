@@ -41,7 +41,7 @@ type ResourceService interface {
 	PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc
 
 	// paste funcs
-	PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
+	PasteSame(ctx context.Context, task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
 	PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode, w http.ResponseWriter,
 		r *http.Request, driveIdCache map[string]string) error
 	PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
@@ -500,7 +500,7 @@ func (rs *BaseResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 	}
 }
 
-func (rs *BaseResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rs *BaseResourceService) PasteSame(ctx context.Context, task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
 }
 
