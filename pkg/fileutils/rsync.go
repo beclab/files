@@ -7,6 +7,7 @@ import (
 	"io"
 	"k8s.io/klog/v2"
 	"math"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -206,23 +207,24 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 	cmd := exec.CommandContext(ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 256), source, dest)
 	cmd.Stdout = stdoutWriter
 
-	var errOnce sync.Once // 确保错误只发送一次
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
 
 	// 启动命令
 	go func() {
 		if err := cmd.Start(); err != nil {
-			errOnce.Do(func() { errChan <- err })
 			stdoutWriter.Close()
 			return
 		}
 	}()
 
 	// Goroutine: 处理 stdout 并解析进度
+	wg.Add(1)
 	go func() {
-		defer func() {
-			stdoutWriter.Close()
-			close(progressChan)
-		}()
+		defer wg.Done()
+		defer stdoutWriter.Close()
+		defer close(progressChan)
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
@@ -267,26 +269,63 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 				if err == io.EOF {
 					break
 				}
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				break
 			}
-			errOnce.Do(func() { errChan <- err })
-			break
 		}
 	}()
 
-	// Goroutine: 等待命令完成
+	// Goroutine: 等待命令完成并处理错误
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		if err := cmd.Wait(); err != nil {
-			errOnce.Do(func() { errChan <- err })
+			mu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			mu.Unlock()
 		}
 	}()
 
 	// Goroutine: 确保在 context 取消时终止命令
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		<-ctx.Done()
 		if cmd.Process != nil {
-			cmd.Process.Kill()
-			cmd.Process.Wait() // 确保进程完全退出
+			cmd.Process.Signal(os.Interrupt) // 尝试优雅地终止进程
+			done := make(chan error)
+			go func() {
+				done <- cmd.Wait()
+			}()
+			select {
+			case err := <-done:
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			case <-time.After(5 * time.Second): // 等待一段时间后强制终止
+				cmd.Process.Kill()
+				<-done // 确保等待进程退出
+			}
 		}
+	}()
+
+	// 启动一个 goroutine 来将错误发送到 errChan（如果存在）
+	go func() {
+		wg.Wait()
+		mu.Lock()
+		if firstErr != nil {
+			errChan <- firstErr
+		}
+		close(errChan)
+		mu.Unlock()
 	}()
 
 	return progressChan, errChan, nil
