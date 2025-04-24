@@ -51,6 +51,7 @@ type FileInfo struct {
 	Checksums    map[string]string `json:"checksums,omitempty"`
 	Token        string            `json:"token,omitempty"`
 	ExternalType string            `json:"externalType,omitempty"`
+	ReadOnly     *bool             `json:"readOnly,omitempty"`
 }
 
 // FileOptions are the options when getting a file info.
@@ -103,6 +104,7 @@ type DiskInfo struct {
 	InodesUsed        int64   `json:"inodesUsed"`
 	InodesFree        int64   `json:"inodesFree"`
 	InodesUsedPercent float64 `json:"inodesUsedPercent"`
+	ReadOnly          *bool   `json:"read_only,omitempty"`
 }
 
 func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
@@ -139,10 +141,19 @@ func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
 }
 
 func GetExternalType(filePath string, mountedData []DiskInfo) string {
-	fileName := strings.TrimPrefix(strings.TrimSuffix(filePath, "/"), "/")
-	lastSlashIndex := strings.LastIndex(fileName, "/")
-	if lastSlashIndex != -1 {
-		fileName = fileName[lastSlashIndex+1:]
+	if !strings.HasPrefix(filePath, ExternalPrefix) {
+		return ""
+	}
+
+	if mountedData == nil || len(mountedData) == 0 {
+		return "others"
+	}
+
+	fileName := strings.TrimPrefix(strings.TrimSuffix(filePath, "/"), ExternalPrefix)
+
+	firstSlashIndex := strings.Index(fileName, "/")
+	if firstSlashIndex != -1 {
+		fileName = fileName[:firstSlashIndex]
 	}
 
 	for _, mounted := range mountedData {
@@ -152,6 +163,40 @@ func GetExternalType(filePath string, mountedData []DiskInfo) string {
 	}
 
 	return "others"
+}
+
+func GetExternalExtraInfos(file *FileInfo, mountedData []DiskInfo, depth int) {
+	var fileName string
+
+	if depth == 1 {
+		// only for external/XXX (depth=1)
+		fileName = strings.TrimPrefix(strings.TrimSuffix(file.Path, "/"), "/")
+		lastSlashIndex := strings.LastIndex(fileName, "/")
+		if lastSlashIndex != -1 {
+			fileName = fileName[lastSlashIndex+1:]
+		}
+	} else {
+		// for all below external (depth=0 or other non-1 number)
+		fileName = strings.TrimPrefix(strings.TrimSuffix(file.Path, "/"), ExternalPrefix)
+
+		firstSlashIndex := strings.Index(fileName, "/")
+		if firstSlashIndex != -1 {
+			fileName = fileName[:firstSlashIndex]
+		}
+	}
+
+	for _, mounted := range mountedData {
+		if mounted.Path == fileName {
+			file.ExternalType = mounted.Type
+			if mounted.ReadOnly != nil {
+				file.ReadOnly = mounted.ReadOnly
+			}
+			return
+		}
+	}
+
+	file.ExternalType = "others"
+	return
 }
 
 func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
@@ -651,7 +696,8 @@ func (i *FileInfo) readListingWithDiskInfo(readHeader bool, mountedData []DiskIn
 
 		if file.IsDir {
 			if CheckPath(file.Path, ExternalPrefix, "/") {
-				file.ExternalType = GetExternalType(file.Path, mountedData)
+				//if strings.HasPrefix(file.Path, ExternalPrefix) {
+				GetExternalExtraInfos(file, mountedData, 1)
 			}
 			listing.NumDirs++
 		} else {

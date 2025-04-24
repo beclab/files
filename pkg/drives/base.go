@@ -127,23 +127,9 @@ func IsCloudDrives(dstType string) bool {
 	}
 }
 
-type BaseResourceService struct{}
-
-func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	xBflUser := r.Header.Get("X-Bfl-User")
-	klog.Infoln("X-Bfl-User: ", xBflUser)
-
-	streamStr := r.URL.Query().Get("stream")
-	stream := 0
-	var err error = nil
-	if streamStr != "" {
-		stream, err = strconv.Atoi(streamStr)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-	}
-
+func GetMountedData(r *http.Request) []files.DiskInfo {
 	var mountedData []files.DiskInfo = nil
+	var err error = nil
 	if files.TerminusdHost != "" {
 		// for 1.12: path-incluster URL exists, won't err in normal condition
 		// for 1.11: path-incluster URL may not exist, if err, use usb-incluster and hdd-incluster for system functional
@@ -194,6 +180,26 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 		klog.Infoln("Mounted Data:", mountedData)
 	}
+	return mountedData
+}
+
+type BaseResourceService struct{}
+
+func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	xBflUser := r.Header.Get("X-Bfl-User")
+	klog.Infoln("X-Bfl-User: ", xBflUser)
+
+	streamStr := r.URL.Query().Get("stream")
+	stream := 0
+	var err error = nil
+	if streamStr != "" {
+		stream, err = strconv.Atoi(streamStr)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+
+	mountedData := GetMountedData(r)
 
 	var file *files.FileInfo
 	if mountedData != nil {
@@ -250,7 +256,8 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 
 	if file.IsDir {
 		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
-			file.ExternalType = files.GetExternalType(file.Path, mountedData)
+			//if strings.HasPrefix(file.Path, files.ExternalPrefix) {
+			files.GetExternalExtraInfos(file, mountedData, 1)
 		}
 		file.Listing.Sorting = files.DefaultSorting
 		file.Listing.ApplySort()
@@ -412,8 +419,12 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
+		mountedData := GetMountedData(r)
+		srcExternalType := files.GetExternalType(src, mountedData)
+		dstExternalType := files.GetExternalType(dst, mountedData)
+
 		klog.Infoln("Before patch action:", src, dst, action, rename)
-		err = common.PatchAction(r.Context(), action, src, dst, fileCache)
+		err = common.PatchAction(r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 
 		return common.ErrToStatus(err), err
 	}
