@@ -131,12 +131,26 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		pool.TaskManager.Store(taskID, task)
 
 		pool.WorkerPool.Submit(func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			pool.TaskManager.Store(taskID, &pool.Task{ID: taskID, Status: "running", Progress: 0})
-			executePasteTask(ctx, &pool.Task{ID: taskID, Source: src, Dest: dst, Log: task.Log},
-				same, action, srcType, dstType, rename, d, fileCache, w, r)
-			cancel()
+			if loadedTask, ok := pool.TaskManager.Load(taskID); ok {
+				if concreteTask, ok := loadedTask.(*pool.Task); ok {
+					concreteTask.Status = "running"
+					concreteTask.Progress = 0
+
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+
+					executePasteTask(ctx, concreteTask, same, action, srcType, dstType, rename, d, fileCache, w, r)
+				}
+			}
 		})
+
+		//pool.WorkerPool.Submit(func() {
+		//	ctx, cancel := context.WithCancel(context.Background())
+		//	pool.TaskManager.Store(taskID, &pool.Task{ID: taskID, Status: "running", Progress: 0})
+		//	executePasteTask(ctx, &pool.Task{ID: taskID, Source: src, Dest: dst, Log: task.Log},
+		//		same, action, srcType, dstType, rename, d, fileCache, w, r)
+		//	cancel()
+		//})
 
 		//w.Header().Set("Content-Type", "application/json")
 		//json.NewEncoder(w).Encode(map[string]string{"task_id": taskID})

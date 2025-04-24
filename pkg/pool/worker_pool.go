@@ -53,12 +53,12 @@ func ProcessProgress(progress, progressType int) int {
 
 func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
-	t.mu.Lock()
-	t.Status = "running"
-	t.Progress = 0
-	t.Log = []string{}
-	TaskManager.Store(t.ID, t)
-	t.mu.Unlock()
+	//t.mu.Lock()
+	//t.Status = "running"
+	//t.Progress = 0
+	//t.Log = []string{}
+	//TaskManager.Store(t.ID, t)
+	//t.mu.Unlock()
 	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
 
 	for {
