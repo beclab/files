@@ -129,9 +129,7 @@ func IsCloudDrives(dstType string) bool {
 }
 
 func GetMountedData() []files.DiskInfo {
-	// return value is for unpredictable using in the future which is originally used but not used after URI path unified
-
-	//var mountedData []files.DiskInfo = nil
+	var mountedData []files.DiskInfo = nil
 	var err error = nil
 	if files.TerminusdHost != "" {
 		// for 1.12: path-incluster URL exists, won't err in normal condition
@@ -202,7 +200,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	GetMountedData()
+	mountedData := GetMountedData()
 
 	var file *files.FileInfo
 	if mountedData != nil {
@@ -422,7 +420,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
-		GetMountedData()
+		mountedData := GetMountedData()
 		srcExternalType := files.GetExternalType(src, mountedData)
 		dstExternalType := files.GetExternalType(dst, mountedData)
 
