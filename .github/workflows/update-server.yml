@@ -11,7 +11,7 @@ on:
       - "main"
       - "dev"
       - "test"
-      - "copy_test"
+      - "copy_task"
     tags:
       - 'v*'
 
