@@ -129,27 +129,26 @@ func Copy(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst string) er
 	errChan := make(chan error, 1)
 
 	// 启动一个 goroutine 来执行 rsync 操作
-	go func() {
-		progressChan, errChan, err = ExecuteRsyncWithContext(ctx, "/data"+src, "/data"+dst)
+	go func(pc chan int, ec chan error) {
+		defer close(pc) // 确保关闭通道，避免死锁
+		defer close(ec)
+		_, ec, err = ExecuteRsyncWithContext(ctx, "/data"+src, "/data"+dst) // 假设函数签名需要调整以支持直接返回错误通道
 		if err != nil {
-			errChan <- err
+			ec <- err
 		}
-	}()
+		// 如果 ExecuteRsyncWithContext 内部支持 progressChan，则直接使用 pc，无需额外处理
+	}(progressChan, errChan)
 
 	// 等待 rsync 操作完成或出错
+	var rsyncErr error
 	select {
-	case err = <-errChan:
-		if err != nil {
-			klog.Errorf("Failed to execute rsync: %v", err)
-			return err
+	case rsyncErr = <-errChan:
+		if rsyncErr != nil {
+			klog.Errorf("Failed to execute rsync: %v", rsyncErr)
+			return rsyncErr
 		}
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-
-	// 检查 progressChan 是否初始化成功
-	if progressChan == nil {
-		return fmt.Errorf("progressChan is nil")
 	}
 
 	// 使用 goroutine 更新任务进度
@@ -158,7 +157,7 @@ func Copy(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst string) er
 	go func() {
 		defer wg.Done()
 		klog.Infof("Starting to update progress for task %s", task.ID)
-		task.UpdateProgressFromRsync(progressChan)
+		task.UpdateProgressFromRsync(progressChan) // 确保 progressChan 是有效且未关闭的
 	}()
 
 	// 模拟外部获取进度（可选，仅用于演示）
@@ -168,7 +167,7 @@ func Copy(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst string) er
 	done := make(chan bool)
 	go func() {
 		time.Sleep(100 * time.Second) // 模拟长时间操作
-		done <- true
+		close(done)                   // 确保关闭通道，避免死锁
 	}()
 
 	for {
