@@ -342,17 +342,35 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
+	var cmdDone = make(chan struct{})
 
-	// 启动命令（移除立即关闭的逻辑）
+	// 启动命令
 	go func() {
-		cmd.Start() // 错误处理移到后续流程
+		defer close(cmdDone)
+		if err := cmd.Start(); err != nil {
+			mu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			mu.Unlock()
+			stdoutWriter.Close()
+			return
+		}
+		if err := cmd.Wait(); err != nil {
+			mu.Lock()
+			if firstErr == nil {
+				firstErr = err
+			}
+			mu.Unlock()
+		}
+		stdoutWriter.Close()
 	}()
 
 	// 处理stdout的goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer close(progressChan) // 最终关闭通道
+		defer close(progressChan)
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
@@ -378,9 +396,13 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 								if len(match) > 1 {
 									p := int(math.Floor(parseFloat(match[1])))
 									matched = true
-									progressChan <- p
-									fmt.Printf("Progress: %d%%\n", p)
-									klog.Infof("Send progress: %d", p)
+									select {
+									case progressChan <- p:
+										fmt.Printf("Progress: %d%%\n", p)
+										klog.Infof("Send progress: %d", p)
+									default:
+										klog.Warningf("Progress channel full, dropping %d%%", p)
+									}
 								}
 							}
 						}
@@ -404,21 +426,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 		}
 	}()
 
-	// Goroutine: 等待命令完成并处理错误
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := cmd.Wait(); err != nil {
-			mu.Lock()
-			if firstErr == nil {
-				firstErr = err
-			}
-			mu.Unlock()
-		}
-		stdoutWriter.Close() // 命令完成后关闭写入端
-	}()
-
-	// Goroutine: 确保在 context 取消时终止命令
+	// 取消处理goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -436,7 +444,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 				<-done
 			}
 		}
-		stdoutWriter.Close() // 取消时关闭写入端
+		stdoutWriter.Close()
 	}()
 
 	// 错误处理goroutine
@@ -448,5 +456,11 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 		}
 	}()
 
+	// 命令执行状态监控
+	go func() {
+		<-cmdDone
+		stdoutWriter.Close()
+	}()
+	
 	return progressChan, errChan, nil
 }
