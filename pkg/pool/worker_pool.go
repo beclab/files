@@ -52,7 +52,7 @@ func ProcessProgress(progress, progressType int) int {
 	return progress
 }
 
-func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
+func (t *Task) UpdateProgressFromRsync(progressChan chan int, logChan chan string) {
 	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
 	t.mu.Lock()
 	t.Status = "running"
@@ -81,6 +81,17 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
 			return
+		case log, ok := <-logChan:
+			if ok {
+				klog.Infof("[%s] %s", t.ID, log)
+				t.mu.Lock()
+				t.Logging(log)
+				TaskManager.Store(t.ID, t)
+				t.mu.Unlock()
+				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+			} else {
+				// logChan is not ok, won't return. All controlled by progressChan
+			}
 		case progress, ok := <-progressChan:
 			if !ok {
 				// 通道关闭，任务完成

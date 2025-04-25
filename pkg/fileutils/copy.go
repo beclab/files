@@ -125,12 +125,13 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	klog.Infof("copy %v from %s to %s", info, src, dst)
 
 	var progressChan chan int // 假设 progressChan 是 int 类型的通道
-	var errChan chan error    // 用于接收 ExecuteRsyncSimulated 的错误
+	var logChan chan string
+	var errChan chan error // 用于接收 ExecuteRsyncSimulated 的错误
 
 	// 启动一个 goroutine 来执行 ExecuteRsyncSimulated
 	go func() {
 		var err error
-		progressChan, errChan, err = ExecuteRsyncWithContext(task.Ctx, "/data"+task.Source, "/data"+task.Dest)
+		progressChan, logChan, errChan, err = ExecuteRsyncWithContext(task.Ctx, "/data"+task.Source, "/data"+task.Dest)
 		if err != nil {
 			// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
 			fmt.Printf("Failed to initialize rsync: %v\n", err)
@@ -158,7 +159,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	go func() {
 		defer wg.Done()
 		klog.Infof("~~~Temp log: copy %v from %s to %s, will update progress", info, src, dst)
-		task.UpdateProgressFromRsync(progressChan)
+		task.UpdateProgressFromRsync(progressChan, logChan)
 	}()
 
 	// 等待 goroutine 完成

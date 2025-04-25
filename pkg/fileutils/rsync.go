@@ -331,8 +331,9 @@ func parseFloat(s string) float64 {
 //	return progressChan, errChan, nil
 //}
 
-func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan error, error) {
+func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan string, chan error, error) {
 	progressChan := make(chan int, 100)
+	logChan := make(chan string, 100)
 	errChan := make(chan error, 1)
 	stdoutReader, stdoutWriter := io.Pipe()
 
@@ -371,6 +372,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 	go func() {
 		defer wg.Done()
 		defer close(progressChan)
+		defer close(logChan)
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
@@ -387,6 +389,12 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 					if line != "" {
 						if i == len(lines)-1 && !strings.HasSuffix(line, "\n") {
 							line = strings.TrimSuffix(line, "\r")
+						}
+						select {
+						case logChan <- line:
+							klog.Infof("Send Log: %s", line)
+						default:
+							klog.Warningf("Log channel full, dropping %s%%", line)
 						}
 
 						var matched bool
@@ -461,6 +469,6 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 		<-cmdDone
 		stdoutWriter.Close()
 	}()
-	
-	return progressChan, errChan, nil
+
+	return progressChan, logChan, errChan, nil
 }
