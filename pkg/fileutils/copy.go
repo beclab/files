@@ -1,7 +1,6 @@
 package fileutils
 
 import (
-	"context"
 	"files/pkg/pool"
 	"fmt"
 	"github.com/spf13/afero"
@@ -102,7 +101,7 @@ import (
 //}
 
 // Copy copies a file or folder from one place to another.
-func Copy(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst string) error {
+func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	if src = path.Clean("/" + src); src == "" {
 		return os.ErrNotExist
 	}
@@ -131,7 +130,7 @@ func Copy(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst string) er
 	// 启动一个 goroutine 来执行 ExecuteRsyncSimulated
 	go func() {
 		var err error
-		progressChan, errChan, err = ExecuteRsyncWithContext(ctx, "/data"+task.Source, "/data"+task.Dest)
+		progressChan, errChan, err = ExecuteRsyncWithContext(task.Ctx, "/data"+task.Source, "/data"+task.Dest)
 		if err != nil {
 			// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
 			fmt.Printf("Failed to initialize rsync: %v\n", err)

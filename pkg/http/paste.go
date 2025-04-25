@@ -136,10 +136,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 					concreteTask.Status = "running"
 					concreteTask.Progress = 0
 
-					//ctx, cancel := context.WithCancel(context.Background())
-					//defer cancel()
-
-					executePasteTask(concreteTask.Ctx, concreteTask, same, action, srcType, dstType, rename, d, fileCache, w, r)
+					executePasteTask(concreteTask, same, action, srcType, dstType, rename, d, fileCache, w, r)
 				}
 			}
 		})
@@ -158,7 +155,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 	}
 }
 
-func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, srcType, dstType string, rename bool,
+func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
 	logChan := make(chan string, 100)
 	defer close(logChan)
@@ -166,7 +163,7 @@ func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, s
 	go func() {
 		var err error
 		if same {
-			err = pasteActionSameArch(ctx, task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
+			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
 		} else {
 			err = pasteActionDiffArch(task, r.Context(), action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
 		}
@@ -293,7 +290,7 @@ func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w h
 	return nil
 }
 
-func pasteActionSameArch(ctx context.Context, task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
 	klog.Infoln("src: ", src, ", dst: ", dst)
 
@@ -302,7 +299,7 @@ func pasteActionSameArch(ctx context.Context, task *pool.Task, action, srcType, 
 		return err
 	}
 
-	return handler.PasteSame(ctx, task, action, src, dst, rename, fileCache, w, r)
+	return handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
 }
 
 //func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {

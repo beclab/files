@@ -328,7 +328,7 @@ func Move(ctx context.Context, fs afero.Fs, src, dst, srcExternalType, dstExtern
 func PatchAction(task *pool.Task, ctx context.Context, action, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
 	switch action {
 	case "copy":
-		return fileutils.Copy(ctx, files.DefaultFs, task, src, dst)
+		return fileutils.Copy(files.DefaultFs, task, src, dst)
 	case "rename":
 		return Move(ctx, files.DefaultFs, src, dst, srcExternalType, dstExternalType, fileCache)
 	default:
