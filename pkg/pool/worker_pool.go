@@ -6,6 +6,7 @@ import (
 	"github.com/alitto/pond/v2"
 	"k8s.io/klog/v2"
 	"sync"
+	"time"
 )
 
 var (
@@ -53,18 +54,22 @@ func ProcessProgress(progress, progressType int) int {
 
 func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
-	//t.mu.Lock()
-	//t.Status = "running"
-	//t.Progress = 0
-	//t.Log = []string{}
-	//TaskManager.Store(t.ID, t)
-	//t.mu.Unlock()
+	t.mu.Lock()
+	t.Status = "running"
+	t.Progress = 0
+	t.Log = []string{}
+	TaskManager.Store(t.ID, t)
+	t.mu.Unlock()
 	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
 
+	timeout := time.After(24 * time.Hour) // 合理超时时间
 	for {
 		select {
 		case <-t.Ctx.Done():
 			klog.Infof("Task %s cancelled", t.ID)
+			return
+		case <-timeout:
+			klog.Errorf("Task %s timeout", t.ID)
 			return
 		case progress, ok := <-progressChan:
 			if !ok {

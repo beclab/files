@@ -199,6 +199,138 @@ func parseFloat(s string) float64 {
 //	return progressChan, errChan, nil
 //}
 
+//func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan error, error) {
+//	progressChan := make(chan int, 100)
+//	errChan := make(chan error, 1)
+//	stdoutReader, stdoutWriter := io.Pipe()
+//
+//	cmd := exec.CommandContext(ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 256), source, dest)
+//	cmd.Stdout = stdoutWriter
+//
+//	var wg sync.WaitGroup
+//	var mu sync.Mutex
+//	var firstErr error
+//
+//	// 启动命令
+//	go func() {
+//		if err := cmd.Start(); err != nil {
+//			stdoutWriter.Close()
+//			return
+//		}
+//	}()
+//
+//	// Goroutine: 处理 stdout 并解析进度
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		defer stdoutWriter.Close()
+//		defer close(progressChan)
+//
+//		reader := bufio.NewReader(stdoutReader)
+//		buffer := make([]byte, 4096)
+//		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
+//
+//		for {
+//			n, err := reader.Read(buffer)
+//			if n > 0 {
+//				output := string(buffer[:n])
+//				klog.Infoln("Rsync output:", output)
+//
+//				lines := strings.Split(output, "\n")
+//				for i, line := range lines {
+//					if line != "" {
+//						if i == len(lines)-1 && !strings.HasSuffix(line, "\n") {
+//							line = strings.TrimSuffix(line, "\r")
+//						}
+//
+//						var matched bool
+//
+//						matches := re.FindAllStringSubmatch(line, -1)
+//						if len(matches) > 0 {
+//							for _, match := range matches {
+//								if len(match) > 1 {
+//									p := int(math.Floor(parseFloat(match[1])))
+//									matched = true
+//									progressChan <- p
+//									fmt.Printf("Progress: %d%%\n", p)
+//									klog.Infof("Send progress: %d", p)
+//								}
+//							}
+//						}
+//
+//						if !matched {
+//							klog.Infof("No percent info in: %s", line)
+//						}
+//					}
+//				}
+//			}
+//			if err != nil {
+//				klog.Errorf("Error reading rsync output: %v", err)
+//				if err == io.EOF {
+//					break
+//				}
+//				mu.Lock()
+//				if firstErr == nil {
+//					firstErr = err
+//				}
+//				mu.Unlock()
+//				break
+//			}
+//		}
+//	}()
+//
+//	// Goroutine: 等待命令完成并处理错误
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		if err := cmd.Wait(); err != nil {
+//			mu.Lock()
+//			if firstErr == nil {
+//				firstErr = err
+//			}
+//			mu.Unlock()
+//		}
+//	}()
+//
+//	// Goroutine: 确保在 context 取消时终止命令
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		<-ctx.Done()
+//		if cmd.Process != nil {
+//			cmd.Process.Signal(os.Interrupt) // 尝试优雅地终止进程
+//			done := make(chan error)
+//			go func() {
+//				done <- cmd.Wait()
+//			}()
+//			select {
+//			case err := <-done:
+//				mu.Lock()
+//				if firstErr == nil {
+//					firstErr = err
+//				}
+//				mu.Unlock()
+//			case <-time.After(5 * time.Second): // 等待一段时间后强制终止
+//				cmd.Process.Kill()
+//				<-done // 确保等待进程退出
+//			}
+//		}
+//	}()
+//
+//	// 启动一个 goroutine 来将错误发送到 errChan（如果存在）
+//	go func() {
+//		wg.Wait()
+//		mu.Lock()
+//		if firstErr != nil {
+//			errChan <- firstErr
+//		}
+//		close(errChan)
+//		mu.Unlock()
+//	}()
+//
+//	return progressChan, errChan, nil
+//}
+
 func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan error, error) {
 	progressChan := make(chan int, 100)
 	errChan := make(chan error, 1)
@@ -223,8 +355,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer stdoutWriter.Close()
-		defer close(progressChan)
+		defer close(progressChan) // 确保通道最终会被关闭
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
@@ -244,7 +375,6 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 						}
 
 						var matched bool
-
 						matches := re.FindAllStringSubmatch(line, -1)
 						if len(matches) > 0 {
 							for _, match := range matches {
@@ -277,6 +407,8 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 				break
 			}
 		}
+		// 显式关闭stdoutWriter确保管道另一端能检测到EOF
+		stdoutWriter.Close()
 	}()
 
 	// Goroutine: 等待命令完成并处理错误
@@ -290,6 +422,8 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 			}
 			mu.Unlock()
 		}
+		// 命令完成后显式关闭管道
+		stdoutWriter.Close()
 	}()
 
 	// Goroutine: 确保在 context 取消时终止命令
@@ -298,7 +432,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 		defer wg.Done()
 		<-ctx.Done()
 		if cmd.Process != nil {
-			cmd.Process.Signal(os.Interrupt) // 尝试优雅地终止进程
+			cmd.Process.Signal(os.Interrupt)
 			done := make(chan error)
 			go func() {
 				done <- cmd.Wait()
@@ -310,14 +444,16 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 					firstErr = err
 				}
 				mu.Unlock()
-			case <-time.After(5 * time.Second): // 等待一段时间后强制终止
+			case <-time.After(5 * time.Second):
 				cmd.Process.Kill()
-				<-done // 确保等待进程退出
+				<-done
 			}
 		}
+		// 取消时也关闭管道
+		stdoutWriter.Close()
 	}()
 
-	// 启动一个 goroutine 来将错误发送到 errChan（如果存在）
+	// 启动错误处理goroutine
 	go func() {
 		wg.Wait()
 		mu.Lock()
