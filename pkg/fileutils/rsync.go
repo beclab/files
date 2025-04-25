@@ -343,19 +343,16 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 	var mu sync.Mutex
 	var firstErr error
 
-	// 启动命令
+	// 启动命令（移除立即关闭的逻辑）
 	go func() {
-		if err := cmd.Start(); err != nil {
-			stdoutWriter.Close()
-			return
-		}
+		cmd.Start() // 错误处理移到后续流程
 	}()
 
-	// Goroutine: 处理 stdout 并解析进度
+	// 处理stdout的goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer close(progressChan) // 确保通道最终会被关闭
+		defer close(progressChan) // 最终关闭通道
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
@@ -395,20 +392,16 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 				}
 			}
 			if err != nil {
-				klog.Errorf("Error reading rsync output: %v", err)
-				if err == io.EOF {
-					break
+				if err != io.EOF {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = err
+					}
+					mu.Unlock()
 				}
-				mu.Lock()
-				if firstErr == nil {
-					firstErr = err
-				}
-				mu.Unlock()
 				break
 			}
 		}
-		// 显式关闭stdoutWriter确保管道另一端能检测到EOF
-		stdoutWriter.Close()
 	}()
 
 	// Goroutine: 等待命令完成并处理错误
@@ -422,8 +415,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 			}
 			mu.Unlock()
 		}
-		// 命令完成后显式关闭管道
-		stdoutWriter.Close()
+		stdoutWriter.Close() // 命令完成后关闭写入端
 	}()
 
 	// Goroutine: 确保在 context 取消时终止命令
@@ -438,30 +430,22 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 				done <- cmd.Wait()
 			}()
 			select {
-			case err := <-done:
-				mu.Lock()
-				if firstErr == nil {
-					firstErr = err
-				}
-				mu.Unlock()
+			case <-done:
 			case <-time.After(5 * time.Second):
 				cmd.Process.Kill()
 				<-done
 			}
 		}
-		// 取消时也关闭管道
-		stdoutWriter.Close()
+		stdoutWriter.Close() // 取消时关闭写入端
 	}()
 
-	// 启动错误处理goroutine
+	// 错误处理goroutine
 	go func() {
 		wg.Wait()
-		mu.Lock()
+		close(errChan)
 		if firstErr != nil {
 			errChan <- firstErr
 		}
-		close(errChan)
-		mu.Unlock()
 	}()
 
 	return progressChan, errChan, nil

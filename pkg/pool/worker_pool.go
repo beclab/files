@@ -63,11 +63,21 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int) {
 	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
 
 	timeout := time.After(24 * time.Hour) // 合理超时时间
+
+	lastHeartbeat := time.Now()
+	heartbeatTicker := time.NewTicker(30 * time.Second)
+	defer heartbeatTicker.Stop()
+
 	for {
 		select {
 		case <-t.Ctx.Done():
 			klog.Infof("Task %s cancelled", t.ID)
 			return
+		case <-heartbeatTicker.C:
+			if time.Since(lastHeartbeat) > 45*time.Second {
+				klog.Errorf("Task %s heartbeat lost", t.ID)
+				return
+			}
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
 			return
