@@ -136,10 +136,10 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 					concreteTask.Status = "running"
 					concreteTask.Progress = 0
 
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
+					//ctx, cancel := context.WithCancel(context.Background())
+					//defer cancel()
 
-					executePasteTask(ctx, concreteTask, same, action, srcType, dstType, rename, d, fileCache, w, r)
+					executePasteTask(concreteTask.Ctx, concreteTask, same, action, srcType, dstType, rename, d, fileCache, w, r)
 				}
 			}
 		})
