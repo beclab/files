@@ -24,6 +24,7 @@ type Task struct {
 	mu       sync.Mutex         `json:"-"`
 	Ctx      context.Context    `json:"-"`
 	Cancel   context.CancelFunc `json:"-"`
+	timer    *time.Timer        // 新增定时器字段
 }
 
 type FormattedTask struct {
@@ -37,7 +38,7 @@ func (ft FormattedTask) String() string {
 
 func NewTask(id, source, dest string) *Task {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Task{
+	task := &Task{
 		ID:     id,
 		Source: source,
 		Dest:   dest,
@@ -45,6 +46,13 @@ func NewTask(id, source, dest string) *Task {
 		Ctx:    ctx,
 		Cancel: cancel,
 	}
+
+	// 新增6小时过期逻辑
+	task.timer = time.AfterFunc(6*time.Hour, func() {
+		task.Cancel()
+		TaskManager.Delete(task.ID) // 从TaskManager删除
+	})
+	return task
 }
 
 func ProcessProgress(progress, progressType int) int {
@@ -139,6 +147,12 @@ func CancelTask(taskID string) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
 			t.Cancel()
+			if t.timer != nil {
+				t.timer.Stop() // 停止定时器防止泄漏
+			}
+
+			// after cancel, delete info
+			TaskManager.Delete(taskID)
 			// 可选：等待任务资源清理或执行其他清理逻辑
 			klog.Infof("Task %s has been cancelled", taskID)
 		}
