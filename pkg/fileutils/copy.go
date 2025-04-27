@@ -124,6 +124,14 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	}
 	klog.Infof("copy %v from %s to %s", info, src, dst)
 
+	if task == nil {
+		if info.IsDir() {
+			return CopyDir(fs, src, dst)
+		}
+
+		return CopyFile(fs, src, dst)
+	}
+
 	var progressChan chan int // 假设 progressChan 是 int 类型的通道
 	var logChan chan string
 	var errChan chan error // 用于接收 ExecuteRsyncSimulated 的错误
