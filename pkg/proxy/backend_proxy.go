@@ -304,7 +304,10 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 			if strings.HasSuffix(firstHalf, pvc) {
 				return path
 			}
-			if splitName == "/Home" || splitName == "/home" {
+			if splitName == "/Home" {
+				return filepath.Join(firstHalf, pvc+secondHalf)
+			} else if splitName == "/home" {
+				secondHalf = "/Home" + strings.TrimPrefix(path[externalIndex:], "/home")
 				return filepath.Join(firstHalf, pvc+secondHalf)
 			} else {
 				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
@@ -313,6 +316,9 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 		}
 	} else {
 		pathSuffix := strings.TrimPrefix(path, prefix)
+		if strings.HasSuffix(prefix, "/cache") {
+			prefix = strings.TrimSuffix(prefix, "/cache") + "/AppData"
+		}
 		if strings.HasPrefix(pathSuffix, "/"+pvc) {
 			return path
 		}
