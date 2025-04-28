@@ -307,7 +307,7 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 			if splitName == "/Home" {
 				return filepath.Join(firstHalf, pvc+secondHalf)
 			} else if splitName == "/home" {
-				secondHalf = "/Home" + strings.TrimPrefix(path[externalIndex:], "/home")
+				secondHalf = "/Home" + strings.TrimPrefix(path[splitIndex:], "/home")
 				return filepath.Join(firstHalf, pvc+secondHalf)
 			} else {
 				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
