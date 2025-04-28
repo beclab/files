@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -570,14 +571,66 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 		return
 	}()
 
-	for log := range logChan {
-		if t, ok := pool.TaskManager.Load(task.ID); ok {
-			if existingTask, ok := t.(*pool.Task); ok {
-				newTask := *existingTask
-				newTask.Log = append(newTask.Log, log)
-				pool.TaskManager.Store(task.ID, &newTask)
+	// 等待 ExecuteRsyncSimulated 完成或出错
+	select {
+	case err := <-task.ErrChan:
+		if err != nil {
+			fmt.Printf("Failed to execute rsync: %v\n", err)
+			return
+		}
+	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
+		fmt.Println("ExecuteRsyncWithContext took too long to start, proceeding assuming no initial error.")
+	}
+
+	if task.ProgressChan == nil {
+		klog.Error("progressChan is nil")
+		return
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
+		task.UpdateProgress()
+	}()
+
+	// 等待 goroutine 完成
+	//wg.Wait()
+
+	// 模拟外部获取进度
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	done := make(chan bool)
+	go func() {
+		time.Sleep(100 * time.Second) // 模拟一些其他操作
+		done <- true
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
+				if t, ok := storedTask.(*pool.Task); ok {
+					klog.Infof("Task %s Infos: %v\n", t.ID, t)
+					fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+				}
 			}
+		case <-done:
+			klog.Infoln("Operation completed or stopped.")
+			return
 		}
 	}
-	return
+
+	//for log := range logChan {
+	//	if t, ok := pool.TaskManager.Load(task.ID); ok {
+	//		if existingTask, ok := t.(*pool.Task); ok {
+	//			newTask := *existingTask
+	//			newTask.Log = append(newTask.Log, log)
+	//			pool.TaskManager.Store(task.ID, &newTask)
+	//		}
+	//	}
+	//}
+	//return
 }

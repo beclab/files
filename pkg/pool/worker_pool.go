@@ -28,7 +28,10 @@ type Task struct {
 	mu             sync.Mutex
 	Ctx            context.Context    `json:"-"`
 	Cancel         context.CancelFunc `json:"-"`
-	timer          *time.Timer        // 新增定时器字段
+	LogChan        chan string
+	ProgressChan   chan int
+	ErrChan        chan error
+	timer          *time.Timer // 新增定时器字段
 }
 
 type FormattedTask struct {
@@ -53,10 +56,16 @@ func NewTask(id, source, dest, srcType, dstType string) *Task {
 		RelationNode:   "",
 		Ctx:            ctx,
 		Cancel:         cancel,
+		LogChan:        make(chan string, 100),
+		ProgressChan:   make(chan int, 100),
+		ErrChan:        make(chan error, 10),
 	}
 
 	// 新增6小时过期逻辑
 	task.timer = time.AfterFunc(6*time.Hour, func() {
+		close(task.ErrChan)
+		close(task.LogChan)
+		close(task.ProgressChan)
 		task.Cancel()
 		TaskManager.Delete(task.ID) // 从TaskManager删除
 	})
@@ -68,7 +77,7 @@ func ProcessProgress(progress, progressType int) int {
 	return progress
 }
 
-func (t *Task) UpdateProgressFromRsync(progressChan chan int, logChan chan string) {
+func (t *Task) UpdateProgress() {
 	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
 	t.mu.Lock()
 	t.Status = "running"
@@ -97,7 +106,7 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int, logChan chan strin
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
 			return
-		case log, ok := <-logChan:
+		case log, ok := <-t.LogChan:
 			if ok {
 				klog.Infof("[%s] %s", t.ID, log)
 				t.mu.Lock()
@@ -108,7 +117,7 @@ func (t *Task) UpdateProgressFromRsync(progressChan chan int, logChan chan strin
 			} else {
 				// logChan is not ok, won't return. All controlled by progressChan
 			}
-		case progress, ok := <-progressChan:
+		case progress, ok := <-t.ProgressChan:
 			if !ok {
 				// 通道关闭，任务完成
 				t.mu.Lock()
@@ -154,6 +163,9 @@ func (t *Task) GetProgress() int {
 func CancelTask(taskID string) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
+			close(t.ErrChan)
+			close(t.LogChan)
+			close(t.ProgressChan)
 			t.Cancel()
 			if t.timer != nil {
 				t.timer.Stop() // 停止定时器防止泄漏

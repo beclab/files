@@ -2,7 +2,7 @@ package fileutils
 
 import (
 	"bufio"
-	"context"
+	"files/pkg/pool"
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
@@ -331,13 +331,15 @@ func parseFloat(s string) float64 {
 //	return progressChan, errChan, nil
 //}
 
-func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan string, chan error, error) {
-	progressChan := make(chan int, 100)
-	logChan := make(chan string, 100)
-	errChan := make(chan error, 1)
+// func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan string, chan error, error) {
+func ExecuteRsyncWithContext(task *pool.Task) error {
+	//progressChan := make(chan int, 100)
+	//logChan := make(chan string, 100)
+	//errChan := make(chan error, 1)
 	stdoutReader, stdoutWriter := io.Pipe()
 
-	cmd := exec.CommandContext(ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 256), source, dest)
+	cmd := exec.CommandContext(task.Ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 256),
+		"/data"+task.Source, "/data"+task.Dest)
 	cmd.Stdout = stdoutWriter
 
 	var wg sync.WaitGroup
@@ -371,8 +373,8 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer close(progressChan)
-		defer close(logChan)
+		//defer close(progressChan)
+		//defer close(logChan)
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
@@ -391,7 +393,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 							line = strings.TrimSuffix(line, "\r")
 						}
 						select {
-						case logChan <- line:
+						case task.LogChan <- line:
 							klog.Infof("Send Log: %s", line)
 						default:
 							klog.Warningf("Log channel full, dropping %s%%", line)
@@ -405,7 +407,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 									p := int(math.Floor(parseFloat(match[1])))
 									matched = true
 									select {
-									case progressChan <- p:
+									case task.ProgressChan <- p:
 										fmt.Printf("Progress: %d%%\n", p)
 										klog.Infof("Send progress: %d", p)
 									default:
@@ -438,7 +440,7 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		<-ctx.Done()
+		<-task.Ctx.Done()
 		if cmd.Process != nil {
 			cmd.Process.Signal(os.Interrupt)
 			done := make(chan error)
@@ -458,9 +460,9 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 	// 错误处理goroutine
 	go func() {
 		wg.Wait()
-		close(errChan)
+		//close(errChan)
 		if firstErr != nil {
-			errChan <- firstErr
+			task.ErrChan <- firstErr
 		}
 	}()
 
@@ -470,5 +472,5 @@ func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int
 		stdoutWriter.Close()
 	}()
 
-	return progressChan, logChan, errChan, nil
+	return nil
 }
