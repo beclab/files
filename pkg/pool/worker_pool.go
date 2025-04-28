@@ -106,17 +106,17 @@ func (t *Task) UpdateProgress() {
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
 			return
-		case log, ok := <-t.LogChan:
-			if ok {
-				klog.Infof("[%s] %s", t.ID, log)
-				t.mu.Lock()
-				t.Logging(log)
-				TaskManager.Store(t.ID, t)
-				t.mu.Unlock()
-				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-			} else {
-				// logChan is not ok, won't return. All controlled by progressChan
-			}
+		//case log, ok := <-t.LogChan:
+		//	if ok {
+		//		klog.Infof("[%s] %s", t.ID, log)
+		//		t.mu.Lock()
+		//		t.Logging(log)
+		//		TaskManager.Store(t.ID, t)
+		//		t.mu.Unlock()
+		//		klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+		//	} else {
+		//		// logChan is not ok, won't return. All controlled by progressChan
+		//	}
 		case progress, ok := <-t.ProgressChan:
 			if !ok {
 				// 通道关闭，任务完成
