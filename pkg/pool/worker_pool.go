@@ -62,13 +62,13 @@ func NewTask(id, source, dest, srcType, dstType string) *Task {
 	}
 
 	// 新增6小时过期逻辑
-	//task.timer = time.AfterFunc(6*time.Hour, func() {
-	//	close(task.ErrChan)
-	//	close(task.LogChan)
-	//	close(task.ProgressChan)
-	//	task.Cancel()
-	//	TaskManager.Delete(task.ID) // 从TaskManager删除
-	//})
+	task.timer = time.AfterFunc(6*time.Hour, func() {
+		close(task.ErrChan)
+		close(task.LogChan)
+		close(task.ProgressChan)
+		task.Cancel()
+		TaskManager.Delete(task.ID) // 从TaskManager删除
+	})
 	return task
 }
 
