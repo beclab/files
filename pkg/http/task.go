@@ -21,7 +21,7 @@ func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 	return common.RenderJSON(w, r, map[string]interface{}{
 		"code": 0,
 		"msg":  "success",
-		"task": t,
+		"task": pool.FormattedTask{Task: *t},
 	})
 }
 
