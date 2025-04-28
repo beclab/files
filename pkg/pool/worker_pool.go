@@ -106,17 +106,20 @@ func (t *Task) UpdateProgress() {
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
 			return
-		//case log, ok := <-t.LogChan:
-		//	if ok {
-		//		klog.Infof("[%s] %s", t.ID, log)
-		//		t.mu.Lock()
-		//		t.Logging(log)
-		//		TaskManager.Store(t.ID, t)
-		//		t.mu.Unlock()
-		//		klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-		//	} else {
-		//		// logChan is not ok, won't return. All controlled by progressChan
-		//	}
+		case log, ok := <-t.LogChan:
+			if !ok {
+				// 通道关闭，可以记录日志或直接退出
+				klog.Infof("Task %s log channel closed", t.ID)
+				break
+			}
+
+			klog.Infof("[%s] %s", t.ID, log)
+			t.mu.Lock()
+			t.Logging(log)
+			TaskManager.Store(t.ID, t)
+			t.mu.Unlock()
+			klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+
 		case progress, ok := <-t.ProgressChan:
 			if !ok {
 				// 通道关闭，任务完成
@@ -136,6 +139,10 @@ func (t *Task) UpdateProgress() {
 			TaskManager.Store(t.ID, t)
 			t.mu.Unlock()
 			klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+			
+		default:
+			// 避免完全阻塞，可以添加短暂休眠
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 }
