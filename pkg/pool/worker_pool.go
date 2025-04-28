@@ -28,10 +28,10 @@ type Task struct {
 	mu             sync.Mutex
 	Ctx            context.Context    `json:"-"`
 	Cancel         context.CancelFunc `json:"-"`
-	LogChan        chan string
-	ProgressChan   chan int
-	ErrChan        chan error
-	timer          *time.Timer // 新增定时器字段
+	LogChan        chan string        `json:"-"`
+	ProgressChan   chan int           `json:"-"`
+	ErrChan        chan error         `json:"-"`
+	timer          *time.Timer        // 新增定时器字段
 }
 
 type FormattedTask struct {
