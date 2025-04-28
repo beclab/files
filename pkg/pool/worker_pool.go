@@ -114,11 +114,11 @@ func (t *Task) UpdateProgress() {
 			}
 
 			klog.Infof("[%s] %s", t.ID, log)
-			t.mu.Lock()
-			t.Logging(log)
-			TaskManager.Store(t.ID, t)
-			t.mu.Unlock()
-			klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+			//t.mu.Lock()
+			//t.Logging(log)
+			//TaskManager.Store(t.ID, t)
+			//t.mu.Unlock()
+			//klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
 
 		case progress, ok := <-t.ProgressChan:
 			if !ok {
@@ -139,7 +139,7 @@ func (t *Task) UpdateProgress() {
 			TaskManager.Store(t.ID, t)
 			t.mu.Unlock()
 			klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-			
+
 		default:
 			// 避免完全阻塞，可以添加短暂休眠
 			time.Sleep(10 * time.Millisecond)
