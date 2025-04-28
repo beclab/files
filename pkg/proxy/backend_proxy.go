@@ -442,13 +442,13 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		klog.Infoln("SRC_TYPE:", srcType)
 		klog.Infoln("DST_TYPE:", dstType)
 
-		if srcType == drives.SrcTypeDrive {
+		if srcType == drives.SrcTypeDrive || srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
 			src = rewriteUrl(src, userPvc, "")
 		} else if srcType == drives.SrcTypeCache {
 			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
 		}
 
-		if dstType == drives.SrcTypeDrive {
+		if dstType == drives.SrcTypeDrive || dstType == drives.SrcTypeData || dstType == drives.SrcTypeExternal {
 			dst = rewriteUrl(dst, userPvc, "")
 			query.Set("destination", dst)
 		} else if dstType == drives.SrcTypeCache {
