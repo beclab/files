@@ -127,7 +127,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		//return common.ErrToStatus(err), err
 
 		taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-		task := pool.NewTask(taskID, src, dst)
+		task := pool.NewTask(taskID, src, dst, srcType, dstType)
 		pool.TaskManager.Store(taskID, task)
 
 		pool.WorkerPool.Submit(func() {
@@ -177,15 +177,15 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 	}()
 
 	// 收集日志
-	for log := range logChan {
-		if t, ok := pool.TaskManager.Load(task.ID); ok {
-			if existingTask, ok := t.(*pool.Task); ok {
-				newTask := *existingTask
-				newTask.Log = append(newTask.Log, log)
-				pool.TaskManager.Store(task.ID, &newTask)
-			}
-		}
-	}
+	//for log := range logChan {
+	//	if t, ok := pool.TaskManager.Load(task.ID); ok {
+	//		if existingTask, ok := t.(*pool.Task); ok {
+	//			newTask := *existingTask
+	//			newTask.Log = append(newTask.Log, log)
+	//			pool.TaskManager.Store(task.ID, &newTask)
+	//		}
+	//	}
+	//}
 	return
 }
 
@@ -299,7 +299,12 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 		return err
 	}
 
-	return handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
+	err = handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
+	if err != nil {
+		return err
+	}
+	pool.TaskManager.Store(task.ID, task)
+	return nil
 }
 
 //func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {

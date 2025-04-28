@@ -26,7 +26,7 @@ type CacheResourceService struct {
 }
 
 func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-	patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&rename=" + strconv.FormatBool(rename)
+	patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&rename=" + strconv.FormatBool(rename) + "&task=1"
 	method := "PATCH"
 	payload := []byte(``)
 	klog.Infoln(patchUrl)
@@ -45,10 +45,22 @@ func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string,
 	}
 	defer res.Body.Close()
 
-	_, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
+	var response struct {
+		TaskID string `json:"task_id"`
 	}
+
+	if err = json.NewDecoder(res.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to parse task_id: %v", err)
+	}
+
+	//_, err = ioutil.ReadAll(res.Body)
+	//if err != nil {
+	//	return err
+	//}
+
+	task.RelationTaskID = response.TaskID
+	xTerminusNode := r.Header.Get("X-Terminus-Node")
+	task.RelationNode = xTerminusNode
 	return nil
 }
 

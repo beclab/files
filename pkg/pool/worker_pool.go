@@ -15,16 +15,20 @@ var (
 )
 
 type Task struct {
-	ID       string             `json:"id"`
-	Source   string             `json:"source"`
-	Dest     string             `json:"dest"`
-	Status   string             `json:"status"`
-	Progress int                `json:"progress"`
-	Log      []string           `json:"log"`
-	mu       sync.Mutex         `json:"-"`
-	Ctx      context.Context    `json:"-"`
-	Cancel   context.CancelFunc `json:"-"`
-	timer    *time.Timer        // 新增定时器字段
+	ID             string   `json:"id"`
+	Source         string   `json:"source"`
+	Dest           string   `json:"dest"`
+	SrcType        string   `json:"src_type"`
+	DstType        string   `json:"dst_type"`
+	Status         string   `json:"status"`
+	Progress       int      `json:"progress"`
+	Log            []string `json:"log"`
+	RelationTaskID string   `json:"relation_task_id"` // only for same cache now
+	RelationNode   string   `json:"relation_node"`    // only for same cache now (for get task progress and cancel task)
+	mu             sync.Mutex
+	Ctx            context.Context    `json:"-"`
+	Cancel         context.CancelFunc `json:"-"`
+	timer          *time.Timer        // 新增定时器字段
 }
 
 type FormattedTask struct {
@@ -32,19 +36,23 @@ type FormattedTask struct {
 }
 
 func (ft FormattedTask) String() string {
-	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, Status: %s, Progress: %d, Log: %v",
-		ft.ID, ft.Source, ft.Dest, ft.Status, ft.Progress, ft.Log)
+	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, SrcType: %s, DstType: %s, Status: %s, Progress: %d, Log: %v, RelationTaskID: %s, RelationNode: %s",
+		ft.ID, ft.Source, ft.Dest, ft.SrcType, ft.DstType, ft.Status, ft.Progress, ft.Log, ft.RelationTaskID, ft.RelationNode)
 }
 
-func NewTask(id, source, dest string) *Task {
+func NewTask(id, source, dest, srcType, dstType string) *Task {
 	ctx, cancel := context.WithCancel(context.Background())
 	task := &Task{
-		ID:     id,
-		Source: source,
-		Dest:   dest,
-		Status: "pending",
-		Ctx:    ctx,
-		Cancel: cancel,
+		ID:             id,
+		Source:         source,
+		Dest:           dest,
+		SrcType:        srcType,
+		DstType:        dstType,
+		Status:         "pending",
+		RelationTaskID: "",
+		RelationNode:   "",
+		Ctx:            ctx,
+		Cancel:         cancel,
 	}
 
 	// 新增6小时过期逻辑

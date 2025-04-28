@@ -425,8 +425,38 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 		dstExternalType := files.GetExternalType(dst, mountedData)
 
 		klog.Infoln("Before patch action:", src, dst, action, rename)
-		err = common.PatchAction(nil, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 
+		needTaskStr := r.URL.Query().Get("task")
+		needTask := 0
+		if needTaskStr != "" {
+			needTask, err = strconv.Atoi(needTaskStr)
+			if err != nil {
+				klog.Errorln(err)
+				needTask = 0
+			}
+		}
+
+		var task *pool.Task = nil
+		if needTask != 0 {
+			// only for cache now
+			taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
+			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache)
+			pool.TaskManager.Store(taskID, task)
+
+			pool.WorkerPool.Submit(func() {
+				if loadedTask, ok := pool.TaskManager.Load(taskID); ok {
+					if concreteTask, ok := loadedTask.(*pool.Task); ok {
+						concreteTask.Status = "running"
+						concreteTask.Progress = 0
+
+						executePatchTask(concreteTask, action, SrcTypeCache, SrcTypeCache, rename, d, fileCache, w, r)
+					}
+				}
+			})
+			return common.RenderJSON(w, r, map[string]string{"task_id": taskID})
+		}
+
+		err = common.PatchAction(nil, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 		return common.ErrToStatus(err), err
 	}
 }
@@ -519,4 +549,35 @@ func (rs *BaseResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 func (rs *BaseResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
+}
+
+func executePatchTask(task *pool.Task, action, srcType, dstType string, rename bool,
+	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+	// only for cache
+	logChan := make(chan string, 100)
+	defer close(logChan)
+
+	go func() {
+		var err error
+		err = common.PatchAction(task, task.Ctx, action, task.Source, task.Dest, "", "", fileCache)
+
+		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
+			fmt.Fprintln(w, err.Error())
+		}
+		if err != nil {
+			klog.Errorln(err)
+		}
+		return
+	}()
+
+	for log := range logChan {
+		if t, ok := pool.TaskManager.Load(task.ID); ok {
+			if existingTask, ok := t.(*pool.Task); ok {
+				newTask := *existingTask
+				newTask.Log = append(newTask.Log, log)
+				pool.TaskManager.Store(task.ID, &newTask)
+			}
+		}
+	}
+	return
 }
