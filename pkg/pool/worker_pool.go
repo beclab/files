@@ -130,7 +130,8 @@ func (t *Task) UpdateProgress() {
 			}
 
 			klog.Infof("[%s] %s with log count %d", t.ID, log, len(logs))
-			logs = append(logs, log)
+			//logs = append(logs, log)
+			t.Log = append(t.Log, log)
 			//t.mu.Lock()
 			//t.Logging(log)
 			//TaskManager.Store(t.ID, t)
