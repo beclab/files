@@ -98,7 +98,9 @@ func (t *Task) UpdateProgress() {
 	for {
 		select {
 		case <-t.Ctx.Done():
+			t.mu.Lock()
 			for _, log := range logs {
+				klog.Infof("~~~Temp log: logging {%s}", log)
 				t.Log = append(t.Log, log)
 			}
 			if t.Progress < 100 {
@@ -107,6 +109,7 @@ func (t *Task) UpdateProgress() {
 				t.Status = "completed"
 			}
 			TaskManager.Store(t.ID, t)
+			t.mu.Unlock()
 			klog.Infof("Task %s cancelled", t.ID)
 			return
 		case <-heartbeatTicker.C:
@@ -124,7 +127,7 @@ func (t *Task) UpdateProgress() {
 				break
 			}
 
-			klog.Infof("[%s] %s", t.ID, log)
+			klog.Infof("[%s] %s with log count %d", t.ID, log, len(logs))
 			logs = append(logs, log)
 			//t.mu.Lock()
 			//t.Logging(log)
@@ -138,6 +141,7 @@ func (t *Task) UpdateProgress() {
 				t.mu.Lock()
 				t.Status = "completed"
 				for _, log := range logs {
+					klog.Infof("~~~Temp log: logging {%s}", log)
 					t.Log = append(t.Log, log)
 				}
 				TaskManager.Store(t.ID, t)
