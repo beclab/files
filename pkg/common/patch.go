@@ -401,6 +401,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 	// TODO: temp not Rename for test
 	if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
 		task.ProgressChan <- 100
+		task.ProgressChan <- 100
 		return nil
 	}
 
@@ -427,6 +428,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 			klog.Errorf("Failed to remove %v: %v", task.Source, err)
 			return
 		}
+		task.ProgressChan <- 100
 		task.ProgressChan <- 100
 	}()
 	return nil

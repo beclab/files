@@ -174,19 +174,19 @@ func (t *Task) UpdateProgress() {
 				processedProgress = progress //ProcessProgress(progress, 0)
 			}
 
-			//if t.Progress == 100 && processedProgress == 100 {
-			//	CancelTask(t.ID, false)
-			//} else {
-			t.mu.Lock()
-			t.Progress = processedProgress
-			TaskManager.Store(t.ID, t)
-			t.mu.Unlock()
-			klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-			//}
-
-			if t.Progress == 100 {
+			if t.Progress == 100 && processedProgress == 100 {
 				CancelTask(t.ID, false)
+			} else {
+				t.mu.Lock()
+				t.Progress = processedProgress
+				TaskManager.Store(t.ID, t)
+				t.mu.Unlock()
+				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
 			}
+
+			//if t.Progress == 100 {
+			//	CancelTask(t.ID, false)
+			//}
 
 		default:
 			// 避免完全阻塞，可以添加短暂休眠
