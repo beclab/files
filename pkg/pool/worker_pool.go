@@ -155,11 +155,16 @@ func (t *Task) UpdateProgress() {
 			if progress > 0 {
 				processedProgress = ProcessProgress(progress, 0)
 			}
-			t.mu.Lock()
-			t.Progress = processedProgress
-			TaskManager.Store(t.ID, t)
-			t.mu.Unlock()
-			klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+
+			if t.Progress == 100 && processedProgress == 100 {
+				CancelTask(t.ID, false)
+			} else {
+				t.mu.Lock()
+				t.Progress = processedProgress
+				TaskManager.Store(t.ID, t)
+				t.mu.Unlock()
+				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+			}
 
 		default:
 			// 避免完全阻塞，可以添加短暂休眠
@@ -188,7 +193,7 @@ func (t *Task) GetProgress() int {
 }
 
 // CancelTask 取消任务
-func CancelTask(taskID string) {
+func CancelTask(taskID string, delete bool) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
 			close(t.ErrChan)
@@ -200,9 +205,13 @@ func CancelTask(taskID string) {
 			}
 
 			// after cancel, delete info
-			TaskManager.Delete(taskID)
-			// 可选：等待任务资源清理或执行其他清理逻辑
-			klog.Infof("Task %s has been cancelled", taskID)
+			if delete {
+				TaskManager.Delete(taskID)
+				// 可选：等待任务资源清理或执行其他清理逻辑
+				klog.Infof("Task %s has been cancelled", taskID)
+			} else {
+				klog.Infof("Task %s has completed", taskID)
+			}
 		}
 	} else {
 		klog.Infof("Task %s not found", taskID)

@@ -34,7 +34,7 @@ func resourceTaskDeleteHandler(w http.ResponseWriter, r *http.Request, d *common
 		if t, ok = storedTask.(*pool.Task); ok {
 			klog.Infof("~~~Debug log: before cancel Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 			klog.Infof("~~~Debug log: before cancel Task %s Progress: %d%%\n", t.ID, t.GetProgress())
-			pool.CancelTask(taskID)
+			pool.CancelTask(taskID, false)
 			klog.Infof("~~~Debug log: after cancel Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 			klog.Infof("~~~Debug log: after cancel Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 		}
