@@ -99,10 +99,12 @@ func (t *Task) UpdateProgress() {
 		select {
 		case <-t.Ctx.Done():
 			for _, log := range logs {
-				t.Logging(log)
+				t.Log = append(t.Log, log)
 			}
 			if t.Progress < 100 {
 				t.Status = "cancelled"
+			} else {
+				t.Status = "completed"
 			}
 			TaskManager.Store(t.ID, t)
 			klog.Infof("Task %s cancelled", t.ID)
@@ -136,7 +138,7 @@ func (t *Task) UpdateProgress() {
 				t.mu.Lock()
 				t.Status = "completed"
 				for _, log := range logs {
-					t.Logging(log)
+					t.Log = append(t.Log, log)
 				}
 				TaskManager.Store(t.ID, t)
 				t.mu.Unlock()
