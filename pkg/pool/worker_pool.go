@@ -52,6 +52,8 @@ func NewTask(id, source, dest, srcType, dstType string) *Task {
 		SrcType:        srcType,
 		DstType:        dstType,
 		Status:         "pending",
+		Progress:       0,
+		Log:            make([]string, 0),
 		RelationTaskID: "",
 		RelationNode:   "",
 		Ctx:            ctx,

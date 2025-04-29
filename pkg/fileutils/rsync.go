@@ -373,8 +373,8 @@ func ExecuteRsyncWithContext(task *pool.Task) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		//defer close(progressChan)
-		//defer close(logChan)
+		defer close(task.ProgressChan)
+		defer close(task.LogChan)
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
