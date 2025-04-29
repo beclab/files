@@ -74,9 +74,26 @@ func NewTask(id, source, dest, srcType, dstType string) *Task {
 	return task
 }
 
-func ProcessProgress(progress, progressType int) int {
-	// TODO: 根据 progressType 处理进度
-	return progress
+func ProcessProgress(progress, lowerBound, upperBound int) int {
+	// 确保下限小于等于上限
+	if lowerBound > upperBound {
+		lowerBound, upperBound = upperBound, lowerBound
+	}
+
+	// 确保 progress 在默认范围 0~100 之间
+	if progress < 0 {
+		progress = 0
+	} else if progress > 100 {
+		progress = 100
+	}
+
+	// 计算缩放比例
+	scale := float64(upperBound-lowerBound) / 100.0
+
+	// 计算缩放后的值，并向下取整
+	scaledProgress := lowerBound + int(float64(progress)*scale)
+
+	return scaledProgress
 }
 
 func (t *Task) UpdateProgress() {
@@ -154,17 +171,21 @@ func (t *Task) UpdateProgress() {
 			klog.Infof("[%s] %d", t.ID, progress)
 			processedProgress := 0
 			if progress > 0 {
-				processedProgress = ProcessProgress(progress, 0)
+				processedProgress = progress //ProcessProgress(progress, 0)
 			}
 
-			if t.Progress == 100 && processedProgress == 100 {
+			//if t.Progress == 100 && processedProgress == 100 {
+			//	CancelTask(t.ID, false)
+			//} else {
+			t.mu.Lock()
+			t.Progress = processedProgress
+			TaskManager.Store(t.ID, t)
+			t.mu.Unlock()
+			klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+			//}
+
+			if t.Progress == 100 {
 				CancelTask(t.ID, false)
-			} else {
-				t.mu.Lock()
-				t.Progress = processedProgress
-				TaskManager.Store(t.ID, t)
-				t.mu.Unlock()
-				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
 			}
 
 		default:

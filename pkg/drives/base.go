@@ -596,32 +596,32 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 	}()
 
 	// 等待 goroutine 完成
-	//wg.Wait()
+	wg.Wait()
 
 	// 模拟外部获取进度
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	done := make(chan bool)
-	go func() {
-		time.Sleep(100 * time.Second) // 模拟一些其他操作
-		done <- true
-	}()
-
-	for {
-		select {
-		case <-ticker.C:
-			if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
-				if t, ok := storedTask.(*pool.Task); ok {
-					klog.Infof("Task %s Infos: %v\n", t.ID, t)
-					fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
-				}
-			}
-		case <-done:
-			klog.Infoln("Operation completed or stopped.")
-			return
-		}
-	}
+	//ticker := time.NewTicker(1 * time.Second)
+	//defer ticker.Stop()
+	//
+	//done := make(chan bool)
+	//go func() {
+	//	time.Sleep(100 * time.Second) // 模拟一些其他操作
+	//	done <- true
+	//}()
+	//
+	//for {
+	//	select {
+	//	case <-ticker.C:
+	//		if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
+	//			if t, ok := storedTask.(*pool.Task); ok {
+	//				klog.Infof("Task %s Infos: %v\n", t.ID, t)
+	//				fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+	//			}
+	//		}
+	//	case <-done:
+	//		klog.Infoln("Operation completed or stopped.")
+	//		return
+	//	}
+	//}
 
 	//for log := range logChan {
 	//	if t, ok := pool.TaskManager.Load(task.ID); ok {

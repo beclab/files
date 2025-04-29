@@ -2,6 +2,7 @@ package fileutils
 
 import (
 	"bufio"
+	"files/pkg/common"
 	"files/pkg/pool"
 	"fmt"
 	"io"
@@ -32,7 +33,7 @@ func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
 	return progressChan, nil
 }
 
-func ExecuteRsync(source, dest string) (chan int, error) {
+func ExecuteRsyncBase(source, dest string) (chan int, error) {
 	progressChan := make(chan int, 100)
 	bwLimit := 1024
 
@@ -332,14 +333,14 @@ func parseFloat(s string) float64 {
 //}
 
 // func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan string, chan error, error) {
-func ExecuteRsyncWithContext(task *pool.Task) error {
+func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	//progressChan := make(chan int, 100)
 	//logChan := make(chan string, 100)
 	//errChan := make(chan error, 1)
 	stdoutReader, stdoutWriter := io.Pipe()
 
 	cmd := exec.CommandContext(task.Ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 256),
-		"/data"+task.Source, "/data"+task.Dest)
+		common.RootPrefix+task.Source, common.RootPrefix+task.Dest)
 	cmd.Stdout = stdoutWriter
 
 	var wg sync.WaitGroup
@@ -405,6 +406,7 @@ func ExecuteRsyncWithContext(task *pool.Task) error {
 							for _, match := range matches {
 								if len(match) > 1 {
 									p := int(math.Floor(parseFloat(match[1])))
+									p = pool.ProcessProgress(p, progressLeft, progressRight)
 									matched = true
 									select {
 									case task.ProgressChan <- p:
