@@ -2,7 +2,6 @@ package fileutils
 
 import (
 	"bufio"
-	"files/pkg/common"
 	"files/pkg/pool"
 	"fmt"
 	"io"
@@ -16,6 +15,14 @@ import (
 	"sync"
 	"time"
 )
+
+var RootPrefix = os.Getenv("ROOT_PREFIX")
+
+func init() {
+	if RootPrefix == "" {
+		RootPrefix = "/data"
+	}
+}
 
 func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
 	progressChan := make(chan int, 10)
@@ -340,7 +347,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	stdoutReader, stdoutWriter := io.Pipe()
 
 	cmd := exec.CommandContext(task.Ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 256),
-		common.RootPrefix+task.Source, common.RootPrefix+task.Dest)
+		RootPrefix+task.Source, RootPrefix+task.Dest)
 	cmd.Stdout = stdoutWriter
 
 	var wg sync.WaitGroup
