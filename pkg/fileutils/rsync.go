@@ -460,7 +460,7 @@ func ExecuteRsyncWithContext(task *pool.Task) error {
 	// 错误处理goroutine
 	go func() {
 		wg.Wait()
-		//close(errChan)
+		defer close(task.ErrChan)
 		if firstErr != nil {
 			task.ErrChan <- firstErr
 		}
