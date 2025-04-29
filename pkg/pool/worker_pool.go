@@ -93,9 +93,18 @@ func (t *Task) UpdateProgress() {
 	heartbeatTicker := time.NewTicker(30 * time.Second)
 	defer heartbeatTicker.Stop()
 
+	var logs []string = []string{}
+
 	for {
 		select {
 		case <-t.Ctx.Done():
+			for _, log := range logs {
+				t.Logging(log)
+			}
+			if t.Progress < 100 {
+				t.Status = "cancelled"
+			}
+			TaskManager.Store(t.ID, t)
 			klog.Infof("Task %s cancelled", t.ID)
 			return
 		case <-heartbeatTicker.C:
@@ -114,6 +123,7 @@ func (t *Task) UpdateProgress() {
 			}
 
 			klog.Infof("[%s] %s", t.ID, log)
+			logs = append(logs, log)
 			//t.mu.Lock()
 			//t.Logging(log)
 			//TaskManager.Store(t.ID, t)
@@ -125,6 +135,9 @@ func (t *Task) UpdateProgress() {
 				// 通道关闭，任务完成
 				t.mu.Lock()
 				t.Status = "completed"
+				for _, log := range logs {
+					t.Logging(log)
+				}
 				TaskManager.Store(t.ID, t)
 				t.mu.Unlock()
 				return
