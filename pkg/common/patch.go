@@ -399,11 +399,10 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 
 	// no matter what situation, try to rename all first
 	// TODO: temp not Rename for test
-	if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
-		task.ProgressChan <- 100
-		task.ProgressChan <- 100
-		return nil
-	}
+	//if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
+	//	task.ProgressChan <- 200
+	//	return nil
+	//}
 
 	// if rename all failed, recursively do things below, without delthumbs any more
 
@@ -428,8 +427,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 			klog.Errorf("Failed to remove %v: %v", task.Source, err)
 			return
 		}
-		task.ProgressChan <- 100
-		task.ProgressChan <- 100
+		task.ProgressChan <- 200
 	}()
 	return nil
 }

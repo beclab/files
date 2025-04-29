@@ -169,24 +169,31 @@ func (t *Task) UpdateProgress() {
 				return
 			}
 			klog.Infof("[%s] %d", t.ID, progress)
-			processedProgress := 0
-			if progress > 0 {
-				processedProgress = progress //ProcessProgress(progress, 0)
-			}
-
-			if t.Progress == 100 && processedProgress == 100 {
-				CancelTask(t.ID, false)
-			} else {
+			if progress == 200 {
+				// 200 is for manual single finish
 				t.mu.Lock()
-				t.Progress = processedProgress
+				t.Progress = 100
+				t.Status = "completed"
 				TaskManager.Store(t.ID, t)
 				t.mu.Unlock()
 				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-			}
+				CancelTask(t.ID, false)
+			} else {
+				processedProgress := 0
+				if progress > 0 {
+					processedProgress = progress //ProcessProgress(progress, 0)
+				}
 
-			//if t.Progress == 100 {
-			//	CancelTask(t.ID, false)
-			//}
+				if t.Progress == 100 && processedProgress == 100 {
+					CancelTask(t.ID, false)
+				} else {
+					t.mu.Lock()
+					t.Progress = processedProgress
+					TaskManager.Store(t.ID, t)
+					t.mu.Unlock()
+					klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+				}
+			}
 
 		default:
 			// 避免完全阻塞，可以添加短暂休眠
