@@ -187,7 +187,21 @@ func (t *Task) UpdateProgress() {
 				TaskManager.Store(t.ID, t)
 				t.mu.Unlock()
 				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-				go func() {
+				select {
+				case <-time.After(time.Second):
+					CancelTask(t.ID, false)
+				case <-t.LogChan:
+					CancelTask(t.ID, false)
+				case <-t.ErrChan:
+					CancelTask(t.ID, false)
+				}
+			} else {
+				processedProgress := 0
+				if progress > 0 {
+					processedProgress = progress //ProcessProgress(progress, 0)
+				}
+
+				if t.Progress == 100 && processedProgress == 100 {
 					select {
 					case <-time.After(time.Second):
 						CancelTask(t.ID, false)
@@ -196,24 +210,6 @@ func (t *Task) UpdateProgress() {
 					case <-t.ErrChan:
 						CancelTask(t.ID, false)
 					}
-				}()
-			} else {
-				processedProgress := 0
-				if progress > 0 {
-					processedProgress = progress //ProcessProgress(progress, 0)
-				}
-
-				if t.Progress == 100 && processedProgress == 100 {
-					go func() {
-						select {
-						case <-time.After(time.Second):
-							CancelTask(t.ID, false)
-						case <-t.LogChan:
-							CancelTask(t.ID, false)
-						case <-t.ErrChan:
-							CancelTask(t.ID, false)
-						}
-					}()
 				} else {
 					t.mu.Lock()
 					t.Progress = processedProgress
