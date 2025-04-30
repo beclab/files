@@ -101,6 +101,10 @@ func ProcessProgress(progress, lowerBound, upperBound int) int {
 }
 
 func (t *Task) UpdateProgress() {
+	if t.Status == "completed" {
+		return
+	}
+
 	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
 	t.mu.Lock()
 	t.Status = "running"
