@@ -471,7 +471,12 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 		wg.Wait()
 		//defer close(task.ErrChan)
 		if firstErr != nil {
-			task.ErrChan <- firstErr
+			select {
+			case task.ErrChan <- firstErr: // 尝试发送数据
+			default: // 如果通道已关闭或满，执行其他逻辑
+				klog.Errorf("Rsync command failed: %v", firstErr)
+				// 处理通道关闭或满的情况
+			}
 		}
 	}()
 
