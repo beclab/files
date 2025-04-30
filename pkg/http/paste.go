@@ -158,8 +158,8 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 
 func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
-	logChan := make(chan string, 100)
-	defer close(logChan)
+	//logChan := make(chan string, 100)
+	//defer close(logChan)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -180,6 +180,13 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 		return
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
+		task.UpdateProgress()
+	}()
+
 	// 等待 ExecuteRsyncSimulated 完成或出错
 	select {
 	case err := <-task.ErrChan:
@@ -195,13 +202,6 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 		klog.Error("progressChan is nil")
 		return
 	}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
-		task.UpdateProgress()
-	}()
 
 	// 等待 goroutine 完成
 	wg.Wait()
