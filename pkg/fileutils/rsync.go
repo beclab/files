@@ -468,21 +468,33 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 
 	// 错误处理goroutine
 	go func() {
-		//wg.Wait()
-		//defer close(task.ErrChan)
-		if firstErr != nil {
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						klog.Errorf("Rsync command failed: %v (channel closed)", firstErr)
-					}
-				}()
-				select {
-				case task.ErrChan <- firstErr:
-				default:
-					klog.Errorf("Rsync command failed: %v (channel full)", firstErr)
+		for {
+			select {
+			case <-task.Ctx.Done():
+				if firstErr != nil {
+					klog.Errorf("Operation cancelled with error: %v", firstErr)
 				}
-			}()
+				return
+			default:
+				// 正常处理逻辑
+				if firstErr != nil {
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								klog.Errorf("Rsync command failed: %v (channel closed)", firstErr)
+							}
+						}()
+
+						select {
+						case task.ErrChan <- firstErr:
+							firstErr = nil
+						default:
+							klog.Errorf("Rsync command failed: %v (channel full)", firstErr)
+						}
+					}()
+				}
+				time.Sleep(100 * time.Millisecond) // 避免忙等待
+			}
 		}
 	}()
 
