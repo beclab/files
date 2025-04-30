@@ -345,7 +345,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 
 	stdoutReader, stdoutWriter := io.Pipe()
 
-	cmd := exec.CommandContext(task.Ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 256),
+	cmd := exec.CommandContext(task.Ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 1024),
 		RootPrefix+task.Source, RootPrefix+task.Dest)
 	cmd.Stdout = stdoutWriter
 
@@ -493,6 +493,8 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 				if firstErr != nil {
 					klog.Errorf("Operation cancelled with error: %v", firstErr)
 				}
+				return
+			case <-cmdDone:
 				return
 			default:
 				if firstErr != nil {
