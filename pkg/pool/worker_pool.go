@@ -181,12 +181,12 @@ func (t *Task) UpdateProgress() {
 			klog.Infof("[%s] %d", t.ID, progress)
 			if progress == 200 {
 				// 200 is for manual single finish
-				t.mu.Lock()
+				//t.mu.Lock()
 				t.Progress = 100
 				t.Status = "completed"
 				TaskManager.Store(t.ID, t)
-				t.mu.Unlock()
-				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+				//t.mu.Unlock()
+				klog.Infof("Finish by progress 200 [%s] %s", t.ID, FormattedTask{Task: *t})
 				select {
 				case <-time.After(time.Second):
 					CancelTask(t.ID, false)
