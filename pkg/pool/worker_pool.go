@@ -281,9 +281,10 @@ func CompleteTask(taskID string) {
 		if t, ok := task.(*Task); ok {
 			t.cancelOnce.Do(func() {
 				t.mu.Lock()
-				defer t.mu.Unlock()
 				t.Progress = 100
 				t.Status = "completed"
+				TaskManager.Store(taskID, t)
+				t.mu.Unlock()
 				if t.ErrChan != nil {
 					close(t.ErrChan)
 				}
