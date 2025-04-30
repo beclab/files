@@ -291,7 +291,6 @@ func CompleteTask(taskID string) {
 				t.Status = "completed"
 				TaskManager.Store(taskID, t) // 存储指针副本
 				klog.Infof("Task %s has been completed with Progress %d", taskID, t.Progress)
-				t.mu.Unlock()
 
 				// 锁外执行非关键操作
 				if t.ErrChan != nil {
@@ -307,6 +306,7 @@ func CompleteTask(taskID string) {
 				if t.timer != nil {
 					t.timer.Stop()
 				}
+				t.mu.Unlock()
 			})
 			klog.Infof("Task %s has completed", taskID)
 		}
