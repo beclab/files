@@ -126,6 +126,9 @@ func (t *Task) UpdateProgress() {
 				klog.Infof("~~~Temp log: logging {%s}", log)
 				t.Log = append(t.Log, log)
 			}
+			if t.Status == "completed" {
+				t.Progress = 100
+			}
 			if t.Progress < 100 {
 				t.Status = "cancelled"
 			} else {
@@ -133,7 +136,14 @@ func (t *Task) UpdateProgress() {
 			}
 			TaskManager.Store(t.ID, t)
 			t.mu.Unlock()
-			klog.Infof("Task %s cancelled", t.ID)
+			if t.Status == "cancelled" {
+				klog.Infof("Task %s cancelled with Progress %d", t.ID, t.Progress)
+			} else if t.Status == "completed" {
+				klog.Infof("Task %s completed with Progress %d", t.ID, t.Progress)
+			} else {
+				klog.Infof("Task %s failed with status %s and Progress %d", t.ID, t.Status, t.Progress)
+			}
+
 			return
 		case <-heartbeatTicker.C:
 			if time.Since(lastHeartbeat) > 45*time.Second {
@@ -264,6 +274,8 @@ func CompleteTask(taskID string) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
 			t.cancelOnce.Do(func() {
+				t.mu.Lock()
+				defer t.mu.Unlock()
 				t.Progress = 100
 				t.Status = "completed"
 				if t.ErrChan != nil {
