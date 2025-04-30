@@ -276,6 +276,7 @@ func CancelTask(taskID string, delete bool) {
 }
 
 func CompleteTask(taskID string) {
+	klog.Infof("~~~Debug Log: Try to complete Task %s", taskID)
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
 			t.cancelOnce.Do(func() {
