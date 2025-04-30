@@ -161,7 +161,10 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 	logChan := make(chan string, 100)
 	defer close(logChan)
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		var err error
 		if same {
 			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
@@ -193,7 +196,6 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 		return
 	}
 
-	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
