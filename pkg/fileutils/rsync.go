@@ -458,7 +458,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 						mu.Unlock()
 					}
 					klog.Infoln("Finished reading stdout")
-					return
+					break
 				}
 			}
 		}
