@@ -359,7 +359,9 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	go func() {
 		defer wg.Done()
 		defer close(cmdDone)
-		klog.Infoln("Starting rsync command")
+		klog.Infoln("Starting rsync command goroutine")
+		defer klog.Infoln("Rsync command goroutine completed")
+
 		if err := cmd.Start(); err != nil {
 			mu.Lock()
 			if firstErr == nil {
@@ -370,7 +372,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 			stdoutWriter.Close()
 			return
 		}
-		klog.Infoln("Rsync command started successfully")
+
 		if err := cmd.Wait(); err != nil {
 			mu.Lock()
 			if firstErr == nil {
@@ -379,7 +381,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 			}
 			mu.Unlock()
 		}
-		klog.Infoln("Rsync command completed")
+
 		stdoutWriter.Close()
 	}()
 
@@ -388,6 +390,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	go func() {
 		defer wg.Done()
 		klog.Infoln("Starting stdout processing goroutine")
+		defer klog.Infoln("Stdout processing goroutine completed")
 
 		reader := bufio.NewReader(stdoutReader)
 		buffer := make([]byte, 4096)
@@ -452,7 +455,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 						mu.Unlock()
 					}
 					klog.Infoln("Finished reading stdout")
-					return // 退出 goroutine
+					return
 				}
 			}
 		}
@@ -463,6 +466,8 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	go func() {
 		defer wg.Done()
 		klog.Infoln("Starting cancellation handling goroutine")
+		defer klog.Infoln("Cancellation handling goroutine completed")
+
 		<-task.Ctx.Done()
 		if cmd.Process != nil {
 			klog.Infoln("Sending interrupt signal to rsync command")
@@ -487,6 +492,9 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		klog.Infoln("Starting error handling goroutine")
+		defer klog.Infoln("Error handling goroutine completed")
+
 		for {
 			select {
 			case <-task.Ctx.Done():
@@ -514,7 +522,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 						}
 					}()
 				}
-				time.Sleep(100 * time.Millisecond) // 避免忙等待
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}()
@@ -523,6 +531,9 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		klog.Infoln("Starting command execution state monitoring goroutine")
+		defer klog.Infoln("Command execution state monitoring goroutine completed")
+
 		<-cmdDone
 		klog.Infoln("Rsync command execution state monitored")
 		stdoutWriter.Close()
