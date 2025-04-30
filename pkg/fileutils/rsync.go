@@ -398,7 +398,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
 		eofCount := 0
-		const maxEOFCount = 5 // 连续读取到 3 个 EOF 后退出
+		const maxEOFCount = 10 // 连续读取到 3 个 EOF 后退出
 
 		for {
 			select {
@@ -461,6 +461,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 					} else {
 						eofCount++
 						klog.Infof("Have read %d EOFs", eofCount)
+						time.Sleep(100 * time.Millisecond)
 						if eofCount >= maxEOFCount {
 							klog.Infoln("Finished reading stdout after multiple EOFs")
 							return
