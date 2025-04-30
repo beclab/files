@@ -179,45 +179,27 @@ func (t *Task) UpdateProgress() {
 				return
 			}
 			klog.Infof("[%s] %d", t.ID, progress)
-			if progress == 200 {
-				klog.Infof("~~~Debug log: Will Finish by progress 200 [%s] %s", t.ID, FormattedTask{Task: *t})
-				// 200 is for manual single finish
-				t.mu.Lock()
-				t.Progress = 100
-				t.Status = "completed"
-				TaskManager.Store(t.ID, t)
-				t.mu.Unlock()
-				klog.Infof("Finish by progress 200 [%s] %s", t.ID, FormattedTask{Task: *t})
+
+			processedProgress := 0
+			if progress > 0 {
+				processedProgress = progress //ProcessProgress(progress, 0)
+			}
+
+			if t.Progress == 100 && processedProgress == 100 {
 				select {
 				case <-time.After(time.Second):
-					CancelTask(t.ID, false)
+					CompleteTask(t.ID)
 				case <-t.LogChan:
-					CancelTask(t.ID, false)
+					CompleteTask(t.ID)
 				case <-t.ErrChan:
-					CancelTask(t.ID, false)
+					CompleteTask(t.ID)
 				}
 			} else {
-				processedProgress := 0
-				if progress > 0 {
-					processedProgress = progress //ProcessProgress(progress, 0)
-				}
-
-				if t.Progress == 100 && processedProgress == 100 {
-					select {
-					case <-time.After(time.Second):
-						CancelTask(t.ID, false)
-					case <-t.LogChan:
-						CancelTask(t.ID, false)
-					case <-t.ErrChan:
-						CancelTask(t.ID, false)
-					}
-				} else {
-					t.mu.Lock()
-					t.Progress = processedProgress
-					TaskManager.Store(t.ID, t)
-					t.mu.Unlock()
-					klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-				}
+				t.mu.Lock()
+				t.Progress = processedProgress
+				TaskManager.Store(t.ID, t)
+				t.mu.Unlock()
+				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
 			}
 
 		default:
@@ -269,11 +251,36 @@ func CancelTask(taskID string, delete bool) {
 			// after cancel, delete info
 			if delete {
 				TaskManager.Delete(taskID)
-				// 可选：等待任务资源清理或执行其他清理逻辑
-				klog.Infof("Task %s has been cancelled", taskID)
-			} else {
-				klog.Infof("Task %s has completed", taskID)
 			}
+			klog.Infof("Task %s has been cancelled", taskID)
+		}
+	} else {
+		klog.Infof("Task %s not found", taskID)
+	}
+}
+
+func CompleteTask(taskID string) {
+	if task, ok := TaskManager.Load(taskID); ok {
+		if t, ok := task.(*Task); ok {
+			t.cancelOnce.Do(func() {
+				t.Progress = 100
+				t.Status = "completed"
+				if t.ErrChan != nil {
+					close(t.ErrChan)
+				}
+				if t.LogChan != nil {
+					close(t.LogChan)
+				}
+				if t.ProgressChan != nil {
+					close(t.ProgressChan)
+				}
+				t.Cancel()
+				if t.timer != nil {
+					t.timer.Stop()
+				}
+			})
+
+			klog.Infof("Task %s has completed", taskID)
 		}
 	} else {
 		klog.Infof("Task %s not found", taskID)

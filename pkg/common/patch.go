@@ -423,7 +423,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 	// no matter what situation, try to rename all first
 	// TODO: temp not Rename for test
 	//if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
-	//	task.ProgressChan <- 200
+	//	pool.CompleteTask(task.ID)
 	//	return nil
 	//}
 
@@ -435,6 +435,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 		err = fileutils.ExecuteRsync(task, 0, 99)
 		if err != nil {
 			klog.Errorf("Failed to initialize rsync: %v\n", err)
+			pool.CancelTask(task.ID, false)
 			return
 		}
 		if srcExternalType == "smb" {
@@ -446,7 +447,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 			klog.Errorf("Failed to remove %v: %v", task.Source, err)
 			return
 		}
-		task.ProgressChan <- 200
+		pool.CompleteTask(task.ID)
 	}()
 	return nil
 }
