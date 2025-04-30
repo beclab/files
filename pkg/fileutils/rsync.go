@@ -341,12 +341,10 @@ func parseFloat(s string) float64 {
 
 // func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan string, chan error, error) {
 func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
-	// 初始化日志
 	klog.Infoln("Starting ExecuteRsync function")
 
 	stdoutReader, stdoutWriter := io.Pipe()
 
-	// 创建 rsync 命令
 	cmd := exec.CommandContext(task.Ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 256),
 		RootPrefix+task.Source, RootPrefix+task.Dest)
 	cmd.Stdout = stdoutWriter
@@ -357,7 +355,9 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	var cmdDone = make(chan struct{})
 
 	// 启动命令
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		defer close(cmdDone)
 		klog.Infoln("Starting rsync command")
 		if err := cmd.Start(); err != nil {
@@ -387,8 +387,6 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		//defer close(task.ProgressChan)
-		//defer close(task.LogChan)
 		klog.Infoln("Starting stdout processing goroutine")
 
 		reader := bufio.NewReader(stdoutReader)
@@ -396,60 +394,66 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
 		for {
-			n, err := reader.Read(buffer)
-			if n > 0 {
-				output := string(buffer[:n])
-				klog.Infoln("Rsync output:", output)
+			select {
+			case <-task.Ctx.Done():
+				klog.Infoln("Stdout processing goroutine exiting due to cancellation")
+				return
+			default:
+				n, err := reader.Read(buffer)
+				if n > 0 {
+					output := string(buffer[:n])
+					klog.Infoln("Rsync output:", output)
 
-				lines := strings.Split(output, "\n")
-				for i, line := range lines {
-					if line != "" {
-						if i == len(lines)-1 && !strings.HasSuffix(line, "\n") {
-							line = strings.TrimSuffix(line, "\r")
-						}
-						select {
-						case task.LogChan <- line:
-							klog.Infof("Send Log: %s", line)
-						default:
-							klog.Warningf("Log channel full, dropping %s%%", line)
-						}
+					lines := strings.Split(output, "\n")
+					for i, line := range lines {
+						if line != "" {
+							if i == len(lines)-1 && !strings.HasSuffix(line, "\n") {
+								line = strings.TrimSuffix(line, "\r")
+							}
+							select {
+							case task.LogChan <- line:
+								klog.Infof("Send Log: %s", line)
+							default:
+								klog.Warningf("Log channel full, dropping %s%%", line)
+							}
 
-						var matched bool
-						matches := re.FindAllStringSubmatch(line, -1)
-						if len(matches) > 0 {
-							for _, match := range matches {
-								if len(match) > 1 {
-									p := int(math.Floor(parseFloat(match[1])))
-									p = pool.ProcessProgress(p, progressLeft, progressRight)
-									matched = true
-									select {
-									case task.ProgressChan <- p:
-										fmt.Printf("Progress: %d%%\n", p)
-										klog.Infof("Send progress: %d", p)
-									default:
-										klog.Warningf("Progress channel full, dropping %d%%", p)
+							var matched bool
+							matches := re.FindAllStringSubmatch(line, -1)
+							if len(matches) > 0 {
+								for _, match := range matches {
+									if len(match) > 1 {
+										p := int(math.Floor(parseFloat(match[1])))
+										p = pool.ProcessProgress(p, progressLeft, progressRight)
+										matched = true
+										select {
+										case task.ProgressChan <- p:
+											fmt.Printf("Progress: %d%%\n", p)
+											klog.Infof("Send progress: %d", p)
+										default:
+											klog.Warningf("Progress channel full, dropping %d%%", p)
+										}
 									}
 								}
 							}
-						}
 
-						if !matched {
-							klog.Infof("No percent info in: %s", line)
+							if !matched {
+								klog.Infof("No percent info in: %s", line)
+							}
 						}
 					}
 				}
-			}
-			if err != nil {
-				if err != io.EOF {
-					mu.Lock()
-					if firstErr == nil {
-						firstErr = err
-						klog.Errorf("Error reading stdout: %v", firstErr)
+				if err != nil {
+					if err != io.EOF {
+						mu.Lock()
+						if firstErr == nil {
+							firstErr = err
+							klog.Errorf("Error reading stdout: %v", firstErr)
+						}
+						mu.Unlock()
 					}
-					mu.Unlock()
+					klog.Infoln("Finished reading stdout")
+					break
 				}
-				klog.Infoln("Finished reading stdout")
-				break
 			}
 		}
 	}()
@@ -480,7 +484,9 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	}()
 
 	// 错误处理goroutine
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-task.Ctx.Done():
@@ -512,15 +518,17 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	}()
 
 	// 命令执行状态监控
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		<-cmdDone
 		klog.Infoln("Rsync command execution state monitored")
 		stdoutWriter.Close()
 	}()
 
-	//klog.Infoln("Waiting for all goroutines to complete")
-	//wg.Wait()
-	//klog.Infoln("All goroutines completed")
+	klog.Infoln("Waiting for all goroutines to complete")
+	wg.Wait()
+	klog.Infoln("All goroutines completed")
 
 	if firstErr != nil {
 		klog.Errorf("ExecuteRsync failed with error: %v", firstErr)
