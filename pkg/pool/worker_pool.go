@@ -281,10 +281,14 @@ func CompleteTask(taskID string) {
 		if t, ok := task.(*Task); ok {
 			t.cancelOnce.Do(func() {
 				t.mu.Lock()
+				// 确保字段可导出
 				t.Progress = 100
 				t.Status = "completed"
-				TaskManager.Store(taskID, t)
+				TaskManager.Store(taskID, t) // 存储指针副本
+				klog.Infof("Task %s has been completed with Progress %d", taskID, t.Progress)
 				t.mu.Unlock()
+
+				// 锁外执行非关键操作
 				if t.ErrChan != nil {
 					close(t.ErrChan)
 				}
@@ -299,7 +303,6 @@ func CompleteTask(taskID string) {
 					t.timer.Stop()
 				}
 			})
-
 			klog.Infof("Task %s has completed", taskID)
 		}
 	} else {
