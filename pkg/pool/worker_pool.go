@@ -225,9 +225,26 @@ func (t *Task) GetProgress() int {
 func CancelTask(taskID string, delete bool) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
-			close(t.ErrChan)
-			close(t.LogChan)
-			close(t.ProgressChan)
+			var closeErrChan, closeLogChan, closeProgressChan sync.Once
+
+			closeErrChan.Do(func() {
+				if t.ErrChan != nil {
+					close(t.ErrChan)
+				}
+			})
+
+			closeLogChan.Do(func() {
+				if t.LogChan != nil {
+					close(t.LogChan)
+				}
+			})
+
+			closeProgressChan.Do(func() {
+				if t.ProgressChan != nil {
+					close(t.ProgressChan)
+				}
+			})
+			
 			t.Cancel()
 			if t.timer != nil {
 				t.timer.Stop() // 停止定时器防止泄漏

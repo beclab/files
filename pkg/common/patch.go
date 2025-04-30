@@ -364,37 +364,60 @@ func PatchAction(task *pool.Task, ctx context.Context, action, src, dst, srcExte
 //}
 
 func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
-	var err error
-	// first recursively delete all thumbs
-	err = filepath.Walk(RootPrefix+task.Source, func(path string, info os.FileInfo, err error) error {
+	srcinfo, err := files.DefaultFs.Stat(task.Source)
+	if err != nil {
+		return err
+	}
+
+	if srcinfo.IsDir() {
+		// first recursively delete all thumbs
+		err = filepath.Walk(RootPrefix+task.Source, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				file, err := files.NewFileInfo(files.FileOptions{
+					Fs:         files.DefaultFs,
+					Path:       path,
+					Modify:     true,
+					Expand:     false,
+					ReadHeader: false,
+				})
+				if err != nil {
+					return err
+				}
+
+				// delete thumbnails
+				err = preview.DelThumbs(task.Ctx, fileCache, file)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			klog.Infoln("Error walking the directory:", err)
+		} else {
+			klog.Infoln("Directory traversal completed.")
+		}
+	} else {
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:         files.DefaultFs,
+			Path:       task.Source,
+			Modify:     true,
+			Expand:     false,
+			ReadHeader: false,
+		})
 		if err != nil {
 			return err
 		}
 
-		if !info.IsDir() {
-			file, err := files.NewFileInfo(files.FileOptions{
-				Fs:         files.DefaultFs,
-				Path:       path,
-				Modify:     true,
-				Expand:     false,
-				ReadHeader: false,
-			})
-			if err != nil {
-				return err
-			}
-
-			// delete thumbnails
-			err = preview.DelThumbs(task.Ctx, fileCache, file)
-			if err != nil {
-				return err
-			}
+		// delete thumbnails
+		err = preview.DelThumbs(task.Ctx, fileCache, file)
+		if err != nil {
+			return err
 		}
-		return nil
-	})
-	if err != nil {
-		klog.Infoln("Error walking the directory:", err)
-	} else {
-		klog.Infoln("Directory traversal completed.")
 	}
 
 	// no matter what situation, try to rename all first
@@ -407,10 +430,6 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 	// if rename all failed, recursively do things below, without delthumbs any more
 
 	// Get properties of source.
-	//srcinfo, err := files.DefaultFs.Stat(task.Source)
-	//if err != nil {
-	//	return err
-	//}
 
 	go func() {
 		err = fileutils.ExecuteRsync(task, 0, 99)
