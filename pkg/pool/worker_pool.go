@@ -31,7 +31,8 @@ type Task struct {
 	LogChan        chan string        `json:"-"`
 	ProgressChan   chan int           `json:"-"`
 	ErrChan        chan error         `json:"-"`
-	timer          *time.Timer        // 新增定时器字段
+	timer          *time.Timer
+	cancelOnce     sync.Once
 }
 
 type FormattedTask struct {
@@ -65,10 +66,12 @@ func NewTask(id, source, dest, srcType, dstType string) *Task {
 
 	// 新增6小时过期逻辑
 	task.timer = time.AfterFunc(6*time.Hour, func() {
-		close(task.ErrChan)
-		close(task.LogChan)
-		close(task.ProgressChan)
-		task.Cancel()
+		task.cancelOnce.Do(func() {
+			close(task.ErrChan)
+			close(task.LogChan)
+			close(task.ProgressChan)
+			task.Cancel()
+		})
 		TaskManager.Delete(task.ID) // 从TaskManager删除
 	})
 	return task
@@ -243,30 +246,21 @@ func (t *Task) GetProgress() int {
 func CancelTask(taskID string, delete bool) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
-			var closeErrChan, closeLogChan, closeProgressChan sync.Once
-
-			closeErrChan.Do(func() {
+			t.cancelOnce.Do(func() {
 				if t.ErrChan != nil {
 					close(t.ErrChan)
 				}
-			})
-
-			closeLogChan.Do(func() {
 				if t.LogChan != nil {
 					close(t.LogChan)
 				}
-			})
-
-			closeProgressChan.Do(func() {
 				if t.ProgressChan != nil {
 					close(t.ProgressChan)
 				}
+				t.Cancel()
+				if t.timer != nil {
+					t.timer.Stop()
+				}
 			})
-
-			t.Cancel()
-			if t.timer != nil {
-				t.timer.Stop() // 停止定时器防止泄漏
-			}
 
 			// after cancel, delete info
 			if delete {
