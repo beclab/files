@@ -189,7 +189,12 @@ func (t *Task) UpdateProgress() {
 				t.mu.Unlock()
 				return
 			}
-			klog.Infof("[%s] %d", t.ID, progress)
+			klog.Infof("[%s] %d %s %d", t.ID, t.Progress, t.Status, progress)
+
+			if t.Status == "completed" {
+				klog.Infof("task [%s] already completed", t.ID)
+				break
+			}
 
 			processedProgress := 0
 			if progress > 0 {
