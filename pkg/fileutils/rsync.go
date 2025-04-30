@@ -452,7 +452,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 						mu.Unlock()
 					}
 					klog.Infoln("Finished reading stdout")
-					break
+					return // 退出 goroutine
 				}
 			}
 		}
