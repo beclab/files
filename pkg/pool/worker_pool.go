@@ -128,11 +128,12 @@ func (t *Task) UpdateProgress() {
 			}
 			if t.Status == "completed" {
 				t.Progress = 100
-			}
-			if t.Progress < 100 {
-				t.Status = "cancelled"
 			} else {
-				t.Status = "completed"
+				if t.Progress < 100 {
+					t.Status = "cancelled"
+				} else {
+					t.Status = "completed"
+				}
 			}
 			TaskManager.Store(t.ID, t)
 			t.mu.Unlock()
