@@ -518,9 +518,9 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 		stdoutWriter.Close()
 	}()
 
-	klog.Infoln("Waiting for all goroutines to complete")
-	wg.Wait()
-	klog.Infoln("All goroutines completed")
+	//klog.Infoln("Waiting for all goroutines to complete")
+	//wg.Wait()
+	//klog.Infoln("All goroutines completed")
 
 	if firstErr != nil {
 		klog.Errorf("ExecuteRsync failed with error: %v", firstErr)
