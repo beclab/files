@@ -142,9 +142,16 @@ func (t *Task) UpdateProgress() {
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
 			return
+		case err, ok := <-t.ErrChan:
+			if !ok {
+				klog.Infof("Task %s log channel closed", t.ID)
+				break
+			}
+
+			klog.Infof("[%s Error] %v with log count %d", t.ID, err, len(logs))
+			t.Log = append(t.Log, fmt.Sprintf("%v", err))
 		case log, ok := <-t.LogChan:
 			if !ok {
-				// 通道关闭，可以记录日志或直接退出
 				klog.Infof("Task %s log channel closed", t.ID)
 				break
 			}
