@@ -401,6 +401,8 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 			case <-task.Ctx.Done():
 				klog.Infoln("Stdout processing goroutine exiting due to cancellation")
 				return
+			case <-cmdDone:
+				return
 			default:
 				n, err := reader.Read(buffer)
 				if n > 0 {
