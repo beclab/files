@@ -177,7 +177,16 @@ func (t *Task) UpdateProgress() {
 				TaskManager.Store(t.ID, t)
 				t.mu.Unlock()
 				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-				CancelTask(t.ID, false)
+				go func() {
+					select {
+					case <-time.After(time.Second):
+						CancelTask(t.ID, false)
+					case <-t.LogChan:
+						CancelTask(t.ID, false)
+					case <-t.ErrChan:
+						CancelTask(t.ID, false)
+					}
+				}()
 			} else {
 				processedProgress := 0
 				if progress > 0 {
@@ -185,7 +194,16 @@ func (t *Task) UpdateProgress() {
 				}
 
 				if t.Progress == 100 && processedProgress == 100 {
-					CancelTask(t.ID, false)
+					go func() {
+						select {
+						case <-time.After(time.Second):
+							CancelTask(t.ID, false)
+						case <-t.LogChan:
+							CancelTask(t.ID, false)
+						case <-t.ErrChan:
+							CancelTask(t.ID, false)
+						}
+					}()
 				} else {
 					t.mu.Lock()
 					t.Progress = processedProgress
@@ -244,7 +262,7 @@ func CancelTask(taskID string, delete bool) {
 					close(t.ProgressChan)
 				}
 			})
-			
+
 			t.Cancel()
 			if t.timer != nil {
 				t.timer.Stop() // 停止定时器防止泄漏

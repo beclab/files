@@ -437,15 +437,15 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 			klog.Errorf("Failed to initialize rsync: %v\n", err)
 			return
 		}
-		//if srcExternalType == "smb" {
-		//	err = Rmrf(RootPrefix + task.Source)
-		//} else {
-		//	err = files.DefaultFs.RemoveAll(task.Source)
-		//}
-		//if err != nil {
-		//	klog.Errorf("Failed to remove %v: %v", task.Source, err)
-		//	return
-		//}
+		if srcExternalType == "smb" {
+			err = Rmrf(RootPrefix + task.Source)
+		} else {
+			err = files.DefaultFs.RemoveAll(task.Source)
+		}
+		if err != nil {
+			klog.Errorf("Failed to remove %v: %v", task.Source, err)
+			return
+		}
 		task.ProgressChan <- 200
 	}()
 	return nil
