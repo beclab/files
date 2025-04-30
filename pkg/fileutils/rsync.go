@@ -397,13 +397,14 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 		buffer := make([]byte, 4096)
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
+		eofCount := 0
+		const maxEOFCount = 5 // 连续读取到 3 个 EOF 后退出
+
 		for {
 			select {
 			case <-task.Ctx.Done():
 				klog.Infoln("Stdout processing goroutine exiting due to cancellation")
 				return
-			//case <-cmdDone:
-			//	return
 			default:
 				n, err := reader.Read(buffer)
 				if n > 0 {
@@ -447,6 +448,7 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 							}
 						}
 					}
+					eofCount = 0 // 重置 EOF 计数器
 				}
 				if err != nil {
 					if err != io.EOF {
@@ -456,9 +458,14 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 							klog.Errorf("Error reading stdout: %v", firstErr)
 						}
 						mu.Unlock()
+					} else {
+						eofCount++
+						klog.Infof("Have read %d EOFs", eofCount)
+						if eofCount >= maxEOFCount {
+							klog.Infoln("Finished reading stdout after multiple EOFs")
+							return
+						}
 					}
-					klog.Infoln("Finished reading stdout")
-					break
 				}
 			}
 		}
