@@ -465,60 +465,29 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 
 	// 取消处理goroutine
 	//wg.Add(1)
-	//go func() {
-	//	defer wg.Done()
-	//	klog.Infoln("Starting cancellation handling goroutine")
-	//	defer klog.Infoln("Cancellation handling goroutine completed")
-	//
-	//	<-task.Ctx.Done()
-	//	if cmd.Process != nil {
-	//		klog.Infoln("Sending interrupt signal to rsync command")
-	//		cmd.Process.Signal(os.Interrupt)
-	//		done := make(chan error)
-	//		go func() {
-	//			done <- cmd.Wait()
-	//		}()
-	//		select {
-	//		case <-done:
-	//			klog.Infoln("Rsync command interrupted successfully")
-	//		case <-time.After(5 * time.Second):
-	//			klog.Infoln("Killing rsync command after timeout")
-	//			cmd.Process.Kill()
-	//			<-done
-	//		}
-	//	}
-	//	stdoutWriter.Close()
-	//}()
-
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
+		//defer wg.Done()
 		klog.Infoln("Starting cancellation handling goroutine")
 		defer klog.Infoln("Cancellation handling goroutine completed")
 
-		select {
-		case <-task.Ctx.Done(): // 监听上下文取消
-			if cmd.Process != nil {
-				klog.Infoln("Sending interrupt signal to rsync command")
-				cmd.Process.Signal(os.Interrupt)
-				done := make(chan error)
-				go func() {
-					done <- cmd.Wait()
-				}()
-				select {
-				case <-done:
-					klog.Infoln("Rsync command interrupted successfully")
-				case <-time.After(5 * time.Second):
-					klog.Infoln("Killing rsync command after timeout")
-					cmd.Process.Kill()
-					<-done
-				}
+		<-task.Ctx.Done()
+		if cmd.Process != nil {
+			klog.Infoln("Sending interrupt signal to rsync command")
+			cmd.Process.Signal(os.Interrupt)
+			done := make(chan error)
+			go func() {
+				done <- cmd.Wait()
+			}()
+			select {
+			case <-done:
+				klog.Infoln("Rsync command interrupted successfully")
+			case <-time.After(5 * time.Second):
+				klog.Infoln("Killing rsync command after timeout")
+				cmd.Process.Kill()
+				<-done
 			}
-		case <-cmdDone: // 监听命令完成
-			klog.Infoln("Rsync command completed normally")
 		}
-
-		stdoutWriter.Close() // 无论哪种情况，最后都关闭
+		stdoutWriter.Close()
 	}()
 
 	// 错误处理goroutine
@@ -561,16 +530,16 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	}()
 
 	// 命令执行状态监控
-	//wg.Add(1)
-	//go func() {
-	//	defer wg.Done()
-	//	klog.Infoln("Starting command execution state monitoring goroutine")
-	//	defer klog.Infoln("Command execution state monitoring goroutine completed")
-	//
-	//	<-cmdDone
-	//	klog.Infoln("Rsync command execution state monitored")
-	//	stdoutWriter.Close()
-	//}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		klog.Infoln("Starting command execution state monitoring goroutine")
+		defer klog.Infoln("Command execution state monitoring goroutine completed")
+
+		<-cmdDone
+		klog.Infoln("Rsync command execution state monitored")
+		stdoutWriter.Close()
+	}()
 
 	klog.Infoln("Waiting for all goroutines to complete")
 	wg.Wait()
