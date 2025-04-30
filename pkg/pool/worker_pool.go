@@ -243,6 +243,11 @@ func (t *Task) GetProgress() int {
 func CancelTask(taskID string, delete bool) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
+			if t.Status == "completed" {
+				klog.Infof("Task %s has already completed, cannot be canelled any more", taskID)
+				return
+			}
+
 			t.cancelOnce.Do(func() {
 				if t.ErrChan != nil {
 					close(t.ErrChan)

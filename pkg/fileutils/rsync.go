@@ -2,6 +2,7 @@ package fileutils
 
 import (
 	"bufio"
+	"context"
 	"files/pkg/pool"
 	"fmt"
 	"io"
@@ -464,30 +465,53 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 	}()
 
 	// 取消处理goroutine
-	//wg.Add(1)
 	go func() {
-		//defer wg.Done()
 		klog.Infoln("Starting cancellation handling goroutine")
 		defer klog.Infoln("Cancellation handling goroutine completed")
 
-		<-task.Ctx.Done()
-		if cmd.Process != nil {
-			klog.Infoln("Sending interrupt signal to rsync command")
-			cmd.Process.Signal(os.Interrupt)
-			done := make(chan error)
-			go func() {
-				done <- cmd.Wait()
-			}()
-			select {
-			case <-done:
-				klog.Infoln("Rsync command interrupted successfully")
-			case <-time.After(5 * time.Second):
-				klog.Infoln("Killing rsync command after timeout")
-				cmd.Process.Kill()
-				<-done
+		// 创建总超时上下文（1小时）
+		totalTimeoutCtx, cancelTotalTimeout := context.WithTimeout(context.Background(), 1*time.Hour)
+		defer cancelTotalTimeout() // 确保释放资源
+
+		select {
+		case <-totalTimeoutCtx.Done():
+			// 总超时触发：强制清理
+			klog.Errorln("Total timeout (1h) reached! Forcing exit...")
+			if cmd.Process != nil {
+				klog.Infoln("Killing rsync command due to total timeout")
+				cmd.Process.Kill() // 立即强制终止
+			}
+			if stdoutWriter != nil {
+				stdoutWriter.Close() // 关闭输出流
+			}
+			return // 直接退出goroutine
+
+		case <-task.Ctx.Done():
+			// 正常取消信号处理逻辑
+			if cmd.Process != nil {
+				klog.Infoln("Sending interrupt signal to rsync command")
+				cmd.Process.Signal(os.Interrupt)
+
+				done := make(chan error)
+				go func() {
+					done <- cmd.Wait()
+				}()
+
+				// 保留原有的5秒超时逻辑
+				select {
+				case <-done:
+					klog.Infoln("Rsync command interrupted successfully")
+				case <-time.After(5 * time.Second):
+					klog.Infoln("Killing rsync command after 5s timeout")
+					cmd.Process.Kill()
+					<-done // 等待实际退出
+				}
+			}
+			// 关闭资源（总超时情况也会执行到这里）
+			if stdoutWriter != nil {
+				stdoutWriter.Close()
 			}
 		}
-		stdoutWriter.Close()
 	}()
 
 	// 错误处理goroutine
