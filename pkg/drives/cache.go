@@ -79,6 +79,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 					Task *pool.Task `json:"task"`
 				}
 				if err := json.Unmarshal(body, &apiResponse); err != nil {
+					klog.Infof("~~~Debug Log: failed to unmarshal response body: %v", body)
 					task.ErrChan <- fmt.Errorf("failed to unmarshal response: %v", err)
 					return
 				}
