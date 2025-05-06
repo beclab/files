@@ -26,7 +26,6 @@ import (
 	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -279,14 +278,14 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 			}
 
 			firstHalf := path[:externalIndex]
-			if firstHalf == "" {
-				firstHalf = "/"
-			}
+			//if firstHalf == "" {
+			//	firstHalf = "/"
+			//}
 			secondHalf := "/External" + strings.TrimPrefix(path[externalIndex:], "/external")
 			klog.Info("firstHalf=", firstHalf)
 			klog.Info("secondHalf=", secondHalf)
 
-			return filepath.Join(firstHalf, secondHalf)
+			return firstHalf + secondHalf
 		}
 
 		homeIndex, homeNeedle := FindEarliestIndex(path, []string{"/Home", "/home"})
@@ -305,13 +304,13 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 				return path
 			}
 			if splitName == "/Home" {
-				return filepath.Join(firstHalf, pvc+secondHalf)
+				return firstHalf + "/" + pvc + secondHalf
 			} else if splitName == "/home" {
 				secondHalf = "/Home" + strings.TrimPrefix(path[splitIndex:], "/home")
-				return filepath.Join(firstHalf, pvc+secondHalf)
+				return firstHalf + "/" + pvc + secondHalf
 			} else {
 				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
-				return filepath.Join(firstHalf, pvc+"/Data"+secondHalf)
+				return firstHalf + "/" + pvc + "/Data" + secondHalf
 			}
 		}
 	} else {
@@ -322,7 +321,7 @@ func rewriteUrl(path string, pvc string, prefix string) string {
 		if strings.HasPrefix(pathSuffix, "/"+pvc) {
 			return path
 		}
-		return filepath.Join(prefix, pvc+pathSuffix)
+		return prefix + "/" + pvc + pathSuffix
 	}
 	return path
 }
