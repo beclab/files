@@ -45,6 +45,8 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 			// 上下文被取消，退出循环
 			return nil
 		case <-ticker.C:
+			done := false // 标志变量，用于控制循环退出
+
 			// 将HTTP请求和响应处理的逻辑包装在一个匿名函数中
 			func() {
 				// 构造请求URL
@@ -183,10 +185,15 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 					//default:
 					//}
 
+					done = true
 					return
 				}
 
 			}()
+
+			if done {
+				return nil
+			}
 		}
 	}
 }
