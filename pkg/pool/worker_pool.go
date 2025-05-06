@@ -15,17 +15,17 @@ var (
 )
 
 type Task struct {
-	ID             string   `json:"id"`
-	Source         string   `json:"source"`
-	Dest           string   `json:"dest"`
-	SrcType        string   `json:"src_type"`
-	DstType        string   `json:"dst_type"`
-	Status         string   `json:"status"`
-	Progress       int      `json:"progress"`
-	Log            []string `json:"log"`
-	RelationTaskID string   `json:"relation_task_id"` // only for same cache now
-	RelationNode   string   `json:"relation_node"`    // only for same cache now (for get task progress and cancel task)
-	mu             sync.Mutex
+	ID             string             `json:"id"`
+	Source         string             `json:"source"`
+	Dest           string             `json:"dest"`
+	SrcType        string             `json:"src_type"`
+	DstType        string             `json:"dst_type"`
+	Status         string             `json:"status"`
+	Progress       int                `json:"progress"`
+	Log            []string           `json:"log"`
+	RelationTaskID string             `json:"relation_task_id"` // only for same cache now
+	RelationNode   string             `json:"relation_node"`    // only for same cache now (for get task progress and cancel task)
+	Mu             sync.Mutex         `json:"-"`
 	Ctx            context.Context    `json:"-"`
 	Cancel         context.CancelFunc `json:"-"`
 	LogChan        chan string        `json:"-"`
@@ -67,13 +67,13 @@ func NewTask(id, source, dest, srcType, dstType string) *Task {
 	// 新增6小时过期逻辑
 	task.timer = time.AfterFunc(6*time.Hour, func() {
 		CancelTask(task.ID, true)
-		//task.cancelOnce.Do(func() {
-		//	close(task.ErrChan)
-		//	close(task.LogChan)
-		//	close(task.ProgressChan)
-		//	task.Cancel()
-		//})
-		//TaskManager.Delete(task.ID) // 从TaskManager删除
+		task.cancelOnce.Do(func() {
+			close(task.ErrChan)
+			close(task.LogChan)
+			close(task.ProgressChan)
+			task.Cancel()
+		})
+		TaskManager.Delete(task.ID) // 从TaskManager删除
 	})
 	return task
 }
@@ -106,12 +106,12 @@ func (t *Task) UpdateProgress() {
 	}
 
 	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
-	t.mu.Lock()
+	t.Mu.Lock()
 	t.Status = "running"
 	t.Progress = 0
 	t.Log = []string{}
 	TaskManager.Store(t.ID, t)
-	t.mu.Unlock()
+	t.Mu.Unlock()
 	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
 
 	timeout := time.After(24 * time.Hour) // 合理超时时间
@@ -125,7 +125,7 @@ func (t *Task) UpdateProgress() {
 	for {
 		select {
 		case <-t.Ctx.Done():
-			t.mu.Lock()
+			t.Mu.Lock()
 			for _, log := range logs {
 				klog.Infof("~~~Temp log: logging {%s}", log)
 				t.Log = append(t.Log, log)
@@ -140,7 +140,7 @@ func (t *Task) UpdateProgress() {
 				}
 			}
 			TaskManager.Store(t.ID, t)
-			t.mu.Unlock()
+			t.Mu.Unlock()
 			if t.Status == "cancelled" {
 				klog.Infof("Task %s cancelled with Progress %d", t.ID, t.Progress)
 			} else if t.Status == "completed" {
@@ -175,23 +175,23 @@ func (t *Task) UpdateProgress() {
 			klog.Infof("[%s] %s with log count %d", t.ID, log, len(logs))
 			//logs = append(logs, log)
 			t.Log = append(t.Log, log)
-			//t.mu.Lock()
+			//t.Mu.Lock()
 			//t.Logging(log)
 			//TaskManager.Store(t.ID, t)
-			//t.mu.Unlock()
+			//t.Mu.Unlock()
 			//klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
 
 		case progress, ok := <-t.ProgressChan:
 			if !ok {
 				// 通道关闭，任务完成
-				t.mu.Lock()
+				t.Mu.Lock()
 				t.Status = "completed"
 				for _, log := range logs {
 					klog.Infof("~~~Temp log: logging {%s}", log)
 					t.Log = append(t.Log, log)
 				}
 				TaskManager.Store(t.ID, t)
-				t.mu.Unlock()
+				t.Mu.Unlock()
 				return
 			}
 			klog.Infof("[%s] %d %s %d", t.ID, t.Progress, t.Status, progress)
@@ -216,10 +216,10 @@ func (t *Task) UpdateProgress() {
 					CompleteTask(t.ID)
 				}
 			} else {
-				t.mu.Lock()
+				t.Mu.Lock()
 				t.Progress = processedProgress
 				TaskManager.Store(t.ID, t)
-				t.mu.Unlock()
+				t.Mu.Unlock()
 				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
 			}
 
@@ -232,8 +232,8 @@ func (t *Task) UpdateProgress() {
 
 // Logging 添加日志条目
 func (t *Task) Logging(entry string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.Mu.Lock()
+	defer t.Mu.Unlock()
 	t.Log = append(t.Log, entry)
 }
 
@@ -244,8 +244,8 @@ func (t *Task) LoggingError(entry string) {
 
 // GetProgress 获取任务进度
 func (t *Task) GetProgress() int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.Mu.Lock()
+	defer t.Mu.Unlock()
 	return t.Progress
 }
 
@@ -291,7 +291,7 @@ func CompleteTask(taskID string) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
 			t.cancelOnce.Do(func() {
-				t.mu.Lock()
+				t.Mu.Lock()
 				// 确保字段可导出
 				t.Progress = 100
 				t.Status = "completed"
@@ -312,7 +312,7 @@ func CompleteTask(taskID string) {
 				if t.timer != nil {
 					t.timer.Stop()
 				}
-				t.mu.Unlock()
+				t.Mu.Unlock()
 			})
 			klog.Infof("Task %s has completed", taskID)
 		}

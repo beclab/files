@@ -19,10 +19,168 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type CacheResourceService struct {
 	BaseResourceService
+}
+
+func ExecuteCacheSameTask(task *pool.Task) error {
+	// 创建一个ticker用于定期轮询
+	ticker := time.NewTicker(1 * time.Second) // 1秒轮询一次，可根据需要调整
+	defer ticker.Stop()
+
+	// 用于记录上一次的日志长度，避免重复发送
+	lastLogLength := len(task.Log)
+
+	// 创建一个HTTP客户端
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	for {
+		select {
+		case <-task.Ctx.Done():
+			// 上下文被取消，退出循环
+			return nil
+		case <-ticker.C:
+			// 将HTTP请求和响应处理的逻辑包装在一个匿名函数中
+			func() {
+				// 构造请求URL
+				taskUrl := fmt.Sprintf("http://127.0.0.1:80/api/cache/%s/task?task_id=%s", task.RelationNode, task.RelationTaskID)
+
+				// 发送HTTP请求
+				req, err := http.NewRequestWithContext(task.Ctx, "GET", taskUrl, nil)
+				if err != nil {
+					task.ErrChan <- fmt.Errorf("failed to create request: %v", err)
+					return
+				}
+
+				resp, err := client.Do(req)
+				if err != nil {
+					task.ErrChan <- fmt.Errorf("failed to query task status: %v", err)
+					return
+				}
+				defer resp.Body.Close() // 确保响应体在函数返回时关闭
+
+				// 读取响应体
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					task.ErrChan <- fmt.Errorf("failed to read response body: %v", err)
+					return
+				}
+
+				// 解析JSON响应
+				var apiResponse struct {
+					Code int        `json:"code"`
+					Msg  string     `json:"msg"`
+					Task *pool.Task `json:"task"`
+				}
+				if err := json.Unmarshal(body, &apiResponse); err != nil {
+					task.ErrChan <- fmt.Errorf("failed to unmarshal response: %v", err)
+					return
+				}
+
+				if apiResponse.Code != 0 {
+					task.ErrChan <- fmt.Errorf("API returned error code: %d, msg: %s", apiResponse.Code, apiResponse.Msg)
+					return
+				}
+
+				klog.Infof("~~~Temp Log: apiResponse: %+v", apiResponse)
+
+				// 加锁保护共享数据
+				//task.Mu.Lock()
+				//defer task.Mu.Unlock()
+
+				// 检查任务是否已完成
+				if apiResponse.Task.Status == "completed" && apiResponse.Task.Progress == 100 {
+					// 确认任务完成，再检查一次确保状态稳定
+					// 先解锁，避免死锁
+					//task.Mu.Unlock()
+
+					// 再检查一次
+					finalResp, err := client.Do(req.Clone(task.Ctx))
+					if err != nil {
+						task.ErrChan <- fmt.Errorf("final check failed: %v", err)
+						return
+					}
+					defer finalResp.Body.Close()
+
+					finalBody, err := io.ReadAll(finalResp.Body)
+					if err != nil {
+						task.ErrChan <- fmt.Errorf("final read failed: %v", err)
+						return
+					}
+
+					var finalApiResponse struct {
+						Code int        `json:"code"`
+						Msg  string     `json:"msg"`
+						Task *pool.Task `json:"task"`
+					}
+					if err := json.Unmarshal(finalBody, &finalApiResponse); err != nil {
+						task.ErrChan <- fmt.Errorf("final unmarshal failed: %v", err)
+						return
+					}
+
+					if finalApiResponse.Code != 0 ||
+						finalApiResponse.Task.Status != "completed" ||
+						finalApiResponse.Task.Progress != 100 {
+						// 状态不稳定，继续轮询
+						return
+					}
+
+					// 状态稳定，任务完成
+					//task.Mu.Lock()
+					//task.Status = "completed"
+					//task.Progress = 100
+					//task.Mu.Unlock()
+					pool.CompleteTask(task.ID)
+
+					// 发送最终进度
+					//select {
+					//case task.ProgressChan <- 100:
+					//default:
+					//}
+
+					return
+				}
+
+				// 更新任务状态
+				//task.Status = apiResponse.Task.Status
+				//task.Progress = apiResponse.Task.Progress
+
+				// 发送进度更新
+				select {
+				case task.ProgressChan <- apiResponse.Task.Progress:
+					klog.Infof("~~~Temp Log: send progress %d", apiResponse.Task.Progress)
+				default:
+				}
+
+				// 处理日志更新
+				newLogs := make([]string, 0, len(apiResponse.Task.Log))
+				for i := lastLogLength; i < len(apiResponse.Task.Log); i++ {
+					if apiResponse.Task.Log[i] != "" {
+						newLogs = append(newLogs, apiResponse.Task.Log[i])
+					}
+				}
+
+				if len(newLogs) > 0 {
+					// 发送新日志
+					for _, log := range newLogs {
+						select {
+						case task.LogChan <- log:
+							klog.Infof("~~~Temp Log: send log %s", log)
+						default:
+						}
+					}
+
+					// 更新最后日志长度
+					lastLogLength = len(apiResponse.Task.Log)
+				}
+			}()
+		}
+	}
 }
 
 func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
@@ -61,6 +219,16 @@ func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string,
 	task.RelationTaskID = response.TaskID
 	xTerminusNode := r.Header.Get("X-Terminus-Node")
 	task.RelationNode = xTerminusNode
+
+	go func() {
+		err = ExecuteCacheSameTask(task)
+		if err != nil {
+			// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
+			fmt.Printf("Failed to initialize rsync: %v\n", err)
+			return
+		}
+	}()
+
 	return nil
 }
 
