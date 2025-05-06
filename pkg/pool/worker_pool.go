@@ -172,9 +172,13 @@ func (t *Task) UpdateProgress() {
 				break
 			}
 
-			klog.Infof("[%s] %s with log count %d", t.ID, log, len(logs))
-			//logs = append(logs, log)
-			t.Log = append(t.Log, log)
+			if log != "" {
+				klog.Infof("[%s] %s with log count %d", t.ID, log, len(logs))
+				//logs = append(logs, log)
+				t.Log = append(t.Log, log)
+			} else {
+				klog.Infof("[%s] %s with log count %d", t.ID, "a discarded empty log", len(logs))
+			}
 			//t.Mu.Lock()
 			//t.Logging(log)
 			//TaskManager.Store(t.ID, t)
