@@ -461,12 +461,12 @@ func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
 					} else {
 						eofCount++
 						klog.Infof("Have read %d EOFs", eofCount)
-						select {
-						case task.LogChan <- "":
-							klog.Infof("Send Log: %s", "EOF")
-						default:
-							klog.Warningf("Log channel full, dropping %s%%", "EOF")
-						}
+						//select {
+						//case task.LogChan <- "":
+						//	klog.Infof("Send Log: %s", "EOF")
+						//default:
+						//	klog.Warningf("Log channel full, dropping %s%%", "EOF")
+						//}
 						time.Sleep(100 * time.Millisecond)
 						if eofCount >= maxEOFCount {
 							klog.Infoln("Finished reading stdout after multiple EOFs")
