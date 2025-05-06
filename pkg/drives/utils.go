@@ -2,6 +2,7 @@ package drives
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/diskcache"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"github.com/mholt/archiver/v3"
 	"github.com/spf13/afero"
+	"io"
 	"k8s.io/klog/v2"
 	"math/rand"
 	"net/http"
@@ -396,4 +398,20 @@ func HandleImagePreview(
 	http.ServeContent(w, r, file.Name, file.ModTime, bytes.NewReader(resizedImage))
 
 	return 0, nil
+}
+
+func SuitableReader(resp *http.Response) io.Reader {
+	var bodyReader io.Reader = resp.Body
+
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			klog.Errorf("unzip response failed: %v\n", err)
+			return nil
+		}
+		defer gzipReader.Close()
+
+		bodyReader = gzipReader
+	}
+	return bodyReader
 }

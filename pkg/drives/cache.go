@@ -66,7 +66,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 				defer resp.Body.Close() // 确保响应体在函数返回时关闭
 
 				// 读取响应体
-				body, err := io.ReadAll(resp.Body)
+				body, err := io.ReadAll(SuitableReader(resp))
 				if err != nil {
 					task.ErrChan <- fmt.Errorf("failed to read response body: %v", err)
 					return
@@ -109,7 +109,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 					}
 					defer finalResp.Body.Close()
 
-					finalBody, err := io.ReadAll(finalResp.Body)
+					finalBody, err := io.ReadAll(SuitableReader(finalResp))
 					if err != nil {
 						task.ErrChan <- fmt.Errorf("final read failed: %v", err)
 						return
