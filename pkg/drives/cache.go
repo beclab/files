@@ -66,7 +66,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 				defer resp.Body.Close() // 确保响应体在函数返回时关闭
 
 				// 读取响应体
-				body, err := io.ReadAll(SuitableReader(resp))
+				body, err := io.ReadAll(SuitableResponseReader(resp))
 				if err != nil {
 					task.ErrChan <- fmt.Errorf("failed to read response body: %v", err)
 					return
@@ -95,6 +95,39 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 				//task.Mu.Lock()
 				//defer task.Mu.Unlock()
 
+				// 更新任务状态
+				//task.Status = apiResponse.Task.Status
+				//task.Progress = apiResponse.Task.Progress
+
+				// 发送进度更新
+				select {
+				case task.ProgressChan <- apiResponse.Task.Progress:
+					klog.Infof("~~~Temp Log: send progress %d", apiResponse.Task.Progress)
+				default:
+				}
+
+				// 处理日志更新
+				newLogs := make([]string, 0, len(apiResponse.Task.Log))
+				for i := lastLogLength; i < len(apiResponse.Task.Log); i++ {
+					if apiResponse.Task.Log[i] != "" {
+						newLogs = append(newLogs, apiResponse.Task.Log[i])
+					}
+				}
+
+				if len(newLogs) > 0 {
+					// 发送新日志
+					for _, log := range newLogs {
+						select {
+						case task.LogChan <- log:
+							klog.Infof("~~~Temp Log: send log %s", log)
+						default:
+						}
+					}
+
+					// 更新最后日志长度
+					lastLogLength = len(apiResponse.Task.Log)
+				}
+
 				// 检查任务是否已完成
 				if apiResponse.Task.Status == "completed" && apiResponse.Task.Progress == 100 {
 					// 确认任务完成，再检查一次确保状态稳定
@@ -109,7 +142,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 					}
 					defer finalResp.Body.Close()
 
-					finalBody, err := io.ReadAll(SuitableReader(finalResp))
+					finalBody, err := io.ReadAll(SuitableResponseReader(finalResp))
 					if err != nil {
 						task.ErrChan <- fmt.Errorf("final read failed: %v", err)
 						return
@@ -148,38 +181,6 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 					return
 				}
 
-				// 更新任务状态
-				//task.Status = apiResponse.Task.Status
-				//task.Progress = apiResponse.Task.Progress
-
-				// 发送进度更新
-				select {
-				case task.ProgressChan <- apiResponse.Task.Progress:
-					klog.Infof("~~~Temp Log: send progress %d", apiResponse.Task.Progress)
-				default:
-				}
-
-				// 处理日志更新
-				newLogs := make([]string, 0, len(apiResponse.Task.Log))
-				for i := lastLogLength; i < len(apiResponse.Task.Log); i++ {
-					if apiResponse.Task.Log[i] != "" {
-						newLogs = append(newLogs, apiResponse.Task.Log[i])
-					}
-				}
-
-				if len(newLogs) > 0 {
-					// 发送新日志
-					for _, log := range newLogs {
-						select {
-						case task.LogChan <- log:
-							klog.Infof("~~~Temp Log: send log %s", log)
-						default:
-						}
-					}
-
-					// 更新最后日志长度
-					lastLogLength = len(apiResponse.Task.Log)
-				}
 			}()
 		}
 	}

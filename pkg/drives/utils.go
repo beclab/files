@@ -400,7 +400,7 @@ func HandleImagePreview(
 	return 0, nil
 }
 
-func SuitableReader(resp *http.Response) io.Reader {
+func SuitableResponseReader(resp *http.Response) io.Reader {
 	var bodyReader io.Reader = resp.Body
 
 	if resp.Header.Get("Content-Encoding") == "gzip" {
