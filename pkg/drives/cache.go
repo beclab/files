@@ -26,7 +26,7 @@ type CacheResourceService struct {
 	BaseResourceService
 }
 
-func ExecuteCacheSameTask(task *pool.Task) error {
+func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 	// 创建一个ticker用于定期轮询
 	ticker := time.NewTicker(1 * time.Second) // 1秒轮询一次，可根据需要调整
 	defer ticker.Stop()
@@ -48,7 +48,7 @@ func ExecuteCacheSameTask(task *pool.Task) error {
 			// 将HTTP请求和响应处理的逻辑包装在一个匿名函数中
 			func() {
 				// 构造请求URL
-				taskUrl := fmt.Sprintf("http://127.0.0.1:80/api/cache/%s/task?task_id=%s", task.RelationNode, task.RelationTaskID)
+				taskUrl := fmt.Sprintf("http://127.0.0.1:80/api/cache/%s/task?task_id=%s&task=1", task.RelationNode, task.RelationTaskID)
 
 				// 发送HTTP请求
 				req, err := http.NewRequestWithContext(task.Ctx, "GET", taskUrl, nil)
@@ -56,6 +56,7 @@ func ExecuteCacheSameTask(task *pool.Task) error {
 					task.ErrChan <- fmt.Errorf("failed to create request: %v", err)
 					return
 				}
+				req.Header = r.Header
 
 				resp, err := client.Do(req)
 				if err != nil {
@@ -221,7 +222,7 @@ func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string,
 	task.RelationNode = xTerminusNode
 
 	go func() {
-		err = ExecuteCacheSameTask(task)
+		err = ExecuteCacheSameTask(task, r)
 		if err != nil {
 			// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
 			fmt.Printf("Failed to initialize rsync: %v\n", err)
