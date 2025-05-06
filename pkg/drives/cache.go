@@ -48,7 +48,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 			// 将HTTP请求和响应处理的逻辑包装在一个匿名函数中
 			func() {
 				// 构造请求URL
-				taskUrl := fmt.Sprintf("http://127.0.0.1:80/api/cache/%s/task?task_id=%s&task=1", task.RelationNode, task.RelationTaskID)
+				taskUrl := fmt.Sprintf("http://127.0.0.1:80/api/cache/%s/task?task_id=%s", task.RelationNode, task.RelationTaskID)
 
 				// 发送HTTP请求
 				req, err := http.NewRequestWithContext(task.Ctx, "GET", taskUrl, nil)
@@ -64,6 +64,11 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 					return
 				}
 				defer resp.Body.Close() // 确保响应体在函数返回时关闭
+
+				if resp.StatusCode != http.StatusOK {
+					task.ErrChan <- fmt.Errorf("failed to query task status: %s", resp.Status)
+					return
+				}
 
 				// 读取响应体
 				body, err := io.ReadAll(SuitableResponseReader(resp))
