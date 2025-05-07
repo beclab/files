@@ -1287,7 +1287,7 @@ func (rc *GoogleDriveResourceService) PasteSame(task *pool.Task, action, src, ds
 	return err
 }
 
-func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *GoogleDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	mode := fileMode
 
@@ -1296,7 +1296,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 		return err
 	}
 
-	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, mode, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -1340,13 +1340,13 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 		fdst := filepath.Join(fdstBase, item.Name)
 		klog.Infoln(fsrc, fdst)
 		if item.IsDir {
-			err = rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
+			err = rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
 		} else {
 			fdst += item.ExportSuffix
-			err = rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
+			err = rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
@@ -1355,7 +1355,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 	return nil
 }
 
-func (rs *GoogleDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *GoogleDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	respBody, _, err := ResourcePostGoogle(dst, w, r, true)
 	var bodyJson GoogleDrivePostResponse
@@ -1371,7 +1371,7 @@ func (rs *GoogleDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, f
 	return nil
 }
 
-func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *GoogleDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
@@ -1420,14 +1420,14 @@ func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, d
 		return err
 	}
 
-	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
+	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, w, r, d, diskSize)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rs *GoogleDriveResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *GoogleDriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	klog.Infoln("Begin to paste!")
 	klog.Infoln("dst: ", dst)
@@ -1458,7 +1458,7 @@ func (rs *GoogleDriveResourceService) GetStat(fs afero.Fs, src string, w http.Re
 	return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
 }
 
-func (rs *GoogleDriveResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+func (rs *GoogleDriveResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	_, status, err := ResourceDeleteGoogle(fileCache, src, w, r, true)
 	if status != http.StatusOK && status != 0 {

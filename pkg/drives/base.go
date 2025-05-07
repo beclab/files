@@ -2,7 +2,6 @@ package drives
 
 import (
 	"bytes"
-	"context"
 	"files/pkg/common"
 	"files/pkg/errors"
 	"files/pkg/files"
@@ -40,16 +39,16 @@ type ResourceService interface {
 
 	// paste funcs
 	PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
-	PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode, w http.ResponseWriter,
+	PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode, w http.ResponseWriter,
 		r *http.Request, driveIdCache map[string]string) error
-	PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
+	PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
 		d *common.Data, driveIdCache map[string]string) error
-	PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, mode os.FileMode, diskSize int64,
+	PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, mode os.FileMode, diskSize int64,
 		w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
-	PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
+	PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
 		d *common.Data, diskSize int64) error
 	GetStat(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error)
-	MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data, w http.ResponseWriter, r *http.Request) error
+	MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data, w http.ResponseWriter, r *http.Request) error
 }
 
 var (
@@ -523,22 +522,22 @@ func (rs *BaseResourceService) PasteSame(task *pool.Task, action, src, dst strin
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *BaseResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *BaseResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *BaseResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *BaseResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	return fmt.Errorf("Not Implemented")
 }
@@ -548,7 +547,7 @@ func (rs *BaseResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 	return nil, 0, 0, false, fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+func (rs *BaseResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
 }

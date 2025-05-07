@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"files/pkg/common"
 	"files/pkg/drives"
 	"files/pkg/errors"
@@ -166,10 +165,13 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 	go func() {
 		defer wg.Done()
 		var err error
+
+		// TODO: for test, all as not same
+		same = false
 		if same {
 			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
 		} else {
-			err = pasteActionDiffArch(task, r.Context(), action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
+			err = pasteActionDiffArch(task, action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
 		}
 		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
 			fmt.Fprintln(w, err.Error())
@@ -298,7 +300,7 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 //	return
 //}
 
-func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
+func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	// path.Clean, only operate on string level, so it fits every src/dst type.
 	if srcType != drives.SrcTypeAWSS3 {
 		if src = path.Clean("/" + src); src == "" {
@@ -335,9 +337,9 @@ func doPaste(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w h
 	var copyTempGoogleDrivePathIdCache = make(map[string]string)
 
 	if isDir {
-		err = handler.PasteDirFrom(fs, srcType, src, dstType, dst, d, mode, w, r, copyTempGoogleDrivePathIdCache)
+		err = handler.PasteDirFrom(task, fs, srcType, src, dstType, dst, d, mode, w, r, copyTempGoogleDrivePathIdCache)
 	} else {
-		err = handler.PasteFileFrom(fs, srcType, src, dstType, dst, d, mode, size, w, r, copyTempGoogleDrivePathIdCache)
+		err = handler.PasteFileFrom(task, fs, srcType, src, dstType, dst, d, mode, size, w, r, copyTempGoogleDrivePathIdCache)
 	}
 	if err != nil {
 		return err
@@ -374,13 +376,13 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 //	return handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
 //}
 
-func pasteActionDiffArch(task *pool.Task, ctx context.Context, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	// In this function, context if tied up to src, because src is in the URL
 	switch action {
 	case "copy":
-		return doPaste(files.DefaultFs, srcType, src, dstType, dst, d, w, r)
+		return doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 	case "rename":
-		err := doPaste(files.DefaultFs, srcType, src, dstType, dst, d, w, r)
+		err := doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 		if err != nil {
 			return err
 		}
@@ -389,7 +391,7 @@ func pasteActionDiffArch(task *pool.Task, ctx context.Context, action, srcType, 
 		if err != nil {
 			return err
 		}
-		err = handler.MoveDelete(fileCache, src, ctx, d, w, r)
+		err = handler.MoveDelete(task, fileCache, src, d, w, r)
 		if err != nil {
 			return err
 		}

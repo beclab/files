@@ -32,7 +32,7 @@ func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst stri
 	return common.PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
 }
 
-func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	srcinfo, err := fs.Stat(src)
 	if err != nil {
@@ -45,7 +45,7 @@ func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 		return err
 	}
 
-	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, mode, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -69,13 +69,13 @@ func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 
 		if obj.IsDir() {
 			// Create sub-directories, recursively.
-			err = rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), w, r, driveIdCache)
+			err = rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), w, r, driveIdCache)
 			if err != nil {
 				errs = append(errs, err)
 			}
 		} else {
 			// Perform the file copy.
-			err = rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), obj.Size(), w, r, driveIdCache)
+			err = rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), obj.Size(), w, r, driveIdCache)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -92,7 +92,7 @@ func (rs *DriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 	return nil
 }
 
-func (rs *DriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *DriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	mode := fileMode
 	if err := fileutils.MkdirAllWithChown(fs, dst, mode); err != nil {
@@ -102,7 +102,7 @@ func (rs *DriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMod
 	return nil
 }
 
-func (rs *DriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
@@ -147,14 +147,14 @@ func (rs *DriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType
 		return err
 	}
 
-	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
+	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, w, r, d, diskSize)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rs *DriveResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	status, err := DriveBufferToFile(bufferPath, dst, fileMode, d)
 	if status != http.StatusOK {
@@ -180,9 +180,9 @@ func (rs *DriveResourceService) GetStat(fs afero.Fs, src string, w http.Response
 	return info, info.Size(), info.Mode(), info.IsDir(), nil
 }
 
-func (rs *DriveResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+func (rs *DriveResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
-	status, err := ResourceDriveDelete(fileCache, src, ctx, d)
+	status, err := ResourceDriveDelete(fileCache, src, task.Ctx, d)
 	if status != http.StatusOK {
 		return os.ErrInvalid
 	}

@@ -247,7 +247,7 @@ func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string,
 	return nil
 }
 
-func (rs *CacheResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	mode := fileMode
 
@@ -256,7 +256,7 @@ func (rs *CacheResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 		return err
 	}
 
-	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, mode, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -345,12 +345,12 @@ func (rs *CacheResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 		fdst := filepath.Join(fdstBase, item.Name)
 
 		if item.IsDir {
-			err := rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), w, r, driveIdCache)
+			err := rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
 		} else {
-			err := rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), item.Size, w, r, driveIdCache)
+			err := rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), item.Size, w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
@@ -359,7 +359,7 @@ func (rs *CacheResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 	return nil
 }
 
-func (rs *CacheResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	if err := CacheMkdirAll(dst, fileMode, r); err != nil {
 		return err
@@ -367,7 +367,7 @@ func (rs *CacheResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMod
 	return nil
 }
 
-func (rs *CacheResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
@@ -406,14 +406,14 @@ func (rs *CacheResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType
 		return err
 	}
 
-	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
+	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, w, r, d, diskSize)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rs *CacheResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *CacheResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	status, err := CacheBufferToFile(bufferPath, dst, fileMode, d)
 	if status != http.StatusOK {
@@ -487,9 +487,9 @@ func (rs *CacheResourceService) GetStat(fs afero.Fs, src string, w http.Response
 	return nil, fileInfo.Size, fileInfo.Mode, fileInfo.IsDir, nil
 }
 
-func (rs *CacheResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+func (rs *CacheResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
-	status, err := ResourceCacheDelete(fileCache, src, ctx, d)
+	status, err := ResourceCacheDelete(fileCache, src, task.Ctx, d)
 	if status != http.StatusOK {
 		return os.ErrInvalid
 	}

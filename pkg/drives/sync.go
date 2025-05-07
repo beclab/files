@@ -3,7 +3,6 @@ package drives
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"crypto/md5"
 	"encoding/json"
 	e "errors"
@@ -208,7 +207,7 @@ func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst strin
 	return err
 }
 
-func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *SyncResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	mode := fileMode
 
@@ -217,7 +216,7 @@ func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, 
 		return err
 	}
 
-	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, mode, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -320,12 +319,12 @@ func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, 
 		fdst := filepath.Join(fdstBase, item.Name)
 
 		if item.Type == "dir" {
-			err := rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, SyncPermToMode(item.Permission), w, r, driveIdCache)
+			err := rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, SyncPermToMode(item.Permission), w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
 		} else {
-			err := rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, SyncPermToMode(item.Permission), item.Size, w, r, driveIdCache)
+			err := rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, SyncPermToMode(item.Permission), item.Size, w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
@@ -334,7 +333,7 @@ func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, 
 	return nil
 }
 
-func (rs *SyncResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *SyncResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	if err := SyncMkdirAll(dst, fileMode, true, r); err != nil {
 		return err
@@ -342,7 +341,7 @@ func (rs *SyncResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode
 	return nil
 }
 
-func (rs *SyncResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
@@ -381,14 +380,14 @@ func (rs *SyncResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType,
 		return err
 	}
 
-	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
+	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, w, r, d, diskSize)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rs *SyncResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	klog.Infoln("Begin to sync paste!")
 	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
@@ -524,7 +523,7 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 	}
 }
 
-func (rs *SyncResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+func (rs *SyncResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	status, err := ResourceSyncDelete(src, r)
 	if status != http.StatusOK {

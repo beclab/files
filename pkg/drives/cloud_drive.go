@@ -1048,7 +1048,7 @@ func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst
 	return err
 }
 
-func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	klog.Infof("~~~Temp log for Cloud Drive PasteDirFrom: srcType: %s, src: %s, dstType: %s, dst: %s", srcType, src, dstType, dst)
 	klog.Infof("~~~Temp log for Cloud Drive PasteDirFrom: driveIdCache: %v", driveIdCache)
@@ -1059,7 +1059,7 @@ func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dst
 		return err
 	}
 
-	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, mode, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -1103,12 +1103,12 @@ func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dst
 		if item.IsDir {
 			fsrc = CloudDriveNormalizationPath(fsrc, srcType, true, true)
 			fdst = CloudDriveNormalizationPath(fdst, dstType, true, true)
-			err = rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
+			err = rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
 		} else {
-			err = rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
+			err = rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
@@ -1117,7 +1117,7 @@ func (rs *CloudDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dst
 	return nil
 }
 
-func (rs *CloudDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *CloudDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	_, _, err := ResourcePostCloudDrive(dst, w, r, false)
 	if err != nil {
@@ -1126,7 +1126,7 @@ func (rs *CloudDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fi
 	return nil
 }
 
-func (rs *CloudDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *CloudDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	klog.Infof("~~~Temp log for Cloud Drive PasteFileFrom: srcType: %s, src: %s, dstType: %s, dst: %s", srcType, srcType, dstType, dst)
 	bflName := r.Header.Get("X-Bfl-User")
@@ -1169,14 +1169,14 @@ func (rs *CloudDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, ds
 		return err
 	}
 
-	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
+	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, w, r, d, diskSize)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rs *CloudDriveResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *CloudDriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	klog.Infoln("Begin to paste!")
 	klog.Infoln("dst: ", dst)
@@ -1204,7 +1204,7 @@ func (rs *CloudDriveResourceService) GetStat(fs afero.Fs, src string, w http.Res
 	return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
 }
 
-func (rs *CloudDriveResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+func (rs *CloudDriveResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	_, status, err := ResourceDeleteCloudDrive(fileCache, src, w, r, true)
 	if status != http.StatusOK && status != 0 {
