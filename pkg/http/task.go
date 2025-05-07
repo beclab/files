@@ -91,6 +91,8 @@ func resourceTaskDeleteHandler(w http.ResponseWriter, r *http.Request, d *common
 					t.ErrChan <- fmt.Errorf("failed to unmarshal response: %v", err)
 					return common.ErrToStatus(err), err
 				}
+
+				time.Sleep(1 * time.Second)
 			}
 
 			pool.CancelTask(taskID, false)
