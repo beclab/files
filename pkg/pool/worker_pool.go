@@ -130,14 +130,12 @@ func (t *Task) UpdateProgress() {
 				klog.Infof("~~~Temp log: logging {%s}", log)
 				t.Log = append(t.Log, log)
 			}
-			if t.Status == "completed" {
-				t.Progress = 100
+			if t.Progress >= 100 {
+				t.Status = "completed"
+				klog.Infof("Task %s completed with progress %d", t.ID, t.Progress)
 			} else {
-				if t.Progress < 100 {
-					t.Status = "cancelled"
-				} else {
-					t.Status = "completed"
-				}
+				t.Status = "cancelled"
+				klog.Warningf("Task %s cancelled with unexpected progress %d", t.ID, t.Progress)
 			}
 			TaskManager.Store(t.ID, t)
 			t.Mu.Unlock()
@@ -189,7 +187,11 @@ func (t *Task) UpdateProgress() {
 			if !ok {
 				// 通道关闭，任务完成
 				t.Mu.Lock()
-				t.Status = "completed"
+				if t.Progress >= 100 {
+					t.Status = "completed"
+				} else {
+					t.Status = "cancelled" // 或根据实际逻辑调整状态
+				}
 				for _, log := range logs {
 					klog.Infof("~~~Temp log: logging {%s}", log)
 					t.Log = append(t.Log, log)
