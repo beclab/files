@@ -196,7 +196,16 @@ func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
-	return ResourceSyncPatch(action, src, dst, r)
+	err := ResourceSyncPatch(action, src, dst, r)
+	if err != nil {
+		task.ErrChan <- err
+		task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
+		pool.CancelTask(task.ID, false)
+	} else {
+		task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
+		pool.CompleteTask(task.ID)
+	}
+	return err
 }
 
 func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
