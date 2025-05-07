@@ -468,7 +468,7 @@ type GoogleDriveIdFocusedMetaInfos struct {
 	ExportSuffix string `json:"exportSuffix"`
 }
 
-func GetGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request) (info *GoogleDriveIdFocusedMetaInfos, err error) {
+func GetGoogleDriveIdFocusedMetaInfos(task *pool.Task, src string, w http.ResponseWriter, r *http.Request) (info *GoogleDriveIdFocusedMetaInfos, err error) {
 	if !strings.HasSuffix(src, "/") {
 		src += "/"
 	}
@@ -479,6 +479,7 @@ func GetGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 	if strings.Index(pathId, "/") != -1 {
 		err = e.New("PathId Parse Error")
+		TaskLog(task, "error", "PathId Parse Error")
 		return
 	}
 
@@ -490,24 +491,29 @@ func GetGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		//klog.Errorln("Error marshalling JSON:", err)
+		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return
 	}
-	klog.Infoln("Google Drive Meta Params:", string(jsonBody))
+	//klog.Infoln("Google Drive Meta Params:", string(jsonBody))
+	TaskLog(task, "info", "Google Drive Meta Params:", string(jsonBody))
 	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
 	if err != nil {
-		klog.Errorln("Error calling drive/get_file_meta_data:", err)
+		//klog.Errorln("Error calling drive/get_file_meta_data:", err)
+		TaskLog(task, "error", "Error calling drive/get_file_meta_data:", err)
 		return
 	}
 
 	var bodyJson GoogleDriveMetaResponse
 	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		klog.Error(err)
+		//klog.Error(err)
+		TaskLog(task, "error", err)
 		return
 	}
 
 	if bodyJson.StatusCode == "FAIL" {
 		err = e.New(*bodyJson.FailReason)
+		TaskLog(task, "error", *bodyJson.FailReason)
 		return
 	}
 
@@ -620,17 +626,21 @@ func streamGoogleDriveFiles(w http.ResponseWriter, r *http.Request, body []byte,
 	}
 }
 
-func CopyGoogleDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.Request) error {
+func CopyGoogleDriveSingleFile(task *pool.Task, src, dst string, w http.ResponseWriter, r *http.Request) error {
 	srcDrive, srcName, srcPathId, srcFilename := ParseGoogleDrivePath(src)
-	klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
+	//klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
+	TaskLog(task, "info", "srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
 	if srcPathId == "" {
-		klog.Infoln("Src parse failed.")
+		//klog.Infoln("Src parse failed.")
+		TaskLog(task, "info", "Src parse failed.")
 		return nil
 	}
 	dstDrive, dstName, dstPathId, dstFilename := ParseGoogleDrivePath(dst)
-	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
+	//klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
+	TaskLog(task, "info", "dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
 	if dstPathId == "" || dstFilename == "" {
-		klog.Infoln("Dst parse failed.")
+		//klog.Infoln("Dst parse failed.")
+		TaskLog(task, "info", "Dst parse failed.")
 		return nil
 	}
 	dstFilename = strings.TrimSuffix(dstFilename, "/")
@@ -645,27 +655,32 @@ func CopyGoogleDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.R
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		//klog.Errorln("Error marshalling JSON:", err)
+		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return err
 	}
-	klog.Infoln("Copy File Params:", string(jsonBody))
+	//klog.Infoln("Copy File Params:", string(jsonBody))
+	TaskLog(task, "info", "Copy File Params:", string(jsonBody))
 	_, err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r, true)
 	if err != nil {
-		klog.Errorln("Error calling drive/copy_file:", err)
+		//klog.Errorln("Error calling drive/copy_file:", err)
+		TaskLog(task, "error", "Error calling drive/copy_file:", err)
 		return err
 	}
 	return nil
 }
 
-func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Request, srcPath string) error {
+func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWriter, r *http.Request, srcPath string) error {
 	srcDrive, srcName, srcPathId, srcFilename := ParseGoogleDrivePath(src)
-	klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
+	//klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
+	TaskLog(task, "info", "srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
 	if srcPathId == "" {
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
 	dstDrive, dstName, dstPathId, dstFilename := ParseGoogleDrivePath(dst)
-	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
+	//klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
+	TaskLog(task, "info", "dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
 	if dstPathId == "" || dstFilename == "" {
 		klog.Infoln("Dst parse failed.")
 		return nil
@@ -676,7 +691,8 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 	var recursivePathId = srcPathId
 	var A []*GoogleDriveListResponseFileData
 	for {
-		klog.Infoln("len(A): ", len(A))
+		//klog.Infoln("len(A): ", len(A))
+		TaskLog(task, "info", "len(A): ", len(A))
 
 		var isDir = true
 		var firstItem *GoogleDriveListResponseFileData
@@ -705,19 +721,23 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 			}
 			postJsonBody, err := json.Marshal(postParam)
 			if err != nil {
-				klog.Errorln("Error marshalling JSON:", err)
+				//klog.Errorln("Error marshalling JSON:", err)
+				TaskLog(task, "error", "Error marshalling JSON:", err)
 				return err
 			}
-			klog.Infoln("Google Drive Post Params:", string(postJsonBody))
+			//klog.Infoln("Google Drive Post Params:", string(postJsonBody))
+			TaskLog(task, "info", "Google Drive Post Params:", string(postJsonBody))
 			var postRespBody []byte
 			postRespBody, err = GoogleDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, true)
 			if err != nil {
-				klog.Errorln("Error calling drive/create_folder:", err)
+				//klog.Errorln("Error calling drive/create_folder:", err)
+				TaskLog(task, "error", "Error calling drive/create_folder:", err)
 				return err
 			}
 			var postBodyJson GoogleDrivePostResponse
 			if err = json.Unmarshal(postRespBody, &postBodyJson); err != nil {
-				klog.Error(err)
+				//klog.Error(err)
+				TaskLog(task, "error", err)
 				return err
 			}
 			CopyTempGoogleDrivePathIdCache[recursivePath] = postBodyJson.Data.Meta.ID
@@ -729,11 +749,13 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 				Name:  srcName,
 			}
 
-			klog.Infoln("firstParam pathId:", recursivePathId)
+			//klog.Infoln("firstParam pathId:", recursivePathId)
+			TaskLog(task, "info", "firstParam pathId:", recursivePathId)
 			var firstJsonBody []byte
 			firstJsonBody, err = json.Marshal(firstParam)
 			if err != nil {
-				klog.Errorln("Error marshalling JSON:", err)
+				//klog.Errorln("Error marshalling JSON:", err)
+				TaskLog(task, "error", "Error marshalling JSON:", err)
 				return err
 			}
 			var firstRespBody []byte
@@ -741,7 +763,8 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 
 			var firstBodyJson GoogleDriveListResponse
 			if err = json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
-				klog.Error(err)
+				//klog.Error(err)
+				TaskLog(task, "error", err)
 				return err
 			}
 
@@ -752,14 +775,17 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 			}
 		} else {
 			if len(A) > 0 {
-				klog.Infoln(CopyTempGoogleDrivePathIdCache)
+				//klog.Infoln(CopyTempGoogleDrivePathIdCache)
+				TaskLog(task, "info", CopyTempGoogleDrivePathIdCache)
 				copyPathPrefix := "/Drive/google/" + srcName + "/"
 				copySrc := copyPathPrefix + firstItem.Meta.ID + "/"
 				parentPathId := CopyTempGoogleDrivePathIdCache[filepath.Dir(firstItem.Path)]
 				copyDst := filepath.Join(copyPathPrefix+parentPathId, firstItem.Name)
-				klog.Infoln("copySrc: ", copySrc)
-				klog.Infoln("copyDst: ", copyDst)
-				err := CopyGoogleDriveSingleFile(copySrc, copyDst, w, r)
+				//klog.Infoln("copySrc: ", copySrc)
+				//klog.Infoln("copyDst: ", copyDst)
+				TaskLog(task, "info", "copySrc: ", copySrc)
+				TaskLog(task, "info", "copyDst: ", copyDst)
+				err := CopyGoogleDriveSingleFile(task, copySrc, copyDst, w, r)
 				if err != nil {
 					return err
 				}
@@ -921,7 +947,7 @@ func GoogleBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *ht
 	}
 }
 
-func MoveGoogleDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Request) error {
+func MoveGoogleDriveFolderOrFiles(task *pool.Task, src, dst string, w http.ResponseWriter, r *http.Request) error {
 	srcDrive, srcName, srcPathId, _ := ParseGoogleDrivePath(src)
 	_, _, dstPathId, _ := ParseGoogleDrivePath(dst)
 
@@ -934,13 +960,16 @@ func MoveGoogleDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *htt
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		//klog.Errorln("Error marshalling JSON:", err)
+		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return err
 	}
-	klog.Infoln("Google Drive Patch Params:", string(jsonBody))
+	//klog.Infoln("Google Drive Patch Params:", string(jsonBody))
+	TaskLog(task, "info", "Google Drive Patch Params:", string(jsonBody))
 	_, err = GoogleDriveCall("/drive/move_file", "POST", jsonBody, w, r, false)
 	if err != nil {
-		klog.Errorln("Error calling drive/move_file:", err)
+		//klog.Errorln("Error calling drive/move_file:", err)
+		TaskLog(task, "error", "Error calling drive/move_file:", err)
 		return err
 	}
 	return nil
@@ -1218,28 +1247,44 @@ func (rs *GoogleDriveResourceService) PreviewHandler(imgSvc preview.ImgService, 
 }
 
 func (rc *GoogleDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	var err error
 	switch action {
 	case "copy":
 		if !strings.HasSuffix(src, "/") {
 			src += "/"
 		}
-		metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+		metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(task, src, w, r)
 		if err != nil {
+			task.ErrChan <- err
+			task.LogChan <- fmt.Sprintf("%s from %s to %s failed when getting meta info", action, src, dst)
+			pool.CancelTask(task.ID, false)
 			return err
 		}
 
 		if metaInfo.IsDir {
-			return CopyGoogleDriveFolder(src, dst, w, r, metaInfo.Path)
+			err = CopyGoogleDriveFolder(task, src, dst, w, r, metaInfo.Path)
 		}
-		return CopyGoogleDriveSingleFile(src, dst, w, r)
+		err = CopyGoogleDriveSingleFile(task, src, dst, w, r)
+
 	case "rename":
 		if !strings.HasSuffix(src, "/") {
 			src += "/"
 		}
-		return MoveGoogleDriveFolderOrFiles(src, dst, w, r)
+		err = MoveGoogleDriveFolderOrFiles(task, src, dst, w, r)
+
 	default:
-		return fmt.Errorf("unknown action: %s", action)
+		err = fmt.Errorf("unknown action: %s", action)
 	}
+
+	if err != nil {
+		task.ErrChan <- err
+		task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
+		pool.CancelTask(task.ID, false)
+	} else {
+		task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
+		pool.CompleteTask(task.ID)
+	}
+	return err
 }
 
 func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
@@ -1341,7 +1386,7 @@ func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, d
 		return err
 	}
 
-	srcInfo, err := GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+	srcInfo, err := GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
 	bufferFilePath, err := GenerateBufferFolder(srcInfo.Path, bflName)
 	if err != nil {
 		return err
@@ -1406,7 +1451,7 @@ func (rs *GoogleDriveResourceService) GetStat(fs afero.Fs, src string, w http.Re
 	if !strings.HasSuffix(src, "/") {
 		src += "/"
 	}
-	metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+	metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
 	if err != nil {
 		return nil, 0, 0, false, err
 	}

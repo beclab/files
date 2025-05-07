@@ -76,7 +76,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		}
 		isDir := strings.HasSuffix(src, "/")
 		if srcType == drives.SrcTypeGoogle && dstType != drives.SrcTypeGoogle {
-			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
 			if err != nil {
 				return http.StatusInternalServerError, err
 			}

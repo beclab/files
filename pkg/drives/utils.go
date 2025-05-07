@@ -9,6 +9,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
@@ -414,4 +415,22 @@ func SuitableResponseReader(resp *http.Response) io.Reader {
 		bodyReader = gzipReader
 	}
 	return bodyReader
+}
+
+func TaskLog(task *pool.Task, level string, args ...interface{}) {
+	// 总是输出到klog
+	switch level {
+	case "info":
+		klog.Infoln(args...)
+	case "error":
+		klog.Errorln(args...)
+	default:
+		klog.Infoln(args...)
+	}
+
+	// 如果task不为nil且LogChan存在，也输出到LogChan
+	if task != nil && task.LogChan != nil {
+		logMsg := fmt.Sprintln(args...)
+		task.LogChan <- logMsg
+	}
 }
