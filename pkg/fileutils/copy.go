@@ -138,7 +138,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 	go func() {
 		var err error
 		//progressChan, logChan, errChan, err = ExecuteRsyncWithContext(task.Ctx, "/data"+task.Source, "/data"+task.Dest)
-		err = ExecuteRsync(task, 0, 100)
+		err = ExecuteRsync(task, "", "", 0, 100)
 		if err != nil {
 			// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
 			fmt.Printf("Failed to initialize rsync: %v\n", err)

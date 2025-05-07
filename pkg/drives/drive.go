@@ -132,23 +132,39 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 	if err != nil {
 		return err
 	}
-	err = DriveFileToBuffer(fileInfo, bufferPath)
+
+	err = DriveFileToBuffer(task, fileInfo, bufferPath)
 	if err != nil {
+		task.ErrChan <- err
+		task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
+		pool.CancelTask(task.ID, false)
 		return err
 	}
 
 	defer func() {
-		klog.Infoln("Begin to remove buffer")
+		//klog.Infoln("Begin to remove buffer")
+		TaskLog(task, "info", "Begin to remove buffer")
 		RemoveDiskBuffer(bufferPath, srcType)
+		if task.Progress == 99 {
+			pool.CompleteTask(task.ID)
+		} else {
+			pool.CancelTask(task.ID, false)
+		}
 	}()
 
 	handler, err := GetResourceService(dstType)
 	if err != nil {
+		task.ErrChan <- err
+		task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
+		pool.CancelTask(task.ID, false)
 		return err
 	}
 
 	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, w, r, d, diskSize)
 	if err != nil {
+		task.ErrChan <- err
+		task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
+		pool.CancelTask(task.ID, false)
 		return err
 	}
 	return nil
@@ -156,11 +172,16 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 
 func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
-	status, err := DriveBufferToFile(bufferPath, dst, fileMode, d)
+	status, err := DriveBufferToFile(task, bufferPath, dst, fileMode, d)
 	if status != http.StatusOK {
+		task.LogChan <- fmt.Sprintf("copy/move to %s failed with status %d", dst, status)
+		pool.CancelTask(task.ID, false)
 		return os.ErrInvalid
 	}
 	if err != nil {
+		task.ErrChan <- err
+		task.LogChan <- fmt.Sprintf("copy/move to %s failed", dst)
+		pool.CancelTask(task.ID, false)
 		return err
 	}
 	return nil
@@ -346,22 +367,25 @@ func ResourceDriveGetInfo(path string, r *http.Request, d *common.Data) (*files.
 	return file, http.StatusOK, nil
 }
 
-func DriveFileToBuffer(file *files.FileInfo, bufferFilePath string) error {
+func DriveFileToBuffer(task *pool.Task, file *files.FileInfo, bufferFilePath string) error {
 	path, err := common.UnescapeURLIfEscaped(file.Path)
 	if err != nil {
 		return err
 	}
 	klog.Infoln("file.Path:", file.Path, ", path:", path)
 
-	err = fileutils.IoCopyFileWithBufferOs("/data"+path, bufferFilePath, 8*1024*1024)
+	//err = fileutils.IoCopyFileWithBufferOs("/data"+path, bufferFilePath, 8*1024*1024)
+	err = fileutils.ExecuteRsync(task, "/data"+path, bufferFilePath, 0, 50)
 	if err != nil {
+		// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
+		fmt.Printf("Failed to initialize rsync: %v\n", err)
 		return err
 	}
 
 	return nil
 }
 
-func DriveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data) (int, error) {
+func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data) (int, error) {
 	klog.Infoln("***DriveBufferToFile!")
 	klog.Infoln("*** bufferFilePath:", bufferFilePath)
 	klog.Infoln("*** targetPath:", targetPath)
@@ -388,7 +412,8 @@ func DriveBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 		ReadHeader: d.Server.TypeDetectionByHeader,
 	})
 
-	err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, "/data"+targetPath, 8*1024*1024)
+	//err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, "/data"+targetPath, 8*1024*1024)
+	err = fileutils.ExecuteRsync(task, bufferFilePath, "/data"+targetPath, 51, 99)
 
 	if err != nil {
 		_ = files.DefaultFs.RemoveAll(targetPath)

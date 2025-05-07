@@ -341,13 +341,20 @@ func parseFloat(s string) float64 {
 //}
 
 // func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan string, chan error, error) {
-func ExecuteRsync(task *pool.Task, progressLeft, progressRight int) error {
+func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight int) error {
 	klog.Infoln("Starting ExecuteRsync function")
 
 	stdoutReader, stdoutWriter := io.Pipe()
 
+	if src == "" {
+		src = RootPrefix + task.Source
+	}
+	if dst == "" {
+		dst = RootPrefix + task.Dest
+	}
+
 	cmd := exec.CommandContext(task.Ctx, "rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", 1024),
-		RootPrefix+task.Source, RootPrefix+task.Dest)
+		src, dst)
 	cmd.Stdout = stdoutWriter
 
 	var wg sync.WaitGroup

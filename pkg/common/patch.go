@@ -434,7 +434,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 	// Get properties of source.
 
 	go func() {
-		err = fileutils.ExecuteRsync(task, 0, 99)
+		err = fileutils.ExecuteRsync(task, "", "", 0, 99)
 		if err != nil {
 			klog.Errorf("Failed to initialize rsync: %v\n", err)
 			pool.CancelTask(task.ID, false)
