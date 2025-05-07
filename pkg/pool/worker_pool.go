@@ -268,6 +268,9 @@ func (t *Task) UpdateProgress() {
 					t.Mu.Unlock()
 					klog.Infof("[%s] Log collected: %s (total: %d)", t.ID, log, len(t.Log))
 				}
+			case <-t.Ctx.Done(): // 收到退出信号时退出循环
+				klog.Infof("Task %s log collector exiting gracefully", t.ID)
+				return
 			}
 		}
 	}()
@@ -281,7 +284,7 @@ func (t *Task) UpdateProgress() {
 		select {
 		case <-t.Ctx.Done():
 			// 关闭日志通道并等待收集完成
-			close(t.LogChan)
+			//close(t.LogChan)
 			wg.Wait()
 
 			t.Mu.Lock()
@@ -329,8 +332,8 @@ func (t *Task) UpdateProgress() {
 		case progress, ok := <-t.ProgressChan:
 			if !ok {
 				// 通道关闭处理
-				close(t.LogChan) // 关闭日志通道
-				wg.Wait()        // 等待日志收集完成
+				//close(t.LogChan) // 关闭日志通道
+				wg.Wait() // 等待日志收集完成
 
 				t.Mu.Lock()
 				t.Status = "completed"
