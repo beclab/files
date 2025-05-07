@@ -556,10 +556,13 @@ func (rs *BaseResourceService) MoveDelete(fileCache fileutils.FileCache, src str
 func executePatchTask(task *pool.Task, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
 	// only for cache
-	logChan := make(chan string, 100)
-	defer close(logChan)
+	//logChan := make(chan string, 100)
+	//defer close(logChan)
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		var err error
 		err = common.PatchAction(task, task.Ctx, action, task.Source, task.Dest, "", "", fileCache)
 
@@ -570,6 +573,13 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 			klog.Errorln(err)
 		}
 		return
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
+		task.UpdateProgress()
 	}()
 
 	// 等待 ExecuteRsyncSimulated 完成或出错
@@ -587,14 +597,6 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 		klog.Error("progressChan is nil")
 		return
 	}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
-		task.UpdateProgress()
-	}()
 
 	// 等待 goroutine 完成
 	wg.Wait()
