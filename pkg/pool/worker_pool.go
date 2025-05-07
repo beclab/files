@@ -294,6 +294,11 @@ func CompleteTask(taskID string) {
 	time.Sleep(1 * time.Second)
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
+			if t.Status == "cancelled" {
+				klog.Infof("Task %s has already been cancelled, cannot complete it", taskID)
+				return
+			}
+
 			t.cancelOnce.Do(func() {
 				t.Mu.Lock()
 				// 确保字段可导出
