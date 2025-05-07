@@ -437,6 +437,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			}
 		}
 
+		klog.Infof("~~~Debug Log: needTask:%d, action:%s, rename: %v", needTask, action, rename)
 		var task *pool.Task = nil
 		if needTask != 0 {
 			// only for cache now

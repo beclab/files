@@ -321,6 +321,7 @@ func Move(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst, srcExtern
 	klog.Infof("copy %v from %s to %s", info, src, dst)
 
 	if task == nil {
+		klog.Infof("~~~Debug Log: task is nil")
 		if info.IsDir() {
 			return MoveDir(ctx, fs, src, dst, srcExternalType, dstExternalType, fileCache, true)
 		}
@@ -329,6 +330,7 @@ func Move(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst, srcExtern
 	}
 
 	go func() {
+		klog.Infof("~~~Debug Log: task ID = %s", task.ID)
 		var err error
 		//progressChan, logChan, errChan, err = ExecuteRsyncWithContext(task.Ctx, "/data"+task.Source, "/data"+task.Dest)
 		err = ExecuteMoveWithRsync(task, srcExternalType, dstExternalType, fileCache)
