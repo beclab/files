@@ -178,7 +178,7 @@ func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			return common.ErrToStatus(err), err
 		}
 
-		err = ResourceSyncPatch(action, src, dst, r)
+		err = ResourceSyncPatch(nil, action, src, dst, r)
 		return common.ErrToStatus(err), err
 	}
 }
@@ -196,7 +196,7 @@ func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
-	err := ResourceSyncPatch(action, src, dst, r)
+	err := ResourceSyncPatch(task, action, src, dst, r)
 	if err != nil {
 		task.ErrChan <- err
 		task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
@@ -1141,7 +1141,7 @@ func SyncPermToMode(permStr string) os.FileMode {
 	return perm
 }
 
-func ResourceSyncPatch(action, src, dst string, r *http.Request) error {
+func ResourceSyncPatch(task *pool.Task, action, src, dst string, r *http.Request) error {
 	var apiName string
 	switch action {
 	case "copy":
@@ -1160,7 +1160,8 @@ func ResourceSyncPatch(action, src, dst string, r *http.Request) error {
 	src = strings.Trim(src, "/")
 	if !strings.Contains(src, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
-		klog.Errorln("Error:", err)
+		//klog.Errorln("Error:", err)
+		TaskLog(task, "error", "Error:", err)
 		return err
 	}
 
@@ -1186,7 +1187,8 @@ func ResourceSyncPatch(action, src, dst string, r *http.Request) error {
 	dst = strings.Trim(dst, "/")
 	if !strings.Contains(dst, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
-		klog.Errorln("Error:", err)
+		//klog.Errorln("Error:", err)
+		TaskLog(task, "error", "Error:", err)
 		return err
 	}
 
@@ -1215,7 +1217,8 @@ func ResourceSyncPatch(action, src, dst string, r *http.Request) error {
 		"src_parent_dir": srcPrefix,
 		"src_repo_id":    srcRepoID,
 	}
-	klog.Infoln(requestBody)
+	//klog.Infoln(requestBody)
+	TaskLog(task, "info", requestBody)
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
 		return err
@@ -1241,14 +1244,17 @@ func ResourceSyncPatch(action, src, dst string, r *http.Request) error {
 
 	// Read the response body as a string
 	postBody, err := io.ReadAll(response.Body)
-	klog.Infoln("ReadAll")
+	TaskLog(task, "info", "ReadAll")
+	//klog.Infoln("ReadAll")
 	if err != nil {
-		klog.Errorln("ReadAll error: ", err)
+		//klog.Errorln("ReadAll error: ", err)
+		TaskLog(task, "error", "ReadAll error: ", err)
 		return err
 	}
 
 	if response.StatusCode != http.StatusOK {
-		klog.Infoln(string(postBody))
+		//klog.Infoln(string(postBody))
+		TaskLog(task, "info", string(postBody))
 		return fmt.Errorf("file paste failed with status: %d", response.StatusCode)
 	}
 
