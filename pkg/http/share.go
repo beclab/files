@@ -8,13 +8,14 @@ import (
 	"files/pkg/files"
 	"files/pkg/postgres"
 	"fmt"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type ShareablePutRequestBody struct {
@@ -147,14 +148,16 @@ func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 }
 
 func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	if r.URL.Path != "" {
-		exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
-		if err != nil {
-			return http.StatusInternalServerError, err
-		}
-		if !exists {
-			return http.StatusNotFound, nil
-		}
+	if r.URL.Path == "" {
+		return http.StatusNotFound, nil
+	}
+
+	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !exists {
+		return http.StatusNotFound, nil
 	}
 
 	statusStr := r.URL.Query().Get("status")
@@ -298,7 +301,11 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	return http.StatusOK, nil
+	w.Header().Set("Content-Type", "application/json")
+	jsonData := map[string]string{
+		"share_link": newShareLink.LinkURL,
+	}
+	return common.RenderJSON(w, r, jsonData)
 }
 
 func shareLinkDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
