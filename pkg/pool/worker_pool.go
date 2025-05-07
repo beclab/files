@@ -100,6 +100,142 @@ func ProcessProgress(progress, lowerBound, upperBound int) int {
 	return scaledProgress
 }
 
+//func (t *Task) UpdateProgress() {
+//	if t.Status == "completed" {
+//		return
+//	}
+//
+//	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
+//	t.Mu.Lock()
+//	t.Status = "running"
+//	t.Progress = 0
+//	t.Log = []string{}
+//	TaskManager.Store(t.ID, t)
+//	t.Mu.Unlock()
+//	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
+//
+//	timeout := time.After(24 * time.Hour) // 合理超时时间
+//
+//	lastHeartbeat := time.Now()
+//	heartbeatTicker := time.NewTicker(30 * time.Second)
+//	defer heartbeatTicker.Stop()
+//
+//	var logs []string = []string{}
+//
+//	for {
+//		select {
+//		case <-t.Ctx.Done():
+//			t.Mu.Lock()
+//			for _, log := range logs {
+//				klog.Infof("~~~Temp log: logging {%s}", log)
+//				t.Log = append(t.Log, log)
+//			}
+//			if t.Progress >= 100 {
+//				t.Status = "completed"
+//				klog.Infof("Task %s completed with progress %d", t.ID, t.Progress)
+//			} else {
+//				t.Status = "cancelled"
+//				klog.Warningf("Task %s cancelled with unexpected progress %d", t.ID, t.Progress)
+//			}
+//			TaskManager.Store(t.ID, t)
+//			t.Mu.Unlock()
+//			if t.Status == "cancelled" {
+//				klog.Infof("Task %s cancelled with Progress %d", t.ID, t.Progress)
+//			} else if t.Status == "completed" {
+//				klog.Infof("Task %s completed with Progress %d", t.ID, t.Progress)
+//			} else {
+//				klog.Infof("Task %s failed with status %s and Progress %d", t.ID, t.Status, t.Progress)
+//			}
+//
+//			return
+//		case <-heartbeatTicker.C:
+//			if time.Since(lastHeartbeat) > 45*time.Second {
+//				klog.Errorf("Task %s heartbeat lost", t.ID)
+//				return
+//			}
+//		case <-timeout:
+//			klog.Errorf("Task %s timeout", t.ID)
+//			return
+//		case err, ok := <-t.ErrChan:
+//			if !ok {
+//				klog.Infof("Task %s log channel closed", t.ID)
+//				break
+//			}
+//
+//			klog.Infof("[%s Error] %v with log count %d", t.ID, err, len(logs))
+//			t.Log = append(t.Log, fmt.Sprintf("%v", err))
+//		case log, ok := <-t.LogChan:
+//			if !ok {
+//				klog.Infof("Task %s log channel closed", t.ID)
+//				break
+//			}
+//
+//			if log != "" {
+//				klog.Infof("[%s] %s with log count %d", t.ID, log, len(logs))
+//				//logs = append(logs, log)
+//				t.Log = append(t.Log, log)
+//			} else {
+//				klog.Infof("[%s] %s with log count %d", t.ID, "a discarded empty log", len(logs))
+//			}
+//			//t.Mu.Lock()
+//			//t.Logging(log)
+//			//TaskManager.Store(t.ID, t)
+//			//t.Mu.Unlock()
+//			//klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+//
+//		case progress, ok := <-t.ProgressChan:
+//			if !ok {
+//				// 通道关闭，任务完成
+//				t.Mu.Lock()
+//				if t.Progress >= 100 {
+//					t.Status = "completed"
+//				} else {
+//					t.Status = "cancelled" // 或根据实际逻辑调整状态
+//				}
+//				for _, log := range logs {
+//					klog.Infof("~~~Temp log: logging {%s}", log)
+//					t.Log = append(t.Log, log)
+//				}
+//				TaskManager.Store(t.ID, t)
+//				t.Mu.Unlock()
+//				return
+//			}
+//			klog.Infof("[%s] %d %s %d", t.ID, t.Progress, t.Status, progress)
+//
+//			if t.Status == "completed" {
+//				klog.Infof("task [%s] already completed", t.ID)
+//				break
+//			}
+//
+//			processedProgress := 0
+//			if progress > 0 {
+//				processedProgress = progress //ProcessProgress(progress, 0)
+//			}
+//
+//			if t.Progress == 100 && processedProgress == 100 {
+//				select {
+//				case <-time.After(time.Second):
+//					CompleteTask(t.ID)
+//				case <-t.LogChan:
+//					CompleteTask(t.ID)
+//				case <-t.ErrChan:
+//					CompleteTask(t.ID)
+//				}
+//			} else {
+//				t.Mu.Lock()
+//				t.Progress = processedProgress
+//				TaskManager.Store(t.ID, t)
+//				t.Mu.Unlock()
+//				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+//			}
+//
+//		default:
+//			// 避免完全阻塞，可以添加短暂休眠
+//			time.Sleep(10 * time.Millisecond)
+//		}
+//	}
+//}
+
 func (t *Task) UpdateProgress() {
 	if t.Status == "completed" {
 		return
@@ -114,31 +250,53 @@ func (t *Task) UpdateProgress() {
 	t.Mu.Unlock()
 	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
 
-	timeout := time.After(24 * time.Hour) // 合理超时时间
+	// 新增：启动独立日志收集协程
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case log, ok := <-t.LogChan:
+				if !ok {
+					klog.Infof("Task %s log channel closed", t.ID)
+					return
+				}
+				if log != "" {
+					t.Mu.Lock()
+					t.Log = append(t.Log, log)
+					t.Mu.Unlock()
+					klog.Infof("[%s] Log collected: %s (total: %d)", t.ID, log, len(t.Log))
+				}
+			}
+		}
+	}()
 
+	timeout := time.After(24 * time.Hour)
 	lastHeartbeat := time.Now()
 	heartbeatTicker := time.NewTicker(30 * time.Second)
 	defer heartbeatTicker.Stop()
 
-	var logs []string = []string{}
-
 	for {
 		select {
 		case <-t.Ctx.Done():
+			// 关闭日志通道并等待收集完成
+			close(t.LogChan)
+			wg.Wait()
+
 			t.Mu.Lock()
-			for _, log := range logs {
-				klog.Infof("~~~Temp log: logging {%s}", log)
-				t.Log = append(t.Log, log)
-			}
-			if t.Progress >= 100 {
-				t.Status = "completed"
-				klog.Infof("Task %s completed with progress %d", t.ID, t.Progress)
+			if t.Status == "completed" {
+				t.Progress = 100
 			} else {
-				t.Status = "cancelled"
-				klog.Warningf("Task %s cancelled with unexpected progress %d", t.ID, t.Progress)
+				if t.Progress < 100 {
+					t.Status = "cancelled"
+				} else {
+					t.Status = "completed"
+				}
 			}
 			TaskManager.Store(t.ID, t)
 			t.Mu.Unlock()
+
 			if t.Status == "cancelled" {
 				klog.Infof("Task %s cancelled with Progress %d", t.ID, t.Progress)
 			} else if t.Status == "completed" {
@@ -146,70 +304,50 @@ func (t *Task) UpdateProgress() {
 			} else {
 				klog.Infof("Task %s failed with status %s and Progress %d", t.ID, t.Status, t.Progress)
 			}
-
 			return
+
 		case <-heartbeatTicker.C:
 			if time.Since(lastHeartbeat) > 45*time.Second {
 				klog.Errorf("Task %s heartbeat lost", t.ID)
 				return
 			}
+
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
 			return
+
 		case err, ok := <-t.ErrChan:
 			if !ok {
-				klog.Infof("Task %s log channel closed", t.ID)
+				klog.Infof("Task %s error channel closed", t.ID)
 				break
 			}
-
-			klog.Infof("[%s Error] %v with log count %d", t.ID, err, len(logs))
-			t.Log = append(t.Log, fmt.Sprintf("%v", err))
-		case log, ok := <-t.LogChan:
-			if !ok {
-				klog.Infof("Task %s log channel closed", t.ID)
-				break
-			}
-
-			if log != "" {
-				klog.Infof("[%s] %s with log count %d", t.ID, log, len(logs))
-				//logs = append(logs, log)
-				t.Log = append(t.Log, log)
-			} else {
-				klog.Infof("[%s] %s with log count %d", t.ID, "a discarded empty log", len(logs))
-			}
-			//t.Mu.Lock()
-			//t.Logging(log)
-			//TaskManager.Store(t.ID, t)
-			//t.Mu.Unlock()
-			//klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
+			klog.Errorf("[%s Error] %v", t.ID, err)
+			t.Mu.Lock()
+			t.Log = append(t.Log, fmt.Sprintf("ERROR: %v", err))
+			t.Mu.Unlock()
 
 		case progress, ok := <-t.ProgressChan:
 			if !ok {
-				// 通道关闭，任务完成
+				// 通道关闭处理
+				close(t.LogChan) // 关闭日志通道
+				wg.Wait()        // 等待日志收集完成
+
 				t.Mu.Lock()
-				if t.Progress >= 100 {
-					t.Status = "completed"
-				} else {
-					t.Status = "cancelled" // 或根据实际逻辑调整状态
-				}
-				for _, log := range logs {
-					klog.Infof("~~~Temp log: logging {%s}", log)
-					t.Log = append(t.Log, log)
-				}
+				t.Status = "completed"
+				t.Progress = 100
 				TaskManager.Store(t.ID, t)
 				t.Mu.Unlock()
 				return
 			}
-			klog.Infof("[%s] %d %s %d", t.ID, t.Progress, t.Status, progress)
 
 			if t.Status == "completed" {
-				klog.Infof("task [%s] already completed", t.ID)
+				klog.Infof("Task [%s] already completed", t.ID)
 				break
 			}
 
 			processedProgress := 0
 			if progress > 0 {
-				processedProgress = progress //ProcessProgress(progress, 0)
+				processedProgress = progress
 			}
 
 			if t.Progress == 100 && processedProgress == 100 {
@@ -230,7 +368,6 @@ func (t *Task) UpdateProgress() {
 			}
 
 		default:
-			// 避免完全阻塞，可以添加短暂休眠
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
