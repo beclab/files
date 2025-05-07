@@ -438,6 +438,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 			pool.CancelTask(task.ID, false)
 			return
 		}
+		klog.Infof("~~~Debug Log: try to remove task.Source: %s", task.Source)
 		if srcExternalType == "smb" {
 			err = Rmrf(RootPrefix + task.Source)
 		} else {
