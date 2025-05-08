@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/afero"
 	"io"
 	"k8s.io/klog/v2"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -450,21 +451,15 @@ func CalculateProgressRange(taskProgress int, totalFileSize, currentFileSize int
 		return 99, 99
 	}
 
-	// Calculate the proportion of this file's size
-	sizeProportion := int(currentFileSize * 100 / totalFileSize)
+	// Calculate the proportion of this file's size as a float to avoid integer division issues
+	sizeProportion := float64(currentFileSize) / float64(totalFileSize) * 100
 
 	// Calculate how much progress each percentage point of size represents
 	// We use 99 as the max progress (since 100 is reserved for completion)
-	progressPerPercent := 99 / 100
+	progressPerPercent := 99.0 / 100.0
 
 	// Calculate the contribution of this file
-	contribution := sizeProportion * progressPerPercent / 100
-
-	// Since we're using integer division, we need to ensure we don't lose too much precision
-	// by rounding down. We'll add 1 if there's any remainder to account for it.
-	if (sizeProportion*progressPerPercent)%100 != 0 {
-		contribution += 1
-	}
+	contribution := int(math.Floor(sizeProportion * progressPerPercent))
 
 	// Calculate left and right values
 	left = taskProgress
