@@ -142,9 +142,9 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 
 	err = DriveFileToBuffer(task, fileInfo, bufferPath, left, mid)
 	if err != nil {
-		task.ErrChan <- err
-		task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
-		pool.CancelTask(task.ID, false)
+		//task.ErrChan <- err
+		//task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
+		//pool.CancelTask(task.ID, false)
 		return err
 	}
 
@@ -157,17 +157,17 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 	if task.Status == "running" {
 		handler, err := GetResourceService(dstType)
 		if err != nil {
-			task.ErrChan <- err
-			task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
-			pool.FailTask(task.ID)
+			//task.ErrChan <- err
+			//task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
+			//pool.FailTask(task.ID)
 			return err
 		}
 
 		err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, mid, right, w, r, d, diskSize)
 		if err != nil {
-			task.ErrChan <- err
-			task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
-			pool.FailTask(task.ID)
+			//task.ErrChan <- err
+			//task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
+			//pool.FailTask(task.ID)
 			return err
 		}
 	}
@@ -178,14 +178,14 @@ func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, buffer
 	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
 	status, err := DriveBufferToFile(task, bufferPath, dst, fileMode, d, left, right)
 	if status != http.StatusOK {
-		task.LogChan <- fmt.Sprintf("copy/move to %s failed with status %d", dst, status)
-		pool.FailTask(task.ID)
+		//task.LogChan <- fmt.Sprintf("copy/move to %s failed with status %d", dst, status)
+		//pool.FailTask(task.ID)
 		return os.ErrInvalid
 	}
 	if err != nil {
-		task.ErrChan <- err
-		task.LogChan <- fmt.Sprintf("copy/move to %s failed", dst)
-		pool.FailTask(task.ID)
+		//task.ErrChan <- err
+		//task.LogChan <- fmt.Sprintf("copy/move to %s failed", dst)
+		//pool.FailTask(task.ID)
 		return err
 	}
 	return nil

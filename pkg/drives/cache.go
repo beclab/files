@@ -391,7 +391,15 @@ func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 	if err != nil {
 		return err
 	}
-	err = CacheFileToBuffer(src, bufferPath)
+
+	left, right := CalculateProgressRange(task.Progress, fileCount, diskSize)
+	mid := left
+	if right-left > 1 {
+		mid = left + (right-left)/2
+	}
+	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
+
+	err = CacheFileToBuffer(task, src, bufferPath, left, mid)
 	if err != nil {
 		return err
 	}
@@ -401,21 +409,23 @@ func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 		RemoveDiskBuffer(bufferPath, srcType)
 	}()
 
-	handler, err := GetResourceService(dstType)
-	if err != nil {
-		return err
-	}
+	if task.Status == "running" {
+		handler, err := GetResourceService(dstType)
+		if err != nil {
+			return err
+		}
 
-	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, 0, 0, w, r, d, diskSize)
-	if err != nil {
-		return err
+		err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, mid, right, w, r, d, diskSize)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (rs *CacheResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
-	status, err := CacheBufferToFile(bufferPath, dst, fileMode, d)
+	status, err := CacheBufferToFile(task, bufferPath, dst, fileMode, d, left, right)
 	if status != http.StatusOK {
 		return os.ErrInvalid
 	}
@@ -489,7 +499,7 @@ func (rs *CacheResourceService) GetStat(fs afero.Fs, src string, w http.Response
 
 func (rs *CacheResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
-	status, err := ResourceCacheDelete(fileCache, src, task.Ctx, d)
+	status, err := ResourceCacheDelete(fileCache, src, task.Ctx, d, r)
 	if status != http.StatusOK {
 		return os.ErrInvalid
 	}
@@ -497,6 +507,46 @@ func (rs *CacheResourceService) MoveDelete(task *pool.Task, fileCache fileutils.
 		return err
 	}
 	return nil
+}
+
+func (rs *CacheResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
+	srcinfo, err := fs.Stat(newSrc)
+	if err != nil {
+		return 0, err
+	}
+
+	var count int64 = 0
+
+	if srcinfo.IsDir() {
+		err = afero.Walk(fs, newSrc, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				if countType == "size" {
+					count += info.Size()
+				} else {
+					count++
+				}
+			}
+			return nil
+		})
+
+		if err != nil {
+			klog.Infoln("Error walking the directory:", err)
+			return 0, err
+		}
+		klog.Infoln("Directory traversal completed.")
+	} else {
+		if countType == "size" {
+			count = srcinfo.Size()
+		} else {
+			count = 1
+		}
+	}
+	return count, nil
 }
 
 func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
@@ -524,7 +574,7 @@ func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	return nil
 }
 
-func CacheFileToBuffer(src string, bufferFilePath string) error {
+func CacheFileToBuffer(task *pool.Task, src string, bufferFilePath string, left, right int) error {
 	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
 	newPath, err := common.UnescapeURLIfEscaped(newSrc)
 	if err != nil {
@@ -532,15 +582,17 @@ func CacheFileToBuffer(src string, bufferFilePath string) error {
 	}
 	klog.Infoln("newSrc:", newSrc, ", newPath:", newPath)
 
-	err = fileutils.IoCopyFileWithBufferOs(newPath, bufferFilePath, 8*1024*1024)
+	//err = fileutils.IoCopyFileWithBufferOs(newPath, bufferFilePath, 8*1024*1024)
+	err = fileutils.ExecuteRsync(task, newPath, bufferFilePath, left, right)
 	if err != nil {
+		fmt.Printf("Failed to initialize rsync: %v\n", err)
 		return err
 	}
 
 	return nil
 }
 
-func CacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data) (int, error) {
+func CacheBufferToFile(task *pool.Task, bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data, left, right int) (int, error) {
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
 		if err := fileutils.MkdirAllWithChown(files.DefaultFs, targetPath, mode); err != nil {
@@ -558,7 +610,8 @@ func CacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	})
 
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
-	err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, newTargetPath, 8*1024*1024)
+	//err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, newTargetPath, 8*1024*1024)
+	err = fileutils.ExecuteRsync(task, bufferFilePath, newTargetPath, left, right)
 
 	if err != nil {
 		err = os.RemoveAll(newTargetPath)
@@ -571,17 +624,35 @@ func CacheBufferToFile(bufferFilePath string, targetPath string, mode os.FileMod
 	return common.ErrToStatus(err), err
 }
 
-func ResourceCacheDelete(fileCache fileutils.FileCache, path string, ctx context.Context, d *common.Data) (int, error) {
+func ResourceCacheDelete(fileCache fileutils.FileCache, path string, ctx context.Context, d *common.Data, r *http.Request) (int, error) {
 	if path == "/" {
 		return http.StatusForbidden, nil
 	}
 
-	newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
-	err := os.RemoveAll(newTargetPath)
+	//newTargetPath := strings.Replace(path, "AppData/", "appcache/", 1)
+	//err := os.RemoveAll(newTargetPath)
+	//
+	//if err != nil {
+	//	return common.ErrToStatus(err), err
+	//}
 
+	infoURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(path)
+
+	client := &http.Client{}
+	request, err := http.NewRequest("DELETE", infoURL, nil)
 	if err != nil {
+		klog.Errorf("delete request failed: %v\n", err)
 		return common.ErrToStatus(err), err
 	}
+
+	request.Header = r.Header
+
+	response, err := client.Do(request)
+	if err != nil {
+		klog.Errorf("request failed: %v\n", err)
+		return common.ErrToStatus(err), err
+	}
+	defer response.Body.Close()
 
 	return http.StatusOK, nil
 }
