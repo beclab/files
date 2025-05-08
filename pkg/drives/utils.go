@@ -440,6 +440,7 @@ func TaskLog(task *pool.Task, level string, args ...interface{}) {
 // The progress range is limited to [0, 99] (inclusive), with left <= right.
 // If the calculated right value exceeds 99, it will be capped at 99.
 func CalculateProgressRange(taskProgress int, totalFileSize, currentFileSize int64) (left, right int) {
+	klog.Infof("~~~Debug Log: taskProgress=%d, totalFileSize=%d, currentFileSize=%d", taskProgress, totalFileSize, currentFileSize)
 	// If total file size is 0 or progress is already complete, return 0-0
 	if totalFileSize <= 0 {
 		return 0, 0
