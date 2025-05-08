@@ -434,3 +434,49 @@ func TaskLog(task *pool.Task, level string, args ...interface{}) {
 		task.LogChan <- logMsg
 	}
 }
+
+// CalculateProgressRange calculates the left and right progress values for the current file
+// based on the total progress, total file size, and current file size.
+// The progress range is limited to [0, 99] (inclusive), with left <= right.
+// If the calculated right value exceeds 99, it will be capped at 99.
+func CalculateProgressRange(taskProgress int, totalFileSize, currentFileSize int64) (left, right int) {
+	// If total file size is 0 or progress is already complete, return 0-0
+	if totalFileSize <= 0 {
+		return 0, 0
+	}
+
+	if taskProgress >= 99 {
+		return 99, 99
+	}
+
+	// Calculate the proportion of this file's size
+	sizeProportion := int(currentFileSize * 100 / totalFileSize)
+
+	// Calculate how much progress each percentage point of size represents
+	// We use 99 as the max progress (since 100 is reserved for completion)
+	progressPerPercent := 99 / 100
+
+	// Calculate the contribution of this file
+	contribution := sizeProportion * progressPerPercent / 100
+
+	// Since we're using integer division, we need to ensure we don't lose too much precision
+	// by rounding down. We'll add 1 if there's any remainder to account for it.
+	if (sizeProportion*progressPerPercent)%100 != 0 {
+		contribution += 1
+	}
+
+	// Calculate left and right values
+	left = taskProgress
+	right = taskProgress + contribution
+
+	// Ensure we don't exceed 99
+	if right > 99 {
+		right = 99
+		// If we've capped the right value, ensure left doesn't exceed it
+		if left > right {
+			left = right
+		}
+	}
+
+	return left, right
+}

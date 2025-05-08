@@ -32,7 +32,7 @@ type Task struct {
 	ProgressChan   chan int           `json:"-"`
 	ErrChan        chan error         `json:"-"`
 	timer          *time.Timer
-	cancelOnce     sync.Once
+	cancelOnce     *sync.Once
 }
 
 type FormattedTask struct {
@@ -62,6 +62,7 @@ func NewTask(id, source, dest, srcType, dstType string) *Task {
 		LogChan:        make(chan string, 100),
 		ProgressChan:   make(chan int, 100),
 		ErrChan:        make(chan error, 10),
+		cancelOnce:     new(sync.Once),
 	}
 
 	// 新增6小时过期逻辑
@@ -399,8 +400,14 @@ func (t *Task) GetProgress() int {
 func CancelTask(taskID string, delete bool) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
-			if t.Status == "completed" {
-				klog.Infof("Task %s has already completed, cannot be canelled any more", taskID)
+			if t.Status == "cancelled" {
+				klog.Infof("Task %s has already been cancelled, cannot be cancalled again", taskID)
+				return
+			} else if t.Status == "completed" {
+				klog.Infof("Task %s has already completed, cannot be cancelled any more", taskID)
+				return
+			} else if t.Status == "failed" {
+				klog.Infof("Task %s has failed, cannot be cancelled any more", taskID)
 				return
 			}
 
@@ -415,9 +422,9 @@ func CancelTask(taskID string, delete bool) {
 					close(t.ProgressChan)
 				}
 				t.Cancel()
-				if t.timer != nil {
-					t.timer.Stop()
-				}
+				//if t.timer != nil {
+				//	t.timer.Stop()
+				//}
 			})
 
 			// after cancel, delete info
@@ -438,6 +445,12 @@ func CompleteTask(taskID string) {
 		if t, ok := task.(*Task); ok {
 			if t.Status == "cancelled" {
 				klog.Infof("Task %s has already been cancelled, cannot complete it", taskID)
+				return
+			} else if t.Status == "completed" {
+				klog.Infof("Task %s has already been completed, cannot complete it again", taskID)
+				return
+			} else if t.Status == "failed" {
+				klog.Infof("Task %s has failed, cannot complete it", taskID)
 				return
 			}
 
@@ -460,9 +473,55 @@ func CompleteTask(taskID string) {
 					close(t.ProgressChan)
 				}
 				t.Cancel()
-				if t.timer != nil {
-					t.timer.Stop()
+				//if t.timer != nil {
+				//	t.timer.Stop()
+				//}
+				t.Mu.Unlock()
+			})
+			klog.Infof("Task %s has completed", taskID)
+		}
+	} else {
+		klog.Infof("Task %s not found", taskID)
+	}
+}
+
+func FailTask(taskID string) {
+	klog.Infof("~~~Debug Log: Try to fail Task %s", taskID)
+	time.Sleep(1 * time.Second)
+	if task, ok := TaskManager.Load(taskID); ok {
+		if t, ok := task.(*Task); ok {
+			if t.Status == "cancelled" {
+				klog.Infof("Task %s has already been cancelled", taskID)
+				return
+			} else if t.Status == "completed" {
+				klog.Infof("Task %s has already been completed", taskID)
+				return
+			} else if t.Status == "failed" {
+				klog.Infof("Task %s has failed", taskID)
+				return
+			}
+
+			t.cancelOnce.Do(func() {
+				t.Mu.Lock()
+				// 确保字段可导出
+				t.Status = "failed"
+				TaskManager.Store(taskID, t) // 存储指针副本
+				klog.Infof("Task %s has been completed with Progress %d", taskID, t.Progress)
+
+				// 锁外执行非关键操作
+				if t.ErrChan != nil {
+					close(t.ErrChan)
 				}
+				if t.LogChan != nil {
+					close(t.LogChan)
+				}
+				if t.ProgressChan != nil {
+					close(t.ProgressChan)
+				}
+				t.Cancel()
+				//if t.timer != nil {
+				//	t.timer.Stop()
+				//}
 				t.Mu.Unlock()
 			})
 			klog.Infof("Task %s has completed", taskID)

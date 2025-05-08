@@ -336,10 +336,15 @@ func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d 
 
 	var copyTempGoogleDrivePathIdCache = make(map[string]string)
 
+	fileCount, err := handler.GetFileCount(fs, src, "size", w, r)
+	if err != nil {
+		klog.Errorln(err) // TODO: remove after all done
+		//return err
+	}
 	if isDir {
-		err = handler.PasteDirFrom(task, fs, srcType, src, dstType, dst, d, mode, w, r, copyTempGoogleDrivePathIdCache)
+		err = handler.PasteDirFrom(task, fs, srcType, src, dstType, dst, d, mode, fileCount, w, r, copyTempGoogleDrivePathIdCache)
 	} else {
-		err = handler.PasteFileFrom(task, fs, srcType, src, dstType, dst, d, mode, size, w, r, copyTempGoogleDrivePathIdCache)
+		err = handler.PasteFileFrom(task, fs, srcType, src, dstType, dst, d, mode, size, fileCount, w, r, copyTempGoogleDrivePathIdCache)
 	}
 	if err != nil {
 		return err
@@ -378,25 +383,39 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 
 func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	// In this function, context if tied up to src, because src is in the URL
+	var err error
 	switch action {
 	case "copy":
-		return doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
+		err = doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 	case "rename":
-		err := doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
+		err = doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 		if err != nil {
-			return err
+			//return err
+			break
 		}
 
-		handler, err := drives.GetResourceService(srcType)
+		var handler drives.ResourceService
+		handler, err = drives.GetResourceService(srcType)
 		if err != nil {
-			return err
+			//return err
+			break
 		}
 		err = handler.MoveDelete(task, fileCache, src, d, w, r)
 		if err != nil {
-			return err
+			//return err
+			break
 		}
 	default:
-		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
+		err = fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
+	}
+	// doPaste always set progress to 99 at the end
+	if err != nil {
+		task.ErrChan <- err
+		task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
+		pool.CancelTask(task.ID, false)
+	} else {
+		task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
+		pool.CompleteTask(task.ID)
 	}
 	return nil
 }

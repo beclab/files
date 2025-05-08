@@ -33,7 +33,7 @@ func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst stri
 }
 
 func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	srcinfo, err := fs.Stat(src)
 	if err != nil {
 		return err
@@ -45,7 +45,7 @@ func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 		return err
 	}
 
-	err = handler.PasteDirTo(task, fs, src, dst, mode, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, mode, fileCount, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -69,13 +69,13 @@ func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 
 		if obj.IsDir() {
 			// Create sub-directories, recursively.
-			err = rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), w, r, driveIdCache)
+			err = rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), fileCount, w, r, driveIdCache)
 			if err != nil {
 				errs = append(errs, err)
 			}
 		} else {
 			// Perform the file copy.
-			err = rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), obj.Size(), w, r, driveIdCache)
+			err = rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, obj.Mode(), obj.Size(), fileCount, w, r, driveIdCache)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -92,7 +92,7 @@ func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 	return nil
 }
 
-func (rs *DriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *DriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	mode := fileMode
 	if err := fileutils.MkdirAllWithChown(fs, dst, mode); err != nil {
@@ -103,7 +103,7 @@ func (rs *DriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, ds
 }
 
 func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
@@ -133,7 +133,14 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 		return err
 	}
 
-	err = DriveFileToBuffer(task, fileInfo, bufferPath)
+	left, right := CalculateProgressRange(task.Progress, fileCount, fileInfo.Size)
+	mid := left
+	if right-left > 1 {
+		mid = left + (right-left)/2
+	}
+	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
+
+	err = DriveFileToBuffer(task, fileInfo, bufferPath, left, mid)
 	if err != nil {
 		task.ErrChan <- err
 		task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
@@ -145,43 +152,40 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 		//klog.Infoln("Begin to remove buffer")
 		TaskLog(task, "info", "Begin to remove buffer")
 		RemoveDiskBuffer(bufferPath, srcType)
-		if task.Progress == 99 {
-			pool.CompleteTask(task.ID)
-		} else {
-			pool.CancelTask(task.ID, false)
-		}
 	}()
 
-	handler, err := GetResourceService(dstType)
-	if err != nil {
-		task.ErrChan <- err
-		task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
-		pool.CancelTask(task.ID, false)
-		return err
-	}
+	if task.Status == "running" {
+		handler, err := GetResourceService(dstType)
+		if err != nil {
+			task.ErrChan <- err
+			task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
+			pool.FailTask(task.ID)
+			return err
+		}
 
-	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, w, r, d, diskSize)
-	if err != nil {
-		task.ErrChan <- err
-		task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
-		pool.CancelTask(task.ID, false)
-		return err
+		err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, mid, right, w, r, d, diskSize)
+		if err != nil {
+			task.ErrChan <- err
+			task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
+			pool.FailTask(task.ID)
+			return err
+		}
 	}
 	return nil
 }
 
-func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
-	r *http.Request, d *common.Data, diskSize int64) error {
-	status, err := DriveBufferToFile(task, bufferPath, dst, fileMode, d)
+func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode,
+	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
+	status, err := DriveBufferToFile(task, bufferPath, dst, fileMode, d, left, right)
 	if status != http.StatusOK {
 		task.LogChan <- fmt.Sprintf("copy/move to %s failed with status %d", dst, status)
-		pool.CancelTask(task.ID, false)
+		pool.FailTask(task.ID)
 		return os.ErrInvalid
 	}
 	if err != nil {
 		task.ErrChan <- err
 		task.LogChan <- fmt.Sprintf("copy/move to %s failed", dst)
-		pool.CancelTask(task.ID, false)
+		pool.FailTask(task.ID)
 		return err
 	}
 	return nil
@@ -211,6 +215,45 @@ func (rs *DriveResourceService) MoveDelete(task *pool.Task, fileCache fileutils.
 		return err
 	}
 	return nil
+}
+
+func (rs *DriveResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	srcinfo, err := fs.Stat(src)
+	if err != nil {
+		return 0, err
+	}
+
+	var count int64 = 0
+
+	if srcinfo.IsDir() {
+		err = afero.Walk(fs, src, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				if countType == "size" {
+					count += info.Size()
+				} else {
+					count++
+				}
+			}
+			return nil
+		})
+
+		if err != nil {
+			klog.Infoln("Error walking the directory:", err)
+			return 0, err
+		}
+		klog.Infoln("Directory traversal completed.")
+	} else {
+		if countType == "size" {
+			count = srcinfo.Size()
+		} else {
+			count = 1
+		}
+	}
+	return count, nil
 }
 
 func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *common.Data, mountedData []files.DiskInfo) {
@@ -367,7 +410,7 @@ func ResourceDriveGetInfo(path string, r *http.Request, d *common.Data) (*files.
 	return file, http.StatusOK, nil
 }
 
-func DriveFileToBuffer(task *pool.Task, file *files.FileInfo, bufferFilePath string) error {
+func DriveFileToBuffer(task *pool.Task, file *files.FileInfo, bufferFilePath string, left, right int) error {
 	path, err := common.UnescapeURLIfEscaped(file.Path)
 	if err != nil {
 		return err
@@ -375,7 +418,7 @@ func DriveFileToBuffer(task *pool.Task, file *files.FileInfo, bufferFilePath str
 	klog.Infoln("file.Path:", file.Path, ", path:", path)
 
 	//err = fileutils.IoCopyFileWithBufferOs("/data"+path, bufferFilePath, 8*1024*1024)
-	err = fileutils.ExecuteRsync(task, "/data"+path, bufferFilePath, 0, 50)
+	err = fileutils.ExecuteRsync(task, "/data"+path, bufferFilePath, left, right)
 	if err != nil {
 		// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
 		fmt.Printf("Failed to initialize rsync: %v\n", err)
@@ -385,7 +428,7 @@ func DriveFileToBuffer(task *pool.Task, file *files.FileInfo, bufferFilePath str
 	return nil
 }
 
-func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data) (int, error) {
+func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data, left, right int) (int, error) {
 	klog.Infoln("***DriveBufferToFile!")
 	klog.Infoln("*** bufferFilePath:", bufferFilePath)
 	klog.Infoln("*** targetPath:", targetPath)
@@ -413,7 +456,7 @@ func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string
 	})
 
 	//err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, "/data"+targetPath, 8*1024*1024)
-	err = fileutils.ExecuteRsync(task, bufferFilePath, "/data"+targetPath, 51, 99)
+	err = fileutils.ExecuteRsync(task, bufferFilePath, "/data"+targetPath, left, right)
 
 	if err != nil {
 		_ = files.DefaultFs.RemoveAll(targetPath)
@@ -427,21 +470,77 @@ func ResourceDriveDelete(fileCache fileutils.FileCache, path string, ctx context
 		return http.StatusForbidden, nil
 	}
 
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs,
-		Path:       path,
-		Modify:     true,
-		Expand:     false,
-		ReadHeader: d.Server.TypeDetectionByHeader,
-	})
+	//file, err := files.NewFileInfo(files.FileOptions{
+	//	Fs:         files.DefaultFs,
+	//	Path:       path,
+	//	Modify:     true,
+	//	Expand:     false,
+	//	ReadHeader: d.Server.TypeDetectionByHeader,
+	//})
+	//if err != nil {
+	//	return common.ErrToStatus(err), err
+	//}
+	//
+	//// delete thumbnails
+	//err = preview.DelThumbs(ctx, fileCache, file)
+	//if err != nil {
+	//	return common.ErrToStatus(err), err
+	//}
+
+	srcinfo, err := files.DefaultFs.Stat(path)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
 
-	// delete thumbnails
-	err = preview.DelThumbs(ctx, fileCache, file)
-	if err != nil {
-		return common.ErrToStatus(err), err
+	if srcinfo.IsDir() {
+		// first recursively delete all thumbs
+		err = filepath.Walk("/data"+path, func(subPath string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				file, err := files.NewFileInfo(files.FileOptions{
+					Fs:         files.DefaultFs,
+					Path:       subPath,
+					Modify:     true,
+					Expand:     false,
+					ReadHeader: false,
+				})
+				if err != nil {
+					return err
+				}
+
+				// delete thumbnails
+				err = preview.DelThumbs(ctx, fileCache, file)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			klog.Infoln("Error walking the directory:", err)
+		} else {
+			klog.Infoln("Directory traversal completed.")
+		}
+	} else {
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:         files.DefaultFs,
+			Path:       path,
+			Modify:     true,
+			Expand:     false,
+			ReadHeader: false,
+		})
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		// delete thumbnails
+		err = preview.DelThumbs(ctx, fileCache, file)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
 	}
 
 	err = files.DefaultFs.RemoveAll(path)

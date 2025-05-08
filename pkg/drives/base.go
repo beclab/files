@@ -39,16 +39,17 @@ type ResourceService interface {
 
 	// paste funcs
 	PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
-	PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode, w http.ResponseWriter,
-		r *http.Request, driveIdCache map[string]string) error
-	PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
+	PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, fileMode os.FileMode,
+		fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
+	PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request,
 		d *common.Data, driveIdCache map[string]string) error
 	PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, mode os.FileMode, diskSize int64,
-		w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
-	PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter, r *http.Request,
+		fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
+	PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, left, right int, w http.ResponseWriter, r *http.Request,
 		d *common.Data, diskSize int64) error
 	GetStat(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error)
 	MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data, w http.ResponseWriter, r *http.Request) error
+	GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error)
 }
 
 var (
@@ -523,21 +524,21 @@ func (rs *BaseResourceService) PasteSame(task *pool.Task, action, src, dst strin
 }
 
 func (rs *BaseResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *BaseResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
 func (rs *BaseResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *BaseResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	return fmt.Errorf("Not Implemented")
 }
@@ -550,6 +551,10 @@ func (rs *BaseResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 func (rs *BaseResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	return 0, fmt.Errorf("Not Implemented")
 }
 
 func executePatchTask(task *pool.Task, action, srcType, dstType string, rename bool,

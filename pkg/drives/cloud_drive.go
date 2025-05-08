@@ -1049,7 +1049,7 @@ func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst
 }
 
 func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	klog.Infof("~~~Temp log for Cloud Drive PasteDirFrom: srcType: %s, src: %s, dstType: %s, dst: %s", srcType, src, dstType, dst)
 	klog.Infof("~~~Temp log for Cloud Drive PasteDirFrom: driveIdCache: %v", driveIdCache)
 	mode := fileMode
@@ -1059,7 +1059,7 @@ func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, 
 		return err
 	}
 
-	err = handler.PasteDirTo(task, fs, src, dst, mode, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, mode, fileCount, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -1103,12 +1103,12 @@ func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, 
 		if item.IsDir {
 			fsrc = CloudDriveNormalizationPath(fsrc, srcType, true, true)
 			fdst = CloudDriveNormalizationPath(fdst, dstType, true, true)
-			err = rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
+			err = rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), fileCount, w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
 		} else {
-			err = rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
+			err = rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, fileCount, w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
@@ -1117,7 +1117,7 @@ func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, 
 	return nil
 }
 
-func (rs *CloudDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *CloudDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	_, _, err := ResourcePostCloudDrive(dst, w, r, false)
 	if err != nil {
@@ -1127,7 +1127,7 @@ func (rs *CloudDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, sr
 }
 
 func (rs *CloudDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	klog.Infof("~~~Temp log for Cloud Drive PasteFileFrom: srcType: %s, src: %s, dstType: %s, dst: %s", srcType, srcType, dstType, dst)
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
@@ -1169,15 +1169,15 @@ func (rs *CloudDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs,
 		return err
 	}
 
-	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, w, r, d, diskSize)
+	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, 0, 0, w, r, d, diskSize)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rs *CloudDriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
-	r *http.Request, d *common.Data, diskSize int64) error {
+func (rs *CloudDriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode,
+	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
 	klog.Infoln("Begin to paste!")
 	klog.Infoln("dst: ", dst)
 	status, err := CloudDriveBufferToFile(bufferPath, dst, w, r)
