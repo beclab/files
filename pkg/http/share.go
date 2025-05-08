@@ -8,13 +8,14 @@ import (
 	"files/pkg/files"
 	"files/pkg/postgres"
 	"fmt"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type ShareablePutRequestBody struct {
@@ -297,8 +298,12 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 		return http.StatusInternalServerError, result.Error
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	return http.StatusOK, nil
+	jsonData := map[string]string{
+		"share_link": newShareLink.LinkURL,
+	}
+	return common.RenderJSON(w, r, jsonData)
 }
 
 func shareLinkDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
