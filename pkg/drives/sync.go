@@ -365,7 +365,11 @@ func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcTy
 	if err != nil {
 		return err
 	}
-	err = SyncFileToBuffer(src, bufferPath, r)
+
+	left, mid, right := CalculateProgressRange(task, diskSize)
+	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
+
+	err = SyncFileToBuffer(task, src, bufferPath, r, left, mid)
 	if err != nil {
 		return err
 	}
@@ -375,14 +379,16 @@ func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcTy
 		RemoveDiskBuffer(bufferPath, srcType)
 	}()
 
-	handler, err := GetResourceService(dstType)
-	if err != nil {
-		return err
-	}
+	if task.Status == "running" {
+		handler, err := GetResourceService(dstType)
+		if err != nil {
+			return err
+		}
 
-	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, 0, 0, w, r, d, diskSize)
-	if err != nil {
-		return err
+		err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, mid, right, w, r, d, diskSize)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -393,7 +399,7 @@ func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferP
 	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
 		return err
 	}
-	status, err := SyncBufferToFile(bufferPath, dst, diskSize, r)
+	status, err := SyncBufferToFile(task, bufferPath, dst, diskSize, r, left, right)
 	if status != http.StatusOK {
 		return os.ErrInvalid
 	}
@@ -401,6 +407,10 @@ func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferP
 		klog.Errorln("Sync paste failed! err: ", err)
 		return err
 	}
+
+	task.Mu.Lock()
+	task.Transferred += diskSize
+	task.Mu.Unlock()
 	return nil
 }
 
@@ -533,6 +543,112 @@ func (rs *SyncResourceService) MoveDelete(task *pool.Task, fileCache fileutils.F
 		return err
 	}
 	return nil
+}
+
+func (rs *SyncResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	var count int64
+
+	repoID, path, filename := ParseSyncPath(src)
+	if !strings.HasSuffix(path, "/") {
+		path += "/"
+	}
+	path = common.EscapeURLWithSpace(path)
+
+	// 初始化队列，只处理当前路径
+	queue := []string{path}
+
+	for len(queue) > 0 {
+		currentPath := queue[0]
+		queue = queue[1:]
+
+		url := fmt.Sprintf("http://127.0.0.1:80/seahub/api/v2.1/repos/%s/dir/?p=%s&with_thumbnail=true",
+			repoID, currentPath)
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return 0, err
+		}
+		req.Header = r.Header
+		client := http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return 0, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return 0, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
+		}
+
+		respBody, err := io.ReadAll(SuitableResponseReader(resp))
+		resp.Body.Close()
+		if err != nil {
+			return 0, err
+		}
+
+		// 解析JSON响应
+		var direntResp DirentResponse
+		if err := json.Unmarshal(respBody, &direntResp); err != nil {
+			return 0, err
+		}
+
+		// 处理当前目录下的文件和子目录
+		for _, dirent := range direntResp.DirentList {
+			if filename != "" && dirent.Name == filename {
+				// 如果 filename 不为空，并且文件名匹配，更新计数器
+				if countType == "size" {
+					count += dirent.Size
+				} else {
+					count++
+				}
+				return count, nil // 找到匹配文件后立即返回
+			} else if filename == "" {
+				// 如果 filename 为空，处理所有文件和目录
+				if dirent.Type == "dir" {
+					// 如果是目录，加入队列继续处理
+					dirPath := dirent.Path
+					if dirPath != "/" {
+						dirPath += "/"
+					}
+					queue = append(queue, common.EscapeURLWithSpace(dirPath))
+				} else {
+					// 如果是文件，更新计数器
+					if countType == "size" {
+						count += dirent.Size
+					} else {
+						count++
+					}
+				}
+			}
+		}
+	}
+
+	return count, nil
+}
+
+func ParseSyncPath(src string) (string, string, string) {
+	src = strings.TrimPrefix(src, "/")
+
+	firstSlashIdx := strings.Index(src, "/")
+
+	repoID := src[:firstSlashIdx]
+
+	lastSlashIdx := strings.LastIndex(src, "/")
+
+	filename := src[lastSlashIdx+1:]
+
+	prefix := ""
+	if firstSlashIdx != lastSlashIdx {
+		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
+	}
+	if prefix == "" {
+		prefix = "/"
+	}
+
+	klog.Infoln("repo-id:", repoID)
+	klog.Infoln("prefix:", prefix)
+	klog.Infoln("filename:", filename)
+	return repoID, prefix, filename
 }
 
 type Dirent struct {
@@ -784,7 +900,7 @@ func SyncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 	return nil
 }
 
-func SyncFileToBuffer(src string, bufferFilePath string, r *http.Request) error {
+func SyncFileToBuffer(task *pool.Task, src string, bufferFilePath string, r *http.Request, left, right int) error {
 	src = strings.Trim(src, "/")
 	if !strings.Contains(src, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
@@ -865,6 +981,10 @@ func SyncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 		}
 	}
 
+	task.Mu.Lock()
+	task.Progress = right
+	task.Mu.Unlock()
+
 	return nil
 }
 
@@ -874,7 +994,7 @@ func generateUniqueIdentifier(relativePath string) string {
 	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
 }
 
-func SyncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Request) (int, error) {
+func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size int64, r *http.Request, left, right int) (int, error) {
 	// Step1: deal with URL
 	dst = strings.Trim(dst, "/")
 	if !strings.Contains(dst, "/") {
@@ -1050,6 +1170,10 @@ func SyncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		}
 	}
 	klog.Infoln("sync buffer to file success!")
+
+	task.Mu.Lock()
+	task.Progress = right
+	task.Mu.Unlock()
 	return http.StatusOK, nil
 }
 

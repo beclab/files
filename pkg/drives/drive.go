@@ -184,7 +184,9 @@ func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, buffer
 		//pool.FailTask(task.ID)
 		return err
 	}
+	task.Mu.Lock()
 	task.Transferred += diskSize
+	task.Mu.Unlock()
 	return nil
 }
 
