@@ -1216,6 +1216,76 @@ func (rs *CloudDriveResourceService) MoveDelete(task *pool.Task, fileCache fileu
 	return nil
 }
 
+func (rs *CloudDriveResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	var count int64
+
+	// 获取文件或文件夹的元信息
+	metaInfo, err := GetCloudDriveFocusedMetaInfos(nil, src, w, r)
+	if err != nil {
+		return 0, err
+	}
+
+	// 如果是文件
+	if !metaInfo.IsDir {
+		if countType == "size" {
+			count += metaInfo.Size
+		} else {
+			count++
+		}
+		return count, nil
+	}
+
+	srcDrive, srcName, pathId := ParseCloudDrivePath(src)
+	// 如果是文件夹，使用 BFS 遍历文件夹
+	queue := []string{pathId} // 使用文件夹的路径作为起始点
+
+	for len(queue) > 0 {
+		currentPath := queue[0]
+		queue = queue[1:]
+
+		// 调用 API 获取当前文件夹下的文件和子文件夹
+		param := CloudDriveListParam{
+			Path:  currentPath,
+			Drive: srcDrive,
+			Name:  srcName,
+		}
+
+		jsonBody, err := json.Marshal(param)
+		if err != nil {
+			return 0, err
+		}
+
+		var respBody []byte
+		respBody, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+		if err != nil {
+			return 0, err
+		}
+
+		var bodyJson CloudDriveListResponse
+		if err := json.Unmarshal(respBody, &bodyJson); err != nil {
+			return 0, err
+		}
+
+		// 解析并处理当前目录下的文件和子目录
+		for _, item := range bodyJson.Data {
+			if item.IsDir {
+				// 如果是目录，加入队列继续处理
+				normalizedPath := CloudDriveNormalizationPath(item.Path, "cloud", true, true)
+				queue = append(queue, normalizedPath)
+			} else {
+				// 如果是文件，更新计数器
+				if countType == "size" {
+					count += item.Size
+				} else {
+					count++
+				}
+			}
+		}
+	}
+
+	return count, nil
+}
+
 func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
 	if src == "" {
 		src = r.URL.Path
