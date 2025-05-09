@@ -554,7 +554,35 @@ func CopyCloudDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrite
 	return nil
 }
 
-func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r *http.Request) error {
+func CloudPauseTask(taskId string, w http.ResponseWriter, r *http.Request) error {
+	resumeURL := fmt.Sprintf("/patch/task/pause/%s", taskId)
+	resumeRespBody, err := CloudDriveCall(resumeURL, "PATCH", nil, w, r, true)
+	if err != nil {
+		klog.Errorln("Error calling patch/task/pause:", err)
+		return err
+	}
+
+	var resumeRespJson struct {
+		StatusCode string      `json:"status_code"`
+		FailReason interface{} `json:"fail_reason"`
+		Data       interface{} `json:"data"`
+	}
+
+	if err := json.Unmarshal(resumeRespBody, &resumeRespJson); err != nil {
+		klog.Error(err)
+		return err
+	}
+
+	if resumeRespJson.StatusCode == "SUCCESS" {
+		return e.New("Task paused successfully")
+	} else {
+		klog.Errorln("Failed to pause task")
+		//return bufferFileName, e.New("Failed to resume task")
+	}
+	return nil
+}
+
+func CloudDriveFileToBuffer(task *pool.Task, src, bufferFilePath string, w http.ResponseWriter, r *http.Request, left, right int) error {
 	if !strings.HasSuffix(bufferFilePath, "/") {
 		bufferFilePath += "/"
 	}
@@ -606,34 +634,47 @@ func CloudDriveFileToBuffer(src, bufferFilePath string, w http.ResponseWriter, r
 	klog.Infoln("Task Params:", string(taskJsonBody))
 
 	for {
-		time.Sleep(1000 * time.Millisecond)
-		var taskRespBody []byte
-		taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
-		if err != nil {
-			klog.Errorln("Error calling drive/download_async:", err)
-			return err
-		}
-		var taskRespJson CloudDriveTaskQueryResponse
-		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
-			klog.Error(err)
-			return err
-		}
-		if len(taskRespJson.Data) == 0 {
-			return e.New("Task Info Not Found")
-		}
-		if srcDrive == SrcTypeTencent && taskRespJson.Data[0].FailedReason != nil && *taskRespJson.Data[0].FailedReason == "Invalid task" {
-			return nil
-		}
-		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-			if taskRespJson.Data[0].Status == "Completed" {
+		select {
+		case <-task.Ctx.Done():
+			err = GooglePauseTask(taskId, w, r)
+			if err != nil {
+				return err
+			}
+		default:
+			time.Sleep(1000 * time.Millisecond)
+			var taskRespBody []byte
+			taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
+			if err != nil {
+				klog.Errorln("Error calling drive/download_async:", err)
+				return err
+			}
+			var taskRespJson CloudDriveTaskQueryResponse
+			if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
+				klog.Error(err)
+				return err
+			}
+			if len(taskRespJson.Data) == 0 {
+				return e.New("Task Info Not Found")
+			}
+			if srcDrive == SrcTypeTencent && taskRespJson.Data[0].FailedReason != nil && *taskRespJson.Data[0].FailedReason == "Invalid task" {
 				return nil
 			}
-			return e.New(taskRespJson.Data[0].Status)
+			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
+				if taskRespJson.Data[0].Status == "Completed" {
+					if task != nil {
+						task.Mu.Lock()
+						task.Progress = right
+						task.Mu.Unlock()
+					}
+					return nil
+				}
+				return e.New(taskRespJson.Data[0].Status)
+			}
 		}
 	}
 }
 
-func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *http.Request) (int, error) {
+func CloudDriveBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.ResponseWriter, r *http.Request, left, right int) (int, error) {
 	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst)
 	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	if dstPath == "" {
@@ -696,31 +737,42 @@ func CloudDriveBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r
 	klog.Infoln("Task Params:", string(taskJsonBody))
 
 	for {
-		time.Sleep(500 * time.Millisecond)
-		var taskRespBody []byte
-		taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
-		if err != nil {
-			klog.Errorln("Error calling drive/upload_async:", err)
-			return common.ErrToStatus(err), err
-		}
-		var taskRespJson CloudDriveTaskQueryResponse
-		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
-			klog.Error(err)
-			return common.ErrToStatus(err), err
-		}
-		if len(taskRespJson.Data) == 0 {
-			err = e.New("Task Info Not Found")
-			return common.ErrToStatus(err), err
-		}
-		if dstDrive == SrcTypeTencent && taskRespJson.Data[0].FailedReason != nil && *taskRespJson.Data[0].FailedReason == "Invalid task" {
-			return http.StatusOK, nil
-		}
-		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-			if taskRespJson.Data[0].Status == "Completed" {
+		select {
+		case <-task.Ctx.Done():
+			err = CloudPauseTask(taskId, w, r)
+			if err != nil {
+				return common.ErrToStatus(err), err
+			}
+		default:
+			time.Sleep(500 * time.Millisecond)
+			var taskRespBody []byte
+			taskRespBody, err = CloudDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
+			if err != nil {
+				klog.Errorln("Error calling drive/upload_async:", err)
+				return common.ErrToStatus(err), err
+			}
+			var taskRespJson CloudDriveTaskQueryResponse
+			if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
+				klog.Error(err)
+				return common.ErrToStatus(err), err
+			}
+			if len(taskRespJson.Data) == 0 {
+				err = e.New("Task Info Not Found")
+				return common.ErrToStatus(err), err
+			}
+			if dstDrive == SrcTypeTencent && taskRespJson.Data[0].FailedReason != nil && *taskRespJson.Data[0].FailedReason == "Invalid task" {
 				return http.StatusOK, nil
 			}
-			err = e.New(taskRespJson.Data[0].Status)
-			return common.ErrToStatus(err), err
+			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
+				if taskRespJson.Data[0].Status == "Completed" {
+					task.Mu.Lock()
+					task.Progress = right
+					task.Mu.Unlock()
+					return http.StatusOK, nil
+				}
+				err = e.New(taskRespJson.Data[0].Status)
+				return common.ErrToStatus(err), err
+			}
 		}
 	}
 }
@@ -1154,24 +1206,31 @@ func (rs *CloudDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs,
 	if err != nil {
 		return err
 	}
-	err = CloudDriveFileToBuffer(src, bufferFilePath, w, r)
+
+	left, mid, right := CalculateProgressRange(task, diskSize)
+	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
+
+	err = CloudDriveFileToBuffer(task, src, bufferFilePath, w, r, left, mid)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		klog.Infoln("Begin to remove buffer")
+		//klog.Infoln("Begin to remove buffer")
+		TaskLog(task, "info", "Begin to remove buffer")
 		RemoveDiskBuffer(bufferPath, srcType)
 	}()
 
-	handler, err := GetResourceService(dstType)
-	if err != nil {
-		return err
-	}
+	if task.Status == "running" {
+		handler, err := GetResourceService(dstType)
+		if err != nil {
+			return err
+		}
 
-	err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, 0, 0, w, r, d, diskSize)
-	if err != nil {
-		return err
+		err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, mid, right, w, r, d, diskSize)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1180,13 +1239,16 @@ func (rs *CloudDriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, b
 	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
 	klog.Infoln("Begin to paste!")
 	klog.Infoln("dst: ", dst)
-	status, err := CloudDriveBufferToFile(bufferPath, dst, w, r)
+	status, err := CloudDriveBufferToFile(task, bufferPath, dst, w, r, left, right)
 	if status != http.StatusOK {
 		return os.ErrInvalid
 	}
 	if err != nil {
 		return err
 	}
+	task.Mu.Lock()
+	task.Transferred += diskSize
+	task.Mu.Unlock()
 	return nil
 }
 
@@ -1448,7 +1510,7 @@ func createPreviewCloudDrive(w http.ResponseWriter, r *http.Request, src string,
 	if err != nil {
 		return nil, err
 	}
-	err = CloudDriveFileToBuffer(src, bufferFilePath, w, r)
+	err = CloudDriveFileToBuffer(nil, src, bufferFilePath, w, r, 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -1514,7 +1576,7 @@ func RawFileHandlerCloudDrive(src string, w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
-	err = CloudDriveFileToBuffer(src, bufferFilePath, w, r)
+	err = CloudDriveFileToBuffer(nil, src, bufferFilePath, w, r, 0, 0)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}

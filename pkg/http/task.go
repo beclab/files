@@ -12,22 +12,78 @@ import (
 	"time"
 )
 
+//func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+//	taskID := r.URL.Query().Get("task_id")
+//	var t *pool.Task
+//	if storedTask, ok := pool.TaskManager.Load(taskID); ok {
+//		if t, ok = storedTask.(*pool.Task); ok {
+//			klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
+//			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+//		}
+//	}
+//
+//	w.Header().Set("Content-Type", "application/json")
+//	return common.RenderJSON(w, r, map[string]interface{}{
+//		"code": 0,
+//		"msg":  "success",
+//		"task": pool.FormattedTask{Task: *t},
+//	})
+//}
+
 func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	taskID := r.URL.Query().Get("task_id")
-	var t *pool.Task
-	if storedTask, ok := pool.TaskManager.Load(taskID); ok {
-		if t, ok = storedTask.(*pool.Task); ok {
-			klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
-			klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
-		}
-	}
+	status := r.URL.Query().Get("status") // 获取筛选的状态
 
 	w.Header().Set("Content-Type", "application/json")
-	return common.RenderJSON(w, r, map[string]interface{}{
-		"code": 0,
-		"msg":  "success",
-		"task": pool.FormattedTask{Task: *t},
-	})
+
+	taskID := r.URL.Query().Get("task_id")
+	if taskID == "" {
+		// 列出所有任务的 task_id 和 status
+		var tasks []struct {
+			TaskID string `json:"task_id"`
+			Status string `json:"status"`
+		}
+
+		pool.TaskManager.Range(func(key, value interface{}) bool {
+			if t, ok := value.(*pool.Task); ok {
+				if status == "" || t.Status == status { // 如果提供了状态筛选，只返回匹配的任务
+					tasks = append(tasks, struct {
+						TaskID string `json:"task_id"`
+						Status string `json:"status"`
+					}{
+						TaskID: t.ID,
+						Status: t.Status,
+					})
+				}
+			}
+			return true
+		})
+
+		return common.RenderJSON(w, r, map[string]interface{}{
+			"code":  0,
+			"msg":   "success",
+			"tasks": tasks,
+		})
+	} else {
+		// 处理单个任务
+		if storedTask, ok := pool.TaskManager.Load(taskID); ok {
+			if t, ok := storedTask.(*pool.Task); ok {
+				klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
+				klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
+
+				return common.RenderJSON(w, r, map[string]interface{}{
+					"code": 0,
+					"msg":  "success",
+					"task": pool.FormattedTask{Task: *t},
+				})
+			}
+		}
+
+		// 如果没有找到任务，返回错误
+		return common.RenderJSON(w, r, map[string]interface{}{
+			"code": -1,
+			"msg":  "task not found",
+		})
+	}
 }
 
 func resourceTaskDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {

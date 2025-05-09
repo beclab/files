@@ -375,7 +375,8 @@ func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcTy
 	}
 
 	defer func() {
-		klog.Infoln("Begin to remove buffer")
+		//klog.Infoln("Begin to remove buffer")
+		TaskLog(task, "info", "Begin to remove buffer")
 		RemoveDiskBuffer(bufferPath, srcType)
 	}()
 
