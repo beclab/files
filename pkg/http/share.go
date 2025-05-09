@@ -202,6 +202,14 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 	return common.RenderJSON(w, r, shareLinks)
 }
 
+func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	shareLinks := map[string]string{
+		"test": "test",
+		"path": r.URL.Path,
+	}
+	return common.RenderJSON(w, r, shareLinks)
+}
+
 type ShareLinkPostRequestBody struct {
 	Permission int    `json:"permission"` // 3=download, 4=upload
 	ExpireIn   uint64 `json:"expire_in"`  // millisecond
