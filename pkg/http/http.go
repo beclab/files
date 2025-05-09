@@ -4,9 +4,10 @@ import (
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"files/pkg/rpc"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"k8s.io/klog/v2"
-	"net/http"
 
 	"github.com/gorilla/mux"
 
@@ -39,6 +40,9 @@ func NewHandler(
 	}
 
 	r.HandleFunc("/health", healthHandler)
+
+	share_link := r.PathPrefix("/share_link").Subrouter()
+	share_link.Handle("/{.*}", monkey(userShareLinkGetHandler, "/share_link")).Methods("GET")
 
 	api := r.PathPrefix("/api").Subrouter()
 
