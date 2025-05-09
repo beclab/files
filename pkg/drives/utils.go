@@ -442,7 +442,18 @@ func TaskLog(task *pool.Task, level string, args ...interface{}) {
 	// 如果task不为nil且LogChan存在，也输出到LogChan
 	if task != nil && task.LogChan != nil {
 		logMsg := fmt.Sprintln(args...)
-		task.LogChan <- logMsg
+
+		// 使用 select 语句尝试写入 LogChan
+		select {
+		case task.LogChan <- logMsg:
+			// 成功写入 LogChan
+		case <-task.Ctx.Done():
+			// 如果任务上下文已取消，停止发送日志
+			klog.Warningln("Task context has been cancelled, only logging to klog")
+		default:
+			// 如果 LogChan 已满，仅输出到 klog
+			klog.Warningln("LogChan is full, only logging to klog")
+		}
 	}
 }
 
