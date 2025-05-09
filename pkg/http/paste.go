@@ -409,14 +409,21 @@ func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst str
 	default:
 		err = fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
 	}
-	// doPaste always set progress to 99 at the end
-	if err != nil {
-		task.ErrChan <- err
-		task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
-		pool.FailTask(task.ID)
-	} else {
-		task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
-		pool.CompleteTask(task.ID)
+
+	select {
+	case <-task.Ctx.Done():
+		return err
+	default:
+		// doPaste always set progress to 99 at the end
+		if err != nil {
+			task.ErrChan <- err
+			task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
+			pool.FailTask(task.ID)
+			return err
+		} else {
+			task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
+			pool.CompleteTask(task.ID)
+			return nil
+		}
 	}
-	return nil
 }
