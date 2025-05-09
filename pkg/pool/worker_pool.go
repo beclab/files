@@ -295,15 +295,17 @@ func (t *Task) UpdateProgress() {
 			wg.Wait()
 
 			t.Mu.Lock()
-			if t.Status == "completed" {
-				t.Progress = 100
-			} else {
-				if t.Progress < 100 {
+			//if t.Status == "completed" {
+			//	t.Progress = 100
+			//} else {
+			if t.Progress < 100 {
+				if t.Status != "failed" {
 					t.Status = "cancelled"
-				} else {
-					t.Status = "completed"
 				}
+			} else {
+				t.Status = "completed"
 			}
+			//}
 			TaskManager.Store(t.ID, t)
 			t.Mu.Unlock()
 
@@ -342,9 +344,19 @@ func (t *Task) UpdateProgress() {
 				//close(t.LogChan) // 关闭日志通道
 				wg.Wait() // 等待日志收集完成
 
+				//t.Mu.Lock()
+				//t.Status = "completed"
+				//t.Progress = 100
+				//TaskManager.Store(t.ID, t)
+				//t.Mu.Unlock()
 				t.Mu.Lock()
-				t.Status = "completed"
-				t.Progress = 100
+				if t.Progress < 100 {
+					if t.Status != "failed" {
+						t.Status = "cancelled"
+					}
+				} else {
+					t.Status = "completed"
+				}
 				TaskManager.Store(t.ID, t)
 				t.Mu.Unlock()
 				return
