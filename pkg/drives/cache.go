@@ -392,11 +392,7 @@ func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 		return err
 	}
 
-	left, right := CalculateProgressRange(task.Progress, fileCount, diskSize)
-	mid := left
-	if right-left > 1 {
-		mid = left + (right-left)/2
-	}
+	left, mid, right := CalculateProgressRange(task, diskSize)
 	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
 
 	err = CacheFileToBuffer(task, src, bufferPath, left, mid)
@@ -432,6 +428,7 @@ func (rs *CacheResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, buffer
 	if err != nil {
 		return err
 	}
+	task.Transferred += diskSize
 	return nil
 }
 

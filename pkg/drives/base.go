@@ -442,7 +442,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 		if needTask != 0 {
 			// only for cache now
 			taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache)
+			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache, true)
 			pool.TaskManager.Store(taskID, task)
 
 			pool.WorkerPool.Submit(func() {

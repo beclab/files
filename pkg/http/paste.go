@@ -127,7 +127,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		//return common.ErrToStatus(err), err
 
 		taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-		task := pool.NewTask(taskID, src, dst, srcType, dstType)
+		task := pool.NewTask(taskID, src, dst, srcType, dstType, drives.TaskCancellable(srcType, dstType))
 		pool.TaskManager.Store(taskID, task)
 
 		pool.WorkerPool.Submit(func() {
@@ -341,6 +341,7 @@ func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d 
 		klog.Errorln(err) // TODO: remove after all done
 		//return err
 	}
+	task.TotalFileSize = fileCount
 	if isDir {
 		err = handler.PasteDirFrom(task, fs, srcType, src, dstType, dst, d, mode, fileCount, w, r, copyTempGoogleDrivePathIdCache)
 	} else {
@@ -412,7 +413,7 @@ func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst str
 	if err != nil {
 		task.ErrChan <- err
 		task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
-		pool.CancelTask(task.ID, false)
+		pool.FailTask(task.ID)
 	} else {
 		task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
 		pool.CompleteTask(task.ID)

@@ -42,8 +42,9 @@ func resourceTaskDeleteHandler(w http.ResponseWriter, r *http.Request, d *common
 				"code": -1,
 				"msg":  fmt.Sprintf("cannot cancel task for copying from %s type to %s type", t.SrcType, t.DstType),
 			}
-			if (t.SrcType == drives.SrcTypeSync || t.DstType == drives.SrcTypeSync) ||
-				(drives.IsCloudDrives(t.SrcType) && t.SrcType == t.DstType) {
+			//if (t.SrcType == drives.SrcTypeSync || t.DstType == drives.SrcTypeSync) ||
+			//	(drives.IsCloudDrives(t.SrcType) && t.SrcType == t.DstType) {
+			if !t.Cancellable {
 				w.Header().Set("Content-Type", "application/json")
 				return common.RenderJSON(w, r, cannotDeleteJson)
 			}

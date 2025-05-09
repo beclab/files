@@ -20,8 +20,11 @@ type Task struct {
 	Dest           string             `json:"dest"`
 	SrcType        string             `json:"src_type"`
 	DstType        string             `json:"dst_type"`
+	Cancellable    bool               `json:"cancellable"`
 	Status         string             `json:"status"`
 	Progress       int                `json:"progress"`
+	TotalFileSize  int64              `json:"total_file_size"`
+	Transferred    int64              `json:"transferred"`
 	Log            []string           `json:"log"`
 	RelationTaskID string             `json:"relation_task_id"` // only for same cache now
 	RelationNode   string             `json:"relation_node"`    // only for same cache now (for get task progress and cancel task)
@@ -40,11 +43,11 @@ type FormattedTask struct {
 }
 
 func (ft FormattedTask) String() string {
-	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, SrcType: %s, DstType: %s, Status: %s, Progress: %d, Log: %v, RelationTaskID: %s, RelationNode: %s",
-		ft.ID, ft.Source, ft.Dest, ft.SrcType, ft.DstType, ft.Status, ft.Progress, ft.Log, ft.RelationTaskID, ft.RelationNode)
+	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, SrcType: %s, DstType: %s, Cancellable: %v, Status: %s, Progress: %d, TotalFileSize: %d, Transferred: %d, Log: %v, RelationTaskID: %s, RelationNode: %s",
+		ft.ID, ft.Source, ft.Dest, ft.SrcType, ft.DstType, ft.Cancellable, ft.Status, ft.Progress, ft.TotalFileSize, ft.Transferred, ft.Log, ft.RelationTaskID, ft.RelationNode)
 }
 
-func NewTask(id, source, dest, srcType, dstType string) *Task {
+func NewTask(id, source, dest, srcType, dstType string, cancellable bool) *Task {
 	ctx, cancel := context.WithCancel(context.Background())
 	task := &Task{
 		ID:             id,
@@ -52,8 +55,11 @@ func NewTask(id, source, dest, srcType, dstType string) *Task {
 		Dest:           dest,
 		SrcType:        srcType,
 		DstType:        dstType,
+		Cancellable:    cancellable,
 		Status:         "pending",
 		Progress:       0,
+		TotalFileSize:  0,
+		Transferred:    0,
 		Log:            make([]string, 0),
 		RelationTaskID: "",
 		RelationNode:   "",
@@ -400,6 +406,11 @@ func (t *Task) GetProgress() int {
 func CancelTask(taskID string, delete bool) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
+			if !t.Cancellable {
+				klog.Infof("[%s] is not cancellable", taskID)
+				return
+			}
+
 			if t.Status == "cancelled" {
 				klog.Infof("Task %s has already been cancelled, cannot be cancalled again", taskID)
 				return

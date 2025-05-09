@@ -133,11 +133,7 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 		return err
 	}
 
-	left, right := CalculateProgressRange(task.Progress, fileCount, fileInfo.Size)
-	mid := left
-	if right-left > 1 {
-		mid = left + (right-left)/2
-	}
+	left, mid, right := CalculateProgressRange(task, diskSize)
 	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
 
 	err = DriveFileToBuffer(task, fileInfo, bufferPath, left, mid)
@@ -188,6 +184,7 @@ func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, buffer
 		//pool.FailTask(task.ID)
 		return err
 	}
+	task.Transferred += diskSize
 	return nil
 }
 

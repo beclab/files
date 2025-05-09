@@ -418,6 +418,16 @@ func SuitableResponseReader(resp *http.Response) io.Reader {
 	return bodyReader
 }
 
+func TaskCancellable(srcType, dstType string) bool {
+	if srcType == SrcTypeSync || dstType == SrcTypeSync {
+		return false
+	}
+	if IsCloudDrives(srcType) && srcType == dstType {
+		return false
+	}
+	return true
+}
+
 func TaskLog(task *pool.Task, level string, args ...interface{}) {
 	// 总是输出到klog
 	switch level {
@@ -440,39 +450,77 @@ func TaskLog(task *pool.Task, level string, args ...interface{}) {
 // based on the total progress, total file size, and current file size.
 // The progress range is limited to [0, 99] (inclusive), with left <= right.
 // If the calculated right value exceeds 99, it will be capped at 99.
-func CalculateProgressRange(taskProgress int, totalFileSize, currentFileSize int64) (left, right int) {
-	klog.Infof("~~~Debug Log: taskProgress=%d, totalFileSize=%d, currentFileSize=%d", taskProgress, totalFileSize, currentFileSize)
-	// If total file size is 0 or progress is already complete, return 0-0
-	if totalFileSize <= 0 {
-		return 0, 0
+//func CalculateProgressRange(taskProgress int, totalFileSize, currentFileSize int64) (left, right int) {
+//	klog.Infof("~~~Debug Log: taskProgress=%d, totalFileSize=%d, currentFileSize=%d", taskProgress, totalFileSize, currentFileSize)
+//	// If total file size is 0 or progress is already complete, return 0-0
+//	if totalFileSize <= 0 {
+//		return 0, 0
+//	}
+//
+//	if taskProgress >= 99 {
+//		return 99, 99
+//	}
+//
+//	// Calculate the proportion of this file's size as a float to avoid integer division issues
+//	sizeProportion := float64(currentFileSize) / float64(totalFileSize) * 100
+//
+//	// Calculate how much progress each percentage point of size represents
+//	// We use 99 as the max progress (since 100 is reserved for completion)
+//	progressPerPercent := 99.0 / 100.0
+//
+//	// Calculate the contribution of this file
+//	contribution := int(math.Floor(sizeProportion * progressPerPercent))
+//
+//	// Calculate left and right values
+//	left = taskProgress
+//	right = taskProgress + contribution
+//
+//	// Ensure we don't exceed 99
+//	if right > 99 {
+//		right = 99
+//		// If we've capped the right value, ensure left doesn't exceed it
+//		if left > right {
+//			left = right
+//		}
+//	}
+//
+//	return left, right
+//}
+
+func CalculateProgressRange(task *pool.Task, currentFileSize int64) (left, mid, right int) {
+	klog.Infof("Debug Log: taskProgress=%d, totalFileSize=%d, currentFileSize=%d, transferred=%d",
+		task.Progress, task.TotalFileSize, currentFileSize, task.Transferred)
+
+	// 处理总文件大小为0或进度已满的情况
+	if task.TotalFileSize <= 0 {
+		return 0, 0, 0
+	}
+	if task.Progress >= 99 {
+		return 99, 99, 99
 	}
 
-	if taskProgress >= 99 {
-		return 99, 99
+	// 计算已传输+当前文件的总大小（防止溢出）
+	sum := task.Transferred + currentFileSize
+	if sum > task.TotalFileSize {
+		sum = task.TotalFileSize
 	}
 
-	// Calculate the proportion of this file's size as a float to avoid integer division issues
-	sizeProportion := float64(currentFileSize) / float64(totalFileSize) * 100
+	// 计算right值（使用浮点运算避免整数除法问题）
+	right = int(math.Floor((float64(sum) / float64(task.TotalFileSize)) * 100))
 
-	// Calculate how much progress each percentage point of size represents
-	// We use 99 as the max progress (since 100 is reserved for completion)
-	progressPerPercent := 99.0 / 100.0
-
-	// Calculate the contribution of this file
-	contribution := int(math.Floor(sizeProportion * progressPerPercent))
-
-	// Calculate left and right values
-	left = taskProgress
-	right = taskProgress + contribution
-
-	// Ensure we don't exceed 99
+	// 确保right不超过99%
 	if right > 99 {
 		right = 99
-		// If we've capped the right value, ensure left doesn't exceed it
-		if left > right {
-			left = right
-		}
 	}
 
-	return left, right
+	// 强制left为taskProgress，但不超过right
+	left = task.Progress
+	if left > right {
+		left = right
+	}
+
+	// 计算mid值（向下取整）
+	mid = (left + right) / 2
+
+	return left, mid, right
 }
