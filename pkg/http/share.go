@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/afero"
@@ -216,10 +217,9 @@ func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		return http.StatusBadRequest, nil
 	}
 
-	host := common.GetHost(r)
-	linkURL := host + "/share_link" + r.URL.Path
+	pathMD5 := strings.Trim(r.URL.Path, "/")
 	var shareLink postgres.ShareLink
-	err := postgres.DBServer.Where("link_url = ? AND password = ?", linkURL, common.Md5String(password)).First(&shareLink).Error
+	err := postgres.DBServer.Where("path_md5 = ? AND password = ?", pathMD5, common.Md5String(password)).First(&shareLink).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return http.StatusNotFound, fmt.Errorf("share link not found")
@@ -319,11 +319,12 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 
 	// Calculate expire time
 	expireTime := time.Now().Add(time.Duration(requestBody.ExpireIn) * time.Millisecond)
-
+	pathMD5 := common.Md5String(r.URL.Path + fmt.Sprint(time.Now().UnixNano()))
 	newShareLink := postgres.ShareLink{
-		LinkURL:    host + "/share_link/" + common.Md5String(r.URL.Path+fmt.Sprint(time.Now().UnixNano())),
+		LinkURL:    host + "/share_link/" + pathMD5,
 		PathID:     pathID,
 		Path:       r.URL.Path,
+		PathMD5:    pathMD5,
 		Password:   common.Md5String(requestBody.Password),
 		OwnerID:    ownerID,
 		OwnerName:  ownerName,

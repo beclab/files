@@ -1,8 +1,9 @@
 package postgres
 
 import (
-	"k8s.io/klog/v2"
 	"time"
+
+	"k8s.io/klog/v2"
 )
 
 var STATUS_INACTIVE = 0
@@ -25,7 +26,8 @@ type ShareLink struct {
 	LinkURL    string    `gorm:"type:text;not null;index:idx_share_links_link_url"`
 	PathID     uint64    `gorm:"type:bigint;not null;index:idx_share_links_path_id"`
 	Path       string    `gorm:"type:text;not null;index:idx_share_links_path"`
-	Password   string    `gorm:"type:varchar(32);not null"`
+	PathMD5    string    `gorm:"type:varchar(32);not null;index:idx_share_links_path_md5"`
+	Password   string    `gorm:"type:varchar(32);not null;index:idx_share_links_password"`
 	OwnerID    string    `gorm:"type:text;not null"`
 	OwnerName  string    `gorm:"type:text;not null"`
 	Permission int       `gorm:"not null"`
