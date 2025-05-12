@@ -17,6 +17,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+)
+
+var (
+	mountedData []files.DiskInfo = nil
+	mu          sync.Mutex
 )
 
 // if cache logic is same as drive, it will be written in this file
