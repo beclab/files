@@ -17,7 +17,11 @@ import (
 
 func resourceMountedHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	drives.GetMountedData(r.Context())
-	return common.RenderJSON(w, r, drives.MountedData)
+	return common.RenderJSON(w, r, map[string]interface{}{
+		"code":         0,
+		"message":      "success",
+		"mounted_data": drives.MountedData,
+	})
 }
 
 func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {

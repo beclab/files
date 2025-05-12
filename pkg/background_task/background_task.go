@@ -137,7 +137,7 @@ func InitBackgroundTaskManager(ctx context.Context) {
 	manager.RegisterTask(Task{
 		name:     "GetMountedData",
 		taskFunc: drives.GetMountedData,
-		taskType: OnceTask,
+		taskType: PeriodicTask,
 		interval: 2 * time.Minute,
 		ticker:   drives.MountedTicker,
 	})
