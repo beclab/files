@@ -24,6 +24,15 @@ type MountRequestData struct {
 	Password string `json:"password"`
 }
 
+func resourceMountedHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	drives.GetMountedData(r.Context())
+	return common.RenderJSON(w, r, map[string]interface{}{
+		"code":         0,
+		"message":      "success",
+		"mounted_data": drives.MountedData,
+	})
+}
+
 func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -56,6 +65,7 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 		}
 	}
 
+	drives.GetMountedData(r.Context())
 	callSendSearch3Mount("smb", data.SMBPath)
 	return common.RenderJSON(w, r, respJson)
 }
@@ -89,7 +99,7 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		return common.ErrToStatus(err), err
 	}
 
-	drives.GetMountedData()
+	drives.GetMountedData(r.Context())
 	externalType := r.URL.Query().Get("external_type")
 	callSendSearch3Unmount(externalType, drives.ParseExternalPath(file.Path))
 	return common.RenderJSON(w, r, respJson)

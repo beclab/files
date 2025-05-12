@@ -57,6 +57,7 @@ func InitRpcService(ctx context.Context) {
 		RpcServer.loadRoutes()
 
 		InitWatcher()
+		InitExternalWatcher()
 	})
 
 	klog.Infoln("RPCSERVER to start!")

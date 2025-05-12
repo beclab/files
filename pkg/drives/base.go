@@ -2,6 +2,7 @@ package drives
 
 import (
 	"bytes"
+	"context"
 	"files/pkg/common"
 	"files/pkg/errors"
 	"files/pkg/files"
@@ -141,11 +142,11 @@ func IsCloudDrives(dstType string) bool {
 	}
 }
 
-func GetMountedData() []files.DiskInfo {
+func GetMountedData(ctx context.Context) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	//var mountedData []files.DiskInfo = nil
+	//var MountedData []files.DiskInfo = nil
 	var err error = nil
 	if files.TerminusdHost != "" {
 		// for 1.12: path-incluster URL exists, won't err in normal condition
@@ -156,7 +157,7 @@ func GetMountedData() []files.DiskInfo {
 		headers.Set("Content-Type", "application/json")
 		headers.Set("X-Signature", "temp_signature")
 
-		mountedData, err = files.FetchDiskInfo(url, headers)
+		MountedData, err = files.FetchDiskInfo(url, headers)
 		if err != nil {
 			klog.Infof("Failed to fetch data from %s: %v", url, err)
 			usbUrl := "http://" + files.TerminusdHost + "/system/mounted-usb-incluster"
@@ -187,17 +188,18 @@ func GetMountedData() []files.DiskInfo {
 
 			for _, item := range usbData {
 				item.Type = "usb"
-				mountedData = append(mountedData, item)
+				MountedData = append(MountedData, item)
 			}
 
 			for _, item := range hddData {
 				item.Type = "hdd"
-				mountedData = append(mountedData, item)
+				MountedData = append(MountedData, item)
 			}
 		}
-		klog.Infoln("Mounted Data:", mountedData)
+		klog.Infoln("Mounted Data:", MountedData)
 	}
-	return mountedData
+	MountedTicker.Reset(5 * time.Minute)
+	return
 }
 
 type BaseResourceService struct{}
@@ -216,10 +218,10 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	GetMountedData()
+	//GetMountedData(r.Context())
 
 	var file *files.FileInfo
-	if mountedData != nil {
+	if MountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
 			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
@@ -227,7 +229,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 			Expand:     true,
 			ReadHeader: d.Server.TypeDetectionByHeader,
 			Content:    true,
-		}, mountedData)
+		}, MountedData)
 	} else {
 		file, err = files.NewFileInfo(files.FileOptions{
 			Fs:         files.DefaultFs,
@@ -274,12 +276,12 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 	if file.IsDir {
 		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
 			//if strings.HasPrefix(file.Path, files.ExternalPrefix) {
-			files.GetExternalExtraInfos(file, mountedData, 1)
+			files.GetExternalExtraInfos(file, MountedData, 1)
 		}
 		file.Listing.Sorting = files.DefaultSorting
 		file.Listing.ApplySort()
 		if stream == 1 {
-			streamListingItems(w, r, file.Listing, d, mountedData)
+			streamListingItems(w, r, file.Listing, d, MountedData)
 			return 0, nil
 		} else {
 			return common.RenderJSON(w, r, file)
@@ -436,9 +438,9 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
-		GetMountedData()
-		srcExternalType := files.GetExternalType(src, mountedData)
-		dstExternalType := files.GetExternalType(dst, mountedData)
+		//GetMountedData(r.Context())
+		srcExternalType := files.GetExternalType(src, MountedData)
+		dstExternalType := files.GetExternalType(dst, MountedData)
 
 		klog.Infoln("Before patch action:", src, dst, action, rename)
 
