@@ -127,7 +127,7 @@ func IsCloudDrives(dstType string) bool {
 	}
 }
 
-func GetMountedData(ctx context.Context) []files.DiskInfo {
+func GetMountedData(ctx context.Context) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -183,7 +183,8 @@ func GetMountedData(ctx context.Context) []files.DiskInfo {
 		}
 		klog.Infoln("Mounted Data:", mountedData)
 	}
-	return mountedData
+	MountedTicker.Reset(2 * time.Minute)
+	return
 }
 
 type BaseResourceService struct{}
@@ -202,7 +203,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	mountedData := GetMountedData(r.Context())
+	//GetMountedData(r.Context())
 
 	var file *files.FileInfo
 	if mountedData != nil {
@@ -422,7 +423,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
-		mountedData := GetMountedData(r.Context())
+		//GetMountedData(r.Context())
 		srcExternalType := files.GetExternalType(src, mountedData)
 		dstExternalType := files.GetExternalType(dst, mountedData)
 

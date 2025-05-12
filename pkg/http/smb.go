@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/redisutils"
 	"fmt"
@@ -13,6 +14,29 @@ import (
 	"strings"
 	"time"
 )
+
+func resourceMountedHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	respJson, err := files.MountPathIncluster(r)
+	if err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	if int(respJson["code"].(float64)) != http.StatusOK {
+		klog.Warningf(respJson["message"].(string))
+		if strings.Contains(respJson["message"].(string), "mount error(13)") {
+			respJson["message"] = "Incorrect username or password"
+		}
+		if strings.Contains(respJson["message"].(string), "mount error(113)") {
+			respJson["message"] = "Unable to find suitable address"
+		}
+		if strings.Contains(respJson["message"].(string), "mount error(115)") {
+			respJson["message"] = "Cannot connect to samba server"
+		}
+	}
+
+	drives.GetMountedData(r.Context())
+	return common.RenderJSON(w, r, respJson)
+}
 
 func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	respJson, err := files.MountPathIncluster(r)
@@ -32,6 +56,8 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 			respJson["message"] = "Cannot connect to samba server"
 		}
 	}
+
+	drives.GetMountedData(r.Context())
 	return common.RenderJSON(w, r, respJson)
 }
 
@@ -52,6 +78,7 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		return common.ErrToStatus(err), err
 	}
 
+	drives.GetMountedData(r.Context())
 	return common.RenderJSON(w, r, respJson)
 }
 
