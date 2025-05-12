@@ -21,11 +21,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
-	mountedData []files.DiskInfo = nil
-	mu          sync.Mutex
+	MountedData   []files.DiskInfo = nil
+	mu            sync.Mutex
+	MountedTicker = time.NewTicker(2 * time.Minute)
 )
 
 // if cache logic is same as drive, it will be written in this file
@@ -34,9 +36,9 @@ type DriveResourceService struct {
 }
 
 func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-	GetMountedData()
-	srcExternalType := files.GetExternalType(src, mountedData)
-	dstExternalType := files.GetExternalType(dst, mountedData)
+	//GetMountedData(r.Context())
+	srcExternalType := files.GetExternalType(src, MountedData)
+	dstExternalType := files.GetExternalType(dst, MountedData)
 	return common.PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
 }
 
@@ -232,7 +234,7 @@ func (rs *DriveResourceService) GeneratePathList(db *gorm.DB, rootPath string, p
 	if rootPath == "" {
 		rootPath = "/data"
 	}
-	GetMountedData()
+	//GetMountedData(nil)
 
 	processedPaths := make(map[string]bool)
 	processedPathEntries := make(map[string]ProcessedPathsEntry)
@@ -692,7 +694,7 @@ func ResourceDriveDelete(fileCache fileutils.FileCache, path string, ctx context
 //}
 
 func ParseExternalPath(path string) string {
-	for _, datum := range mountedData {
+	for _, datum := range MountedData {
 		if strings.HasPrefix(path, datum.Path) {
 			idSerial := datum.IDSerial
 			if idSerial == "" {

@@ -2,6 +2,7 @@ package background_task
 
 import (
 	"context"
+	"files/pkg/drives"
 	"files/pkg/postgres"
 	"files/pkg/rpc"
 	"k8s.io/klog/v2"
@@ -21,6 +22,7 @@ type Task struct {
 	taskFunc func(context.Context)
 	taskType TaskType
 	interval time.Duration // only for PeriodicTask
+	ticker   *time.Ticker
 }
 
 type TaskManager struct {
@@ -89,6 +91,7 @@ func (tm *TaskManager) Stop() {
 func (tm *TaskManager) runTask(ctx context.Context, task Task) {
 	switch task.taskType {
 	case OnceTask:
+		klog.Infoln("run once task", task.name)
 		task.taskFunc(ctx)
 	case PeriodicTask:
 		tm.periodicWg.Add(1)
@@ -104,15 +107,17 @@ func (tm *TaskManager) runPeriodicTask(ctx context.Context, task Task) {
 	taskCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	ticker := time.NewTicker(task.interval)
-	defer ticker.Stop()
+	if task.ticker == nil {
+		task.ticker = time.NewTicker(task.interval)
+	}
+	defer task.ticker.Stop()
 
 	for {
 		select {
 		case <-tm.periodicStop:
 			klog.Infoln("Periodic task stopped:", task.name)
 			return
-		case <-ticker.C:
+		case <-task.ticker.C:
 			task.taskFunc(taskCtx)
 		case <-ctx.Done():
 			klog.Infoln("Periodic task canceled by context:", task.name)
@@ -153,6 +158,14 @@ func InitBackgroundTaskManager(ctx context.Context) {
 			interval: 1 * time.Minute,
 		})
 	}
+
+	manager.RegisterTask(Task{
+		name:     "GetMountedData",
+		taskFunc: drives.GetMountedData,
+		taskType: PeriodicTask,
+		interval: 2 * time.Minute,
+		ticker:   drives.MountedTicker,
+	})
 
 	go manager.Start(ctx)
 }
