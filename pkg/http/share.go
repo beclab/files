@@ -202,6 +202,27 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 	return common.RenderJSON(w, r, shareLinks)
 }
 
+func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	password := r.URL.Query().Get("password")
+	if password == "" {
+		return http.StatusBadRequest, nil
+	}
+	klog.Info("share link 5")
+	host := common.GetHost(r)
+	linkURL := host + "/share_link/" + r.URL.Path
+	var shareLink postgres.ShareLink
+	err := postgres.DBServer.Where("link_url = ? AND password = ?", linkURL, common.Md5String(password)).First(&shareLink).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return http.StatusNotFound, fmt.Errorf("share link not found")
+		} else {
+			return http.StatusInternalServerError, fmt.Errorf("failed to query share link: %v", err)
+		}
+	}
+
+	return common.RenderJSON(w, r, shareLink)
+}
+
 type ShareLinkPostRequestBody struct {
 	Permission int    `json:"permission"` // 3=download, 4=upload
 	ExpireIn   uint64 `json:"expire_in"`  // millisecond
