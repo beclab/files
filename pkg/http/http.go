@@ -56,6 +56,13 @@ func NewHandler(
 	uploader.PathPrefix("/file-uploaded-bytes").Handler(monkey(uploadedBytesHandler, "/upload/file-uploaded-bytes")).Methods("GET") // recons done
 	uploader.PathPrefix("/upload-link/{uid}").Handler(monkey(uploadChunksHandler, "/upload/upload-link")).Methods("POST")           // recons done
 
+	share_link := r.PathPrefix("/share_link").Subrouter()
+	share_link.Handle("/{[a-fA-F0-9]{32}}", monkey(useShareLinkGetHandler, "/share_link")).Methods("GET")
+	share_link.Handle("/{[a-fA-F0-9]{32}}/download/{path}", publicAuthMiddleware(monkey(shareLinkDownloadHandler, "/share_link"))).Methods("GET")
+	share_link.Handle("/{[a-fA-F0-9]{32}}/upload/upload_link", publicAuthMiddleware(monkey(shareLinkUploadLinkHandler, "/share_link"))).Methods("GET")
+	share_link.Handle("/{[a-fA-F0-9]{32}}/upload/file_uploaded_bytes", publicAuthMiddleware(monkey(shareLinkUploadedBytesHandler, "/share_link"))).Methods("GET")
+	share_link.Handle("/{[a-fA-F0-9]{32}}/upload/upload_link/{uid}", publicAuthMiddleware(monkey(shareLinkUploadChunksHandler, "/share_link"))).Methods("POST")
+
 	api := r.PathPrefix("/api").Subrouter()
 
 	api.PathPrefix("/nodes").Handler(common(nodesGetHandler)).Methods("GET")
