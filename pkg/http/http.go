@@ -42,7 +42,7 @@ func NewHandler(
 	r.HandleFunc("/health", healthHandler)
 
 	share_link := r.PathPrefix("/share_link").Subrouter()
-	share_link.Handle("/{md5_str:[a-fA-F0-9]{32}}", monkey(useShareLinkGetHandler, "/share_link")).Methods("GET")
+	share_link.Handle("/{[a-fA-F0-9]{32}}", monkey(useShareLinkGetHandler, "/share_link")).Methods("GET")
 
 	api := r.PathPrefix("/api").Subrouter()
 

@@ -203,11 +203,23 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 }
 
 func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	shareLinks := map[string]string{
-		"test": "test",
-		"path": r.URL.Path,
+	password := r.URL.Query().Get("password")
+	if password == "" {
+		return http.StatusBadRequest, nil
 	}
-	return common.RenderJSON(w, r, shareLinks)
+	host := common.GetHost(r)
+	linkURL := host + "/share_link/" + r.URL.Path
+	var shareLink postgres.ShareLink
+	err := postgres.DBServer.Where("link_url = ? AND password = ?", linkURL, common.Md5String(password)).First(&shareLink).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return http.StatusNotFound, fmt.Errorf("share link not found")
+		} else {
+			return http.StatusInternalServerError, fmt.Errorf("failed to query share link: %v", err)
+		}
+	}
+
+	return common.RenderJSON(w, r, shareLink)
 }
 
 type ShareLinkPostRequestBody struct {
