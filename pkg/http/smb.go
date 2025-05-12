@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/redisutils"
 	"fmt"
@@ -13,6 +14,21 @@ import (
 	"strings"
 	"time"
 )
+
+type MountRequestData struct {
+	SMBPath  string `json:"smbPath"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+func resourceMountedHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	drives.GetMountedData(r.Context())
+	return common.RenderJSON(w, r, map[string]interface{}{
+		"code":         0,
+		"message":      "success",
+		"mounted_data": drives.MountedData,
+	})
+}
 
 func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	respJson, err := files.MountPathIncluster(r)
@@ -32,6 +48,8 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 			respJson["message"] = "Cannot connect to samba server"
 		}
 	}
+
+	drives.GetMountedData(r.Context())
 	return common.RenderJSON(w, r, respJson)
 }
 
@@ -52,6 +70,7 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		return common.ErrToStatus(err), err
 	}
 
+	drives.GetMountedData(r.Context())
 	return common.RenderJSON(w, r, respJson)
 }
 

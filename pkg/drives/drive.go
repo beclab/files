@@ -17,6 +17,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
+)
+
+var (
+	MountedData   []files.DiskInfo = nil
+	mu            sync.Mutex
+	MountedTicker = time.NewTicker(2 * time.Minute)
 )
 
 // if cache logic is same as drive, it will be written in this file
@@ -25,9 +33,9 @@ type DriveResourceService struct {
 }
 
 func (rs *DriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-	mountedData := GetMountedData(r)
-	srcExternalType := files.GetExternalType(src, mountedData)
-	dstExternalType := files.GetExternalType(dst, mountedData)
+	//GetMountedData(r.Context())
+	srcExternalType := files.GetExternalType(src, MountedData)
+	dstExternalType := files.GetExternalType(dst, MountedData)
 	return common.PatchAction(r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 }
 
