@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/afero"
@@ -198,8 +199,50 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 		return http.StatusInternalServerError, err
 	}
 
+	result := map[string]interface{}{
+		"code":    0,
+		"message": "success",
+		"data": map[string]interface{}{
+			"count": len(shareLinks),
+			"items": shareLinks,
+		},
+	}
 	w.Header().Set("Content-Type", "application/json")
-	return common.RenderJSON(w, r, shareLinks)
+	return common.RenderJSON(w, r, result)
+}
+
+func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	password := r.URL.Query().Get("password")
+	if password == "" {
+		return http.StatusBadRequest, nil
+	}
+
+	pathMD5 := strings.Trim(r.URL.Path, "/")
+	var shareLink postgres.ShareLink
+	err := postgres.DBServer.Where("path_md5 = ? AND password = ?", pathMD5, common.Md5String(password)).First(&shareLink).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return http.StatusNotFound, fmt.Errorf("share link not found")
+		} else {
+			return http.StatusInternalServerError, fmt.Errorf("failed to query share link: %v", err)
+		}
+	}
+
+	result := map[string]interface{}{
+		"code":    0,
+		"message": "success",
+		// TODO: generate a new token
+		"token": "",
+		"data": map[string]interface{}{
+			"permission": shareLink.Permission,
+			"expire_in":  shareLink.ExpireIn,
+			"paths":      []string{shareLink.Path},
+			"owner_id":   shareLink.OwnerID,
+			"owner_name": shareLink.OwnerName,
+		},
+	}
+
+	return common.RenderJSON(w, r, result)
 }
 
 type ShareLinkPostRequestBody struct {
@@ -276,11 +319,12 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 
 	// Calculate expire time
 	expireTime := time.Now().Add(time.Duration(requestBody.ExpireIn) * time.Millisecond)
-
+	pathMD5 := common.Md5String(r.URL.Path + fmt.Sprint(time.Now().UnixNano()))
 	newShareLink := postgres.ShareLink{
-		LinkURL:    host + "/share_link/" + common.Md5String(r.URL.Path+fmt.Sprint(time.Now().UnixNano())),
+		LinkURL:    host + "/share_link/" + pathMD5,
 		PathID:     pathID,
 		Path:       r.URL.Path,
+		PathMD5:    pathMD5,
 		Password:   common.Md5String(requestBody.Password),
 		OwnerID:    ownerID,
 		OwnerName:  ownerName,
