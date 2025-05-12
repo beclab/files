@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	mountedData   []files.DiskInfo = nil
+	MountedData   []files.DiskInfo = nil
 	mu            sync.Mutex
 	MountedTicker = time.NewTicker(2 * time.Minute)
 )
@@ -34,8 +34,8 @@ type DriveResourceService struct {
 
 func (rs *DriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	//GetMountedData(r.Context())
-	srcExternalType := files.GetExternalType(src, mountedData)
-	dstExternalType := files.GetExternalType(dst, mountedData)
+	srcExternalType := files.GetExternalType(src, MountedData)
+	dstExternalType := files.GetExternalType(dst, MountedData)
 	return common.PatchAction(r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 }
 
