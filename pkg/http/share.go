@@ -198,8 +198,50 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 		return http.StatusInternalServerError, err
 	}
 
+	result := map[string]interface{}{
+		"code":    0,
+		"message": "success",
+		"data": map[string]interface{}{
+			"count": len(shareLinks),
+			"items": shareLinks,
+		},
+	}
 	w.Header().Set("Content-Type", "application/json")
-	return common.RenderJSON(w, r, shareLinks)
+	return common.RenderJSON(w, r, result)
+}
+
+func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	password := r.URL.Query().Get("password")
+	if password == "" {
+		return http.StatusBadRequest, nil
+	}
+	klog.Info("share link 6")
+	host := common.GetHost(r)
+	linkURL := host + "/share_link" + r.URL.Path
+	var shareLink postgres.ShareLink
+	err := postgres.DBServer.Where("link_url = ? AND password = ?", linkURL, common.Md5String(password)).First(&shareLink).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return http.StatusNotFound, fmt.Errorf("share link not found")
+		} else {
+			return http.StatusInternalServerError, fmt.Errorf("failed to query share link: %v", err)
+		}
+	}
+
+	result := map[string]interface{}{
+		"code":    0,
+		"message": "success",
+		"token":   "",
+		"data": map[string]interface{}{
+			"permission": shareLink.Permission,
+			"expire_in":  shareLink.ExpireIn,
+			"paths":      []string{shareLink.Path},
+			"owner_id":   shareLink.OwnerID,
+			"owner_name": shareLink.OwnerName,
+		},
+	}
+
+	return common.RenderJSON(w, r, result)
 }
 
 type ShareLinkPostRequestBody struct {
