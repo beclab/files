@@ -7,31 +7,52 @@ import (
 	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/postgres"
+	"files/pkg/token"
 	"fmt"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
+
+const secrectKey = "pathmd5"
+
+type userTokenData struct {
+	PathMD5 string `json:"path_md5"`
+}
 
 type ShareablePutRequestBody struct {
 	Status int `json:"status"`
 }
 
 func shareableGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	if !exists {
-		return http.StatusNotFound, nil
+	path := r.URL.Path
+	if path != "" && path != "/" {
+		fileParam, _, err := UrlPrep(r, path)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		uri, err := fileParam.GetResourceUri()
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		path = strings.TrimPrefix(uri+fileParam.Path, "/data")
+
+		exists, err := afero.Exists(files.DefaultFs, path)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+		if !exists {
+			return http.StatusNotFound, nil
+		}
 	}
 
 	statusStr := r.URL.Query().Get("status")
-	path := r.URL.Path
 	md5 := r.URL.Query().Get("md5")
 	pageStr := r.URL.Query().Get("page")
 	limitStr := r.URL.Query().Get("limit")
@@ -76,7 +97,17 @@ func shareableGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 }
 
 func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
+	fileParam, _, err := UrlPrep(r, "")
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	urlPath := strings.TrimPrefix(uri+fileParam.Path, "/data")
+
+	exists, err := afero.Exists(files.DefaultFs, urlPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -111,7 +142,7 @@ func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 		return http.StatusBadRequest, nil
 	}
 
-	path := r.URL.Path
+	path := urlPath
 	status := requestBody.Status
 	ownerID, ownerName := getOwner(r)
 	var pathInfo postgres.PathInfo
@@ -147,8 +178,19 @@ func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 }
 
 func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	urlPath := ""
 	if r.URL.Path != "" {
-		exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
+		fileParam, _, err := UrlPrep(r, "")
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		uri, err := fileParam.GetResourceUri()
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		urlPath = strings.TrimPrefix(uri+fileParam.Path, "/data")
+
+		exists, err := afero.Exists(files.DefaultFs, urlPath)
 		if err != nil {
 			return http.StatusInternalServerError, err
 		}
@@ -191,14 +233,72 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 	}
 
 	ownerID, _ := getOwner(r)
-	shareLinks, err := postgres.QueryShareLinks(r.URL.Path, ownerID, status, page, limit)
+	shareLinks, err := postgres.QueryShareLinks(urlPath, ownerID, status, page, limit)
 	if err != nil {
 		http.Error(w, "Error querying path infos", http.StatusInternalServerError)
 		return http.StatusInternalServerError, err
 	}
 
+	result := map[string]interface{}{
+		"code":    0,
+		"message": "success",
+		"data": map[string]interface{}{
+			"count": len(shareLinks),
+			"items": shareLinks,
+		},
+	}
 	w.Header().Set("Content-Type", "application/json")
-	return common.RenderJSON(w, r, shareLinks)
+	return common.RenderJSON(w, r, result)
+}
+
+func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	password := r.URL.Query().Get("password")
+	if password == "" {
+		return http.StatusBadRequest, nil
+	}
+
+	pathMD5 := strings.Trim(r.URL.Path, "/")
+	var shareLink postgres.ShareLink
+	err := postgres.DBServer.Where("path_md5 = ? AND password = ?", pathMD5, common.Md5String(password)).First(&shareLink).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return http.StatusNotFound, fmt.Errorf("share link not found")
+		} else {
+			return http.StatusInternalServerError, fmt.Errorf("failed to query share link: %v", err)
+		}
+	}
+
+	expireDuration := time.Until(shareLink.ExpireTime)
+	if expireDuration <= 0 {
+		return http.StatusBadRequest, fmt.Errorf("share link has already expired")
+	}
+
+	userTokenData := userTokenData{
+		PathMD5: pathMD5,
+	}
+	data, err := json.Marshal(userTokenData)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to marshal user data: %v", err)
+	}
+
+	userToken, err := token.GenerateToken(data, secrectKey, expireDuration)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to generate token: %v", err)
+	}
+	result := map[string]interface{}{
+		"code":    0,
+		"message": "success",
+		"token":   userToken,
+		"data": map[string]interface{}{
+			"permission": shareLink.Permission,
+			"expire_in":  shareLink.ExpireIn,
+			"paths":      []string{shareLink.Path},
+			"owner_id":   shareLink.OwnerID,
+			"owner_name": shareLink.OwnerName,
+		},
+	}
+
+	return common.RenderJSON(w, r, result)
 }
 
 type ShareLinkPostRequestBody struct {
@@ -231,7 +331,17 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	host := common.GetHost(r.Header.Get("X-Bfl-User"))
 	ownerID, ownerName := getOwner(r)
 
-	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
+	fileParam, _, err := UrlPrep(r, "")
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	urlPath := strings.TrimPrefix(uri+fileParam.Path, "/data")
+
+	exists, err := afero.Exists(files.DefaultFs, urlPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -267,7 +377,7 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	// Convert path to PathID
-	pathID, err := checkPathAndConvertToPathID(r.URL.Path, ownerID)
+	pathID, err := checkPathAndConvertToPathID(urlPath, ownerID)
 	if err != nil {
 		klog.Errorln("Error converting path to path ID:", err)
 		return http.StatusForbidden, err
@@ -275,11 +385,12 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 
 	// Calculate expire time
 	expireTime := time.Now().Add(time.Duration(requestBody.ExpireIn) * time.Millisecond)
-
+	pathMD5 := common.Md5String(urlPath + fmt.Sprint(time.Now().UnixNano()))
 	newShareLink := postgres.ShareLink{
-		LinkURL:    host + "/share_link/" + common.Md5String(r.URL.Path+fmt.Sprint(time.Now().UnixNano())),
+		LinkURL:    host + "/share_link/" + pathMD5,
 		PathID:     pathID,
-		Path:       r.URL.Path,
+		Path:       urlPath,
+		PathMD5:    pathMD5,
 		Password:   common.Md5String(requestBody.Password),
 		OwnerID:    ownerID,
 		OwnerName:  ownerName,
@@ -297,8 +408,12 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 		return http.StatusInternalServerError, result.Error
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	return http.StatusOK, nil
+	jsonData := map[string]string{
+		"share_link": newShareLink.LinkURL,
+	}
+	return common.RenderJSON(w, r, jsonData)
 }
 
 func shareLinkDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
