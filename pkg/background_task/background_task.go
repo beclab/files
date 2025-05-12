@@ -2,6 +2,7 @@ package background_task
 
 import (
 	"context"
+	"files/pkg/drives"
 	"files/pkg/rpc"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ type Task struct {
 	taskFunc func(context.Context)
 	taskType TaskType
 	interval time.Duration // only for PeriodicTask
+	ticker   *time.Ticker
 }
 
 type TaskManager struct {
@@ -48,13 +50,15 @@ func (tm *TaskManager) runTask(ctx context.Context, task Task) {
 	case OnceTask:
 		task.taskFunc(ctx)
 	case PeriodicTask:
-		ticker := time.NewTicker(task.interval)
-		defer ticker.Stop()
+		if task.ticker == nil {
+			task.ticker = time.NewTicker(task.interval)
+		}
+		defer task.ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-task.ticker.C:
 				task.taskFunc(ctx)
 			}
 		}
@@ -69,6 +73,12 @@ func InitBackgroundTaskManager(ctx context.Context) {
 		taskFunc: rpc.InitRpcService,
 		taskType: OnceTask,
 		interval: 0,
+		ticker:   nil,
+	})
+
+	manager.RegisterTask(Task{
+		name:     "PeriodicTask",
+		taskFunc: drives.GetMountedData,
 	})
 
 	manager.Start(ctx)

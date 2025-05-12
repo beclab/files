@@ -127,15 +127,18 @@ func IsCloudDrives(dstType string) bool {
 	}
 }
 
-func GetMountedData(r *http.Request) []files.DiskInfo {
-	var mountedData []files.DiskInfo = nil
+func GetMountedData(ctx context.Context) []files.DiskInfo {
+	mu.Lock()
+	defer mu.Unlock()
+
+	//var mountedData []files.DiskInfo = nil
 	var err error = nil
 	if files.TerminusdHost != "" {
 		// for 1.12: path-incluster URL exists, won't err in normal condition
 		// for 1.11: path-incluster URL may not exist, if err, use usb-incluster and hdd-incluster for system functional
 		url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
 
-		headers := r.Header.Clone()
+		headers := make(http.Header)
 		headers.Set("Content-Type", "application/json")
 		headers.Set("X-Signature", "temp_signature")
 
@@ -144,7 +147,7 @@ func GetMountedData(r *http.Request) []files.DiskInfo {
 			klog.Infof("Failed to fetch data from %s: %v", url, err)
 			usbUrl := "http://" + files.TerminusdHost + "/system/mounted-usb-incluster"
 
-			usbHeaders := r.Header.Clone()
+			usbHeaders := headers.Clone()
 			usbHeaders.Set("Content-Type", "application/json")
 			usbHeaders.Set("X-Signature", "temp_signature")
 
@@ -157,7 +160,7 @@ func GetMountedData(r *http.Request) []files.DiskInfo {
 
 			hddUrl := "http://" + files.TerminusdHost + "/system/mounted-hdd-incluster"
 
-			hddHeaders := r.Header.Clone()
+			hddHeaders := headers.Clone()
 			hddHeaders.Set("Content-Type", "application/json")
 			hddHeaders.Set("X-Signature", "temp_signature")
 
@@ -199,7 +202,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	mountedData := GetMountedData(r)
+	mountedData := GetMountedData(r.Context())
 
 	var file *files.FileInfo
 	if mountedData != nil {
@@ -419,7 +422,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
-		mountedData := GetMountedData(r)
+		mountedData := GetMountedData(r.Context())
 		srcExternalType := files.GetExternalType(src, mountedData)
 		dstExternalType := files.GetExternalType(dst, mountedData)
 
