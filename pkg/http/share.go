@@ -207,9 +207,9 @@ func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 	if password == "" {
 		return http.StatusBadRequest, nil
 	}
-	klog.Info("share link 5")
+	klog.Info("share link 6")
 	host := common.GetHost(r)
-	linkURL := host + "/share_link/" + r.URL.Path
+	linkURL := host + "/share_link" + r.URL.Path
 	var shareLink postgres.ShareLink
 	err := postgres.DBServer.Where("link_url = ? AND password = ?", linkURL, common.Md5String(password)).First(&shareLink).Error
 	if err != nil {
