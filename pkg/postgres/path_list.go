@@ -170,16 +170,16 @@ func UpdateOtherPathList(forced bool) {
 }
 
 func logPathList() error {
-	var paths []PathList
-	if err := DBServer.Find(&paths).Error; err != nil {
-		return err
-	}
-
-	klog.Infoln("Path List Entries:")
-	for _, path := range paths {
-		klog.Infof("Drive: %s, Path: %s, MTime: %s, ParseDoc: %v, Status: %d, CreateTime: %s, UpdateTime: %s\n",
-			path.Drive, path.Path, path.MTime, path.ParseDoc, path.Status, path.CreateTime, path.UpdateTime)
-	}
+	//var paths []PathList
+	//if err := DBServer.Find(&paths).Error; err != nil {
+	//	return err
+	//}
+	//
+	//klog.Infoln("Path List Entries:")
+	//for _, path := range paths {
+	//	klog.Infof("Drive: %s, Path: %s, MTime: %s, ParseDoc: %v, Status: %d, CreateTime: %s, UpdateTime: %s\n",
+	//		path.Drive, path.Path, path.MTime, path.ParseDoc, path.Status, path.CreateTime, path.UpdateTime)
+	//}
 
 	return nil
 }

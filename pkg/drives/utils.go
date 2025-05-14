@@ -2,6 +2,7 @@ package drives
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/diskcache"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"github.com/mholt/archiver/v3"
 	"github.com/spf13/afero"
+	"io"
 	"k8s.io/klog/v2"
 	"math/rand"
 	"net/http"
@@ -468,4 +470,33 @@ func callSendS3MultiFiles(fileInfos []os.FileInfo) {
 		klog.Infof("~~~Temp log: [%d] %s", index, fileInfo.Name())
 	}
 	klog.Infof("~~~Temp log: sending %d infos ends", len(fileInfos))
+}
+
+func SuitableResponseReader(resp *http.Response) io.ReadCloser {
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		klog.Infoln("~~~Debug log: gzip!")
+		gzipReader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			klog.Errorf("unzip response failed: %v\n", err)
+			return nil
+		}
+		// 返回需要调用者关闭的包装器
+		return &autoCloseReader{
+			Reader: gzipReader,
+			closer: resp.Body,
+		}
+	}
+	klog.Infoln("~~~Debug log: normal!")
+	// 返回需要调用者关闭的原始Body
+	return resp.Body
+}
+
+// 自动关闭包装器
+type autoCloseReader struct {
+	io.Reader
+	closer io.Closer
+}
+
+func (a *autoCloseReader) Close() error {
+	return a.closer.Close()
 }

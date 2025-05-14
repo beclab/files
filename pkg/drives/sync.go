@@ -12,6 +12,7 @@ import (
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"fmt"
+	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,6 +36,8 @@ type SyncResourceService struct {
 }
 
 func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	klog.Infof("Request headers: %v", r.Header)
+
 	streamStr := r.URL.Query().Get("stream")
 	stream := 0
 	var err error
@@ -49,100 +53,80 @@ func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
-	klog.Infoln("src Path:", src)
-	src = strings.Trim(src, "/") + "/"
+	klog.Infof("r.URL.Path: %s, src Path: %s", r.URL.Path, src)
 
-	firstSlashIdx := strings.Index(src, "/")
+	if !strings.HasPrefix(r.URL.Path, "/"+SrcTypeSync) || strings.HasSuffix(src, "/") {
+		src = strings.Trim(src, "/") + "/"
+		repoID, prefix, _ := ParseSyncPath(src)
 
-	repoID := src[:firstSlashIdx]
+		url := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace(prefix) + "&with_thumbnail=true"
+		klog.Infoln(url)
 
-	lastSlashIdx := strings.LastIndex(src, "/")
-
-	// won't use, because this func is only used for folders
-	filename := src[lastSlashIdx+1:]
-
-	prefix := ""
-	if firstSlashIdx != lastSlashIdx {
-		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
-	}
-	if prefix == "" {
-		prefix = "/"
-	}
-	prefix = common.EscapeURLWithSpace(prefix)
-
-	klog.Infoln("repo-id:", repoID)
-	klog.Infoln("prefix:", prefix)
-	klog.Infoln("filename:", filename)
-
-	url := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + prefix + "&with_thumbnail=true"
-	klog.Infoln(url)
-
-	request, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	request.Header = r.Header
-
-	client := http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return response.StatusCode, nil
-	}
-
-	// SSE
-	if stream == 1 {
-		var body []byte
-		if response.Header.Get("Content-Encoding") == "gzip" {
-			reader, err := gzip.NewReader(response.Body)
-			defer reader.Close()
-			if err != nil {
-				klog.Errorln("Error creating gzip reader:", err)
-				return common.ErrToStatus(err), err
-			}
-
-			body, err = ioutil.ReadAll(reader)
-			if err != nil {
-				klog.Errorln("Error reading gzipped response body:", err)
-				reader.Close()
-				return common.ErrToStatus(err), err
-			}
-		} else {
-			body, err = ioutil.ReadAll(response.Body)
-			if err != nil {
-				klog.Errorln("Error reading response body:", err)
-				return common.ErrToStatus(err), err
-			}
-		}
-		streamSyncDirents(w, r, body, repoID)
-		return 0, nil
-	}
-
-	// non-SSE
-	var responseBody io.Reader = response.Body
-	if response.Header.Get("Content-Encoding") == "gzip" {
-		reader, err := gzip.NewReader(response.Body)
+		request, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			klog.Errorln("Error creating gzip reader:", err)
+			return common.ErrToStatus(err), err
+		}
+
+		request.Header = r.Header
+
+		client := http.Client{}
+		response, err := client.Do(request)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+		defer response.Body.Close()
+
+		if response.StatusCode != http.StatusOK {
+			return response.StatusCode, nil
+		}
+
+		// SSE
+		if stream == 1 {
+			var body []byte
+			respReader := SuitableResponseReader(response)
+			if respReader == nil {
+				return http.StatusBadRequest, nil
+			}
+			defer respReader.Close()
+
+			body, err = ioutil.ReadAll(respReader)
+			streamSyncDirents(w, r, body, repoID)
+			return 0, nil
+		}
+
+		// non-SSE
+		respReader := SuitableResponseReader(response)
+		if respReader == nil {
+			return http.StatusBadRequest, nil
+		}
+		defer respReader.Close()
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, err = io.Copy(w, respReader)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return common.ErrToStatus(err), err
 		}
-		defer reader.Close()
-		responseBody = reader
+		return 0, nil
+	}
+
+	// file
+	repoID, prefix, filename := ParseSyncPath(src)
+	url := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file" + common.EscapeURLWithSpace(prefix) + common.EscapeURLWithSpace(filename) + "?dict=1"
+	klog.Infoln(url)
+
+	_, respBody, err := syncCall(url, "GET", nil, nil, r, nil, true)
+	if err != nil {
+		return common.ErrToStatus(err), err
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, err = io.Copy(w, responseBody)
+	_, err = w.Write(respBody)
+	//_, err = io.Copy(w, respBody)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return common.ErrToStatus(err), err
 	}
-
 	return 0, nil
 }
 
@@ -158,16 +142,84 @@ func (rc *SyncResourceService) PostHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (rc *SyncResourceService) PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	// TODO: Sync support editing, but not in this structure for the time being. This func is reserving a slot for sync.
-	return http.StatusNotImplemented, fmt.Errorf("sync drive does not supoort editing files for the time being")
+	// Only allow PUT for files.
+	var err error
+	if strings.HasSuffix(r.URL.Path, "/") {
+		return http.StatusMethodNotAllowed, nil
+	}
+
+	src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
+	src, err = common.UnescapeURLIfEscaped(src)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	klog.Infoln("src Path:", src)
+
+	repoID, prefix, filename := ParseSyncPath(src)
+	getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/update-link/?p=/"
+	klog.Infoln(getUrl)
+
+	_, getRespBody, err := syncCall(getUrl, "GET", nil, nil, r, nil, true)
+	if err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	updateLink := string(getRespBody)
+	updateLink = strings.Trim(updateLink, "\"")
+
+	updateUrl := "http://127.0.0.1:80/seahub/" + updateLink
+	klog.Infoln(updateUrl)
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	_ = writer.WriteField("target_file", prefix+filename)
+	_ = writer.WriteField("filename", filename)
+	klog.Infoln("target_file", prefix+filename)
+
+	fileWriter, err := writer.CreateFormFile("files_content", filename)
+	if err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	if _, err = fileWriter.Write(bodyBytes); err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	if err = writer.Close(); err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	header := r.Header
+	header.Set("Content-Type", writer.FormDataContentType())
+	statusCode, postBody, err := syncCall(updateUrl, "POST", body.Bytes(), nil, r, &header, true)
+	if err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	klog.Infoln("Status Code: ", statusCode)
+	if statusCode != http.StatusOK {
+		klog.Infoln(string(postBody))
+		return statusCode, fmt.Errorf("file update failed, status code: %d", statusCode)
+	}
+	return http.StatusOK, nil
 }
 
 func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		// only for rename
 		src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
 		dst := strings.TrimPrefix(r.URL.Query().Get("destination"), "/"+SrcTypeSync)
 
 		action := r.URL.Query().Get("action")
+		if action != "rename" {
+			return http.StatusBadRequest, nil
+		}
 		var err error
 		src, err = common.UnescapeURLIfEscaped(src)
 		if err != nil {
@@ -178,25 +230,194 @@ func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			return common.ErrToStatus(err), err
 		}
 
-		err = ResourceSyncPatch(action, src, dst, r)
-		return common.ErrToStatus(err), err
+		statusCode, respBody, err := ResourceSyncPatch(action, src, dst, r)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+		// sync will return a 404 when success
+		klog.Infof("file rename failed, status code: %d, fail reason: %s", statusCode, string(respBody))
+		if statusCode != http.StatusOK && statusCode != http.StatusNotFound {
+			return statusCode, fmt.Errorf("file rename failed, status code: %d, fail reason: %s", statusCode, string(respBody))
+		}
+		return http.StatusOK, nil
 	}
 }
 
 func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	return http.StatusNotImplemented, nil
+	src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
+	if src == "" {
+		return http.StatusBadRequest, fmt.Errorf("empty source path")
+	}
+	repoID, prefix, filename := ParseSyncPath(src)
+	if strings.HasSuffix(r.URL.Path, "/") {
+		zipTaskUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/zip-task/"
+
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+
+		fields := []struct {
+			key   string
+			value string
+		}{
+			{"parent_dir", path.Dir(strings.TrimSuffix(prefix, "/"))},
+			{"dirents", path.Base(strings.TrimSuffix(prefix, "/"))},
+		}
+
+		for _, field := range fields {
+			if err := writer.WriteField(field.key, field.value); err != nil {
+				return http.StatusInternalServerError, fmt.Errorf("write field failed: %s=%s - %w", field.key, field.value, err)
+			}
+		}
+
+		if err := writer.Close(); err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("writer close failed: %w", err)
+		}
+
+		header := r.Header.Clone()
+		header.Set("Content-Type", writer.FormDataContentType())
+
+		_, zipTaskRespBody, err := syncCall(zipTaskUrl, "POST", body.Bytes(), nil, r, &header, true)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		var zipTaskRespData map[string]interface{}
+		if err = json.Unmarshal(zipTaskRespBody, &zipTaskRespData); err != nil {
+			return common.ErrToStatus(err), err
+		}
+		klog.Infof("zipTaskRespData: %v", zipTaskRespData)
+
+		var zipToken string
+		var ok bool
+		if zipToken, ok = zipTaskRespData["zip_token"].(string); ok {
+			klog.Infoln("Extracted Zip Token:", zipToken)
+		} else {
+			klog.Infoln("Zip Token not found or invalid type")
+			return http.StatusBadRequest, e.New("Zip Token not found or invalid type")
+		}
+
+		time.Sleep(1 * time.Second) // the most important
+
+		zipUrl := "http://127.0.0.1:80/seafhttp/zip/" + zipToken
+		klog.Infoln(zipUrl)
+
+		request, err := http.NewRequest("GET", zipUrl, nil)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+		request.Header = r.Header.Clone()
+		klog.Infof("~~~Debug Log: reqeust.Header=%v", request.Header)
+
+		client := &http.Client{}
+		response, err := client.Do(request)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+		if response.StatusCode != http.StatusOK {
+			return response.StatusCode, fmt.Errorf("unexpected status code from ZIP endpoint: %d", response.StatusCode)
+		}
+		defer func() {
+			_, _ = io.Copy(io.Discard, response.Body)
+			_ = response.Body.Close()
+		}()
+
+		klog.Infof("Response Status: %d", response.StatusCode)
+		klog.Infof("ZIP Response Headers: %v", response.Header)
+
+		reader := SuitableResponseReader(response)
+
+		zipFilename := path.Base(strings.TrimSuffix(prefix, "/")) + ".zip"
+		safeZipFilename := url.QueryEscape(zipFilename)
+		safeZipFilename = strings.ReplaceAll(safeZipFilename, "+", "%20")
+		klog.Infof("~~~Debug Log: zipFilename=%s, safeZipFilename=%s", zipFilename, safeZipFilename)
+
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", zipFilename, safeZipFilename))
+		w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
+		w.Header().Set("Content-Length", response.Header.Get("Content-Length"))
+
+		_, err = io.Copy(w, reader)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+
+		return response.StatusCode, nil
+	}
+
+	dlUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file" + common.EscapeAndJoin(prefix+filename, "/") + "/" + "?dl=1"
+	klog.Infof("redirect url: %s", dlUrl)
+
+	request, err := http.NewRequest("GET", dlUrl, nil)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	request.Header = r.Header.Clone() // 透传客户端请求头
+	klog.Infof("~~~Debug Log: reqeust.Header=%v", request.Header)
+
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	defer response.Body.Close()
+
+	klog.Infof("~~~Debug Log: response.Header=%v", response.Header)
+	reader := SuitableResponseReader(response)
+
+	safeFilename := url.QueryEscape(filename)
+	safeFilename = strings.ReplaceAll(safeFilename, "+", "%20")
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, safeFilename))
+	w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
+	w.Header().Set("Content-Length", response.Header.Get("Content-Length"))
+
+	_, err = io.Copy(w, reader)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	return response.StatusCode, nil
 }
 
 func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		return http.StatusNotImplemented, nil
+		vars := mux.Vars(r)
+
+		previewSize, err := preview.ParsePreviewSize(vars["size"])
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		previewSizeStr := ""
+		if previewSize == 0 {
+			previewSizeStr = "/128"
+		} else if previewSize == 1 {
+			previewSizeStr = "/1080"
+		} else {
+			return http.StatusBadRequest, err
+		}
+
+		path := "/" + vars["path"]
+		path = strings.TrimPrefix(path, "/"+SrcTypeSync)
+		if path == "" || strings.HasSuffix(path, "/") {
+			return http.StatusBadRequest, fmt.Errorf("empty source path")
+		}
+		repoID, prefix, filename := ParseSyncPath(path)
+		previewUrl := "http://127.0.0.1:80/seahub/thumbnail/" + repoID + previewSizeStr + common.EscapeAndJoin(prefix+filename, "/")
+		status, previewRespBody, err := syncCall(previewUrl, "GET", nil, nil, r, nil, true)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Content-Length", strconv.Itoa(len(previewRespBody)))
+		w.Write(previewRespBody)
+		return status, nil
 	}
 }
 
 func (rc *SyncResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
-	return ResourceSyncPatch(action, src, dst, r)
+	return PasteSyncPatch(action, src, dst, r)
 }
 
 func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
@@ -500,7 +721,7 @@ func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, rootPath string, pr
 		header.Set("X-Bfl-User", bflName)
 		header.Set("Cookie", cookie)
 
-		repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
+		_, repoRespBody, err := syncCall(repoURL, "GET", nil, nil, nil, &header, true)
 		if err != nil {
 			klog.Errorf("SyncCall failed: %v\n", err)
 			return err
@@ -520,7 +741,7 @@ func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, rootPath string, pr
 			klog.Infoln(url)
 
 			var direntRespBody []byte
-			direntRespBody, err = syncCall(url, "GET", nil, nil, nil, &header, true)
+			_, direntRespBody, err = syncCall(url, "GET", nil, nil, nil, &header, true)
 			if err != nil {
 				klog.Errorf("fetch repo response failed: %v\n", err)
 				return err
@@ -555,51 +776,63 @@ func (rs *SyncResourceService) parsePathToURI(path string) (string, string) {
 	return SrcTypeSync, path
 }
 
-func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) ([]byte, error) {
+func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) (int, []byte, error) {
 	// w is for future use, not used now
 	client := &http.Client{}
 	request, err := http.NewRequest(method, dst, bytes.NewBuffer(reqBodyJson))
 	if err != nil {
 		klog.Errorf("create request failed: %v\n", err)
-		return nil, err
+		return -1, nil, err
 	}
 
 	if header != nil {
-		request.Header = *header
+		request.Header = (*header).Clone()
 	} else {
-		request.Header = r.Header
+		request.Header = r.Header.Clone()
 	}
 
 	response, err := client.Do(request)
 	if err != nil {
 		klog.Errorf("request failed: %v\n", err)
-		return nil, err
+		return -1, nil, err
 	}
 	defer response.Body.Close()
 
-	var bodyReader io.Reader = response.Body
-
-	if response.Header.Get("Content-Encoding") == "gzip" {
-		gzipReader, err := gzip.NewReader(response.Body)
-		if err != nil {
-			klog.Errorf("unzip response failed: %v\n", err)
-			return nil, err
-		}
-		defer gzipReader.Close()
-
-		bodyReader = gzipReader
+	respReader := SuitableResponseReader(response)
+	if respReader == nil {
+		return -1, nil, fmt.Errorf("response reader is nil")
 	}
+	defer respReader.Close()
 
-	body, err := ioutil.ReadAll(bodyReader)
+	body, err := ioutil.ReadAll(respReader)
 	if err != nil {
 		klog.Errorf("read response failed: %v\n", err)
-		return nil, err
+		return -1, nil, err
 	}
 
+	//var bodyReader io.Reader = response.Body
+	//
+	//if response.Header.Get("Content-Encoding") == "gzip" {
+	//	gzipReader, err := gzip.NewReader(response.Body)
+	//	if err != nil {
+	//		klog.Errorf("unzip response failed: %v\n", err)
+	//		return nil, err
+	//	}
+	//	defer gzipReader.Close()
+	//
+	//	bodyReader = gzipReader
+	//}
+	//
+	//body, err := ioutil.ReadAll(bodyReader)
+	//if err != nil {
+	//	klog.Errorf("read response failed: %v\n", err)
+	//	return nil, err
+	//}
+
 	if returnResp {
-		return body, nil
+		return response.StatusCode, body, nil
 	}
-	return nil, nil
+	return response.StatusCode, nil, nil
 }
 
 type Repo struct {
@@ -624,6 +857,40 @@ type Repo struct {
 
 type RepoResponse struct {
 	Repos []Repo `json:"repos"`
+}
+
+func ParseSyncPath(src string) (string, string, string) {
+	// prefix is with suffix "/" and prefix "/" while repo_id and filename don't have any prefix and suffix
+	src = strings.TrimPrefix(src, "/")
+
+	firstSlashIdx := strings.Index(src, "/")
+
+	repoID := src[:firstSlashIdx]
+
+	lastSlashIdx := strings.LastIndex(src, "/")
+
+	filename := src[lastSlashIdx+1:]
+
+	prefix := ""
+	if firstSlashIdx != lastSlashIdx {
+		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
+	}
+	if prefix == "" {
+		prefix = "/"
+	}
+
+	// for url with additional "/" or lack of "/"
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+	if !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
+
+	klog.Infoln("repo-id:", repoID)
+	klog.Infoln("prefix:", prefix)
+	klog.Infoln("filename:", filename)
+	return repoID, prefix, filename
 }
 
 type Dirent struct {
@@ -690,7 +957,7 @@ func walkSyncDirentsGenerator(body []byte, header *http.Header, r *http.Request,
 				firstUrl := fmt.Sprintf("http://127.0.0.1:80/seahub/api/v2.1/repos/%s/dir/?p=%s&with_thumbnail=true", repoID, path)
 				klog.Infoln(firstUrl)
 
-				firstRespBody, err := syncCall(firstUrl, "GET", nil, nil, r, header, true)
+				_, firstRespBody, err := syncCall(firstUrl, "GET", nil, nil, r, header, true)
 				if err != nil {
 					klog.Error(err)
 					continue
@@ -1287,7 +1554,48 @@ func SyncPermToMode(permStr string) os.FileMode {
 	return perm
 }
 
-func ResourceSyncPatch(action, src, dst string, r *http.Request) error {
+func ResourceSyncPatch(action, src, dst string, r *http.Request) (int, []byte, error) {
+	var apiName = "/file/"
+	if strings.HasSuffix(src, "/") {
+		apiName = "/dir/"
+	}
+
+	repoID, prefix, filename := ParseSyncPath(src)
+	_, _, newFilename := ParseSyncPath(dst)
+	postUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + apiName + "?p=" + common.EscapeAndJoin(prefix+filename, "/")
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	fields := []struct {
+		key   string
+		value string
+	}{
+		{"operation", action},
+		{"newname", newFilename},
+	}
+
+	for _, field := range fields {
+		if err := writer.WriteField(field.key, field.value); err != nil {
+			return http.StatusInternalServerError, nil, fmt.Errorf("write field failed: %s=%s - %w", field.key, field.value, err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("writer close failed: %w", err)
+	}
+
+	header := r.Header.Clone()
+	header.Set("Content-Type", writer.FormDataContentType())
+	statusCode, respBody, err := syncCall(postUrl, "POST", body.Bytes(), nil, r, &header, true)
+	if err != nil {
+		return common.ErrToStatus(err), nil, err
+	}
+	klog.Infof("statusCode: %d, respBody: %s", statusCode, string(respBody))
+	return statusCode, respBody, nil
+}
+
+func PasteSyncPatch(action, src, dst string, r *http.Request) error {
 	var apiName string
 	switch action {
 	case "copy":
