@@ -7,6 +7,7 @@ import (
 	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/postgres"
+	"files/pkg/token"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -18,6 +19,12 @@ import (
 	"gorm.io/gorm"
 	"k8s.io/klog/v2"
 )
+
+const secrectKey = "pathmd5"
+
+type userTokenData struct {
+	PathMD5 string `json:"path_md5"`
+}
 
 type ShareablePutRequestBody struct {
 	Status int `json:"status"`
@@ -228,11 +235,25 @@ func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		}
 	}
 
+	err = token.InitTokenSecret(secrectKey)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to initialize token secret: %v", err)
+	}
+	userTokenData := userTokenData{
+		PathMD5: pathMD5,
+	}
+	data, err := json.Marshal(userTokenData)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to marshal user data: %v", err)
+	}
+	userToken, err := token.GenerateToken(data, secrectKey, time.Hour*24)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to generate token: %v", err)
+	}
 	result := map[string]interface{}{
 		"code":    0,
 		"message": "success",
-		// TODO: generate a new token
-		"token": "",
+		"token":   userToken,
 		"data": map[string]interface{}{
 			"permission": shareLink.Permission,
 			"expire_in":  shareLink.ExpireIn,
