@@ -235,6 +235,11 @@ func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		}
 	}
 
+	expireDuration := time.Until(shareLink.ExpireTime)
+	if expireDuration <= 0 {
+		return http.StatusBadRequest, fmt.Errorf("share link has already expired")
+	}
+
 	userTokenData := userTokenData{
 		PathMD5: pathMD5,
 	}
@@ -242,7 +247,8 @@ func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to marshal user data: %v", err)
 	}
-	userToken, err := token.GenerateToken(data, secrectKey, time.Hour*24)
+
+	userToken, err := token.GenerateToken(data, secrectKey, expireDuration)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to generate token: %v", err)
 	}
