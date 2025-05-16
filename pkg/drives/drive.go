@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/parser"
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
@@ -354,6 +355,21 @@ func (rs *DriveResourceService) GetFileCount(fs afero.Fs, src, countType string,
 		}
 	}
 	return count, nil
+}
+
+func (rs *DriveResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	srcinfo, err := fs.Stat(src)
+	if err != nil {
+		return false, "", "", err
+	}
+	isDir = srcinfo.IsDir()
+	filename = srcinfo.Name()
+	fileType = ""
+	if !isDir {
+		fileType = parser.MimeTypeByExtension(filename)
+	}
+
+	return isDir, fileType, filename, nil
 }
 
 func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *common.Data, mountedData []files.DiskInfo) {

@@ -1453,6 +1453,21 @@ func (rs *CloudDriveResourceService) GetFileCount(fs afero.Fs, src, countType st
 	return count, nil
 }
 
+func (rs *CloudDriveResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	metaInfo, err := GetCloudDriveFocusedMetaInfos(nil, src, w, r)
+	if err != nil {
+		return false, "", "", err
+	}
+
+	isDir = metaInfo.IsDir
+	filename = metaInfo.Name
+	fileType = ""
+	if !isDir {
+		fileType = parser.MimeTypeByExtension(filename)
+	}
+	return isDir, fileType, filename, nil
+}
+
 func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
 	if src == "" {
 		src = r.URL.Path

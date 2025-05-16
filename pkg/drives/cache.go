@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/parser"
 	"files/pkg/pool"
 	"fmt"
 	"github.com/spf13/afero"
@@ -630,6 +631,21 @@ func (rs *CacheResourceService) GetFileCount(fs afero.Fs, src, countType string,
 		}
 	}
 	return count, nil
+}
+
+func (rs *CacheResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
+	srcinfo, err := fs.Stat(newSrc)
+	if err != nil {
+		return false, "", "", err
+	}
+	isDir = srcinfo.IsDir()
+	filename = srcinfo.Name()
+	fileType = ""
+	if !isDir {
+		fileType = parser.MimeTypeByExtension(filename)
+	}
+	return isDir, fileType, filename, nil
 }
 
 func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {

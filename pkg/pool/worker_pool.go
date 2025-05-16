@@ -21,6 +21,9 @@ type Task struct {
 	SrcType        string             `json:"src_type"`
 	DstType        string             `json:"dst_type"`
 	Cancellable    bool               `json:"cancellable"`
+	IsDir          bool               `json:"is_dir"`
+	FileType       string             `json:"file_type"`
+	Filename       string             `json:"filename"`
 	Status         string             `json:"status"`
 	Progress       int                `json:"progress"`
 	TotalFileSize  int64              `json:"total_file_size"`
@@ -43,11 +46,11 @@ type FormattedTask struct {
 }
 
 func (ft FormattedTask) String() string {
-	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, SrcType: %s, DstType: %s, Cancellable: %v, Status: %s, Progress: %d, TotalFileSize: %d, Transferred: %d, Log: %v, RelationTaskID: %s, RelationNode: %s",
-		ft.ID, ft.Source, ft.Dest, ft.SrcType, ft.DstType, ft.Cancellable, ft.Status, ft.Progress, ft.TotalFileSize, ft.Transferred, ft.Log, ft.RelationTaskID, ft.RelationNode)
+	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, SrcType: %s, DstType: %s, Cancellable: %v, IsDir: %v, FileType: %s, Filename: %s, Status: %s, Progress: %d, TotalFileSize: %d, Transferred: %d, Log: %v, RelationTaskID: %s, RelationNode: %s",
+		ft.ID, ft.Source, ft.Dest, ft.SrcType, ft.DstType, ft.Cancellable, ft.IsDir, ft.FileType, ft.Filename, ft.Status, ft.Progress, ft.TotalFileSize, ft.Transferred, ft.Log, ft.RelationTaskID, ft.RelationNode)
 }
 
-func NewTask(id, source, dest, srcType, dstType string, cancellable bool) *Task {
+func NewTask(id, source, dest, srcType, dstType string, cancellable bool, isDir bool, fileType, filename string) *Task {
 	ctx, cancel := context.WithCancel(context.Background())
 	task := &Task{
 		ID:             id,
@@ -56,6 +59,9 @@ func NewTask(id, source, dest, srcType, dstType string, cancellable bool) *Task 
 		SrcType:        srcType,
 		DstType:        dstType,
 		Cancellable:    cancellable,
+		IsDir:          isDir,
+		FileType:       fileType,
+		Filename:       filename,
 		Status:         "pending",
 		Progress:       0,
 		TotalFileSize:  0,

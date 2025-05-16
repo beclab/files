@@ -9,6 +9,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/errors"
 	"files/pkg/fileutils"
+	"files/pkg/parser"
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
@@ -803,6 +804,7 @@ func (rs *SyncResourceService) GeneratePathList(db *gorm.DB, rootPath string, pr
 }
 
 func (rs *SyncResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	var count int64
 
 	repoID, path, filename := ParseSyncPath(src)
@@ -811,7 +813,6 @@ func (rs *SyncResourceService) GetFileCount(fs afero.Fs, src, countType string, 
 	}
 	path = common.EscapeURLWithSpace(path)
 
-	// 初始化队列，只处理当前路径
 	queue := []string{path}
 
 	for len(queue) > 0 {
@@ -880,6 +881,20 @@ func (rs *SyncResourceService) GetFileCount(fs afero.Fs, src, countType string, 
 		}
 	}
 	return count, nil
+}
+
+func (rs *SyncResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
+	fileType = ""
+	if strings.HasSuffix(src, "/") {
+		isDir = true
+		filename = path.Base(strings.TrimSuffix(src, "/"))
+	} else {
+		isDir = false
+		filename = path.Base(src)
+		fileType = parser.MimeTypeByExtension(filename)
+	}
+	return isDir, fileType, filename, nil
 }
 
 // just for complement, no need to use now

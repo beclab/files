@@ -53,6 +53,7 @@ type ResourceService interface {
 	GetStat(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error)
 	MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data, w http.ResponseWriter, r *http.Request) error
 	GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error)
+	GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error)
 
 	// path list funcs
 	GeneratePathList(db *gorm.DB, rootPath string, pathProcessor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error
@@ -455,8 +456,14 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 		var task *pool.Task = nil
 		if needTask != 0 {
 			// only for cache now
+			handler, err := GetResourceService(SrcTypeCache)
+			if err != nil {
+				return http.StatusBadRequest, err
+			}
+			isDir, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, src, w, r)
+
 			taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache, true)
+			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache, true, isDir, fileType, filename)
 			pool.TaskManager.Store(taskID, task)
 
 			pool.WorkerPool.Submit(func() {
@@ -569,6 +576,10 @@ func (rs *BaseResourceService) MoveDelete(task *pool.Task, fileCache fileutils.F
 
 func (rs *BaseResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
 	return 0, fmt.Errorf("Not Implemented")
+}
+
+func (rs *BaseResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	return false, "", "", fmt.Errorf("Not Implemented")
 }
 
 func (rs *BaseResourceService) GeneratePathList(db *gorm.DB, rootPath string, pathProcessor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error {

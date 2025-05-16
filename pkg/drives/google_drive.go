@@ -10,6 +10,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/parser"
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/redisutils"
@@ -1723,6 +1724,21 @@ func (rs *GoogleDriveResourceService) GetFileCount(fs afero.Fs, src, countType s
 		}
 	}
 	return count, nil
+}
+
+func (rs *GoogleDriveResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
+	if err != nil {
+		return false, "", "", err
+	}
+
+	isDir = metaInfo.IsDir
+	filename = metaInfo.Name
+	fileType = ""
+	if !isDir {
+		fileType = parser.MimeTypeByExtension(filename)
+	}
+	return isDir, fileType, filename, nil
 }
 
 // just for complement, no need to use now
