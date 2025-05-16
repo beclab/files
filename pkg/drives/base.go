@@ -9,15 +9,16 @@ import (
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
@@ -431,6 +432,9 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 }
 
 func (rs *BaseResourceService) RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+
+	klog.Info("RawHandler: ", r.URL.Path)
+	klog.Info(w, r, d)
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         files.DefaultFs,
 		Path:       r.URL.Path,
