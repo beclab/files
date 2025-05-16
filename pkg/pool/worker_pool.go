@@ -289,9 +289,9 @@ func (t *Task) UpdateProgress() {
 	}()
 
 	timeout := time.After(24 * time.Hour)
-	lastHeartbeat := time.Now()
-	heartbeatTicker := time.NewTicker(30 * time.Second)
-	defer heartbeatTicker.Stop()
+	//lastHeartbeat := time.Now()
+	//heartbeatTicker := time.NewTicker(30 * time.Second)
+	//defer heartbeatTicker.Stop()
 
 	for {
 		select {
@@ -324,11 +324,11 @@ func (t *Task) UpdateProgress() {
 			}
 			return
 
-		case <-heartbeatTicker.C:
-			if time.Since(lastHeartbeat) > 45*time.Second {
-				klog.Errorf("Task %s heartbeat lost", t.ID)
-				return
-			}
+		//case <-heartbeatTicker.C:
+		//	if time.Since(lastHeartbeat) > 45*time.Second {
+		//		klog.Errorf("Task %s heartbeat lost", t.ID)
+		//		return
+		//	}
 
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
