@@ -13,10 +13,7 @@ import (
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,6 +23,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 )
 
 type CloudDriveListParam struct {
@@ -975,6 +976,9 @@ func (rs *CloudDriveResourceService) RawHandler(w http.ResponseWriter, r *http.R
 	if metaData.IsDir {
 		return http.StatusNotImplemented, fmt.Errorf("doesn't support directory download for cloud drive now")
 	}
+	klog.Info("src Path:", src)
+	klog.Info(w)
+	klog.Info(r)
 	return RawFileHandlerCloudDrive(src, w, r, metaData, bflName)
 }
 
