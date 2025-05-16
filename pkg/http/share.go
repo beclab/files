@@ -7,15 +7,24 @@ import (
 	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/postgres"
+	"files/pkg/token"
 	"fmt"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
+
+const secrectKey = "pathmd5"
+
+type userTokenData struct {
+	PathMD5 string `json:"path_md5"`
+}
 
 type ShareablePutRequestBody struct {
 	Status int `json:"status"`
@@ -197,8 +206,66 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 		return http.StatusInternalServerError, err
 	}
 
+	result := map[string]interface{}{
+		"code":    0,
+		"message": "success",
+		"data": map[string]interface{}{
+			"count": len(shareLinks),
+			"items": shareLinks,
+		},
+	}
 	w.Header().Set("Content-Type", "application/json")
-	return common.RenderJSON(w, r, shareLinks)
+	return common.RenderJSON(w, r, result)
+}
+
+func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	password := r.URL.Query().Get("password")
+	if password == "" {
+		return http.StatusBadRequest, nil
+	}
+
+	pathMD5 := strings.Trim(r.URL.Path, "/")
+	var shareLink postgres.ShareLink
+	err := postgres.DBServer.Where("path_md5 = ? AND password = ?", pathMD5, common.Md5String(password)).First(&shareLink).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return http.StatusNotFound, fmt.Errorf("share link not found")
+		} else {
+			return http.StatusInternalServerError, fmt.Errorf("failed to query share link: %v", err)
+		}
+	}
+
+	expireDuration := time.Until(shareLink.ExpireTime)
+	if expireDuration <= 0 {
+		return http.StatusBadRequest, fmt.Errorf("share link has already expired")
+	}
+
+	userTokenData := userTokenData{
+		PathMD5: pathMD5,
+	}
+	data, err := json.Marshal(userTokenData)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to marshal user data: %v", err)
+	}
+
+	userToken, err := token.GenerateToken(data, secrectKey, expireDuration)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to generate token: %v", err)
+	}
+	result := map[string]interface{}{
+		"code":    0,
+		"message": "success",
+		"token":   userToken,
+		"data": map[string]interface{}{
+			"permission": shareLink.Permission,
+			"expire_in":  shareLink.ExpireIn,
+			"paths":      []string{shareLink.Path},
+			"owner_id":   shareLink.OwnerID,
+			"owner_name": shareLink.OwnerName,
+		},
+	}
+
+	return common.RenderJSON(w, r, result)
 }
 
 type ShareLinkPostRequestBody struct {
@@ -275,11 +342,12 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 
 	// Calculate expire time
 	expireTime := time.Now().Add(time.Duration(requestBody.ExpireIn) * time.Millisecond)
-
+	pathMD5 := common.Md5String(r.URL.Path + fmt.Sprint(time.Now().UnixNano()))
 	newShareLink := postgres.ShareLink{
-		LinkURL:    host + "/share_link/" + common.Md5String(r.URL.Path+fmt.Sprint(time.Now().UnixNano())),
+		LinkURL:    host + "/share_link/" + pathMD5,
 		PathID:     pathID,
 		Path:       r.URL.Path,
+		PathMD5:    pathMD5,
 		Password:   common.Md5String(requestBody.Password),
 		OwnerID:    ownerID,
 		OwnerName:  ownerName,
@@ -297,8 +365,12 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 		return http.StatusInternalServerError, result.Error
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	return http.StatusOK, nil
+	jsonData := map[string]string{
+		"share_link": newShareLink.LinkURL,
+	}
+	return common.RenderJSON(w, r, jsonData)
 }
 
 func shareLinkDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
