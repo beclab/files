@@ -595,9 +595,9 @@ func (rs *CacheResourceService) parsePathToURI(path string) (string, string) {
 
 func (rs *CacheResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
 	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
-	klog.Infoln("/data" + newSrc)
+	klog.Infoln(newSrc)
 	//srcinfo, err := fs.Stat(newSrc)
-	srcinfo, err := os.Stat("/data" + newSrc)
+	srcinfo, err := os.Stat(newSrc)
 	if err != nil {
 		return 0, err
 	}
@@ -637,9 +637,9 @@ func (rs *CacheResourceService) GetFileCount(fs afero.Fs, src, countType string,
 
 func (rs *CacheResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
 	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
-	klog.Infoln("/data" + newSrc)
+	klog.Infoln(newSrc)
 	//srcinfo, err := fs.Stat(newSrc)
-	srcinfo, err := os.Stat("/data" + newSrc)
+	srcinfo, err := os.Stat(newSrc)
 	if err != nil {
 		return false, "", "", err
 	}
