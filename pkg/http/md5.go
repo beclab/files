@@ -20,7 +20,7 @@ func downloadAndComputeMD5(r *http.Request, url string) (string, error) {
 		return "", err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 
 	client := http.Client{}
 	resp, err := client.Do(request)

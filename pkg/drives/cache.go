@@ -37,7 +37,7 @@ func (*CacheResourceService) PasteSame(action, src, dst string, rename bool, fil
 		return err
 	}
 
-	req.Header = r.Header
+	req.Header = r.Header.Clone()
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -111,7 +111,7 @@ func (rs *CacheResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType,
 		return err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -246,7 +246,7 @@ func (rs *CacheResourceService) GetStat(fs afero.Fs, src string, w http.Response
 		return nil, 0, 0, false, err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -397,7 +397,7 @@ func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 		return err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 	request.Header.Set("Content-Type", "application/octet-stream")
 
 	client := http.Client{}

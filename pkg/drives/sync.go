@@ -31,6 +31,12 @@ import (
 	"time"
 )
 
+func RemoveAdditionalHeaders(header *http.Header) {
+	header.Del("Traceparent")
+	header.Del("Tracestate")
+	return
+}
+
 type SyncResourceService struct {
 	BaseResourceService
 }
@@ -67,7 +73,8 @@ func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 			return common.ErrToStatus(err), err
 		}
 
-		request.Header = r.Header
+		request.Header = r.Header.Clone()
+		RemoveAdditionalHeaders(&request.Header)
 
 		client := http.Client{}
 		response, err := client.Do(request)
@@ -195,7 +202,7 @@ func (rc *SyncResourceService) PutHandler(w http.ResponseWriter, r *http.Request
 		return common.ErrToStatus(err), err
 	}
 
-	header := r.Header
+	header := r.Header.Clone()
 	header.Set("Content-Type", writer.FormDataContentType())
 	statusCode, postBody, err := syncCall(updateUrl, "POST", body.Bytes(), nil, r, &header, true)
 	if err != nil {
@@ -307,6 +314,7 @@ func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request
 		}
 		request.Header = r.Header.Clone()
 		klog.Infof("~~~Debug Log: reqeust.Header=%v", request.Header)
+		RemoveAdditionalHeaders(&request.Header)
 
 		client := &http.Client{}
 		response, err := client.Do(request)
@@ -352,6 +360,7 @@ func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request
 	}
 	request.Header = r.Header.Clone() // 透传客户端请求头
 	klog.Infof("~~~Debug Log: reqeust.Header=%v", request.Header)
+	RemoveAdditionalHeaders(&request.Header)
 
 	client := &http.Client{}
 	response, err := client.Do(request)
@@ -469,7 +478,8 @@ func (rs *SyncResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, 
 		return err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
+	RemoveAdditionalHeaders(&request.Header)
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -633,7 +643,8 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 		return nil, 0, 0, false, err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
+	RemoveAdditionalHeaders(&request.Header)
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -790,6 +801,8 @@ func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *
 	} else {
 		request.Header = r.Header.Clone()
 	}
+
+	RemoveAdditionalHeaders(&request.Header)
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -1010,7 +1023,8 @@ func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- 
 				return
 			}
 
-			firstRequest.Header = r.Header
+			firstRequest.Header = r.Header.Clone()
+			RemoveAdditionalHeaders(&firstRequest.Header)
 
 			client := http.Client{}
 			firstResponse, err := client.Do(firstRequest)
@@ -1145,7 +1159,8 @@ func SyncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 			klog.Errorf("create request failed: %v\n", err)
 			return err
 		}
-		getRequest.Header = r.Header
+		getRequest.Header = r.Header.Clone()
+		RemoveAdditionalHeaders(&getRequest.Header)
 		getResponse, err := client.Do(getRequest)
 		if err != nil {
 			klog.Errorf("request failed: %v\n", err)
@@ -1179,8 +1194,9 @@ func SyncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 			return err
 		}
 
-		request.Header = r.Header
+		request.Header = r.Header.Clone()
 		request.Header.Set("Content-Type", "application/json")
+		RemoveAdditionalHeaders(&request.Header)
 
 		response, err := client.Do(request)
 		if err != nil {
@@ -1226,7 +1242,8 @@ func SyncFileToBuffer(src string, bufferFilePath string, r *http.Request) error 
 		return err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
+	RemoveAdditionalHeaders(&request.Header)
 
 	client := http.Client{}
 	response, err := client.Do(request)
@@ -1334,7 +1351,8 @@ func SyncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 		return common.ErrToStatus(err), err
 	}
 
-	getRequest.Header = r.Header
+	getRequest.Header = r.Header.Clone()
+	RemoveAdditionalHeaders(&getRequest.Header)
 
 	getClient := http.Client{}
 	getResponse, err := getClient.Do(getRequest)
@@ -1434,7 +1452,8 @@ func SyncBufferToFile(bufferFilePath string, dst string, size int64, r *http.Req
 			return http.StatusInternalServerError, err
 		}
 
-		request.Header = r.Header
+		request.Header = r.Header.Clone()
+		RemoveAdditionalHeaders(&request.Header)
 		request.Header.Set("Content-Type", writer.FormDataContentType())
 		request.Header.Set("Content-Disposition", "attachment; filename=\""+common.EscapeAndJoin(filename, "/")+"\"")
 		request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(size, 10))
@@ -1510,8 +1529,9 @@ func ResourceSyncDelete(path string, r *http.Request) (int, error) {
 		return http.StatusInternalServerError, err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 	request.Header.Set("Content-Type", "application/json")
+	RemoveAdditionalHeaders(&request.Header)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -1680,8 +1700,9 @@ func PasteSyncPatch(action, src, dst string, r *http.Request) error {
 		return err
 	}
 
-	request.Header = r.Header
+	request.Header = r.Header.Clone()
 	request.Header.Set("Content-Type", "application/json")
+	RemoveAdditionalHeaders(&request.Header)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
