@@ -218,6 +218,18 @@ func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 	return common.RenderJSON(w, r, result)
 }
 
+func sharePathGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	srcType := r.URL.Query().Get("src")
+	handler, err := drives.GetResourceService(srcType)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	klog.Info("rawHandler", "srcType", srcType, "handler", handler)
+	klog.Info(r.URL.Path)
+	klog.Info(w, r, d)
+	return handler.RawHandler(w, r, d)
+}
+
 func useShareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	password := r.URL.Query().Get("password")
 	if password == "" {
