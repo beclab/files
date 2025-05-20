@@ -43,7 +43,7 @@ func NewHandler(
 
 	share_link := r.PathPrefix("/share_link").Subrouter()
 	share_link.Handle("/{[a-fA-F0-9]{32}}", monkey(useShareLinkGetHandler, "/share_link")).Methods("GET")
-	share_link.Handle("/{.*}", monkey(sharePathGetHandler, "/share_link")).Methods("GET")
+	share_link.Handle("/{srctype}/{filepath:.*}", monkey(sharePathGetHandler, "/share_link")).Methods("GET")
 
 	api := r.PathPrefix("/api").Subrouter()
 
