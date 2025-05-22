@@ -278,8 +278,8 @@ func (p *PVCCache) getFromCache(cached func() *string, fetch func() (string, err
 	}
 
 	return func() (string, error) {
-		p.mu.Unlock()
-		defer p.mu.Lock()
+		p.mu.Lock()
+		defer p.mu.Unlock()
 
 		if c := cached(); c != nil {
 			return *c, nil
