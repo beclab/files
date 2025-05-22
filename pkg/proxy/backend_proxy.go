@@ -19,11 +19,6 @@ import (
 	"files/pkg/appdata"
 	"files/pkg/drives"
 	"fmt"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -31,6 +26,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -253,7 +254,7 @@ type PVCCache struct {
 	userPvcTime  map[string]time.Time
 	cachePvcMap  map[string]string
 	cachePvcTime map[string]time.Time
-	mu           sync.Mutex
+	mu           sync.RWMutex
 }
 
 func NewPVCCache(proxy *BackendProxy) *PVCCache {
@@ -266,44 +267,78 @@ func NewPVCCache(proxy *BackendProxy) *PVCCache {
 	}
 }
 
-func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (p *PVCCache) getFromCache(cached func() *string, fetch func() (string, error)) (string, error) {
+	if c := func() *string {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
 
-	if val, ok := p.userPvcMap[bflName]; ok {
-		if t, ok := p.userPvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
-			p.userPvcTime[bflName] = time.Now()
-			return val, nil
+		return cached()
+	}(); c != nil {
+		return *c, nil
+	}
+
+	return func() (string, error) {
+		p.mu.Unlock()
+		defer p.mu.Lock()
+
+		if c := cached(); c != nil {
+			return *c, nil
 		}
-	}
 
-	userPvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "userspace_pvc", bflName)
-	if err != nil {
-		return "", err
-	}
-	p.userPvcMap[bflName] = userPvc
-	p.userPvcTime[bflName] = time.Now()
-	return userPvc, nil
+		return fetch()
+	}()
+}
+
+func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
+
+	return p.getFromCache(
+		func() *string {
+			if val, ok := p.userPvcMap[bflName]; ok {
+				if t, ok := p.userPvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+					p.userPvcTime[bflName] = time.Now()
+					return &val
+				}
+			}
+
+			return nil
+		},
+		func() (string, error) {
+			userPvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "userspace_pvc", bflName)
+			if err != nil {
+				return "", err
+			}
+
+			p.userPvcMap[bflName] = userPvc
+			p.userPvcTime[bflName] = time.Now()
+			return userPvc, nil
+		},
+	)
+
 }
 
 func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	return p.getFromCache(
+		func() *string {
+			if val, ok := p.cachePvcMap[bflName]; ok {
+				if t, ok := p.cachePvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+					p.cachePvcTime[bflName] = time.Now()
+					return &val
+				}
+			}
 
-	if val, ok := p.cachePvcMap[bflName]; ok {
-		if t, ok := p.cachePvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
+			return nil
+		},
+
+		func() (string, error) {
+			cachePvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "appcache_pvc", bflName)
+			if err != nil {
+				return "", err
+			}
+			p.cachePvcMap[bflName] = cachePvc
 			p.cachePvcTime[bflName] = time.Now()
-			return val, nil
-		}
-	}
-
-	cachePvc, err := appdata.GetAnnotation(p.proxy.mainCtx, p.proxy.k8sClient, "appcache_pvc", bflName)
-	if err != nil {
-		return "", err
-	}
-	p.cachePvcMap[bflName] = cachePvc
-	p.cachePvcTime[bflName] = time.Now()
-	return cachePvc, nil
+			return cachePvc, nil
+		},
+	)
 }
 
 func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
