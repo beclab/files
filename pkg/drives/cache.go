@@ -35,6 +35,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 
 	// 用于记录上一次的日志长度，避免重复发送
 	lastLogLength := len(task.Log)
+	lastFailReasonLength := len(task.FailReason)
 
 	// 创建一个HTTP客户端
 	client := &http.Client{
@@ -135,6 +136,27 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 
 					// 更新最后日志长度
 					lastLogLength = len(apiResponse.Task.Log)
+				}
+
+				newFailReasons := make([]string, 0, len(apiResponse.Task.FailReason))
+				for i := lastFailReasonLength; i < len(apiResponse.Task.FailReason); i++ {
+					if apiResponse.Task.FailReason[i] != "" {
+						newFailReasons = append(newFailReasons, apiResponse.Task.FailReason[i])
+					}
+				}
+
+				if len(newFailReasons) > 0 {
+					// 发送新日志
+					for _, failReason := range newFailReasons {
+						select {
+						case task.ErrChan <- fmt.Errorf(failReason):
+							klog.Infof("~~~Temp Log: send fail reason %s", failReason)
+						default:
+						}
+					}
+
+					// 更新最后日志长度
+					lastFailReasonLength = len(apiResponse.Task.FailReason)
 				}
 
 				// 检查任务是否已完成

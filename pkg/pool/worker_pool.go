@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/alitto/pond/v2"
 	"k8s.io/klog/v2"
+	"path"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,11 +27,13 @@ type Task struct {
 	IsDir          bool               `json:"is_dir"`
 	FileType       string             `json:"file_type"`
 	Filename       string             `json:"filename"`
+	DstFilename    string             `json:"dst_filename"`
 	Status         string             `json:"status"`
 	Progress       int                `json:"progress"`
 	TotalFileSize  int64              `json:"total_file_size"`
 	Transferred    int64              `json:"transferred"`
 	Log            []string           `json:"log"`
+	FailReason     []string           `json:"fail_reason"`
 	RelationTaskID string             `json:"relation_task_id"` // only for same cache now
 	RelationNode   string             `json:"relation_node"`    // only for same cache now (for get task progress and cancel task)
 	Mu             sync.Mutex         `json:"-"`
@@ -47,8 +51,8 @@ type FormattedTask struct {
 }
 
 func (ft FormattedTask) String() string {
-	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, SrcType: %s, DstType: %s, Action: %s, Cancellable: %v, IsDir: %v, FileType: %s, Filename: %s, Status: %s, Progress: %d, TotalFileSize: %d, Transferred: %d, Log: %v, RelationTaskID: %s, RelationNode: %s",
-		ft.ID, ft.Source, ft.Dest, ft.SrcType, ft.DstType, ft.Action, ft.Cancellable, ft.IsDir, ft.FileType, ft.Filename, ft.Status, ft.Progress, ft.TotalFileSize, ft.Transferred, ft.Log, ft.RelationTaskID, ft.RelationNode)
+	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, SrcType: %s, DstType: %s, Action: %s, Cancellable: %v, IsDir: %v, FileType: %s, Filename: %s, DstFilename: %s, Status: %s, Progress: %d, TotalFileSize: %d, Transferred: %d, Log: %v, FailReason: %v, RelationTaskID: %s, RelationNode: %s",
+		ft.ID, ft.Source, ft.Dest, ft.SrcType, ft.DstType, ft.Action, ft.Cancellable, ft.IsDir, ft.FileType, ft.Filename, ft.DstFilename, ft.Status, ft.Progress, ft.TotalFileSize, ft.Transferred, ft.Log, ft.FailReason, ft.RelationTaskID, ft.RelationNode)
 }
 
 func NewTask(id, source, dest, srcType, dstType, action string, cancellable bool, isDir bool, fileType, filename string) *Task {
@@ -64,11 +68,13 @@ func NewTask(id, source, dest, srcType, dstType, action string, cancellable bool
 		IsDir:          isDir,
 		FileType:       fileType,
 		Filename:       filename,
+		DstFilename:    path.Base(strings.TrimSuffix(dest, "/")),
 		Status:         "pending",
 		Progress:       0,
 		TotalFileSize:  0,
 		Transferred:    0,
 		Log:            make([]string, 0),
+		FailReason:     make([]string, 0),
 		RelationTaskID: "",
 		RelationNode:   "",
 		Ctx:            ctx,
@@ -114,142 +120,6 @@ func ProcessProgress(progress, lowerBound, upperBound int) int {
 
 	return scaledProgress
 }
-
-//func (t *Task) UpdateProgress() {
-//	if t.Status == "completed" {
-//		return
-//	}
-//
-//	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
-//	t.Mu.Lock()
-//	t.Status = "running"
-//	t.Progress = 0
-//	t.Log = []string{}
-//	TaskManager.Store(t.ID, t)
-//	t.Mu.Unlock()
-//	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
-//
-//	timeout := time.After(24 * time.Hour) // 合理超时时间
-//
-//	lastHeartbeat := time.Now()
-//	heartbeatTicker := time.NewTicker(30 * time.Second)
-//	defer heartbeatTicker.Stop()
-//
-//	var logs []string = []string{}
-//
-//	for {
-//		select {
-//		case <-t.Ctx.Done():
-//			t.Mu.Lock()
-//			for _, log := range logs {
-//				klog.Infof("~~~Temp log: logging {%s}", log)
-//				t.Log = append(t.Log, log)
-//			}
-//			if t.Progress >= 100 {
-//				t.Status = "completed"
-//				klog.Infof("Task %s completed with progress %d", t.ID, t.Progress)
-//			} else {
-//				t.Status = "cancelled"
-//				klog.Warningf("Task %s cancelled with unexpected progress %d", t.ID, t.Progress)
-//			}
-//			TaskManager.Store(t.ID, t)
-//			t.Mu.Unlock()
-//			if t.Status == "cancelled" {
-//				klog.Infof("Task %s cancelled with Progress %d", t.ID, t.Progress)
-//			} else if t.Status == "completed" {
-//				klog.Infof("Task %s completed with Progress %d", t.ID, t.Progress)
-//			} else {
-//				klog.Infof("Task %s failed with status %s and Progress %d", t.ID, t.Status, t.Progress)
-//			}
-//
-//			return
-//		case <-heartbeatTicker.C:
-//			if time.Since(lastHeartbeat) > 45*time.Second {
-//				klog.Errorf("Task %s heartbeat lost", t.ID)
-//				return
-//			}
-//		case <-timeout:
-//			klog.Errorf("Task %s timeout", t.ID)
-//			return
-//		case err, ok := <-t.ErrChan:
-//			if !ok {
-//				klog.Infof("Task %s log channel closed", t.ID)
-//				break
-//			}
-//
-//			klog.Infof("[%s Error] %v with log count %d", t.ID, err, len(logs))
-//			t.Log = append(t.Log, fmt.Sprintf("%v", err))
-//		case log, ok := <-t.LogChan:
-//			if !ok {
-//				klog.Infof("Task %s log channel closed", t.ID)
-//				break
-//			}
-//
-//			if log != "" {
-//				klog.Infof("[%s] %s with log count %d", t.ID, log, len(logs))
-//				//logs = append(logs, log)
-//				t.Log = append(t.Log, log)
-//			} else {
-//				klog.Infof("[%s] %s with log count %d", t.ID, "a discarded empty log", len(logs))
-//			}
-//			//t.Mu.Lock()
-//			//t.Logging(log)
-//			//TaskManager.Store(t.ID, t)
-//			//t.Mu.Unlock()
-//			//klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-//
-//		case progress, ok := <-t.ProgressChan:
-//			if !ok {
-//				// 通道关闭，任务完成
-//				t.Mu.Lock()
-//				if t.Progress >= 100 {
-//					t.Status = "completed"
-//				} else {
-//					t.Status = "cancelled" // 或根据实际逻辑调整状态
-//				}
-//				for _, log := range logs {
-//					klog.Infof("~~~Temp log: logging {%s}", log)
-//					t.Log = append(t.Log, log)
-//				}
-//				TaskManager.Store(t.ID, t)
-//				t.Mu.Unlock()
-//				return
-//			}
-//			klog.Infof("[%s] %d %s %d", t.ID, t.Progress, t.Status, progress)
-//
-//			if t.Status == "completed" {
-//				klog.Infof("task [%s] already completed", t.ID)
-//				break
-//			}
-//
-//			processedProgress := 0
-//			if progress > 0 {
-//				processedProgress = progress //ProcessProgress(progress, 0)
-//			}
-//
-//			if t.Progress == 100 && processedProgress == 100 {
-//				select {
-//				case <-time.After(time.Second):
-//					CompleteTask(t.ID)
-//				case <-t.LogChan:
-//					CompleteTask(t.ID)
-//				case <-t.ErrChan:
-//					CompleteTask(t.ID)
-//				}
-//			} else {
-//				t.Mu.Lock()
-//				t.Progress = processedProgress
-//				TaskManager.Store(t.ID, t)
-//				t.Mu.Unlock()
-//				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
-//			}
-//
-//		default:
-//			// 避免完全阻塞，可以添加短暂休眠
-//			time.Sleep(10 * time.Millisecond)
-//		}
-//	}
-//}
 
 func (t *Task) UpdateProgress() {
 	if t.Status == "completed" {
@@ -344,6 +214,7 @@ func (t *Task) UpdateProgress() {
 			klog.Errorf("[%s Error] %v", t.ID, err)
 			t.Mu.Lock()
 			t.Log = append(t.Log, fmt.Sprintf("ERROR: %v", err))
+			t.FailReason = append(t.FailReason, err.Error())
 			t.Mu.Unlock()
 
 		case progress, ok := <-t.ProgressChan:
@@ -413,6 +284,9 @@ func (t *Task) Logging(entry string) {
 // LoggingError 添加错误日志条目
 func (t *Task) LoggingError(entry string) {
 	t.Logging("[ERROR] " + entry)
+	t.Mu.Lock()
+	defer t.Mu.Unlock()
+	t.FailReason = append(t.FailReason, entry)
 }
 
 // GetProgress 获取任务进度
