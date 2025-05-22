@@ -708,6 +708,10 @@ func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcTy
 	left, mid, right := CalculateProgressRange(task, diskSize)
 	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Ensure context is canceled when main exits
+	go SimulateProgress(ctx, left, mid, diskSize, 20000000, task)
+
 	err = SyncFileToBuffer(task, src, bufferPath, r, left, mid)
 	if err != nil {
 		return err
@@ -741,6 +745,11 @@ func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferP
 	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
 		return err
 	}
+	
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Ensure context is canceled when main exits
+	go SimulateProgress(ctx, left, right, diskSize, 20000000, task)
+
 	status, err := SyncBufferToFile(task, bufferPath, dst, diskSize, r, left, right)
 	if status != http.StatusOK && status != 0 {
 		return os.ErrInvalid

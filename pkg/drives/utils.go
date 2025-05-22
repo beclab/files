@@ -508,14 +508,14 @@ func (a *autoCloseReader) Close() error {
 	return a.closer.Close()
 }
 
-func TaskCancellable(srcType, dstType string) bool {
+func TaskCancellable(srcType, dstType string, same bool) bool {
 	if srcType == SrcTypeSync || dstType == SrcTypeSync {
 		return false
 	}
-	if IsCloudDrives(srcType) && srcType == dstType {
+	if IsCloudDrives(srcType) && same {
 		return false
 	}
-	if srcType == SrcTypeGoogle && srcType == dstType {
+	if srcType == SrcTypeGoogle && same {
 		return false
 	}
 	return true

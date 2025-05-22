@@ -1,6 +1,8 @@
 package http
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"files/pkg/common"
 	"files/pkg/drives"
 	"files/pkg/errors"
@@ -9,6 +11,7 @@ import (
 	"files/pkg/pool"
 	"fmt"
 	"github.com/spf13/afero"
+	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
 	"os"
@@ -154,7 +157,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		_, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, src, w, r)
 
 		taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-		task := pool.NewTask(taskID, src, dst, detailSrcType, detailDstType, action, drives.TaskCancellable(srcType, dstType), isDir, fileType, filename)
+		task := pool.NewTask(taskID, src, dst, detailSrcType, detailDstType, action, drives.TaskCancellable(srcType, dstType, same), isDir, fileType, filename)
 		pool.TaskManager.Store(taskID, task)
 
 		pool.WorkerPool.Submit(func() {
@@ -182,6 +185,30 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 	}
 }
 
+func createAndRemoveTempFile(targetDir string) error {
+	// 生成随机文件名（基于时间戳+随机字节）
+	timestamp := fmt.Sprintf("%d", time.Now().UnixNano()) // 纳秒级时间戳
+	randomBytes := make([]byte, 8)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return fmt.Errorf("Generating random filename failed: %v", err)
+	}
+	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:8] // 取前8个字符
+	filename := fmt.Sprintf("temp_%s_%s.testwritingpermission", timestamp, randomStr)
+	filePath := targetDir + filename
+
+	// 创建空文件
+	if err := ioutil.WriteFile(filePath, []byte{}, 0644); err != nil {
+		return fmt.Errorf("Create test file failed: %v", err)
+	}
+
+	// 立即删除文件
+	if err := os.Remove(filePath); err != nil {
+		return fmt.Errorf("Delete test file failed: %v", err)
+	}
+
+	return nil
+}
+
 func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
 	//logChan := make(chan string, 100)
@@ -191,18 +218,27 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		var err error
+		var err error = nil
 
-		// TODO: for test, all as not same
-		//same = false
-		if same {
-			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
-		} else {
-			err = pasteActionDiffArch(task, action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
+		if task.DstType == drives.SrcTypeExternal {
+			err = createAndRemoveTempFile(path.Dir(common.RootPrefix + task.Dest))
+			if err != nil {
+				task.ErrChan <- fmt.Errorf("writing permission test failed: %w", err)
+				task.LogChan <- fmt.Sprintf("writing permission test failed: %v", err)
+			}
 		}
-		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
-			fmt.Fprintln(w, err.Error())
+
+		if err == nil {
+			if same {
+				err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
+			} else {
+				err = pasteActionDiffArch(task, action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
+			}
+			if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
+				fmt.Fprintln(w, err.Error())
+			}
 		}
+		
 		if err != nil {
 			klog.Errorln(err)
 		}
@@ -418,8 +454,8 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 			pool.FailTask(task.ID)
 			return err
 		} else {
-			task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
-			pool.CompleteTask(task.ID)
+			//task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
+			//pool.CompleteTask(task.ID)
 			return nil
 		}
 	}
