@@ -19,9 +19,6 @@ func InitExternalWatcher() {
 			panic(err)
 		}
 		klog.Infoln("~~~Debug Log: externalWatcher created")
-
-		// Start listening for events.
-		go dedupExternalLoop(externalWatcher)
 	}
 
 	//err = filepath.Walk("/data", func(path string, info fs.FileInfo, err error) error {
@@ -87,6 +84,9 @@ func InitExternalWatcher() {
 		panic(err)
 	}
 	klog.Infof("watcher initialized at %s", path)
+
+	// Start listening for events.
+	go dedupExternalLoop(externalWatcher)
 
 	//path := strings.TrimSuffix(RootPrefix+files.ExternalPrefix, "/")
 	//klog.Infof("~~~Debug Log: Watching external files: %s", path)
