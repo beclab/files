@@ -1780,6 +1780,8 @@ func ResourceSyncDelete(path string, w http.ResponseWriter, r *http.Request) (in
 		return statusCode, fmt.Errorf("file update failed, status code: %d", statusCode)
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	contentLength := len(deleteBody)
+	w.Header().Set("Content-Length", strconv.Itoa(contentLength))
 	klog.Infof("deleteBody length=%d", len(deleteBody))
 	klog.Infof("deleteBody content=%s", string(deleteBody))
 	if len(deleteBody) > 0 {
