@@ -11,11 +11,11 @@ import (
 	"files/pkg/pool"
 	"fmt"
 	"github.com/spf13/afero"
-	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -186,28 +186,63 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 }
 
 func createAndRemoveTempFile(targetDir string) error {
-	// 生成随机文件名（基于时间戳+随机字节）
-	timestamp := fmt.Sprintf("%d", time.Now().UnixNano()) // 纳秒级时间戳
+	dir := findExistingDir(targetDir)
+	if dir == "" {
+		return fmt.Errorf("no writable directory found in path hierarchy of %q", targetDir)
+	}
+
+	timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
 	randomBytes := make([]byte, 8)
 	if _, err := rand.Read(randomBytes); err != nil {
-		return fmt.Errorf("Generating random filename failed: %v", err)
+		return fmt.Errorf("failed to generate random bytes: %v", err)
 	}
-	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:8] // 取前8个字符
+	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:8]
 	filename := fmt.Sprintf("temp_%s_%s.testwritingpermission", timestamp, randomStr)
-	filePath := targetDir + "/" + filename
+	filePath := filepath.Join(dir, filename)
 
 	klog.Infof("Creating temporary file %s", filePath)
-	// 创建空文件
-	if err := ioutil.WriteFile(filePath, []byte{}, 0644); err != nil {
-		return fmt.Errorf("Create test file failed: %v", err)
+
+	if err := os.WriteFile(filePath, []byte{}, 0o644); err != nil {
+		return fmt.Errorf("failed to create file: %v", err)
 	}
 
-	// 立即删除文件
 	if err := os.Remove(filePath); err != nil {
-		return fmt.Errorf("Delete test file failed: %v", err)
+		return fmt.Errorf("failed to remove file: %v", err)
 	}
 
 	return nil
+}
+
+func findExistingDir(targetDir string) string {
+	currentDir := filepath.Clean(targetDir)
+
+	for {
+		if dirExists(currentDir) {
+			return currentDir
+		}
+
+		parentDir := filepath.Dir(currentDir)
+
+		if parentDir == currentDir || parentDir == "/" || parentDir == "\\" {
+			break
+		}
+
+		currentDir = parentDir
+	}
+
+	if dirExists(".") {
+		return "."
+	}
+
+	return ""
+}
+
+func dirExists(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fi.IsDir()
 }
 
 func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, rename bool,
