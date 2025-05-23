@@ -56,6 +56,16 @@ const (
 	API_CACHE_PREFIX               = "/api/cache"
 )
 
+var REWRITE_FOCUSED_PREFIXES = []string{
+	"/api/resources/",
+	"/api/raw/",
+	"/api/preview/thumb/",
+	"/api/preview/big/",
+	"/api/paste/",
+	"/api/md5/",
+	"/api/permission/",
+}
+
 var PVCs *PVCCache = nil
 
 type GatewayHandler func(c echo.Context) (next bool, err error)
@@ -293,50 +303,81 @@ func FindEarliestIndex(haystack string, needles []string) (int, string) {
 	return earliestIndex, earliestNeedle
 }
 
-func rewriteUrl(path string, pvc string, prefix string) string {
+func rewriteUrl(path string, pvc string, prefix string, hasFocusPrefix bool) string {
 	if prefix == "" {
-		externalIndex, externalNeedle := FindEarliestIndex(path, []string{"/External", "/external"})
-		if externalIndex != -1 {
-			if externalNeedle == "/External" {
-				return path
-			}
-
-			firstHalf := path[:externalIndex]
-			//if firstHalf == "" {
-			//	firstHalf = "/"
-			//}
-			secondHalf := "/External" + strings.TrimPrefix(path[externalIndex:], "/external")
-			klog.Info("firstHalf=", firstHalf)
-			klog.Info("secondHalf=", secondHalf)
-
-			return firstHalf + secondHalf
-		}
-
-		homeIndex, homeNeedle := FindEarliestIndex(path, []string{"/Home", "/home"})
-		applicationIndex, applicationNeedle := FindEarliestIndex(path, []string{"/Application", "/data"})
-		splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, homeNeedle, applicationNeedle)
-		if splitIndex != -1 {
-			firstHalf := path[:splitIndex]
-			//if firstHalf == "" {
-			//	firstHalf = "/"
-			//}
-			secondHalf := path[splitIndex:]
-			klog.Info("firstHalf=", firstHalf)
-			klog.Info("secondHalf=", secondHalf)
-
-			if strings.HasSuffix(firstHalf, pvc) {
-				return path
-			}
-			if splitName == "/Home" {
-				return firstHalf + "/" + pvc + secondHalf
-			} else if splitName == "/home" {
-				secondHalf = "/Home" + strings.TrimPrefix(path[splitIndex:], "/home")
-				return firstHalf + "/" + pvc + secondHalf
-			} else {
-				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
-				return firstHalf + "/" + pvc + "/Data" + secondHalf
+		dealPath := path
+		focusPrefix := "/"
+		if hasFocusPrefix {
+			for _, fPrefix := range REWRITE_FOCUSED_PREFIXES {
+				if strings.HasPrefix(path, fPrefix) {
+					dealPath = strings.TrimPrefix(path, fPrefix)
+					focusPrefix = fPrefix
+					break
+				}
 			}
 		}
+		dealPath = strings.TrimPrefix(dealPath, "/")
+		klog.Infof("Rewriting url for: %s with a focus prefix: %s", dealPath, focusPrefix)
+		klog.Infof("pvc: %s", pvc)
+
+		pathSplit := strings.Split(dealPath, "/")
+		if len(pathSplit) < 2 {
+			return ""
+		}
+
+		if pathSplit[0] != pvc {
+			switch pathSplit[0] {
+			case "external", "External":
+				return focusPrefix + "External" + strings.TrimPrefix(dealPath, pathSplit[0])
+			case "home", "Home":
+				return focusPrefix + pvc + "/Home" + strings.TrimPrefix(dealPath, pathSplit[0])
+			case "data", "Data", "application", "Application":
+				return focusPrefix + pvc + "/Data" + strings.TrimPrefix(dealPath, pathSplit[0])
+			}
+		}
+
+		//externalIndex, externalNeedle := FindEarliestIndex(path, []string{"/External", "/external"})
+		//if externalIndex != -1 {
+		//	if externalNeedle == "/External" {
+		//		return path
+		//	}
+		//
+		//	firstHalf := path[:externalIndex]
+		//	//if firstHalf == "" {
+		//	//	firstHalf = "/"
+		//	//}
+		//	secondHalf := "/External" + strings.TrimPrefix(path[externalIndex:], "/external")
+		//	klog.Info("firstHalf=", firstHalf)
+		//	klog.Info("secondHalf=", secondHalf)
+		//
+		//	return firstHalf + secondHalf
+		//}
+
+		//homeIndex, homeNeedle := FindEarliestIndex(path, []string{"/Home", "/home"})
+		//applicationIndex, applicationNeedle := FindEarliestIndex(path, []string{"/Application", "/data"})
+		//splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, homeNeedle, applicationNeedle)
+		//if splitIndex != -1 {
+		//	firstHalf := path[:splitIndex]
+		//	//if firstHalf == "" {
+		//	//	firstHalf = "/"
+		//	//}
+		//	secondHalf := path[splitIndex:]
+		//	klog.Info("firstHalf=", firstHalf)
+		//	klog.Info("secondHalf=", secondHalf)
+		//
+		//	if strings.HasSuffix(firstHalf, pvc) {
+		//		return path
+		//	}
+		//	if splitName == "/Home" {
+		//		return firstHalf + "/" + pvc + secondHalf
+		//	} else if splitName == "/home" {
+		//		secondHalf = "/Home" + strings.TrimPrefix(path[splitIndex:], "/home")
+		//		return firstHalf + "/" + pvc + secondHalf
+		//	} else {
+		//		secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
+		//		return firstHalf + "/" + pvc + "/Data" + secondHalf
+		//	}
+		//}
 	} else {
 		pathSuffix := strings.TrimPrefix(path, prefix)
 		if strings.HasSuffix(prefix, "/cache") {
@@ -500,13 +541,13 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		klog.Infoln("DST_TYPE:", dstType)
 
 		if srcType == drives.SrcTypeDrive || srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
-			src = rewriteUrl(src, userPvc, "")
+			src = rewriteUrl(src, userPvc, "", true)
 		} else if srcType == drives.SrcTypeCache {
-			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
+			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData", true)
 		}
 
 		if dstType == drives.SrcTypeDrive || dstType == drives.SrcTypeData || dstType == drives.SrcTypeExternal {
-			dst = rewriteUrl(dst, userPvc, "")
+			dst = rewriteUrl(dst, userPvc, "", false)
 			query.Set("destination", dst)
 		} else if dstType == drives.SrcTypeCache {
 			if strings.HasPrefix(dst, "/cache") {
@@ -535,7 +576,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 					c.Request().Header.Set(NODE_HEADER, dstNode)
 				}
 			} // only for cache for compatible
-			dst = rewriteUrl(dst, cachePvc, "/AppData")
+			dst = rewriteUrl(dst, cachePvc, "/AppData", false)
 			query.Set("destination", dst)
 		}
 
@@ -555,23 +596,23 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 				if strings.HasPrefix(dst, "/cache") {
 					dst = strings.TrimPrefix(dst, "/cache")
 				} // only for cache for compatible
-				dst = rewriteUrl(dst, cachePvc, "/AppData")
+				dst = rewriteUrl(dst, cachePvc, "/AppData", false)
 				dst = strings.Replace(dst, "/"+node[0], "", 1)
 				query.Set("destination", dst)
 				c.Request().URL.RawQuery = query.Encode()
 			}
 
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX, true)
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX, true)
 		} else if strings.HasPrefix(path, API_MD5_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_MD5_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_MD5_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PREVIEW_THUMB_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_THUMB_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_THUMB_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PREVIEW_BIG_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_BIG_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_BIG_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PERMISSION_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PERMISSION_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PERMISSION_PREFIX, true)
 		}
 		host = appdata.GetAppDataServiceEndpoint(p.k8sClient, node[0])
 		klog.Info("host: ", host)
@@ -588,11 +629,11 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 					dst = strings.TrimPrefix(dst, "/cache")
 				} // only for cache for compatible
 				klog.Infoln("DST:", dst)
-				dst = rewriteUrl(dst, userPvc, "")
+				dst = rewriteUrl(dst, userPvc, "", false)
 				query.Set("destination", dst)
 				c.Request().URL.RawQuery = query.Encode()
 			}
-			c.Request().URL.Path = rewriteUrl(path, userPvc, "")
+			c.Request().URL.Path = rewriteUrl(path, userPvc, "", true)
 			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, UPLOADER_PREFIX) {
 			host = "127.0.0.1:40030"
