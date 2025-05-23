@@ -1779,81 +1779,29 @@ func ResourceSyncDelete(path string, w http.ResponseWriter, r *http.Request) (in
 		klog.Infoln(string(deleteBody))
 		return statusCode, fmt.Errorf("file update failed, status code: %d", statusCode)
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	contentLength := len(deleteBody)
-	w.Header().Set("Content-Length", strconv.Itoa(contentLength))
-	klog.Infof("deleteBody length=%d", len(deleteBody))
-	klog.Infof("deleteBody content=%s", string(deleteBody))
-	if len(deleteBody) > 0 {
-		_, err = w.Write([]byte(deleteBody))
-		if err != nil {
-			klog.Errorln("Failed to write response:", err)
-			return common.ErrToStatus(err), err
-		}
-	}
-	return 0, nil
-
-	//path = strings.Trim(path, "/")
-	//if !strings.Contains(path, "/") {
-	//	err := e.New("invalid path format: path must contain at least one '/'")
-	//	klog.Errorln("Error:", err)
-	//	return common.ErrToStatus(err), err
+	//w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	//contentLength := len(deleteBody)
+	//w.Header().Set("Content-Length", strconv.Itoa(contentLength))
+	//klog.Infof("deleteBody length=%d", len(deleteBody))
+	//klog.Infof("deleteBody content=%s", string(deleteBody))
+	//if len(deleteBody) > 0 {
+	//	_, err = w.Write([]byte(deleteBody))
+	//	if err != nil {
+	//		klog.Errorln("Failed to write response:", err)
+	//		return common.ErrToStatus(err), err
+	//	}
 	//}
-	//
-	//firstSlashIdx := strings.Index(path, "/")
-	//
-	//repoID := path[:firstSlashIdx]
-	//
-	//lastSlashIdx := strings.LastIndex(path, "/")
-	//
-	//filename := path[lastSlashIdx+1:]
-	//
-	//prefix := ""
-	//if firstSlashIdx != lastSlashIdx {
-	//	prefix = path[firstSlashIdx+1 : lastSlashIdx+1]
-	//}
-	//
-	//if prefix != "" {
-	//	prefix = "/" + prefix + "/"
-	//} else {
-	//	prefix = "/"
-	//}
-	//
-	//targetURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/batch-delete-item/"
-	//requestBody := map[string]interface{}{
-	//	"dirents":    []string{filename},
-	//	"parent_dir": prefix,
-	//	"repo_id":    repoID,
-	//}
-	//jsonBody, err := json.Marshal(requestBody)
-	//if err != nil {
-	//	return http.StatusInternalServerError, err
-	//}
-	//
-	//request, err := http.NewRequest("DELETE", targetURL, bytes.NewBuffer(jsonBody))
-	//if err != nil {
-	//	return http.StatusInternalServerError, err
-	//}
-	//
-	//request.Header = r.Header.Clone()
-	//request.Header.Set("Content-Type", "application/json")
-	//RemoveAdditionalHeaders(&request.Header)
-	//
-	//client := &http.Client{
-	//	Timeout: 10 * time.Second,
-	//}
-	//
-	//response, err := client.Do(request)
-	//if err != nil {
-	//	return http.StatusInternalServerError, err
-	//}
-	//defer response.Body.Close()
-	//
-	//if response.StatusCode != http.StatusOK {
-	//	return response.StatusCode, fmt.Errorf("file delete failed with status: %d", response.StatusCode)
-	//}
-	//
 	//return 0, nil
+	type Response struct {
+		Success  bool   `json:"success"`
+		CommitID string `json:"commit_id"`
+	}
+	var resp Response
+	if err = json.Unmarshal(deleteBody, &resp); err != nil {
+		klog.Errorf("JSON parse failed: %v", err)
+		return http.StatusInternalServerError, err
+	}
+	return common.RenderJSON(w, r, resp)
 }
 
 func SyncPermToMode(permStr string) os.FileMode {
