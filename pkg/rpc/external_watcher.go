@@ -21,6 +21,22 @@ func InitExternalWatcher() {
 		klog.Infoln("~~~Debug Log: externalWatcher created")
 	}
 
+	//err = filepath.Walk("/data", func(path string, info fs.FileInfo, err error) error {
+	//	if err != nil {
+	//		return err
+	//	}
+	//	if info.IsDir() {
+	//		klog.Infoln("filepath.Base: ", filepath.Base(path))
+	//		if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
+	//			err = externalWatcher.Add(path)
+	//			if err != nil {
+	//				klog.Errorln("watcher add error:", err)
+	//				return err
+	//			}
+	//		}
+	//	}
+	//	return nil
+	//})
 	path := "/External"
 	err = externalWatcher.Add(path)
 	if err != nil {
@@ -71,6 +87,15 @@ func InitExternalWatcher() {
 
 	// Start listening for events.
 	go dedupExternalLoop(externalWatcher)
+
+	//path := strings.TrimSuffix(RootPrefix+files.ExternalPrefix, "/")
+	//klog.Infof("~~~Debug Log: Watching external files: %s", path)
+	//err = externalWatcher.Add(path)
+	//if err != nil {
+	//	klog.Errorln("watcher add error:", err)
+	//	panic(err)
+	//}
+	//klog.Infoln("~~~Debug Log: externalWatcher initialized with path:", path)
 }
 
 func dedupExternalLoop(w *jfsnotify.Watcher) {
@@ -97,11 +122,11 @@ func dedupExternalLoop(w *jfsnotify.Watcher) {
 			for name, t := range toProcess {
 				select {
 				case <-t.C:
-					//mu.Lock()
+					mu.Lock()
 					if ev, ok := pendingEvent[name]; ok {
-						//delete(pendingEvent, name)
-						//delete(timers, name)
-						//mu.Unlock()
+						delete(pendingEvent, name)
+						delete(timers, name)
+						mu.Unlock()
 
 						printEvent(ev)
 						err := handleExternalEvent(ev)
@@ -109,8 +134,7 @@ func dedupExternalLoop(w *jfsnotify.Watcher) {
 							klog.Errorf("handle watch file event error %s", err.Error())
 						}
 					} else {
-						klog.Errorf("handle watch file event error %s", name)
-						//mu.Unlock()
+						mu.Unlock()
 					}
 				case <-time.After(waitFor):
 					continue
@@ -126,7 +150,6 @@ func dedupExternalLoop(w *jfsnotify.Watcher) {
 		select {
 		case err, ok := <-w.Errors:
 			if !ok {
-				klog.Errorf("watcher error channel closed")
 				return
 			}
 			printTime("ERROR: %s", err)
@@ -137,11 +160,15 @@ func dedupExternalLoop(w *jfsnotify.Watcher) {
 				return
 			}
 
-			//if e.Has(jfsnotify.Chmod) {
+			if e.Has(jfsnotify.Chmod) {
+				continue
+			}
+
+			//if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
 			//	continue
 			//}
 
-			//mu.Lock()
+			mu.Lock()
 			pendingEvent[e.Name] = e
 			t, ok := timers[e.Name]
 			if !ok {
