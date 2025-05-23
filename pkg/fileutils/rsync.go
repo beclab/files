@@ -592,7 +592,7 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 
 	if firstErr != nil {
 		klog.Errorf("ExecuteRsync failed with error: %v", firstErr)
-		task.ErrChan <- firstErr
+		task.ErrChan <- fmt.Errorf("ExecuteRsync failed with error: %v", firstErr)
 		pool.FailTask(task.ID)
 		return firstErr
 	}
