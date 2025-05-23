@@ -194,7 +194,7 @@ func createAndRemoveTempFile(targetDir string) error {
 	}
 	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:8] // 取前8个字符
 	filename := fmt.Sprintf("temp_%s_%s.testwritingpermission", timestamp, randomStr)
-	filePath := targetDir + filename
+	filePath := targetDir + "/" + filename
 
 	klog.Infof("Creating temporary file %s", filePath)
 	// 创建空文件
