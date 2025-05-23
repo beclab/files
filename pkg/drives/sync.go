@@ -1103,25 +1103,6 @@ func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *
 		return -1, nil, err
 	}
 
-	//var bodyReader io.Reader = response.Body
-	//
-	//if response.Header.Get("Content-Encoding") == "gzip" {
-	//	gzipReader, err := gzip.NewReader(response.Body)
-	//	if err != nil {
-	//		klog.Errorf("unzip response failed: %v\n", err)
-	//		return nil, err
-	//	}
-	//	defer gzipReader.Close()
-	//
-	//	bodyReader = gzipReader
-	//}
-	//
-	//body, err := ioutil.ReadAll(bodyReader)
-	//if err != nil {
-	//	klog.Errorf("read response failed: %v\n", err)
-	//	return nil, err
-	//}
-
 	if returnResp {
 		return response.StatusCode, body, nil
 	}
@@ -1799,10 +1780,12 @@ func ResourceSyncDelete(path string, w http.ResponseWriter, r *http.Request) (in
 		return statusCode, fmt.Errorf("file update failed, status code: %d", statusCode)
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	klog.Infof("deleteBody=%s", string(deleteBody))
+	klog.Infof("deleteBody length=%d", len(deleteBody))
+	klog.Infof("deleteBody content=%s", string(deleteBody))
 	if len(deleteBody) > 0 {
-		_, err = w.Write(deleteBody)
+		_, err = w.Write([]byte(deleteBody))
 		if err != nil {
+			klog.Errorln("Failed to write response:", err)
 			return common.ErrToStatus(err), err
 		}
 	}
