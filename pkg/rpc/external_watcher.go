@@ -5,6 +5,7 @@ import (
 	"files/pkg/drives"
 	"files/pkg/files"
 	"k8s.io/klog/v2"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,7 +26,7 @@ func InitExternalWatcher() {
 		go dedupExternalLoop(externalWatcher)
 	}
 
-	path := RootPrefix + files.ExternalPrefix
+	path := strings.TrimSuffix(RootPrefix+files.ExternalPrefix, "/")
 	klog.Infof("~~~Debug Log: Watching external files: %s", path)
 	err = externalWatcher.Add(path)
 	if err != nil {
