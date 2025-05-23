@@ -251,7 +251,8 @@ func (t *Task) UpdateProgress() {
 				processedProgress = progress
 			}
 
-			if t.Progress == 100 && processedProgress == 100 {
+			//if t.Progress == 100 && processedProgress == 100 {
+			if processedProgress == 100 {
 				select {
 				case <-time.After(time.Second):
 					CompleteTask(t.ID)
