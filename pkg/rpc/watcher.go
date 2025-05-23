@@ -145,10 +145,6 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 			}
 			panic(err)
 		}
-
-		// Start listening for events.
-		go dedupLoop(watcher)
-		klog.Infof("watching path %s", strings.Join(addPaths, ","))
 	}
 
 	currentTime := time.Now().Format(time.RFC3339)
@@ -262,6 +258,10 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 	}
 
 	klog.Infoln("Finished watching path setup.")
+
+	// Start listening for events.
+	go dedupLoop(watcher)
+	klog.Infof("watching path %s", strings.Join(addPaths, ","))
 }
 
 func dedupLoop(w *jfsnotify.Watcher) {
