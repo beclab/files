@@ -48,6 +48,14 @@ func InitExternalWatcher() {
 	}
 	klog.Infof("watcher initialized at %s", path)
 
+	path = "/data/External"
+	err = externalWatcher.Add(path)
+	if err != nil {
+		klog.Errorln("watcher add error:", err)
+		panic(err)
+	}
+	klog.Infof("watcher initialized at %s", path)
+
 	path = "/wangrongxiang"
 	err = externalWatcher.Add(path)
 	if err != nil {
