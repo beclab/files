@@ -26,6 +26,7 @@ func InitExternalWatcher() {
 	}
 
 	path := RootPrefix + files.ExternalPrefix
+	klog.Infof("~~~Debug Log: Watching external files: %s", path)
 	err = externalWatcher.Add(path)
 	if err != nil {
 		klog.Errorln("watcher add error:", err)
