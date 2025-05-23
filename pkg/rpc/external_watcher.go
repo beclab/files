@@ -18,6 +18,7 @@ func InitExternalWatcher() {
 	if externalWatcher == nil {
 		externalWatcher, err = jfsnotify.NewWatcher("externalWatcher")
 		if err != nil {
+			klog.Fatalf("Failed to initialize watcher: %v", err)
 			panic(err)
 		}
 		klog.Infoln("~~~Debug Log: externalWatcher created")

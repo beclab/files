@@ -91,6 +91,7 @@ func (tm *TaskManager) Stop() {
 func (tm *TaskManager) runTask(ctx context.Context, task Task) {
 	switch task.taskType {
 	case OnceTask:
+		klog.Infoln("run once task", task.name)
 		task.taskFunc(ctx)
 	case PeriodicTask:
 		tm.periodicWg.Add(1)
