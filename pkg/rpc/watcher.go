@@ -68,6 +68,7 @@ func InitWatcher() {
 	if WatcherEnabled == "True" {
 		go WatchPath(BaseWatchDirs, nil, WatchDirs)
 	}
+	go InitExternalWatcher()
 }
 
 func checkString(s string) bool {
