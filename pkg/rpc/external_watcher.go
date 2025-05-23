@@ -5,8 +5,6 @@ import (
 	"files/pkg/drives"
 	"files/pkg/files"
 	"k8s.io/klog/v2"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -46,10 +44,10 @@ func dedupExternalLoop(w *jfsnotify.Watcher) {
 			klog.Infof("handle event %v %v", e.Op.String(), e.Name)
 		}
 	)
+	klog.Infof("~~~Debug Log: dedup watcher started with %v", w)
 
 	go func() {
 		for {
-			klog.Infof("~~~Debug Log: waiting for events to be processed")
 			mu.Lock()
 			toProcess := make(map[string]*time.Timer)
 			for name, t := range timers {
@@ -82,7 +80,9 @@ func dedupExternalLoop(w *jfsnotify.Watcher) {
 		}
 	}()
 
+	klog.Infof("~~~Debug Log: dedup watcher started")
 	for {
+		klog.Infof("~~~Debug Log: event for")
 		select {
 		case err, ok := <-w.Errors:
 			if !ok {
@@ -100,9 +100,9 @@ func dedupExternalLoop(w *jfsnotify.Watcher) {
 				continue
 			}
 
-			if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
-				continue
-			}
+			//if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
+			//	continue
+			//}
 
 			mu.Lock()
 			pendingEvent[e.Name] = e
@@ -120,10 +120,10 @@ func dedupExternalLoop(w *jfsnotify.Watcher) {
 
 func handleExternalEvent(e jfsnotify.Event) error {
 	klog.Infof("~~~Debug Log: handle event %v %v", e.Op.String(), e.Name)
-	if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
-		//klog.Infoln("we won't deal with uploads temp dir")
-		return nil
-	}
+	//if strings.HasSuffix(filepath.Dir(e.Name), "/.uploadstemp") {
+	//	//klog.Infoln("we won't deal with uploads temp dir")
+	//	return nil
+	//}
 
 	if e.Has(jfsnotify.Remove) || e.Has(jfsnotify.Rename) {
 		klog.Infof("external delete %s", e.Name)
