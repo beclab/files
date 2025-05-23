@@ -26,7 +26,7 @@ func InitExternalWatcher() {
 	}
 
 	path := RootPrefix + files.ExternalPrefix
-	err = watcher.Add(path)
+	err = externalWatcher.Add(path)
 	if err != nil {
 		klog.Errorln("watcher add error:", err)
 		panic(err)
