@@ -3,11 +3,7 @@ package rpc
 import (
 	"bytetrade.io/web3os/fs-lib/jfsnotify"
 	"files/pkg/drives"
-	"files/pkg/files"
-	"io/fs"
 	"k8s.io/klog/v2"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -28,28 +24,45 @@ func InitExternalWatcher() {
 		go dedupExternalLoop(externalWatcher)
 	}
 
-	err = filepath.Walk("/data", func(path string, info fs.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			klog.Infoln("filepath.Base: ", filepath.Base(path))
-			if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
-				err = externalWatcher.Add(path)
-				if err != nil {
-					klog.Errorln("watcher add error:", err)
-					return err
-				}
-			}
-		}
-		return nil
-	})
-	//path := "/data/External"
-	//err = externalWatcher.Add(path)
+	//err = filepath.Walk("/data", func(path string, info fs.FileInfo, err error) error {
+	//	if err != nil {
+	//		return err
+	//	}
+	//	if info.IsDir() {
+	//		klog.Infoln("filepath.Base: ", filepath.Base(path))
+	//		if filepath.Base(path) == strings.Trim(files.ExternalPrefix, "/") {
+	//			err = externalWatcher.Add(path)
+	//			if err != nil {
+	//				klog.Errorln("watcher add error:", err)
+	//				return err
+	//			}
+	//		}
+	//	}
+	//	return nil
+	//})
+	path := "/External"
+	err = externalWatcher.Add(path)
 	if err != nil {
 		klog.Errorln("watcher add error:", err)
 		panic(err)
 	}
+	klog.Infof("watcher initialized at %s", path)
+
+	path = "/wangrongxiang"
+	err = externalWatcher.Add(path)
+	if err != nil {
+		klog.Errorln("watcher add error:", err)
+		panic(err)
+	}
+	klog.Infof("watcher initialized at %s", path)
+
+	path = "/Application"
+	err = externalWatcher.Add(path)
+	if err != nil {
+		klog.Errorln("watcher add error:", err)
+		panic(err)
+	}
+	klog.Infof("watcher initialized at %s", path)
 
 	//path := strings.TrimSuffix(RootPrefix+files.ExternalPrefix, "/")
 	//klog.Infof("~~~Debug Log: Watching external files: %s", path)
