@@ -745,7 +745,7 @@ func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferP
 	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
 		return err
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Ensure context is canceled when main exits
 	go SimulateProgress(ctx, left, right, diskSize, 20000000, task)
@@ -1801,7 +1801,6 @@ func ResourceSyncDelete(path string, w http.ResponseWriter, r *http.Request) (in
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err = w.Write(deleteBody)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return common.ErrToStatus(err), err
 	}
 	return 0, nil

@@ -254,12 +254,11 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 		task.UpdateProgress()
 	}()
 
-	// 等待 ExecuteRsyncSimulated 完成或出错
 	select {
 	case err := <-task.ErrChan:
 		if err != nil {
-			task.LoggingError(fmt.Sprintf("Failed to execute rsync: %v\n", err))
-			klog.Errorf("Failed to execute rsync: %v\n", err)
+			task.LoggingError(fmt.Sprintf("%v", err))
+			klog.Errorf("[TASK EXECUTE ERROR]: %v", err)
 			return
 		}
 	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待

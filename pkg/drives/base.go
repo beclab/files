@@ -623,8 +623,8 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 	select {
 	case err := <-task.ErrChan:
 		if err != nil {
-			task.LoggingError(fmt.Sprintf("Failed to execute rsync: %v\n", err))
-			klog.Errorf("Failed to execute rsync: %v\n", err)
+			task.LoggingError(fmt.Sprintf("%v", err))
+			klog.Errorf("[ERROR]: %v", err)
 			return
 		}
 	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
