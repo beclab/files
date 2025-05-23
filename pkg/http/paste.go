@@ -196,6 +196,7 @@ func createAndRemoveTempFile(targetDir string) error {
 	filename := fmt.Sprintf("temp_%s_%s.testwritingpermission", timestamp, randomStr)
 	filePath := targetDir + filename
 
+	klog.Infof("Creating temporary file %s", filePath)
 	// 创建空文件
 	if err := ioutil.WriteFile(filePath, []byte{}, 0644); err != nil {
 		return fmt.Errorf("Create test file failed: %v", err)
@@ -225,6 +226,7 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 			if err != nil {
 				task.ErrChan <- fmt.Errorf("writing permission test failed: %w", err)
 				task.LogChan <- fmt.Sprintf("writing permission test failed: %v", err)
+				pool.FailTask(task.ID)
 			}
 		}
 
