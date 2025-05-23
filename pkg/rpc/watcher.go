@@ -65,9 +65,9 @@ func InitWatcher() {
 
 	klog.Infoln("baseWatchDirs = ", BaseWatchDirs)
 
-	if WatcherEnabled == "True" {
-		go WatchPath(BaseWatchDirs, nil, WatchDirs)
-	}
+	//if WatcherEnabled == "True" {
+	//	go WatchPath(BaseWatchDirs, nil, WatchDirs)
+	//}
 	go InitExternalWatcher()
 }
 
