@@ -179,7 +179,7 @@ func (rc *SyncResourceService) DeleteHandler(fileCache fileutils.FileCache) hand
 			}
 			return 0, nil
 		}
-		return ResourceSyncDelete(strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync), w, r)
+		return ResourceSyncDelete(strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync), w, r, true)
 	}
 }
 
@@ -864,8 +864,8 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 func (rs *SyncResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
-	status, err := ResourceSyncDelete(src, w, r)
-	if status != http.StatusOK {
+	status, err := ResourceSyncDelete(src, w, r, false)
+	if status != http.StatusOK && status != 0 {
 		return os.ErrInvalid
 	}
 	if err != nil {
@@ -1755,7 +1755,7 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 	return 0, nil
 }
 
-func ResourceSyncDelete(path string, w http.ResponseWriter, r *http.Request) (int, error) {
+func ResourceSyncDelete(path string, w http.ResponseWriter, r *http.Request, returnResp bool) (int, error) {
 	repoID, prefix, filename := ParseSyncPath(path)
 	p := prefix + filename
 	if strings.HasSuffix(p, "/") {
@@ -1792,16 +1792,19 @@ func ResourceSyncDelete(path string, w http.ResponseWriter, r *http.Request) (in
 	//	}
 	//}
 	//return 0, nil
-	type Response struct {
-		Success  bool   `json:"success"`
-		CommitID string `json:"commit_id"`
+	if returnResp {
+		type Response struct {
+			Success  bool   `json:"success"`
+			CommitID string `json:"commit_id"`
+		}
+		var resp Response
+		if err = json.Unmarshal(deleteBody, &resp); err != nil {
+			klog.Errorf("JSON parse failed: %v", err)
+			return http.StatusInternalServerError, err
+		}
+		return common.RenderJSON(w, r, resp)
 	}
-	var resp Response
-	if err = json.Unmarshal(deleteBody, &resp); err != nil {
-		klog.Errorf("JSON parse failed: %v", err)
-		return http.StatusInternalServerError, err
-	}
-	return common.RenderJSON(w, r, resp)
+	return 0, nil
 }
 
 func SyncPermToMode(permStr string) os.FileMode {
