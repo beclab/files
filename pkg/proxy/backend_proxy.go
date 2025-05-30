@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -35,20 +34,37 @@ import (
 )
 
 const (
-	API_RESOURCES_PREFIX     = "/api/resources/AppData"
-	API_RAW_PREFIX           = "/api/raw/AppData"
-	API_MD5_PREFIX           = "/api/md5/AppData"
-	API_PREVIEW_THUMB_PREFIX = "/api/preview/thumb/AppData"
-	API_PREVIEW_BIG_PREFIX   = "/api/preview/big/AppData"
-	API_PERMISSION_PREFIX    = "/api/permission/AppData"
-	NODE_HEADER              = "X-Terminus-Node"
-	BFL_HEADER               = "X-Bfl-User"
-	API_PREFIX               = "/api"
-	UPLOADER_PREFIX          = "/upload"
-	MEDIA_PREFIX             = "/videos"
-	API_PASTE_PREFIX         = "/api/paste"
-	API_CACHE_PREFIX         = "/api/cache"
+	API_RESOURCES_PREFIX           = "/api/resources/AppData"
+	API_RAW_PREFIX                 = "/api/raw/AppData"
+	API_MD5_PREFIX                 = "/api/md5/AppData"
+	API_PREVIEW_THUMB_PREFIX       = "/api/preview/thumb/AppData"
+	API_PREVIEW_BIG_PREFIX         = "/api/preview/big/AppData"
+	API_PERMISSION_PREFIX          = "/api/permission/AppData"
+	API_RESOURCES_CACHE_PREFIX     = "/api/resources/cache"
+	API_RAW_CACHE_PREFIX           = "/api/raw/cache"
+	API_MD5_CACHE_PREFIX           = "/api/md5/cache"
+	API_PREVIEW_THUMB_CACHE_PREFIX = "/api/preview/thumb/cache"
+	API_PREVIEW_BIG_CACHE_PREFIX   = "/api/preview/big/cache"
+	API_PERMISSION_CACHE_PREFIX    = "/api/permission/cache"
+	NODE_HEADER                    = "X-Terminus-Node"
+	BFL_HEADER                     = "X-Bfl-User"
+	API_PREFIX                     = "/api"
+	UPLOADER_PREFIX                = "/upload"
+	MEDIA_PREFIX                   = "/videos"
+	API_PASTE_PREFIX               = "/api/paste"
+	API_PASTE_CACHE_PREFIX         = "/api/paste/cache"
+	API_CACHE_PREFIX               = "/api/cache"
 )
+
+var REWRITE_FOCUSED_PREFIXES = []string{
+	"/api/resources/",
+	"/api/raw/",
+	"/api/preview/thumb/",
+	"/api/preview/big/",
+	"/api/paste/",
+	"/api/md5/",
+	"/api/permission/",
+}
 
 var PVCs *PVCCache = nil
 
@@ -92,6 +108,18 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	backendProxy.addHandlers(API_PREVIEW_BIG_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_PERMISSION_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_PERMISSION_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RESOURCES_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RESOURCES_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RAW_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_RAW_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_MD5_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_MD5_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_THUMB_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_THUMB_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_BIG_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PREVIEW_BIG_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PERMISSION_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
+	backendProxy.addHandlers(API_PERMISSION_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX, backendProxy.listNodesOrNot(backendProxy.listNodes))
 	backendProxy.addHandlers(API_CACHE_PREFIX+"/", backendProxy.listNodesOrNot(backendProxy.listNodes))
 
@@ -121,6 +149,41 @@ func (p *BackendProxy) Shutdown() {
 func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		path := c.Request().URL.Path
+
+		// deal for new cache method
+		cachePrefixMap := map[string]string{
+			API_RESOURCES_CACHE_PREFIX:     "resources",
+			API_RAW_CACHE_PREFIX:           "raw",
+			API_MD5_CACHE_PREFIX:           "md5",
+			API_PREVIEW_THUMB_CACHE_PREFIX: "preview/thumb",
+			API_PREVIEW_BIG_CACHE_PREFIX:   "preview/big",
+			API_PERMISSION_CACHE_PREFIX:    "permission",
+			API_PASTE_CACHE_PREFIX:         "paste",
+		}
+
+		for prefix, base := range cachePrefixMap {
+			if path == prefix {
+				path = fmt.Sprintf("/api/%s/AppData", base)
+				break
+			} else if path == prefix+"/" {
+				path = fmt.Sprintf("/api/%s/AppData/", base)
+				break
+			} else {
+				if strings.HasPrefix(path, prefix) {
+					suffix := strings.TrimPrefix(path[len(prefix):], "/")
+
+					parts := strings.SplitN(suffix, "/", 2)
+					node := parts[0]
+					remaining := ""
+					if len(parts) > 1 {
+						remaining = parts[1]
+					}
+
+					path = fmt.Sprintf("%s/%s/%s/AppData/%s", API_CACHE_PREFIX, node, base, remaining)
+					break
+				}
+			}
+		}
 
 		if !regexp.MustCompile("^"+API_RESOURCES_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+API_RAW_PREFIX+".*").Match([]byte(path)) &&
@@ -217,33 +280,69 @@ func minWithNegativeOne(a, b int, aName, bName string) (int, string) {
 	}
 }
 
-func rewriteUrl(path string, pvc string, prefix string) string {
-	if prefix == "" {
-		homeIndex := strings.Index(path, "/Home")
-		applicationIndex := strings.Index(path, "/Application")
-		splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, "/Home", "/Application")
-		if splitIndex != -1 {
-			firstHalf := path[:splitIndex]
-			secondHalf := path[splitIndex:]
-			klog.Info("firstHalf=", firstHalf)
-			klog.Info("secondHalf=", secondHalf)
+func FindEarliestIndex(haystack string, needles []string) (int, string) {
+	earliestIndex := -1
+	earliestNeedle := ""
 
-			if strings.HasSuffix(firstHalf, pvc) {
-				return path
+	for _, needle := range needles {
+		if needle == "" {
+			continue
+		}
+
+		currentIndex := strings.Index(haystack, needle)
+
+		if currentIndex >= 0 {
+			if earliestIndex == -1 || currentIndex < earliestIndex {
+				earliestIndex = currentIndex
+				earliestNeedle = needle
 			}
-			if splitName == "/Home" {
-				return filepath.Join(firstHalf, pvc+secondHalf)
-			} else {
-				secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
-				return filepath.Join(firstHalf, pvc+"/Data"+secondHalf)
+		}
+	}
+
+	return earliestIndex, earliestNeedle
+}
+
+func rewriteUrl(path string, pvc string, prefix string, hasFocusPrefix bool) string {
+	if prefix == "" {
+		dealPath := path
+		focusPrefix := "/"
+		if hasFocusPrefix {
+			for _, fPrefix := range REWRITE_FOCUSED_PREFIXES {
+				if strings.HasPrefix(path, fPrefix) {
+					dealPath = strings.TrimPrefix(path, fPrefix)
+					focusPrefix = fPrefix
+					break
+				}
+			}
+		}
+		dealPath = strings.TrimPrefix(dealPath, "/")
+		klog.Infof("Rewriting url for: %s with a focus prefix: %s", dealPath, focusPrefix)
+		klog.Infof("pvc: %s", pvc)
+
+		pathSplit := strings.Split(dealPath, "/")
+		if len(pathSplit) < 2 {
+			return ""
+		}
+
+		if pathSplit[0] != pvc {
+			switch pathSplit[0] {
+			case "external", "External":
+				return focusPrefix + "External" + strings.TrimPrefix(dealPath, pathSplit[0])
+			case "home", "Home":
+				return focusPrefix + pvc + "/Home" + strings.TrimPrefix(dealPath, pathSplit[0])
+			case "data", "Data", "application", "Application":
+				return focusPrefix + pvc + "/Data" + strings.TrimPrefix(dealPath, pathSplit[0])
 			}
 		}
 	} else {
 		pathSuffix := strings.TrimPrefix(path, prefix)
+		if strings.HasSuffix(prefix, "/cache") {
+			prefix = strings.TrimSuffix(prefix, "/cache") + "/AppData"
+		}
 		if strings.HasPrefix(pathSuffix, "/"+pvc) {
 			return path
 		}
-		return filepath.Join(prefix, pvc+pathSuffix)
+		return prefix + "/" + pvc + pathSuffix
 	}
 	return path
 }
@@ -382,27 +481,56 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		dst := query.Get("destination")
 		klog.Infoln("DST:", dst)
 
-		srcType := query.Get("src_type")
-		dstType := query.Get("dst_type")
+		srcType, err := drives.ParsePathType(strings.TrimPrefix(src, API_PASTE_PREFIX), c.Request(), false, false)
+		if err != nil {
+			klog.Errorln(err)
+			srcType = "Parse Error"
+		}
+		dstType, err := drives.ParsePathType(dst, c.Request(), true, false)
+		if err != nil {
+			klog.Errorln(err)
+			dstType = "Parse Error"
+		}
 		klog.Infoln("SRC_TYPE:", srcType)
 		klog.Infoln("DST_TYPE:", dstType)
 
-		if srcType == drives.SrcTypeDrive {
-			src = rewriteUrl(src, userPvc, "")
+		if srcType == drives.SrcTypeDrive || srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
+			src = rewriteUrl(src, userPvc, "", true)
 		} else if srcType == drives.SrcTypeCache {
-			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData")
-		} else if srcType == drives.SrcTypeSync {
-			src = src
+			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData", true)
 		}
 
-		if dstType == drives.SrcTypeDrive {
-			dst = rewriteUrl(dst, userPvc, "")
+		if dstType == drives.SrcTypeDrive || dstType == drives.SrcTypeData || dstType == drives.SrcTypeExternal {
+			dst = rewriteUrl(dst, userPvc, "", false)
 			query.Set("destination", dst)
 		} else if dstType == drives.SrcTypeCache {
-			dst = rewriteUrl(dst, cachePvc, "/AppData")
+			if strings.HasPrefix(dst, "/cache") {
+				dst = strings.TrimPrefix(dst, "/cache")
+				var dstNode string
+				dstParts := strings.SplitN(strings.TrimPrefix(dst, "/"), "/", 2)
+
+				if len(dstParts) > 1 {
+					dstNode = dstParts[0]
+					if len(dst) > len("/"+dstNode) {
+						dst = "/AppData" + dst[len("/"+dstNode):]
+					} else {
+						dst = "/AppData"
+					}
+					klog.Infoln("Node:", dstNode)
+					klog.Infoln("New dst:", dst)
+				} else if len(dstParts) > 0 {
+					dstNode = dstParts[0]
+					dst = "/AppData"
+					klog.Infoln("Node:", dstNode)
+					klog.Infoln("New dst:", dst)
+				}
+
+				if len(node) == 0 {
+					c.Request().Header.Set(NODE_HEADER, dstNode)
+				}
+			} // only for cache for compatible
+			dst = rewriteUrl(dst, cachePvc, "/AppData", false)
 			query.Set("destination", dst)
-		} else if dstType == drives.SrcTypeSync {
-			dst = dst
 		}
 
 		newURL := fmt.Sprintf("%s?%s", src, query.Encode())
@@ -418,23 +546,26 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			query := c.Request().URL.Query()
 			dst := query.Get("destination")
 			if dst != "" {
-				dst = rewriteUrl(dst, cachePvc, "/AppData")
+				if strings.HasPrefix(dst, "/cache") {
+					dst = strings.TrimPrefix(dst, "/cache")
+				} // only for cache for compatible
+				dst = rewriteUrl(dst, cachePvc, "/AppData", false)
 				dst = strings.Replace(dst, "/"+node[0], "", 1)
 				query.Set("destination", dst)
 				c.Request().URL.RawQuery = query.Encode()
 			}
 
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX, true)
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX, true)
 		} else if strings.HasPrefix(path, API_MD5_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_MD5_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_MD5_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PREVIEW_THUMB_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_THUMB_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_THUMB_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PREVIEW_BIG_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_BIG_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_BIG_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PERMISSION_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PERMISSION_PREFIX)
+			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PERMISSION_PREFIX, true)
 		}
 		host = appdata.GetAppDataServiceEndpoint(p.k8sClient, node[0])
 		klog.Info("host: ", host)
@@ -447,12 +578,15 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			query := c.Request().URL.Query()
 			dst := query.Get("destination")
 			if dst != "" {
+				if strings.HasPrefix(dst, "/cache") {
+					dst = strings.TrimPrefix(dst, "/cache")
+				} // only for cache for compatible
 				klog.Infoln("DST:", dst)
-				dst = rewriteUrl(dst, userPvc, "")
+				dst = rewriteUrl(dst, userPvc, "", false)
 				query.Set("destination", dst)
 				c.Request().URL.RawQuery = query.Encode()
 			}
-			c.Request().URL.Path = rewriteUrl(path, userPvc, "")
+			c.Request().URL.Path = rewriteUrl(path, userPvc, "", true)
 			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, UPLOADER_PREFIX) {
 			host = "127.0.0.1:40030"

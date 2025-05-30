@@ -10,11 +10,14 @@ import (
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/parser"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
+	"gorm.io/gorm"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -442,7 +445,7 @@ func GetGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) 
 		return nil, err
 	}
 	klog.Infoln("Google Drive List Params:", string(jsonBody))
-	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/ls:", err)
 		return nil, err
@@ -460,6 +463,7 @@ type GoogleDriveIdFocusedMetaInfos struct {
 	ID           string `json:"id"`
 	Path         string `json:"path"`
 	Name         string `json:"name"`
+	FileSize     int64  `json:"fileSize"`
 	Size         int64  `json:"size"`
 	IsDir        bool   `json:"is_dir"`
 	CanDownload  bool   `json:"canDownload"`
@@ -467,7 +471,7 @@ type GoogleDriveIdFocusedMetaInfos struct {
 	ExportSuffix string `json:"exportSuffix"`
 }
 
-func GetGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http.Request) (info *GoogleDriveIdFocusedMetaInfos, err error) {
+func GetGoogleDriveIdFocusedMetaInfos(task *pool.Task, src string, w http.ResponseWriter, r *http.Request) (info *GoogleDriveIdFocusedMetaInfos, err error) {
 	if !strings.HasSuffix(src, "/") {
 		src += "/"
 	}
@@ -478,6 +482,7 @@ func GetGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 	if strings.Index(pathId, "/") != -1 {
 		err = e.New("PathId Parse Error")
+		TaskLog(task, "error", "PathId Parse Error")
 		return
 	}
 
@@ -489,24 +494,25 @@ func GetGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return
 	}
-	klog.Infoln("Google Drive Meta Params:", string(jsonBody))
-	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, true)
+	TaskLog(task, "info", "Google Drive Meta Params:", string(jsonBody))
+	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
-		klog.Errorln("Error calling drive/get_file_meta_data:", err)
+		TaskLog(task, "error", "Error calling drive/get_file_meta_data:", err)
 		return
 	}
 
 	var bodyJson GoogleDriveMetaResponse
 	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		klog.Error(err)
+		TaskLog(task, "error", err)
 		return
 	}
 
 	if bodyJson.StatusCode == "FAIL" {
 		err = e.New(*bodyJson.FailReason)
+		TaskLog(task, "error", *bodyJson.FailReason)
 		return
 	}
 
@@ -515,6 +521,7 @@ func GetGoogleDriveIdFocusedMetaInfos(src string, w http.ResponseWriter, r *http
 		Path:         bodyJson.Data.Path,
 		Name:         bodyJson.Data.Name,
 		Size:         bodyJson.Data.FileSize,
+		FileSize:     bodyJson.Data.FileSize,
 		IsDir:        bodyJson.Data.IsDir,
 		CanDownload:  bodyJson.Data.CanDownload,
 		CanExport:    bodyJson.Data.CanExport,
@@ -560,7 +567,7 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 				return
 			}
 			var firstRespBody []byte
-			firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
+			firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, nil, true)
 
 			var firstBodyJson GoogleDriveListResponse
 			if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
@@ -619,17 +626,17 @@ func streamGoogleDriveFiles(w http.ResponseWriter, r *http.Request, body []byte,
 	}
 }
 
-func CopyGoogleDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.Request) error {
+func CopyGoogleDriveSingleFile(task *pool.Task, src, dst string, w http.ResponseWriter, r *http.Request, fileSize int64) error {
 	srcDrive, srcName, srcPathId, srcFilename := ParseGoogleDrivePath(src)
-	klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
+	TaskLog(task, "info", "srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
 	if srcPathId == "" {
-		klog.Infoln("Src parse failed.")
+		TaskLog(task, "info", "Src parse failed.")
 		return nil
 	}
 	dstDrive, dstName, dstPathId, dstFilename := ParseGoogleDrivePath(dst)
-	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
+	TaskLog(task, "info", "dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
 	if dstPathId == "" || dstFilename == "" {
-		klog.Infoln("Dst parse failed.")
+		TaskLog(task, "info", "Dst parse failed.")
 		return nil
 	}
 	dstFilename = strings.TrimSuffix(dstFilename, "/")
@@ -644,27 +651,34 @@ func CopyGoogleDriveSingleFile(src, dst string, w http.ResponseWriter, r *http.R
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return err
 	}
-	klog.Infoln("Copy File Params:", string(jsonBody))
-	_, err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r, true)
+	TaskLog(task, "info", "Copy File Params:", string(jsonBody))
+	_, err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
-		klog.Errorln("Error calling drive/copy_file:", err)
-		return err
+		TaskLog(task, "error", "Error calling drive/copy_file:", err)
+		return e.New("Error calling drive/copy_file:" + err.Error())
 	}
+
+	_, _, right := CalculateProgressRange(task, fileSize)
+	task.Mu.Lock()
+	task.Transferred += fileSize
+	task.Progress = right
+	task.Mu.Unlock()
+
 	return nil
 }
 
-func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Request, srcPath string) error {
+func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWriter, r *http.Request, srcPath string) error {
 	srcDrive, srcName, srcPathId, srcFilename := ParseGoogleDrivePath(src)
-	klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
+	TaskLog(task, "info", "srcDrive:", srcDrive, "srcName:", srcName, "srcPathId:", srcPathId, "srcFilename:", srcFilename)
 	if srcPathId == "" {
 		klog.Infoln("Src parse failed.")
 		return nil
 	}
 	dstDrive, dstName, dstPathId, dstFilename := ParseGoogleDrivePath(dst)
-	klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
+	TaskLog(task, "info", "dstDrive:", dstDrive, "dstName:", dstName, "dstPathId:", dstPathId, "dstFilename:", dstFilename)
 	if dstPathId == "" || dstFilename == "" {
 		klog.Infoln("Dst parse failed.")
 		return nil
@@ -675,7 +689,7 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 	var recursivePathId = srcPathId
 	var A []*GoogleDriveListResponseFileData
 	for {
-		klog.Infoln("len(A): ", len(A))
+		TaskLog(task, "info", "len(A): ", len(A))
 
 		var isDir = true
 		var firstItem *GoogleDriveListResponseFileData
@@ -704,19 +718,19 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 			}
 			postJsonBody, err := json.Marshal(postParam)
 			if err != nil {
-				klog.Errorln("Error marshalling JSON:", err)
+				TaskLog(task, "error", "Error marshalling JSON:", err)
 				return err
 			}
-			klog.Infoln("Google Drive Post Params:", string(postJsonBody))
+			TaskLog(task, "info", "Google Drive Post Params:", string(postJsonBody))
 			var postRespBody []byte
-			postRespBody, err = GoogleDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, true)
+			postRespBody, err = GoogleDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, nil, true)
 			if err != nil {
-				klog.Errorln("Error calling drive/create_folder:", err)
+				TaskLog(task, "error", "Error calling drive/create_folder:", err)
 				return err
 			}
 			var postBodyJson GoogleDrivePostResponse
 			if err = json.Unmarshal(postRespBody, &postBodyJson); err != nil {
-				klog.Error(err)
+				TaskLog(task, "error", err)
 				return err
 			}
 			CopyTempGoogleDrivePathIdCache[recursivePath] = postBodyJson.Data.Meta.ID
@@ -728,19 +742,19 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 				Name:  srcName,
 			}
 
-			klog.Infoln("firstParam pathId:", recursivePathId)
+			TaskLog(task, "info", "firstParam pathId:", recursivePathId)
 			var firstJsonBody []byte
 			firstJsonBody, err = json.Marshal(firstParam)
 			if err != nil {
-				klog.Errorln("Error marshalling JSON:", err)
+				TaskLog(task, "error", "Error marshalling JSON:", err)
 				return err
 			}
 			var firstRespBody []byte
-			firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, true)
+			firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, nil, true)
 
 			var firstBodyJson GoogleDriveListResponse
 			if err = json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
-				klog.Error(err)
+				TaskLog(task, "error", err)
 				return err
 			}
 
@@ -751,14 +765,14 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 			}
 		} else {
 			if len(A) > 0 {
-				klog.Infoln(CopyTempGoogleDrivePathIdCache)
+				TaskLog(task, "info", CopyTempGoogleDrivePathIdCache)
 				copyPathPrefix := "/Drive/google/" + srcName + "/"
 				copySrc := copyPathPrefix + firstItem.Meta.ID + "/"
 				parentPathId := CopyTempGoogleDrivePathIdCache[filepath.Dir(firstItem.Path)]
 				copyDst := filepath.Join(copyPathPrefix+parentPathId, firstItem.Name)
-				klog.Infoln("copySrc: ", copySrc)
-				klog.Infoln("copyDst: ", copyDst)
-				err := CopyGoogleDriveSingleFile(copySrc, copyDst, w, r)
+				TaskLog(task, "info", "copySrc: ", copySrc)
+				TaskLog(task, "info", "copyDst: ", copyDst)
+				err := CopyGoogleDriveSingleFile(task, copySrc, copyDst, w, r, firstItem.FileSize)
 				if err != nil {
 					return err
 				}
@@ -771,7 +785,34 @@ func CopyGoogleDriveFolder(src, dst string, w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func GoogleFileToBuffer(src, bufferFilePath, bufferFileName string, w http.ResponseWriter, r *http.Request) (string, error) {
+func GooglePauseTask(taskId string, w http.ResponseWriter, r *http.Request) error {
+	resumeURL := fmt.Sprintf("/patch/task/pause/%s", taskId)
+	resumeRespBody, err := GoogleDriveCall(resumeURL, "PATCH", nil, w, r, nil, true)
+	if err != nil {
+		klog.Errorln("Error calling patch/task/pause:", err)
+		return err
+	}
+
+	var resumeRespJson struct {
+		StatusCode string      `json:"status_code"`
+		FailReason interface{} `json:"fail_reason"`
+		Data       interface{} `json:"data"`
+	}
+
+	if err := json.Unmarshal(resumeRespBody, &resumeRespJson); err != nil {
+		klog.Error(err)
+		return err
+	}
+
+	if resumeRespJson.StatusCode == "SUCCESS" {
+		return e.New("Task paused successfully")
+	} else {
+		klog.Errorln("Failed to pause task")
+	}
+	return nil
+}
+
+func GoogleFileToBuffer(task *pool.Task, src, bufferFilePath, bufferFileName string, w http.ResponseWriter, r *http.Request, left, right int) (string, error) {
 	if !strings.HasSuffix(src, "/") {
 		src += "/"
 	}
@@ -803,7 +844,7 @@ func GoogleFileToBuffer(src, bufferFilePath, bufferFileName string, w http.Respo
 	klog.Infoln("Download File Params:", string(jsonBody))
 
 	var respBody []byte
-	respBody, err = GoogleDriveCall("/drive/download_async", "POST", jsonBody, w, r, true)
+	respBody, err = GoogleDriveCall("/drive/download_async", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/download_async:", err)
 		return bufferFileName, err
@@ -824,32 +865,74 @@ func GoogleFileToBuffer(src, bufferFilePath, bufferFileName string, w http.Respo
 	}
 	klog.Infoln("Task Params:", string(taskJsonBody))
 
-	for {
-		time.Sleep(1000 * time.Millisecond)
-		var taskRespBody []byte
-		taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
-		if err != nil {
-			klog.Errorln("Error calling drive/download_async:", err)
-			return bufferFileName, err
-		}
-		var taskRespJson GoogleDriveTaskQueryResponse
-		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
-			klog.Error(err)
-			return bufferFileName, err
-		}
-		if len(taskRespJson.Data) == 0 {
-			return bufferFileName, e.New("Task Info Not Found")
-		}
-		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-			if taskRespJson.Data[0].Status == "Completed" {
-				return bufferFileName, nil
+	if task == nil {
+		for {
+			time.Sleep(1000 * time.Millisecond)
+			var taskRespBody []byte
+			taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, nil, true)
+			if err != nil {
+				klog.Errorln("Error calling drive/download_async:", err)
+				return bufferFileName, err
 			}
-			return bufferFileName, e.New(taskRespJson.Data[0].Status)
+			var taskRespJson GoogleDriveTaskQueryResponse
+			if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
+				klog.Error(err)
+				return bufferFileName, err
+			}
+			if len(taskRespJson.Data) == 0 {
+				return bufferFileName, e.New("Task Info Not Found")
+			}
+			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
+				if taskRespJson.Data[0].Status == "Completed" {
+					return bufferFileName, nil
+				}
+				return bufferFileName, e.New(taskRespJson.Data[0].Status)
+			}
+		}
+	}
+
+	for {
+		select {
+		case <-task.Ctx.Done():
+			err = GooglePauseTask(taskId, w, r)
+			if err != nil {
+				return bufferFileName, err
+			}
+
+		default:
+			time.Sleep(1000 * time.Millisecond)
+			var taskRespBody []byte
+			taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, nil, true)
+			if err != nil {
+				klog.Errorln("Error calling drive/download_async:", err)
+				return bufferFileName, err
+			}
+			var taskRespJson GoogleDriveTaskQueryResponse
+			if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
+				klog.Error(err)
+				return bufferFileName, err
+			}
+			if len(taskRespJson.Data) == 0 {
+				return bufferFileName, e.New("Task Info Not Found")
+			}
+			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
+				if taskRespJson.Data[0].Status == "Completed" {
+					task.Mu.Lock()
+					task.Progress = right
+					task.Mu.Unlock()
+					return bufferFileName, nil
+				}
+				return bufferFileName, e.New(taskRespJson.Data[0].Status)
+			} else if taskRespJson.Data[0].Status == "InProgress" {
+				task.Mu.Lock()
+				task.Progress = MapProgress(taskRespJson.Data[0].Progress, left, right)
+				task.Mu.Unlock()
+			}
 		}
 	}
 }
 
-func GoogleBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *http.Request) (int, error) {
+func GoogleBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.ResponseWriter, r *http.Request, left, right int) (int, error) {
 	dstDrive, dstName, dstPathId, dstFilename := ParseGoogleDrivePath(dst)
 	klog.Infoln("srcDrive:", dstDrive, "srcName:", dstName, "srcPathId:", dstPathId, "srcFilename:", dstFilename)
 	if dstPathId == "" {
@@ -872,7 +955,7 @@ func GoogleBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *ht
 	klog.Infoln("Upload File Params:", string(jsonBody))
 
 	var respBody []byte
-	respBody, err = GoogleDriveCall("/drive/upload_async", "POST", jsonBody, w, r, true)
+	respBody, err = GoogleDriveCall("/drive/upload_async", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/upload_async:", err)
 		return common.ErrToStatus(err), err
@@ -894,33 +977,50 @@ func GoogleBufferToFile(bufferFilePath, dst string, w http.ResponseWriter, r *ht
 	klog.Infoln("Task Params:", string(taskJsonBody))
 
 	for {
-		time.Sleep(500 * time.Millisecond)
-		var taskRespBody []byte
-		taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, true)
-		if err != nil {
-			klog.Errorln("Error calling drive/download_async:", err)
-			return common.ErrToStatus(err), err
-		}
-		var taskRespJson GoogleDriveTaskQueryResponse
-		if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
-			klog.Error(err)
-			return common.ErrToStatus(err), err
-		}
-		if len(taskRespJson.Data) == 0 {
-			err = e.New("Task Info Not Found")
-			return common.ErrToStatus(err), err
-		}
-		if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-			if taskRespJson.Data[0].Status == "Completed" {
-				return http.StatusOK, nil
+		select {
+		case <-task.Ctx.Done():
+			err = GooglePauseTask(taskId, w, r)
+			if err != nil {
+				return common.ErrToStatus(err), err
 			}
-			err = e.New(taskRespJson.Data[0].Status)
-			return common.ErrToStatus(err), err
+		default:
+			time.Sleep(500 * time.Millisecond)
+			var taskRespBody []byte
+			taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, nil, true)
+			if err != nil {
+				klog.Errorln("Error calling drive/download_async:", err)
+				return common.ErrToStatus(err), err
+			}
+			var taskRespJson GoogleDriveTaskQueryResponse
+			if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
+				klog.Error(err)
+				return common.ErrToStatus(err), err
+			}
+			if len(taskRespJson.Data) == 0 {
+				err = e.New("Task Info Not Found")
+				return common.ErrToStatus(err), err
+			}
+			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
+				if taskRespJson.Data[0].Status == "Completed" {
+					task.Mu.Lock()
+					task.Progress = right
+					task.Mu.Unlock()
+					return http.StatusOK, nil
+				}
+				err = e.New(taskRespJson.Data[0].Status)
+				return common.ErrToStatus(err), err
+			} else if taskRespJson.Data[0].Status == "InProgress" {
+				if task != nil {
+					task.Mu.Lock()
+					task.Progress = MapProgress(taskRespJson.Data[0].Progress, left, right)
+					task.Mu.Unlock()
+				}
+			}
 		}
 	}
 }
 
-func MoveGoogleDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *http.Request) error {
+func MoveGoogleDriveFolderOrFiles(task *pool.Task, src, dst string, w http.ResponseWriter, r *http.Request) error {
 	srcDrive, srcName, srcPathId, _ := ParseGoogleDrivePath(src)
 	_, _, dstPathId, _ := ParseGoogleDrivePath(dst)
 
@@ -933,25 +1033,33 @@ func MoveGoogleDriveFolderOrFiles(src, dst string, w http.ResponseWriter, r *htt
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return err
 	}
-	klog.Infoln("Google Drive Patch Params:", string(jsonBody))
-	_, err = GoogleDriveCall("/drive/move_file", "POST", jsonBody, w, r, false)
+	TaskLog(task, "info", "Google Drive Patch Params:", string(jsonBody))
+	_, err = GoogleDriveCall("/drive/move_file", "POST", jsonBody, w, r, nil, false)
 	if err != nil {
-		klog.Errorln("Error calling drive/move_file:", err)
+		TaskLog(task, "error", "Error calling drive/move_file:", err)
 		return err
 	}
 	return nil
 }
 
-func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, error) {
-	bflName := r.Header.Get("X-Bfl-User")
+func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var bflName = ""
+	if header != nil {
+		bflName = header.Get("X-Bfl-User")
+	} else {
+		bflName = r.Header.Get("X-Bfl-User")
+	}
 	if bflName == "" {
 		return nil, os.ErrPermission
 	}
 
-	host := common.GetHost(r)
+	host := common.GetHost(bflName)
 	dstUrl := host + dst
 
 	klog.Infoln("dstUrl:", dstUrl)
@@ -967,9 +1075,9 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 	for i := 0; i <= maxRetries; i++ {
 		var req *http.Request
 		if reqBodyJson != nil {
-			req, err = http.NewRequest(method, dstUrl, bytes.NewBuffer(reqBodyJson))
+			req, err = http.NewRequestWithContext(ctx, method, dstUrl, bytes.NewBuffer(reqBodyJson))
 		} else {
-			req, err = http.NewRequest(method, dstUrl, nil)
+			req, err = http.NewRequestWithContext(ctx, method, dstUrl, nil)
 		}
 
 		if err != nil {
@@ -977,16 +1085,32 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 			return nil, err
 		}
 
-		req.Header = r.Header.Clone()
-		req.Header.Set("Content-Type", "application/json")
+		if header != nil {
+			req.Header = *header
+		} else {
+			req.Header = r.Header.Clone()
+			req.Header.Set("Content-Type", "application/json")
+		}
+		RemoveAdditionalHeaders(&req.Header)
 
 		client := &http.Client{}
 		resp, err = client.Do(req)
 		if err != nil {
+			if e.Is(err, context.DeadlineExceeded) {
+				klog.Errorln("Request timed out after 30 seconds")
+				return nil, fmt.Errorf("request timed out after 30 seconds")
+			}
 			klog.Errorln("Error making request:", err)
 			return nil, err
 		}
 		defer resp.Body.Close()
+
+		select {
+		case <-ctx.Done():
+			klog.Errorln("Request timed out after 30 seconds")
+			return nil, fmt.Errorf("request timed out after 30 seconds")
+		default:
+		}
 
 		if resp.StatusCode != http.StatusOK {
 			if i < maxRetries {
@@ -1057,8 +1181,7 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 
 	responseText, err := json.MarshalIndent(datas, "", "  ")
 	if err != nil {
-		http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
-		return nil, err
+		return nil, e.New("Error marshaling JSON response to text: " + err.Error())
 	}
 
 	if returnResp {
@@ -1070,7 +1193,7 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 }
 
 func ParseGoogleDrivePath(path string) (drive, name, dir, filename string) {
-	if strings.HasPrefix(path, "/Drive/google") {
+	if strings.HasPrefix(path, "/Drive/google") || strings.HasPrefix(path, "/drive/google") {
 		path = path[13:]
 		drive = "google"
 	}
@@ -1149,14 +1272,14 @@ func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.
 	klog.Infoln("Google Drive List Params:", string(jsonBody))
 	if stream == 1 {
 		var body []byte
-		body, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+		body, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
 		streamGoogleDriveFiles(w, r, body, param)
 		return 0, nil
 	}
 	if meta == 1 {
-		_, err = GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, false)
+		_, err = GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, false)
 	} else {
-		_, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, false)
+		_, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, false)
 	}
 	if err != nil {
 		klog.Errorln("Error calling drive/ls:", err)
@@ -1216,33 +1339,57 @@ func (rs *GoogleDriveResourceService) PreviewHandler(imgSvc preview.ImgService, 
 	}
 }
 
-func (rc *GoogleDriveResourceService) PasteSame(action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rc *GoogleDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	var err error
 	switch action {
 	case "copy":
 		if !strings.HasSuffix(src, "/") {
 			src += "/"
 		}
-		metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+		var metaInfo *GoogleDriveIdFocusedMetaInfos
+		metaInfo, err = GetGoogleDriveIdFocusedMetaInfos(task, src, w, r)
 		if err != nil {
+			TaskLog(task, "info", fmt.Sprintf("%s from %s to %s failed when getting meta info", action, src, dst))
+			TaskLog(task, "error", err.Error())
+			pool.FailTask(task.ID)
 			return err
 		}
 
 		if metaInfo.IsDir {
-			return CopyGoogleDriveFolder(src, dst, w, r, metaInfo.Path)
+			err = CopyGoogleDriveFolder(task, src, dst, w, r, metaInfo.Path)
 		}
-		return CopyGoogleDriveSingleFile(src, dst, w, r)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel() // Ensure context is canceled when main exits
+		go SimulateProgress(ctx, 0, 99, task.TotalFileSize, 50000000, task)
+		err = CopyGoogleDriveSingleFile(task, src, dst, w, r, metaInfo.FileSize)
+
 	case "rename":
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel() // Ensure context is canceled when main exits
+		go SimulateProgress(ctx, 0, 99, task.TotalFileSize, 50000000, task)
+
 		if !strings.HasSuffix(src, "/") {
 			src += "/"
 		}
-		return MoveGoogleDriveFolderOrFiles(src, dst, w, r)
+		err = MoveGoogleDriveFolderOrFiles(task, src, dst, w, r)
+
 	default:
-		return fmt.Errorf("unknown action: %s", action)
+		err = fmt.Errorf("unknown action: %s", action)
 	}
+
+	if err != nil {
+		TaskLog(task, "info", fmt.Sprintf("%s from %s to %s failed", action, src, dst))
+		TaskLog(task, "error", err.Error())
+		pool.FailTask(task.ID)
+	} else {
+		TaskLog(task, "info", fmt.Sprintf("%s from %s to %s successfully", action, src, dst))
+		pool.CompleteTask(task.ID)
+	}
+	return err
 }
 
-func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	fileMode os.FileMode, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+func (rs *GoogleDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	mode := fileMode
 
 	handler, err := GetResourceService(dstType)
@@ -1250,7 +1397,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 		return err
 	}
 
-	err = handler.PasteDirTo(fs, src, dst, mode, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, mode, fileCount, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -1279,7 +1426,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 	}
 	klog.Infoln("Google Drive List Params:", string(jsonBody))
 	var respBody []byte
-	respBody, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, true)
+	respBody, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
 		klog.Errorln("Error calling drive/ls:", err)
 		return err
@@ -1294,13 +1441,13 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 		fdst := filepath.Join(fdstBase, item.Name)
 		klog.Infoln(fsrc, fdst)
 		if item.IsDir {
-			err = rs.PasteDirFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), w, r, driveIdCache)
+			err = rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), fileCount, w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
 		} else {
 			fdst += item.ExportSuffix
-			err = rs.PasteFileFrom(fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), item.FileSize, w, r, driveIdCache)
+			err = rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(0755), fileCount, item.FileSize, w, r, driveIdCache)
 			if err != nil {
 				return err
 			}
@@ -1309,7 +1456,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(fs afero.Fs, srcType, src, ds
 	return nil
 }
 
-func (rs *GoogleDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, fileMode os.FileMode, w http.ResponseWriter,
+func (rs *GoogleDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	respBody, _, err := ResourcePostGoogle(dst, w, r, true)
 	var bodyJson GoogleDrivePostResponse
@@ -1321,12 +1468,11 @@ func (rs *GoogleDriveResourceService) PasteDirTo(fs afero.Fs, src, dst string, f
 	if err != nil {
 		return err
 	}
-	klog.Infof("~~~Temp log for Google Drive PasteDirTo: driveIdCache: %v", driveIdCache)
 	return nil
 }
 
-func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
-	mode os.FileMode, diskSize int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+func (rs *GoogleDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
@@ -1340,7 +1486,7 @@ func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, d
 		return err
 	}
 
-	srcInfo, err := GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+	srcInfo, err := GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
 	bufferFilePath, err := GenerateBufferFolder(srcInfo.Path, bflName)
 	if err != nil {
 		return err
@@ -1349,19 +1495,25 @@ func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, d
 	bufferPath = filepath.Join(bufferFilePath, bufferFileName)
 	klog.Infoln("Buffer file path: ", bufferFilePath)
 	klog.Infoln("Buffer path: ", bufferPath)
+	task.AddBuffer(bufferPath)
+
+	defer func() {
+		logMsg := fmt.Sprintf("Remove copy buffer")
+		TaskLog(task, "info", logMsg)
+		RemoveDiskBuffer(task, bufferPath, srcType)
+	}()
+
 	err = MakeDiskBuffer(bufferPath, diskSize, true)
 	if err != nil {
 		return err
 	}
-	_, err = GoogleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
+
+	left, mid, right := CalculateProgressRange(task, diskSize)
+
+	_, err = GoogleFileToBuffer(task, src, bufferFilePath, bufferFileName, w, r, left, mid)
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		klog.Infoln("Begin to remove buffer")
-		RemoveDiskBuffer(bufferPath, srcType)
-	}()
 
 	// only srcType == google need this now
 	rename := r.URL.Query().Get("rename") == "true"
@@ -1369,29 +1521,37 @@ func (rs *GoogleDriveResourceService) PasteFileFrom(fs afero.Fs, srcType, src, d
 		dst = PasteAddVersionSuffix(dst, dstType, false, files.DefaultFs, w, r)
 	}
 
-	handler, err := GetResourceService(dstType)
-	if err != nil {
-		return err
+	if task.Status == "running" {
+		handler, err := GetResourceService(dstType)
+		if err != nil {
+			return err
+		}
+
+		err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, mid, right, w, r, d, diskSize)
+		if err != nil {
+			return err
+		}
 	}
 
-	err = handler.PasteFileTo(fs, bufferPath, dst, mode, w, r, d, diskSize)
-	if err != nil {
-		return err
-	}
+	logMsg := fmt.Sprintf("Copy from %s to %s sucessfully!", src, dst)
+	TaskLog(task, "info", logMsg)
 	return nil
 }
 
-func (rs *GoogleDriveResourceService) PasteFileTo(fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, w http.ResponseWriter,
-	r *http.Request, d *common.Data, diskSize int64) error {
+func (rs *GoogleDriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode,
+	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
 	klog.Infoln("Begin to paste!")
 	klog.Infoln("dst: ", dst)
-	status, err := GoogleBufferToFile(bufferPath, dst, w, r)
+	status, err := GoogleBufferToFile(task, bufferPath, dst, w, r, left, right)
 	if status != http.StatusOK {
 		return os.ErrInvalid
 	}
 	if err != nil {
 		return err
 	}
+	task.Mu.Lock()
+	task.Transferred += diskSize
+	task.Mu.Unlock()
 	return nil
 }
 
@@ -1405,14 +1565,14 @@ func (rs *GoogleDriveResourceService) GetStat(fs afero.Fs, src string, w http.Re
 	if !strings.HasSuffix(src, "/") {
 		src += "/"
 	}
-	metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(src, w, r)
+	metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
 	if err != nil {
 		return nil, 0, 0, false, err
 	}
 	return nil, metaInfo.Size, 0755, metaInfo.IsDir, nil
 }
 
-func (rs *GoogleDriveResourceService) MoveDelete(fileCache fileutils.FileCache, src string, ctx context.Context, d *common.Data,
+func (rs *GoogleDriveResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	_, status, err := ResourceDeleteGoogle(fileCache, src, w, r, true)
 	if status != http.StatusOK && status != 0 {
@@ -1422,6 +1582,164 @@ func (rs *GoogleDriveResourceService) MoveDelete(fileCache fileutils.FileCache, 
 		return err
 	}
 	return nil
+}
+
+func (rs *GoogleDriveResourceService) GeneratePathList(db *gorm.DB, rootPath string, processor PathProcessor, recordsStatusProcessor RecordsStatusProcessor) error {
+	if rootPath == "" {
+		rootPath = "/"
+	}
+
+	processedPaths := make(map[string]bool)
+
+	for bflName, cookie := range common.BflCookieCache {
+		klog.Infof("Key: %s, Value: %s\n", bflName, cookie)
+
+		header := make(http.Header)
+		header.Set("Content-Type", "application/json")
+		header.Set("X-Bfl-User", bflName)
+		header.Set("Cookie", cookie)
+
+		repoRespBody, err := GoogleDriveCall("/drive/accounts", "POST", nil, nil, nil, &header, true)
+		if err != nil {
+			klog.Errorf("GoogleDriveCall failed: %v\n", err)
+			return err
+		}
+
+		var data DriveAccountsResponse
+		err = json.Unmarshal(repoRespBody, &data)
+		if err != nil {
+			klog.Errorf("unmarshal repo response failed: %v\n", err)
+			return err
+		}
+
+		for _, datum := range data.Data {
+			klog.Infof("datum=%v", datum)
+
+			if datum.Type != SrcTypeGoogle {
+				continue
+			}
+
+			rootParam := GoogleDriveListParam{
+				Path:  rootPath,
+				Drive: datum.Type,
+				Name:  datum.Name,
+			}
+			rootJsonBody, err := json.Marshal(rootParam)
+			if err != nil {
+				klog.Errorln("Error marshalling JSON:", err)
+				return err
+			}
+
+			var direntRespBody []byte
+			direntRespBody, err = GoogleDriveCall("/drive/ls", "POST", rootJsonBody, nil, nil, &header, true)
+			if err != nil {
+				klog.Errorf("fetch repo response failed: %v\n", err)
+				return err
+			}
+
+			generator := walkGoogleDriveDirentsGenerator(direntRespBody, &header, nil, datum)
+
+			for dirent := range generator {
+				key := fmt.Sprintf("%s:%s", dirent.Drive, dirent.Path)
+				processedPaths[key] = true
+
+				_, err = processor(db, dirent.Drive, dirent.Path, dirent.Mtime)
+				if err != nil {
+					klog.Errorf("generate path list failed: %v\n", err)
+					return err
+				}
+			}
+		}
+	}
+
+	err := recordsStatusProcessor(db, processedPaths, []string{SrcTypeGoogle}, 1)
+	if err != nil {
+		klog.Errorf("records status processor failed: %v\n", err)
+		return err
+	}
+
+	return nil
+}
+
+func (rs *GoogleDriveResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	var count int64
+
+	metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
+	if err != nil {
+		return 0, err
+	}
+
+	if !metaInfo.IsDir {
+		if countType == "size" {
+			count += metaInfo.FileSize
+		} else {
+			count++
+		}
+		return count, nil
+	}
+
+	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
+	queue := []string{pathId}
+
+	for len(queue) > 0 {
+		currentID := queue[0]
+		queue = queue[1:]
+
+		param := GoogleDriveListParam{
+			Path:  currentID,
+			Drive: srcDrive,
+			Name:  srcName,
+		}
+
+		jsonBody, err := json.Marshal(param)
+		if err != nil {
+			return 0, err
+		}
+
+		var respBody []byte
+		respBody, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
+		if err != nil {
+			return 0, err
+		}
+
+		var bodyJson GoogleDriveListResponse
+		if err := json.Unmarshal(respBody, &bodyJson); err != nil {
+			return 0, err
+		}
+
+		for _, item := range bodyJson.Data {
+			if item.IsDir {
+				queue = append(queue, item.Meta.ID)
+			} else {
+				if countType == "size" {
+					count += item.FileSize
+				} else {
+					count++
+				}
+			}
+		}
+	}
+	return count, nil
+}
+
+func (rs *GoogleDriveResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	metaInfo, err := GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
+	if err != nil {
+		return false, "", "", err
+	}
+
+	isDir = metaInfo.IsDir
+	filename = metaInfo.Name
+	fileType = ""
+	if !isDir {
+		fileType = parser.MimeTypeByExtension(filename)
+	}
+	return isDir, fileType, filename, nil
+}
+
+// just for complement, no need to use now
+func (rs *GoogleDriveResourceService) parsePathToURI(path string) (string, string) {
+	return SrcTypeDrive, path
 }
 
 func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
@@ -1456,10 +1774,10 @@ func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.Resp
 
 	var respBody []byte = nil
 	if returnResp {
-		respBody, err = GoogleDriveCall("/drive/delete", "POST", jsonBody, w, r, true)
+		respBody, err = GoogleDriveCall("/drive/delete", "POST", jsonBody, w, r, nil, true)
 		klog.Infoln(string(respBody))
 	} else {
-		_, err = GoogleDriveCall("/drive/delete", "POST", jsonBody, w, r, false)
+		_, err = GoogleDriveCall("/drive/delete", "POST", jsonBody, w, r, nil, false)
 	}
 	if err != nil {
 		klog.Errorln("Error calling drive/delete:", err)
@@ -1492,9 +1810,9 @@ func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 	klog.Infoln("Google Drive Post Params:", string(jsonBody))
 	var respBody []byte = nil
 	if returnResp {
-		respBody, err = GoogleDriveCall("/drive/create_folder", "POST", jsonBody, w, r, true)
+		respBody, err = GoogleDriveCall("/drive/create_folder", "POST", jsonBody, w, r, nil, true)
 	} else {
-		_, err = GoogleDriveCall("/drive/create_folder", "POST", jsonBody, w, r, false)
+		_, err = GoogleDriveCall("/drive/create_folder", "POST", jsonBody, w, r, nil, false)
 	}
 	if err != nil {
 		klog.Errorln("Error calling drive/create_folder:", err)
@@ -1531,7 +1849,7 @@ func ResourcePatchGoogle(fileCache fileutils.FileCache, w http.ResponseWriter, r
 		return common.ErrToStatus(err), err
 	}
 
-	_, err = GoogleDriveCall("/drive/rename", "POST", jsonBody, w, r, false)
+	_, err = GoogleDriveCall("/drive/rename", "POST", jsonBody, w, r, nil, false)
 	if err != nil {
 		klog.Errorln("Error calling drive/rename:", err)
 		return common.ErrToStatus(err), err
@@ -1570,11 +1888,17 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	klog.Infoln("Buffer file path: ", bufferFilePath)
 	klog.Infoln("Buffer path: ", bufferPath)
+
+	defer func() {
+		klog.Infoln("Begin to remove buffer")
+		RemoveDiskBuffer(nil, bufferPath, SrcTypeGoogle)
+	}()
+
 	err = MakeDiskBuffer(bufferPath, diskSize, true)
 	if err != nil {
 		return nil, err
 	}
-	_, err = GoogleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
+	_, err = GoogleFileToBuffer(nil, src, bufferFilePath, bufferFileName, w, r, 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -1616,8 +1940,6 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 		}
 	}()
 
-	klog.Infoln("Begin to remove buffer")
-	RemoveDiskBuffer(bufferPath, SrcTypeGoogle)
 	return buf.Bytes(), nil
 }
 
@@ -1637,11 +1959,17 @@ func RawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, fi
 	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
 	klog.Infoln("Buffer file path: ", bufferFilePath)
 	klog.Infoln("Buffer path: ", bufferPath)
+
+	defer func() {
+		klog.Infoln("Begin to remove buffer")
+		RemoveDiskBuffer(nil, bufferPath, SrcTypeGoogle)
+	}()
+
 	err = MakeDiskBuffer(bufferPath, diskSize, true)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
-	_, err = GoogleFileToBuffer(src, bufferFilePath, bufferFileName, w, r)
+	_, err = GoogleFileToBuffer(nil, src, bufferFilePath, bufferFileName, w, r, 0, 0)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
@@ -1657,8 +1985,6 @@ func RawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, fi
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, file.Modified, fd)
 
-	klog.Infoln("Begin to remove buffer")
-	RemoveDiskBuffer(bufferPath, SrcTypeGoogle)
 	return 0, nil
 }
 
@@ -1758,4 +2084,62 @@ func delThumbsGoogle(ctx context.Context, fileCache fileutils.FileCache, src str
 	}
 
 	return nil
+}
+
+func walkGoogleDriveDirentsGenerator(body []byte, header *http.Header, r *http.Request, datum DrivesAccounsResponseItem) <-chan DirentGeneratedEntry {
+	ch := make(chan DirentGeneratedEntry)
+	go func() {
+		defer close(ch)
+
+		var bodyJson GoogleDriveListResponse
+		if err := json.Unmarshal(body, &bodyJson); err != nil {
+			klog.Error(err)
+			return
+		}
+
+		queue := make([]*GoogleDriveListResponseFileData, 0)
+		bodyJson.Lock()
+		queue = append(queue, bodyJson.Data...)
+		bodyJson.Unlock()
+
+		for len(queue) > 0 {
+			firstItem := queue[0]
+			queue = queue[1:]
+
+			if firstItem.IsDir {
+				fullPath := filepath.Join(SrcTypeGoogle, datum.Name, firstItem.Meta.ID) + "/"
+				entry := DirentGeneratedEntry{
+					Drive: SrcTypeGoogle,
+					Path:  fullPath,
+					Mtime: firstItem.Modified,
+				}
+				ch <- entry
+
+				firstParam := GoogleDriveListParam{
+					Path:  firstItem.Meta.ID,
+					Drive: datum.Type,
+					Name:  datum.Name,
+				}
+				firstJsonBody, err := json.Marshal(firstParam)
+				if err != nil {
+					klog.Errorln("Error marshalling JSON:", err)
+					continue
+				}
+
+				firstRespBody, err := GoogleDriveCall("/drive/ls", "POST", firstJsonBody, nil, r, header, true)
+				if err != nil {
+					klog.Error(err)
+					continue
+				}
+
+				var firstBodyJson GoogleDriveListResponse
+				if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
+					klog.Error(err)
+					continue
+				}
+				queue = append(queue, firstBodyJson.Data...)
+			}
+		}
+	}()
+	return ch
 }

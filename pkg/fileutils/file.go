@@ -306,14 +306,12 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 					uid = 1000
 				} else {
 					uid, subErr = GetUID(fs, filepath.Dir(vol))
-					klog.Infoln("~~~Temp log: uid ", uid, " filepath ", filepath.Dir(vol))
 					if subErr != nil {
 						return subErr
 					}
 				}
 				found = true
 			}
-			klog.Infoln("~~~Temp log: path ", vol, " does not exist, will create with uid: ", uid, " and mode: ", mode)
 
 			if subErr = createAndChownDir(fs, vol, mode, uid, uid); subErr != nil {
 				return subErr

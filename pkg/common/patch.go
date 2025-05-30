@@ -6,6 +6,7 @@ import (
 	"files/pkg/errors"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
 	"github.com/spf13/afero"
@@ -100,8 +101,8 @@ func Rmrf(path string) error {
 	for {
 		cmd := exec.Command("rm", "-rf", path)
 
-		//cmdStr := fmt.Sprintf("%s %s", cmd.Path, strings.Join(cmd.Args[1:], " "))
-		//klog.Infoln("~~~Debug log: Executing command:", cmdStr)
+		cmdStr := fmt.Sprintf("%s %s", cmd.Path, strings.Join(cmd.Args[1:], " "))
+		klog.Infoln("Executing command:", cmdStr)
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -111,8 +112,8 @@ func Rmrf(path string) error {
 		if err != nil {
 			klog.Infoln("Error executing rm -rf:", err)
 		}
-		//klog.Infoln("Command stdout:", stdout.String())
-		//klog.Infoln("Command stderr:", stderr.String())
+		klog.Infoln("Command stdout:", stdout.String())
+		klog.Infoln("Command stderr:", stderr.String())
 
 		exists, err := pathExistsInLsOutput(path, true)
 		if !exists && err == nil {
@@ -131,8 +132,6 @@ func safeRemoveAll(fs afero.Fs, source string) error {
 	// TODO: not used for the time being
 	realPath := filepath.Join(RootPrefix, source)
 	for {
-		klog.Infof("~~~Debug log: Attempting to delete folder %s", realPath)
-
 		err := fs.RemoveAll(source)
 		if err != nil {
 			klog.Errorf("Error attempting to delete folder %s: %v", realPath, err)
@@ -294,7 +293,7 @@ func MoveFile(ctx context.Context, fs afero.Fs, src, dst string, fileCache fileu
 	return fileutils.MoveFile(fs, src, dst)
 }
 
-func Move(ctx context.Context, fs afero.Fs, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
+func Move(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
 	if src = path.Clean("/" + src); src == "" {
 		return os.ErrNotExist
 	}
@@ -317,20 +316,121 @@ func Move(ctx context.Context, fs afero.Fs, src, dst, srcExternalType, dstExtern
 		return err
 	}
 
-	if info.IsDir() {
-		return MoveDir(ctx, fs, src, dst, srcExternalType, dstExternalType, fileCache, true)
+	klog.Infof("copy %v from %s to %s", info, src, dst)
+
+	if task == nil {
+		if info.IsDir() {
+			return MoveDir(ctx, fs, src, dst, srcExternalType, dstExternalType, fileCache, true)
+		}
+
+		return MoveFile(ctx, fs, src, dst, fileCache, true)
 	}
 
-	return MoveFile(ctx, fs, src, dst, fileCache, true)
+	go func() {
+		var err error
+		err = ExecuteMoveWithRsync(task, srcExternalType, dstExternalType, fileCache)
+		if err != nil {
+			klog.Errorf("Failed to initialize rsync: %v\n", err)
+			return
+		}
+	}()
+	return nil
 }
 
-func PatchAction(ctx context.Context, action, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
+func PatchAction(task *pool.Task, ctx context.Context, action, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
 	switch action {
 	case "copy":
-		return fileutils.Copy(files.DefaultFs, src, dst)
+		return fileutils.Copy(files.DefaultFs, task, src, dst)
 	case "rename":
-		return Move(ctx, files.DefaultFs, src, dst, srcExternalType, dstExternalType, fileCache)
+		return Move(ctx, files.DefaultFs, task, src, dst, srcExternalType, dstExternalType, fileCache)
 	default:
 		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
 	}
+}
+
+func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
+	srcinfo, err := files.DefaultFs.Stat(task.Source)
+	if err != nil {
+		return err
+	}
+
+	if srcinfo.IsDir() {
+		// first recursively delete all thumbs
+		err = filepath.Walk(RootPrefix+task.Source, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				file, err := files.NewFileInfo(files.FileOptions{
+					Fs:         files.DefaultFs,
+					Path:       path,
+					Modify:     true,
+					Expand:     false,
+					ReadHeader: false,
+				})
+				if err != nil {
+					return err
+				}
+
+				// delete thumbnails
+				err = preview.DelThumbs(task.Ctx, fileCache, file)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			klog.Infoln("Error walking the directory:", err)
+		} else {
+			klog.Infoln("Directory traversal completed.")
+		}
+	} else {
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:         files.DefaultFs,
+			Path:       task.Source,
+			Modify:     true,
+			Expand:     false,
+			ReadHeader: false,
+		})
+		if err != nil {
+			return err
+		}
+
+		// delete thumbnails
+		err = preview.DelThumbs(task.Ctx, fileCache, file)
+		if err != nil {
+			return err
+		}
+	}
+
+	// no matter what situation, try to rename all first
+	if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
+		task.Logging(fmt.Sprintf("rename from %s to %s successfully", task.Source, task.Dest))
+		pool.CompleteTask(task.ID)
+		return nil
+	}
+	// if rename all failed, recursively do things below, without delthumbs any more
+
+	// Get properties of source.
+	go func() {
+		err = fileutils.ExecuteRsync(task, "", "", 0, 99)
+		if err != nil {
+			klog.Errorf("Failed to initialize rsync: %v\n", err)
+			pool.FailTask(task.ID)
+			return
+		}
+		if srcExternalType == "smb" {
+			err = Rmrf(RootPrefix + task.Source)
+		} else {
+			err = files.DefaultFs.RemoveAll(task.Source)
+		}
+		if err != nil {
+			klog.Errorf("Failed to remove %v: %v", task.Source, err)
+			return
+		}
+		pool.CompleteTask(task.ID)
+	}()
+	return nil
 }

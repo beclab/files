@@ -79,6 +79,19 @@ func timingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func cookieMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bflName := r.Header.Get("X-Bfl-User")
+		oldCookie := common.BflCookieCache[bflName]
+		newCookie := r.Header.Get("Cookie")
+		if newCookie != oldCookie {
+			common.BflCookieCache[bflName] = newCookie
+		}
+		klog.Infof("BflCookieCache= %v", common.BflCookieCache)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func NeedCheckPrefix(prefix string) bool {
 	switch prefix {
 	case "/api/resources", "/api/raw", "/api/preview", "/api/paste", "/api/permission", "/api/share":
@@ -102,24 +115,18 @@ func CheckPathOwner(r *http.Request, prefix string) bool {
 		src = r.URL.Path
 	}
 
-	srcType := r.URL.Query().Get("src_type")
-	if srcType == "" {
-		srcType = r.URL.Query().Get("src")
-		if srcType == "" {
-			srcType = drives.SrcTypeDrive
-		}
+	srcType, err := drives.ParsePathType(src, r, false, true)
+	if err != nil {
+		srcType = drives.SrcTypeDrive
 	}
 
 	dst := r.URL.Query().Get("destination")
-	dstType := ""
-	if dst != "" {
-		dstType = r.URL.Query().Get("dst_type")
-		if dstType == "" {
-			if prefix == "/api/resources" && r.Method == http.MethodPatch {
-				dstType = srcType
-			} else {
-				dstType = drives.SrcTypeDrive
-			}
+	dstType, err := drives.ParsePathType(dst, r, true, true)
+	if err != nil {
+		if prefix == "/api/resources" && r.Method == http.MethodPatch {
+			dstType = srcType
+		} else {
+			dstType = drives.SrcTypeDrive
 		}
 	}
 
