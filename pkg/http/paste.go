@@ -30,18 +30,10 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
-		//srcType := r.URL.Query().Get("src_type")
-		//if srcType == "" {
-		//	srcType = drives.SrcTypeDrive
-		//}
 		srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
-		//dstType := r.URL.Query().Get("dst_type")
-		//if dstType == "" {
-		//	dstType = drives.SrcTypeDrive
-		//}
 		dstType, err := drives.ParsePathType(r.URL.Query().Get("destination"), r, true, true)
 		if err != nil {
 			return http.StatusBadRequest, err
@@ -143,16 +135,6 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			same = false
 		}
 
-		//if same {
-		//	err = pasteActionSameArch(action, srcType, src, dstType, dst, rename, fileCache, w, r)
-		//} else {
-		//	err = pasteActionDiffArch(r.Context(), action, srcType, src, dstType, dst, d, fileCache, w, r)
-		//}
-		//if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
-		//	fmt.Fprintln(w, err.Error())
-		//}
-		//return common.ErrToStatus(err), err
-
 		handler, err := drives.GetResourceService(srcType)
 		if err != nil {
 			return http.StatusBadRequest, err
@@ -174,16 +156,6 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			}
 		})
 
-		//pool.WorkerPool.Submit(func() {
-		//	ctx, cancel := context.WithCancel(context.Background())
-		//	pool.TaskManager.Store(taskID, &pool.Task{ID: taskID, Status: "running", Progress: 0})
-		//	executePasteTask(ctx, &pool.Task{ID: taskID, Source: src, Dest: dst, Log: task.Log},
-		//		same, action, srcType, dstType, rename, d, fileCache, w, r)
-		//	cancel()
-		//})
-
-		//w.Header().Set("Content-Type", "application/json")
-		//json.NewEncoder(w).Encode(map[string]string{"task_id": taskID})
 		return common.RenderJSON(w, r, map[string]string{"task_id": taskID})
 	}
 }
@@ -256,9 +228,6 @@ func createAndRemoveTempFile(targetDir string) error {
 
 func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
-	//logChan := make(chan string, 100)
-	//defer close(logChan)
-
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -294,7 +263,6 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
 		task.UpdateProgress()
 	}()
 
@@ -305,7 +273,7 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 			klog.Errorf("[TASK EXECUTE ERROR]: %v", err)
 			return
 		}
-	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
+	case <-time.After(5 * time.Second):
 		fmt.Println("ExecuteRsyncWithContext took too long to start, proceeding assuming no initial error.")
 	}
 
@@ -314,100 +282,8 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 		return
 	}
 
-	// 等待 goroutine 完成
 	wg.Wait()
-
-	// 模拟外部获取进度
-	//ticker := time.NewTicker(1 * time.Second)
-	//defer ticker.Stop()
-	//
-	//done := make(chan bool)
-	//go func() {
-	//	time.Sleep(100 * time.Second) // 模拟一些其他操作
-	//	done <- true
-	//}()
-	//
-	//for {
-	//	select {
-	//	case <-ticker.C:
-	//		if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
-	//			if t, ok := storedTask.(*pool.Task); ok {
-	//				klog.Infof("Task %s Infos: %v\n", t.ID, t)
-	//				fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
-	//			}
-	//		}
-	//	case <-done:
-	//		klog.Infoln("Operation completed or stopped.")
-	//		return
-	//	}
-	//}
-
-	// 收集日志
-	//for log := range logChan {
-	//	if t, ok := pool.TaskManager.Load(task.ID); ok {
-	//		if existingTask, ok := t.(*pool.Task); ok {
-	//			newTask := *existingTask
-	//			newTask.Log = append(newTask.Log, log)
-	//			pool.TaskManager.Store(task.ID, &newTask)
-	//		}
-	//	}
-	//}
-	//return
 }
-
-//func executePasteTask(ctx context.Context, task *pool.Task, same bool, action, srcType, dstType string, rename bool,
-//	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
-//	logChan := make(chan string, 100)
-//	defer close(logChan)
-//
-//	go func() {
-//		var err error
-//		if same {
-//			err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
-//		} else {
-//			err = pasteActionDiffArch(task, r.Context(), action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
-//		}
-//		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
-//			fmt.Fprintln(w, err.Error())
-//		}
-//		if err != nil {
-//			klog.Errorln(err)
-//		}
-//		return
-//
-//		//// 子任务 1：本地文件复制
-//		//err := rsyncCopy(ctx, task.Source, task.Dest, logChan)
-//		//if err != nil {
-//		//	taskManager.Store(task.ID, &Task{ID: task.ID, Status: "failed", Log: []string{err.Error()}})
-//		//	return
-//		//}
-//		//
-//		//// 更新进度
-//		//taskManager.Store(task.ID, &Task{ID: task.ID, Status: "running", Progress: 50, Log: append(task.Log, <-logChan)})
-//		//
-//		//// 子任务 2：调用第三方接口上传
-//		//err = uploadToThirdParty(ctx, task.Dest, logChan)
-//		//if err != nil {
-//		//	taskManager.Store(task.ID, &Task{ID: task.ID, Status: "failed", Log: []string{err.Error()}})
-//		//	return
-//		//}
-//		//
-//		//// 更新进度
-//		//taskManager.Store(task.ID, &Task{ID: task.ID, Status: "completed", Progress: 100, Log: append(task.Log, <-logChan)})
-//	}()
-//
-//	// 收集日志
-//	for log := range logChan {
-//		if t, ok := pool.TaskManager.Load(task.ID); ok {
-//			if existingTask, ok := t.(*pool.Task); ok {
-//				newTask := *existingTask
-//				newTask.Log = append(newTask.Log, log)
-//				pool.TaskManager.Store(task.ID, &newTask)
-//			}
-//		}
-//	}
-//	return
-//}
 
 func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	// path.Clean, only operate on string level, so it fits every src/dst type.
@@ -447,8 +323,8 @@ func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d 
 
 	fileCount, err := handler.GetFileCount(fs, src, "size", w, r)
 	if err != nil {
-		klog.Errorln(err) // TODO: remove after all done
-		//return err
+		klog.Errorln(err)
+		return err
 	}
 	task.TotalFileSize = fileCount
 	if isDir {
@@ -474,7 +350,7 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 
 		fileCount, err := handler.GetFileCount(files.DefaultFs, src, "size", w, r)
 		if err != nil {
-			klog.Errorln(err) // TODO: remove after all done
+			klog.Errorln(err)
 			return err
 		}
 		task.Mu.Lock()
@@ -500,24 +376,10 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 			pool.FailTask(task.ID)
 			return err
 		} else {
-			//task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
-			//pool.CompleteTask(task.ID)
 			return nil
 		}
 	}
 }
-
-//func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-//	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
-//	klog.Infoln("src: ", src, ", dst: ", dst)
-//
-//	handler, err := drives.GetResourceService(srcType)
-//	if err != nil {
-//		return err
-//	}
-//
-//	return handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
-//}
 
 func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	// In this function, context if tied up to src, because src is in the URL
@@ -533,19 +395,16 @@ func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst str
 	case "rename":
 		err = doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
 		if err != nil {
-			//return err
 			break
 		}
 
 		var handler drives.ResourceService
 		handler, err = drives.GetResourceService(srcType)
 		if err != nil {
-			//return err
 			break
 		}
 		err = handler.MoveDelete(task, fileCache, src, d, w, r)
 		if err != nil {
-			//return err
 			break
 		}
 	default:

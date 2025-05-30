@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	TaskManager = sync.Map{} // 存储任务状态
+	TaskManager = sync.Map{}
 	WorkerPool  pond.Pool
 )
 
@@ -122,7 +122,6 @@ func NewTask(id, source, dest, srcType, dstType, action string, cancellable, isB
 		cancelOnce:     new(sync.Once),
 	}
 
-	// 新增6小时过期逻辑
 	task.timer = time.AfterFunc(6*time.Hour, func() {
 		CancelTask(task.ID, true)
 		task.cancelOnce.Do(func() {
@@ -131,28 +130,24 @@ func NewTask(id, source, dest, srcType, dstType, action string, cancellable, isB
 			close(task.ProgressChan)
 			task.Cancel()
 		})
-		TaskManager.Delete(task.ID) // 从TaskManager删除
+		TaskManager.Delete(task.ID)
 	})
 	return task
 }
 
 func ProcessProgress(progress, lowerBound, upperBound int) int {
-	// 确保下限小于等于上限
 	if lowerBound > upperBound {
 		lowerBound, upperBound = upperBound, lowerBound
 	}
 
-	// 确保 progress 在默认范围 0~100 之间
 	if progress < 0 {
 		progress = 0
 	} else if progress > 100 {
 		progress = 100
 	}
 
-	// 计算缩放比例
 	scale := float64(upperBound-lowerBound) / 100.0
 
-	// 计算缩放后的值，并向下取整
 	scaledProgress := lowerBound + int(float64(progress)*scale)
 
 	return scaledProgress
@@ -163,16 +158,13 @@ func (t *Task) UpdateProgress() {
 		return
 	}
 
-	klog.Infof("~~~Temp log: Update Progress From Rsync [%s] ~~~", t.ID)
 	t.Mu.Lock()
 	t.Status = "running"
 	t.Progress = 0
 	t.Log = []string{}
 	TaskManager.Store(t.ID, t)
 	t.Mu.Unlock()
-	klog.Infof("~~~Temp log: %s", FormattedTask{Task: *t})
 
-	// 新增：启动独立日志收集协程
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -190,7 +182,7 @@ func (t *Task) UpdateProgress() {
 					t.Mu.Unlock()
 					klog.Infof("[%s] Log collected: %s (total: %d)", t.ID, log, len(t.Log))
 				}
-			case <-t.Ctx.Done(): // 收到退出信号时退出循环
+			case <-t.Ctx.Done():
 				klog.Infof("Task %s log collector exiting gracefully", t.ID)
 				return
 			}
@@ -198,21 +190,13 @@ func (t *Task) UpdateProgress() {
 	}()
 
 	timeout := time.After(6 * time.Hour)
-	//lastHeartbeat := time.Now()
-	//heartbeatTicker := time.NewTicker(30 * time.Second)
-	//defer heartbeatTicker.Stop()
 
 	for {
 		select {
 		case <-t.Ctx.Done():
-			// 关闭日志通道并等待收集完成
-			//close(t.LogChan)
 			wg.Wait()
 
 			t.Mu.Lock()
-			//if t.Status == "completed" {
-			//	t.Progress = 100
-			//} else {
 			if t.Progress < 100 {
 				if t.Status != "failed" {
 					t.Status = "cancelled"
@@ -220,7 +204,6 @@ func (t *Task) UpdateProgress() {
 			} else {
 				t.Status = "completed"
 			}
-			//}
 			TaskManager.Store(t.ID, t)
 			t.Mu.Unlock()
 
@@ -232,12 +215,6 @@ func (t *Task) UpdateProgress() {
 				klog.Infof("Task %s failed with status %s and Progress %d", t.ID, t.Status, t.Progress)
 			}
 			return
-
-		//case <-heartbeatTicker.C:
-		//	if time.Since(lastHeartbeat) > 45*time.Second {
-		//		klog.Errorf("Task %s heartbeat lost", t.ID)
-		//		return
-		//	}
 
 		case <-timeout:
 			klog.Errorf("Task %s timeout", t.ID)
@@ -256,15 +233,8 @@ func (t *Task) UpdateProgress() {
 
 		case progress, ok := <-t.ProgressChan:
 			if !ok {
-				// 通道关闭处理
-				//close(t.LogChan) // 关闭日志通道
-				wg.Wait() // 等待日志收集完成
+				wg.Wait()
 
-				//t.Mu.Lock()
-				//t.Status = "completed"
-				//t.Progress = 100
-				//TaskManager.Store(t.ID, t)
-				//t.Mu.Unlock()
 				t.Mu.Lock()
 				if t.Progress < 100 {
 					if t.Status != "failed" {
@@ -288,14 +258,12 @@ func (t *Task) UpdateProgress() {
 				processedProgress = progress
 			}
 
-			//if t.Progress == 100 && processedProgress == 100 {
 			if processedProgress == 100 {
 				select {
 				case <-time.After(1 * time.Second):
 					CompleteTask(t.ID)
 				case <-t.LogChan:
 					// if not err, JUST wait 2 seconds. Because log may flush.
-					// CompleteTask(t.ID)
 				case <-t.ErrChan:
 					FailTask(t.ID)
 				}
@@ -313,7 +281,6 @@ func (t *Task) UpdateProgress() {
 	}
 }
 
-// Logging 添加日志条目
 func (t *Task) Logging(entry string) {
 	klog.Infof("TASK LOGGING [%s] %s", t.ID, entry)
 	t.Mu.Lock()
@@ -321,10 +288,8 @@ func (t *Task) Logging(entry string) {
 	t.Log = append(t.Log, entry)
 }
 
-// LoggingError 添加错误日志条目
 func (t *Task) LoggingError(entry string) {
 	klog.Infof("TASK LOGGING ERROR [%s] %s", t.ID, entry)
-	//t.Logging("[ERROR] " + entry)
 	t.Mu.Lock()
 	defer t.Mu.Unlock()
 	t.Log = append(t.Log, "[ERROR] "+entry)
@@ -380,14 +345,12 @@ func (t *Task) DeleteBuffers() {
 	}
 }
 
-// GetProgress 获取任务进度
 func (t *Task) GetProgress() int {
 	t.Mu.Lock()
 	defer t.Mu.Unlock()
 	return t.Progress
 }
 
-// CancelTask 取消任务
 func CancelTask(taskID string, delete bool) {
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
@@ -447,7 +410,6 @@ func CancelTask(taskID string, delete bool) {
 }
 
 func CompleteTask(taskID string) {
-	klog.Infof("~~~Debug Log: Try to complete Task %s", taskID)
 	time.Sleep(1 * time.Second)
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
@@ -465,14 +427,12 @@ func CompleteTask(taskID string) {
 			t.cancelOnce.Do(func() {
 				t.DeleteBuffers()
 				t.Mu.Lock()
-				// 确保字段可导出
 				t.Progress = 100
 				t.Status = "completed"
 				t.FailedReason = ""
-				TaskManager.Store(taskID, t) // 存储指针副本
+				TaskManager.Store(taskID, t)
 				klog.Infof("Task %s has been completed with Progress %d", taskID, t.Progress)
 
-				// 锁外执行非关键操作
 				if t.ErrChan != nil {
 					close(t.ErrChan)
 				}
@@ -483,9 +443,6 @@ func CompleteTask(taskID string) {
 					close(t.ProgressChan)
 				}
 				t.Cancel()
-				//if t.timer != nil {
-				//	t.timer.Stop()
-				//}
 				t.Mu.Unlock()
 			})
 			klog.Infof("Task %s has completed", taskID)
@@ -496,17 +453,9 @@ func CompleteTask(taskID string) {
 }
 
 func FailTask(taskID string) {
-	klog.Infof("~~~Debug Log: Try to fail Task %s", taskID)
 	time.Sleep(1 * time.Second)
 	if task, ok := TaskManager.Load(taskID); ok {
 		if t, ok := task.(*Task); ok {
-			//if t.Status == "cancelled" {
-			//	klog.Infof("Task %s has already been cancelled", taskID)
-			//	return
-			//} else if t.Status == "completed" {
-			//	klog.Infof("Task %s has already been completed", taskID)
-			//	return
-			//} else
 			if t.Status == "failed" {
 				klog.Infof("Task %s has failed", taskID)
 				return
@@ -515,12 +464,10 @@ func FailTask(taskID string) {
 			t.DeleteBuffers()
 			t.cancelOnce.Do(func() {
 				t.Mu.Lock()
-				// 确保字段可导出
 				t.Status = "failed"
-				TaskManager.Store(taskID, t) // 存储指针副本
+				TaskManager.Store(taskID, t)
 				klog.Infof("Task %s has failed with Progress %d", taskID, t.Progress)
 
-				// 锁外执行非关键操作
 				if t.ErrChan != nil {
 					close(t.ErrChan)
 				}
@@ -531,9 +478,6 @@ func FailTask(taskID string) {
 					close(t.ProgressChan)
 				}
 				t.Cancel()
-				//if t.timer != nil {
-				//	t.timer.Stop()
-				//}
 				t.Mu.Unlock()
 			})
 			klog.Infof("Task %s has failed", taskID)

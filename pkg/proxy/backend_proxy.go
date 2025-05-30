@@ -176,7 +176,6 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 					node := parts[0]
 					remaining := ""
 					if len(parts) > 1 {
-						// remaining = "/" + parts[1]
 						remaining = parts[1]
 					}
 
@@ -335,49 +334,6 @@ func rewriteUrl(path string, pvc string, prefix string, hasFocusPrefix bool) str
 				return focusPrefix + pvc + "/Data" + strings.TrimPrefix(dealPath, pathSplit[0])
 			}
 		}
-
-		//externalIndex, externalNeedle := FindEarliestIndex(path, []string{"/External", "/external"})
-		//if externalIndex != -1 {
-		//	if externalNeedle == "/External" {
-		//		return path
-		//	}
-		//
-		//	firstHalf := path[:externalIndex]
-		//	//if firstHalf == "" {
-		//	//	firstHalf = "/"
-		//	//}
-		//	secondHalf := "/External" + strings.TrimPrefix(path[externalIndex:], "/external")
-		//	klog.Info("firstHalf=", firstHalf)
-		//	klog.Info("secondHalf=", secondHalf)
-		//
-		//	return firstHalf + secondHalf
-		//}
-
-		//homeIndex, homeNeedle := FindEarliestIndex(path, []string{"/Home", "/home"})
-		//applicationIndex, applicationNeedle := FindEarliestIndex(path, []string{"/Application", "/data"})
-		//splitIndex, splitName := minWithNegativeOne(homeIndex, applicationIndex, homeNeedle, applicationNeedle)
-		//if splitIndex != -1 {
-		//	firstHalf := path[:splitIndex]
-		//	//if firstHalf == "" {
-		//	//	firstHalf = "/"
-		//	//}
-		//	secondHalf := path[splitIndex:]
-		//	klog.Info("firstHalf=", firstHalf)
-		//	klog.Info("secondHalf=", secondHalf)
-		//
-		//	if strings.HasSuffix(firstHalf, pvc) {
-		//		return path
-		//	}
-		//	if splitName == "/Home" {
-		//		return firstHalf + "/" + pvc + secondHalf
-		//	} else if splitName == "/home" {
-		//		secondHalf = "/Home" + strings.TrimPrefix(path[splitIndex:], "/home")
-		//		return firstHalf + "/" + pvc + secondHalf
-		//	} else {
-		//		secondHalf = strings.TrimPrefix(path[splitIndex:], splitName)
-		//		return firstHalf + "/" + pvc + "/Data" + secondHalf
-		//	}
-		//}
 	} else {
 		pathSuffix := strings.TrimPrefix(path, prefix)
 		if strings.HasSuffix(prefix, "/cache") {
@@ -525,8 +481,6 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		dst := query.Get("destination")
 		klog.Infoln("DST:", dst)
 
-		//srcType := query.Get("src_type")
-		//dstType := query.Get("dst_type")
 		srcType, err := drives.ParsePathType(strings.TrimPrefix(src, API_PASTE_PREFIX), c.Request(), false, false)
 		if err != nil {
 			klog.Errorln(err)
@@ -556,8 +510,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 				dstParts := strings.SplitN(strings.TrimPrefix(dst, "/"), "/", 2)
 
 				if len(dstParts) > 1 {
-					dstNode = dstParts[0] // 修复变量名：dstParts 不是 parts
-					// 添加长度校验
+					dstNode = dstParts[0]
 					if len(dst) > len("/"+dstNode) {
 						dst = "/AppData" + dst[len("/"+dstNode):]
 					} else {
@@ -565,7 +518,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 					}
 					klog.Infoln("Node:", dstNode)
 					klog.Infoln("New dst:", dst)
-				} else if len(dstParts) > 0 { // 修复条件：检查 dstParts 而非未定义的 parts
+				} else if len(dstParts) > 0 {
 					dstNode = dstParts[0]
 					dst = "/AppData"
 					klog.Infoln("Node:", dstNode)

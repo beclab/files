@@ -101,8 +101,8 @@ func Rmrf(path string) error {
 	for {
 		cmd := exec.Command("rm", "-rf", path)
 
-		//cmdStr := fmt.Sprintf("%s %s", cmd.Path, strings.Join(cmd.Args[1:], " "))
-		//klog.Infoln("~~~Debug log: Executing command:", cmdStr)
+		cmdStr := fmt.Sprintf("%s %s", cmd.Path, strings.Join(cmd.Args[1:], " "))
+		klog.Infoln("Executing command:", cmdStr)
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -112,8 +112,8 @@ func Rmrf(path string) error {
 		if err != nil {
 			klog.Infoln("Error executing rm -rf:", err)
 		}
-		//klog.Infoln("Command stdout:", stdout.String())
-		//klog.Infoln("Command stderr:", stderr.String())
+		klog.Infoln("Command stdout:", stdout.String())
+		klog.Infoln("Command stderr:", stderr.String())
 
 		exists, err := pathExistsInLsOutput(path, true)
 		if !exists && err == nil {
@@ -132,8 +132,6 @@ func safeRemoveAll(fs afero.Fs, source string) error {
 	// TODO: not used for the time being
 	realPath := filepath.Join(RootPrefix, source)
 	for {
-		klog.Infof("~~~Debug log: Attempting to delete folder %s", realPath)
-
 		err := fs.RemoveAll(source)
 		if err != nil {
 			klog.Errorf("Error attempting to delete folder %s: %v", realPath, err)
@@ -321,7 +319,6 @@ func Move(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst, srcExtern
 	klog.Infof("copy %v from %s to %s", info, src, dst)
 
 	if task == nil {
-		klog.Infof("~~~Debug Log: task is nil")
 		if info.IsDir() {
 			return MoveDir(ctx, fs, src, dst, srcExternalType, dstExternalType, fileCache, true)
 		}
@@ -330,13 +327,10 @@ func Move(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst, srcExtern
 	}
 
 	go func() {
-		klog.Infof("~~~Debug Log: task ID = %s", task.ID)
 		var err error
-		//progressChan, logChan, errChan, err = ExecuteRsyncWithContext(task.Ctx, "/data"+task.Source, "/data"+task.Dest)
 		err = ExecuteMoveWithRsync(task, srcExternalType, dstExternalType, fileCache)
 		if err != nil {
-			// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
-			fmt.Printf("Failed to initialize rsync: %v\n", err)
+			klog.Errorf("Failed to initialize rsync: %v\n", err)
 			return
 		}
 	}()
@@ -353,17 +347,6 @@ func PatchAction(task *pool.Task, ctx context.Context, action, src, dst, srcExte
 		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
 	}
 }
-
-//func PatchAction(task *pool.Task, ctx context.Context, action, src, dst string, fileCache fileutils.FileCache) error {
-//	switch action {
-//	case "copy":
-//		return fileutils.Copy(files.DefaultFs, task, src, dst)
-//	case "rename":
-//		return Move(ctx, files.DefaultFs, src, dst, fileCache)
-//	default:
-//		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
-//	}
-//}
 
 func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
 	srcinfo, err := files.DefaultFs.Stat(task.Source)
@@ -424,15 +407,13 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 
 	// no matter what situation, try to rename all first
 	if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
-		task.Logging(fmt.Sprintf("rename from %s to %s suceessfully", task.Source, task.Dest))
+		task.Logging(fmt.Sprintf("rename from %s to %s successfully", task.Source, task.Dest))
 		pool.CompleteTask(task.ID)
 		return nil
 	}
-
 	// if rename all failed, recursively do things below, without delthumbs any more
 
 	// Get properties of source.
-
 	go func() {
 		err = fileutils.ExecuteRsync(task, "", "", 0, 99)
 		if err != nil {
@@ -440,7 +421,6 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 			pool.FailTask(task.ID)
 			return
 		}
-		klog.Infof("~~~Debug Log: try to remove task.Source: %s", task.Source)
 		if srcExternalType == "smb" {
 			err = Rmrf(RootPrefix + task.Source)
 		} else {

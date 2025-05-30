@@ -144,7 +144,6 @@ func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err = w.Write(respBody)
-	//_, err = io.Copy(w, respBody)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return common.ErrToStatus(err), err
@@ -431,7 +430,6 @@ func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request
 			return http.StatusInternalServerError, err
 		}
 		request.Header = r.Header.Clone()
-		klog.Infof("~~~Debug Log: reqeust.Header=%v", request.Header)
 		RemoveAdditionalHeaders(&request.Header)
 
 		client := &http.Client{}
@@ -455,7 +453,6 @@ func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request
 		zipFilename := path.Base(strings.TrimSuffix(prefix, "/")) + ".zip"
 		safeZipFilename := url.QueryEscape(zipFilename)
 		safeZipFilename = strings.ReplaceAll(safeZipFilename, "+", "%20")
-		klog.Infof("~~~Debug Log: zipFilename=%s, safeZipFilename=%s", zipFilename, safeZipFilename)
 
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", zipFilename, safeZipFilename))
 		w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
@@ -476,8 +473,7 @@ func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
-	request.Header = r.Header.Clone() // 透传客户端请求头
-	klog.Infof("~~~Debug Log: reqeust.Header=%v", request.Header)
+	request.Header = r.Header.Clone()
 	RemoveAdditionalHeaders(&request.Header)
 
 	client := &http.Client{}
@@ -487,7 +483,6 @@ func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request
 	}
 	defer response.Body.Close()
 
-	klog.Infof("~~~Debug Log: response.Header=%v", response.Header)
 	reader := SuitableResponseReader(response)
 
 	safeFilename := url.QueryEscape(filename)
@@ -548,7 +543,6 @@ func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst strin
 	klog.Infof("Request headers: %v", r.Header)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	//defer cancel() // Ensure context is canceled when main exits
 	go SimulateProgress(ctx, 0, 99, task.TotalFileSize, 50000000, task)
 
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
@@ -559,12 +553,9 @@ func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst strin
 	if err != nil {
 		TaskLog(task, "info", fmt.Sprintf("%s from %s to %s failed", action, src, dst))
 		TaskLog(task, "error", err.Error())
-		//task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
-		//task.ErrChan <- err
 		pool.FailTask(task.ID)
 	} else {
 		TaskLog(task, "info", fmt.Sprintf("%s from %s to %s successfully", action, src, dst))
-		//task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
 		pool.CompleteTask(task.ID)
 	}
 	return err
@@ -716,11 +707,6 @@ func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcTy
 	}
 
 	left, mid, right := CalculateProgressRange(task, diskSize)
-	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
-
-	//ctx, cancel := context.WithCancel(context.Background())
-	//defer cancel() // Ensure context is canceled when main exits
-	//go SimulateProgress(ctx, left, mid, diskSize, 20000000, task)
 
 	err = SyncFileToBuffer(task, src, bufferPath, r, left, mid, diskSize)
 	if err != nil {
@@ -751,10 +737,6 @@ func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferP
 	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
 		return err
 	}
-
-	//ctx, cancel := context.WithCancel(context.Background())
-	//defer cancel() // Ensure context is canceled when main exits
-	//go SimulateProgress(ctx, left, right, diskSize, 20000000, task)
 
 	status, err := SyncBufferToFile(task, bufferPath, dst, diskSize, r, left, right)
 	if status != http.StatusOK && status != 0 {
@@ -989,33 +971,27 @@ func (rs *SyncResourceService) GetFileCount(fs afero.Fs, src, countType string, 
 			return 0, err
 		}
 
-		// 解析JSON响应
 		var direntResp DirentResponse
 		if err := json.Unmarshal(respBody, &direntResp); err != nil {
 			return 0, err
 		}
 
-		// 处理当前目录下的文件和子目录
 		for _, dirent := range direntResp.DirentList {
 			if filename != "" && dirent.Name == filename {
-				// 如果 filename 不为空，并且文件名匹配，更新计数器
 				if countType == "size" {
 					count += dirent.Size
 				} else {
 					count++
 				}
-				return count, nil // 找到匹配文件后立即返回
+				return count, nil
 			} else if filename == "" {
-				// 如果 filename 为空，处理所有文件和目录
 				if dirent.Type == "dir" {
-					// 如果是目录，加入队列继续处理
 					dirPath := dirent.Path
 					if dirPath != "/" {
 						dirPath += "/"
 					}
 					queue = append(queue, common.EscapeURLWithSpace(dirPath))
 				} else {
-					// 如果是文件，更新计数器
 					if countType == "size" {
 						count += dirent.Size
 					} else {
@@ -1050,14 +1026,12 @@ func (rs *SyncResourceService) parsePathToURI(path string) (string, string) {
 func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) (int, []byte, error) {
 	// w is for future use, not used now
 
-	// 创建带有30秒超时的context
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel() // 确保在函数返回时取消context
+	defer cancel()
 
 	client := &http.Client{}
 	var err error
 
-	// 创建带context的请求
 	var request *http.Request
 	if reqBodyJson != nil {
 		request, err = http.NewRequestWithContext(ctx, method, dst, bytes.NewBuffer(reqBodyJson))
@@ -1079,7 +1053,6 @@ func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *
 
 	response, err := client.Do(request)
 	if err != nil {
-		// 检查是否是context超时错误
 		if e.Is(err, context.DeadlineExceeded) {
 			klog.Errorln("Request timed out after 30 seconds")
 			return -1, nil, fmt.Errorf("request timed out after 30 seconds")
@@ -1089,13 +1062,11 @@ func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *
 	}
 	defer response.Body.Close()
 
-	// 检查context是否已超时
 	select {
 	case <-ctx.Done():
 		klog.Errorln("Request timed out after 30 seconds")
 		return -1, nil, fmt.Errorf("request timed out after 30 seconds")
 	default:
-		// 继续处理
 	}
 
 	respReader := SuitableResponseReader(response)
@@ -1222,7 +1193,6 @@ func walkSyncDirentsGenerator(body []byte, header *http.Header, r *http.Request,
 
 			if firstItem.Type == "dir" {
 				fullPath := filepath.Join(SrcTypeSync, repoID, firstItem.Path, firstItem.Name)
-				klog.Infof("~~~Temp log: sync fullPath = %s", fullPath)
 				entry := DirentGeneratedEntry{
 					Drive: SrcTypeSync,
 					Path:  fullPath,
@@ -1483,10 +1453,9 @@ func SyncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 }
 
 func SyncFileToBuffer(task *pool.Task, src string, bufferFilePath string, r *http.Request, left, right int, diskSize int64) error {
-	// 关键修改1：函数入口取消检查
 	select {
 	case <-task.Ctx.Done():
-		return nil // 直接返回不报错
+		return nil
 	default:
 	}
 
@@ -1509,7 +1478,6 @@ func SyncFileToBuffer(task *pool.Task, src string, bufferFilePath string, r *htt
 
 	dlUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + common.EscapeURLWithSpace(prefix+filename) + "/" + "?dl=1"
 
-	// 关键修改2：使用带context的请求
 	request, err := http.NewRequestWithContext(task.Ctx, "GET", dlUrl, nil)
 	if err != nil {
 		return err
@@ -1518,14 +1486,11 @@ func SyncFileToBuffer(task *pool.Task, src string, bufferFilePath string, r *htt
 	request.Header = r.Header.Clone()
 	RemoveAdditionalHeaders(&request.Header)
 
-	client := http.Client{
-		//Timeout: 30 * time.Second, // 添加超时控制
-	}
+	client := http.Client{}
 
-	// 关键修改3：自动响应context取消
 	response, err := client.Do(request)
 	if err != nil {
-		return err // 包含context取消错误
+		return err
 	}
 	defer response.Body.Close()
 
@@ -1550,7 +1515,6 @@ func SyncFileToBuffer(task *pool.Task, src string, bufferFilePath string, r *htt
 	}
 	defer bufferFile.Close()
 
-	// 关键修改4：添加context感知的复制逻辑
 	var reader io.Reader = response.Body
 	if response.Header.Get("Content-Encoding") == "gzip" {
 		gzipReader, err := gzip.NewReader(response.Body)
@@ -1561,15 +1525,13 @@ func SyncFileToBuffer(task *pool.Task, src string, bufferFilePath string, r *htt
 		reader = gzipReader
 	}
 
-	// 关键修改5：分块复制+取消检查
 	buf := make([]byte, 32*1024)
 	var totalRead int64
 	lastProgress := 0
 	for {
-		// 每次循环检查取消
 		select {
 		case <-task.Ctx.Done():
-			return nil // 直接返回不报错
+			return nil
 		default:
 		}
 
@@ -1714,16 +1676,9 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 			return 0, nil
 		}
 
-		// 计算百分比（0-100 表示 0%-100%）
 		percent := (chunkNumber * 100) / totalChunks
-
-		// 计算范围大小
 		rangeSize := right - left
-
-		// 计算映射进度
 		mappedProgress := left + int((percent*int64(rangeSize))/100)
-
-		// 边界检查
 		finalProgress := mappedProgress
 		if finalProgress < left {
 			finalProgress = left
@@ -1785,7 +1740,7 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 		chunkStart += int64(bytesRead)
 
 		client := &http.Client{
-			Timeout: 30 * time.Second, // 添加超时控制
+			Timeout: 30 * time.Second,
 		}
 
 		maxRetries := 3
@@ -1793,28 +1748,20 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 		special := false
 
 		for retry := 0; retry < maxRetries; retry++ {
-			// 每次重试都创建新请求（关键修改）
 			var req *http.Request
 			var err error
 
-			// 首次尝试使用原始请求体
 			if retry == 0 {
 				req, err = http.NewRequest(request.Method, request.URL.String(), request.Body)
 				if err != nil {
-					//klog.Errorln("Create request error:", err)
 					TaskLog(task, "warning", fmt.Sprintf("create request error: %v", err))
-					//task.LogChan <- fmt.Sprintf("create request error: %v", err)
 					continue
 				}
-				// 复制原始请求的Header
 				req.Header = make(http.Header)
 				for k, s := range request.Header {
 					req.Header[k] = s
 				}
 			} else {
-				// 重试时需要重新生成请求体（示例实现，需根据实际场景调整）
-				// newBody, err := generateNewRequestBody(request.Context()) // 替换为实际逻辑
-
 				// newBody begin
 				offset = (chunkNumber - 1) * chunkSize
 				chunkData = make([]byte, chunkSize)
@@ -1856,8 +1803,6 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 				}
 
 				if err != nil {
-					//klog.Errorln("Generate new request body error:", err)
-					//task.LogChan <- fmt.Sprintf("generate body error: %v", err)
 					TaskLog(task, "warning", fmt.Sprintf("generate body error: %v", err))
 					continue
 				}
@@ -1865,42 +1810,33 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 
 				req, err = http.NewRequest(request.Method, request.URL.String(), newBody)
 				if err != nil {
-					//klog.Errorln("Create retry request error:", err)
 					TaskLog(task, "warning", fmt.Sprintf("create request error: %v", err))
-					//task.LogChan <- fmt.Sprintf("create retry request error: %v", err)
 					continue
 				}
-				// 复制原始请求的Header
 				req.Header = make(http.Header)
 				for k, s := range request.Header {
 					req.Header[k] = s
 				}
 			}
 
-			// 发送请求
 			response, err = client.Do(req)
 			klog.Infoln("Do Request (attempt", retry+1, ")")
 
-			// 错误处理（网络错误等）
 			if err != nil {
-				//klog.Errorln("Request error (attempt", retry+1, "):", err)
 				TaskLog(task, "warning", fmt.Sprintf("request error (attempt %d): %v", retry+1, err))
-				//task.LogChan <- fmt.Sprintf("request error (attempt %d): %v", retry+1, err)
 
 				if chunkNumber == totalChunks {
 					if strings.Contains(err.Error(), "context deadline exceeded (Client.Timeout exceeded while awaiting headers)") {
 						const gb = 1024 * 1024 * 1024
 						additionalBlocks := size / (10 * gb)
 						totalBubble := 15*time.Second + time.Duration(additionalBlocks)*15*time.Second
-						//task.LogChan <- fmt.Sprintf("Waiting %ds for seafile to complete hug file!", int(totalBubble.Seconds()))
 						TaskLog(task, "info", fmt.Sprintf("Waiting %ds for seafile to complete", int(totalBubble.Seconds())))
 						time.Sleep(totalBubble)
 						special = true
 						if response != nil && response.Body != nil {
 							response.Body.Close()
 						}
-						//task.LogChan <- "Waiting for seafile to complete hug file done!"
-						TaskLog(task, "info", fmt.Sprintf("Waiting for seafile to complete hug file done!"))
+						TaskLog(task, "info", fmt.Sprintf("Waiting for seafile to complete huge file done!"))
 						break
 					}
 				}
@@ -1908,62 +1844,43 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 				if response != nil && response.Body != nil {
 					bodyBytes, err := io.ReadAll(response.Body)
 					if err != nil {
-						//klog.Errorln("Read response body error:", err)
-						//task.LogChan <- fmt.Sprintf("read body error: %v", err)
 						TaskLog(task, "warning", fmt.Sprintf("read body error: %v", err))
 					} else {
-						// 记录响应体内容（自动处理UTF-8和非UTF-8内容）
 						bodyString := string(bodyBytes)
-						//klog.Infoln("~~~Debug log: error response body: ", bodyString)
-						//task.LogChan <- fmt.Sprintf("error response: %s", bodyString)
 						TaskLog(task, "info", fmt.Sprintf("error response: %s", bodyString))
 
-						// 重置Body以便后续处理（关键步骤！）
 						response.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 					}
 				} else {
-					//task.LogChan <- fmt.Sprintf("got an empty error response")
 					TaskLog(task, "info", fmt.Sprintf("got an empty error response"))
 				}
 
-				// 非最后一次重试则等待后继续
 				if retry < maxRetries-1 {
-					waitTime := time.Duration(1<<uint(retry)) * time.Second // 指数退避: 1s, 2s, 4s
+					waitTime := time.Duration(1<<uint(retry)) * time.Second
 					klog.Warningf("Retrying in %v...", waitTime)
 					time.Sleep(waitTime)
 				}
-				continue // 必须继续循环而不是返回
+				continue
 			}
 
-			if special {
+			if response.StatusCode == http.StatusOK {
 				break
 			}
 
-			// 状态码检查
-			if response.StatusCode == http.StatusOK {
-				break // 成功，退出循环
-			}
-
-			// 非200状态码处理
-			//klog.Warningf("Non-200 status: %s (attempt %d)", response.Status, retry+1)
 			TaskLog(task, "warning", fmt.Sprintf("non-200 status: %s (attempt %d)", response.Status, retry+1))
-			//task.LogChan <- fmt.Sprintf("non-200 status: %s (attempt %d)", response.Status, retry+1)
 
-			// 手动关闭当前响应体
 			if response.Body != nil {
 				response.Body.Close()
 			}
 
-			// 非最后一次重试则等待后继续
 			if retry < maxRetries-1 {
-				waitTime := time.Duration(1<<uint(retry)) * time.Second // 指数退避
+				waitTime := time.Duration(1<<uint(retry)) * time.Second
 				klog.Warningf("Retrying in %v...", waitTime)
 				time.Sleep(waitTime)
 			}
 		}
 
 		if !special {
-			// 最终检查是否成功
 			if response == nil || response.StatusCode != http.StatusOK {
 				statusCode := http.StatusInternalServerError
 				statusMsg := "request failed after retries"
@@ -1971,23 +1888,14 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 				if response != nil {
 					statusCode = response.StatusCode
 					statusMsg = response.Status
-					// 确保最终关闭响应体
 					if response.Body != nil {
 						defer response.Body.Close()
 					}
 				}
 
-				//klog.Errorln("Final failure:", statusMsg)
-				//task.LogChan <- fmt.Sprintf("%s after %d attempts", statusMsg, maxRetries)
 				TaskLog(task, "warning", fmt.Sprintf("%s after %d attempts", statusMsg, maxRetries))
 				return statusCode, fmt.Errorf("%s after %d attempts", statusMsg, maxRetries)
 			}
-			//response, err := client.Do(request)
-			//klog.Infoln("Do Request")
-			//if err != nil {
-			//	klog.Errorln("Do Request error: ", err)
-			//	return http.StatusInternalServerError, err
-			//}
 			defer response.Body.Close()
 
 			// Read the response body as a string
@@ -2005,10 +1913,8 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 			}
 		}
 
-		//task.LogChan <- fmt.Sprintf("Chunk %d/%d from of bytes %d-%d/%d successfully transferred.", chunkNumber, totalChunks, chunkStart, chunkStart+int64(bytesRead)-1, size)
 		TaskLog(task, "info", fmt.Sprintf("Chunk %d/%d from of bytes %d-%d/%d successfully transferred.", chunkNumber, totalChunks, chunkStart, chunkStart+int64(bytesRead)-1, size))
 		task.Mu.Lock()
-		//task.Log = append(task.Log, fmt.Sprintf("Chunk %d/%d from of bytes %d-%d/%d successfully transferred.", chunkNumber, totalChunks, chunkStart, chunkStart+int64(bytesRead)-1, size))
 		task.Progress = finalProgress
 		task.Mu.Unlock()
 
@@ -2046,19 +1952,6 @@ func ResourceSyncDelete(path string, w http.ResponseWriter, r *http.Request, ret
 		klog.Infoln(string(deleteBody))
 		return statusCode, fmt.Errorf("file update failed, status code: %d", statusCode)
 	}
-	//w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	//contentLength := len(deleteBody)
-	//w.Header().Set("Content-Length", strconv.Itoa(contentLength))
-	//klog.Infof("deleteBody length=%d", len(deleteBody))
-	//klog.Infof("deleteBody content=%s", string(deleteBody))
-	//if len(deleteBody) > 0 {
-	//	_, err = w.Write([]byte(deleteBody))
-	//	if err != nil {
-	//		klog.Errorln("Failed to write response:", err)
-	//		return common.ErrToStatus(err), err
-	//	}
-	//}
-	//return 0, nil
 	if returnResp {
 		type Response struct {
 			Success  bool   `json:"success"`
@@ -2158,7 +2051,6 @@ func PasteSyncPatch(task *pool.Task, action, src, dst string, r *http.Request) e
 	src = strings.Trim(src, "/")
 	if !strings.Contains(src, "/") {
 		err := e.New("invalid path format: path must contain at least one '/'")
-		//klog.Errorln("Error:", err)
 		TaskLog(task, "error", "Error:", err)
 		return err
 	}
@@ -2215,7 +2107,6 @@ func PasteSyncPatch(task *pool.Task, action, src, dst string, r *http.Request) e
 		"src_parent_dir": srcPrefix,
 		"src_repo_id":    srcRepoID,
 	}
-	//klog.Infoln(requestBody)
 	TaskLog(task, "info", requestBody)
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
@@ -2244,15 +2135,12 @@ func PasteSyncPatch(task *pool.Task, action, src, dst string, r *http.Request) e
 	// Read the response body as a string
 	postBody, err := io.ReadAll(response.Body)
 	TaskLog(task, "info", "ReadAll")
-	//klog.Infoln("ReadAll")
 	if err != nil {
-		//klog.Errorln("ReadAll error: ", err)
 		TaskLog(task, "error", "ReadAll error: ", err)
 		return err
 	}
 
 	if response.StatusCode != http.StatusOK {
-		//klog.Infoln(string(postBody))
 		TaskLog(task, "info", string(postBody))
 		return fmt.Errorf("file paste failed with status: %d", response.StatusCode)
 	}

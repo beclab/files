@@ -41,13 +41,11 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 		return CopyFile(fs, src, dst)
 	}
 
-	// 启动一个 goroutine 来执行 ExecuteRsyncSimulated
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		var err error
-		//progressChan, logChan, errChan, err = ExecuteRsyncWithContext(task.Ctx, "/data"+task.Source, "/data"+task.Dest)
 		err = ExecuteRsync(task, "", "", 0, 99)
 		if err != nil {
 			klog.Errorf("failed to execute rsync: %v\n", err)

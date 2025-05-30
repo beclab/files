@@ -36,7 +36,6 @@ type DriveResourceService struct {
 }
 
 func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
-	//GetMountedData(r.Context())
 	srcExternalType := files.GetExternalType(src, MountedData)
 	dstExternalType := files.GetExternalType(dst, MountedData)
 	return common.PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
@@ -151,30 +150,20 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 	}
 
 	left, mid, right := CalculateProgressRange(task, diskSize)
-	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
 
 	err = DriveFileToBuffer(task, fileInfo, bufferPath, left, mid)
 	if err != nil {
-		//task.ErrChan <- err
-		//task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
-		//pool.CancelTask(task.ID, false)
 		return err
 	}
 
 	if task.Status == "running" {
 		handler, err := GetResourceService(dstType)
 		if err != nil {
-			//task.ErrChan <- err
-			//task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
-			//pool.FailTask(task.ID)
 			return err
 		}
 
 		err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, mid, right, w, r, d, diskSize)
 		if err != nil {
-			//task.ErrChan <- err
-			//task.LogChan <- fmt.Sprintf("copy/move from %s to %s failed", src, dst)
-			//pool.FailTask(task.ID)
 			return err
 		}
 	}
@@ -188,14 +177,9 @@ func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, buffer
 	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
 	status, err := DriveBufferToFile(task, bufferPath, dst, fileMode, d, left, right)
 	if status != http.StatusOK {
-		//task.LogChan <- fmt.Sprintf("copy/move to %s failed with status %d", dst, status)
-		//pool.FailTask(task.ID)
 		return os.ErrInvalid
 	}
 	if err != nil {
-		//task.ErrChan <- err
-		//task.LogChan <- fmt.Sprintf("copy/move to %s failed", dst)
-		//pool.FailTask(task.ID)
 		return err
 	}
 	task.Mu.Lock()
@@ -234,7 +218,6 @@ func (rs *DriveResourceService) GeneratePathList(db *gorm.DB, rootPath string, p
 	if rootPath == "" {
 		rootPath = "/data"
 	}
-	//GetMountedData(nil)
 
 	processedPaths := make(map[string]bool)
 	processedPathEntries := make(map[string]ProcessedPathsEntry)
@@ -539,11 +522,9 @@ func DriveFileToBuffer(task *pool.Task, file *files.FileInfo, bufferFilePath str
 	}
 	klog.Infoln("file.Path:", file.Path, ", path:", path)
 
-	//err = fileutils.IoCopyFileWithBufferOs("/data"+path, bufferFilePath, 8*1024*1024)
 	err = fileutils.ExecuteRsync(task, "/data"+path, bufferFilePath, left, right)
 	if err != nil {
-		// 如果 ExecuteRsyncWithContext 返回错误，直接打印并返回
-		fmt.Printf("Failed to initialize rsync: %v\n", err)
+		klog.Errorf("Failed to initialize rsync: %v\n", err)
 		return err
 	}
 
@@ -577,7 +558,6 @@ func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string
 		ReadHeader: d.Server.TypeDetectionByHeader,
 	})
 
-	//err = fileutils.IoCopyFileWithBufferOs(bufferFilePath, "/data"+targetPath, 8*1024*1024)
 	err = fileutils.ExecuteRsync(task, bufferFilePath, "/data"+targetPath, left, right)
 
 	if err != nil {
@@ -591,23 +571,6 @@ func ResourceDriveDelete(fileCache fileutils.FileCache, path string, ctx context
 	if path == "/" {
 		return http.StatusForbidden, nil
 	}
-
-	//file, err := files.NewFileInfo(files.FileOptions{
-	//	Fs:         files.DefaultFs,
-	//	Path:       path,
-	//	Modify:     true,
-	//	Expand:     false,
-	//	ReadHeader: d.Server.TypeDetectionByHeader,
-	//})
-	//if err != nil {
-	//	return common.ErrToStatus(err), err
-	//}
-	//
-	//// delete thumbnails
-	//err = preview.DelThumbs(ctx, fileCache, file)
-	//if err != nil {
-	//	return common.ErrToStatus(err), err
-	//}
 
 	srcinfo, err := files.DefaultFs.Stat(path)
 	if err != nil {
@@ -673,25 +636,6 @@ func ResourceDriveDelete(fileCache fileutils.FileCache, path string, ctx context
 
 	return http.StatusOK, nil
 }
-
-//func GetMountedData() {
-//	mu.Lock()
-//	defer mu.Unlock()
-//
-//	url := "http://" + files.TerminusdHost + "/system/mounted-path-incluster"
-//
-//	headers := make(http.Header)
-//	headers.Set("Content-Type", "application/json")
-//	headers.Set("X-Signature", "temp_signature")
-//
-//	tempMountedData, err := files.FetchDiskInfo(url, headers)
-//	if err != nil {
-//		klog.Errorln(err)
-//		return
-//	}
-//	mountedData = tempMountedData
-//	return
-//}
 
 func ParseExternalPath(path string) string {
 	for _, datum := range MountedData {

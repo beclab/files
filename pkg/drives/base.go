@@ -146,7 +146,6 @@ func GetMountedData(ctx context.Context) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	//var MountedData []files.DiskInfo = nil
 	var err error = nil
 	if files.TerminusdHost != "" {
 		// for 1.12: path-incluster URL exists, won't err in normal condition
@@ -218,8 +217,6 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	//GetMountedData(r.Context())
-
 	var file *files.FileInfo
 	if MountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
@@ -275,7 +272,6 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 
 	if file.IsDir {
 		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
-			//if strings.HasPrefix(file.Path, files.ExternalPrefix) {
 			files.GetExternalExtraInfos(file, MountedData, 1)
 		}
 		file.Listing.Sorting = files.DefaultSorting
@@ -438,7 +434,6 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 		}
 
-		//GetMountedData(r.Context())
 		srcExternalType := files.GetExternalType(src, MountedData)
 		dstExternalType := files.GetExternalType(dst, MountedData)
 
@@ -454,7 +449,6 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			}
 		}
 
-		klog.Infof("~~~Debug Log: needTask:%d, action:%s, rename: %v", needTask, action, rename)
 		var task *pool.Task = nil
 		if needTask != 0 {
 			// only for cache now
@@ -595,8 +589,6 @@ func (rs *BaseResourceService) parsePathToURI(path string) (string, string) {
 func executePatchTask(task *pool.Task, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
 	// only for cache
-	//logChan := make(chan string, 100)
-	//defer close(logChan)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -617,11 +609,9 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		klog.Infof("~~~Temp log: copy from %s to %s, will update progress", task.Source, task.Dest)
 		task.UpdateProgress()
 	}()
 
-	// 等待 ExecuteRsyncSimulated 完成或出错
 	select {
 	case err := <-task.ErrChan:
 		if err != nil {
@@ -629,7 +619,7 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 			klog.Errorf("[ERROR]: %v", err)
 			return
 		}
-	case <-time.After(5 * time.Second): // 假设等待 5 秒以避免无限等待
+	case <-time.After(5 * time.Second):
 		fmt.Println("ExecuteRsyncWithContext took too long to start, proceeding assuming no initial error.")
 	}
 
@@ -638,42 +628,5 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 		return
 	}
 
-	// 等待 goroutine 完成
 	wg.Wait()
-
-	// 模拟外部获取进度
-	//ticker := time.NewTicker(1 * time.Second)
-	//defer ticker.Stop()
-	//
-	//done := make(chan bool)
-	//go func() {
-	//	time.Sleep(100 * time.Second) // 模拟一些其他操作
-	//	done <- true
-	//}()
-	//
-	//for {
-	//	select {
-	//	case <-ticker.C:
-	//		if storedTask, ok := pool.TaskManager.Load(task.ID); ok {
-	//			if t, ok := storedTask.(*pool.Task); ok {
-	//				klog.Infof("Task %s Infos: %v\n", t.ID, t)
-	//				fmt.Printf("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
-	//			}
-	//		}
-	//	case <-done:
-	//		klog.Infoln("Operation completed or stopped.")
-	//		return
-	//	}
-	//}
-
-	//for log := range logChan {
-	//	if t, ok := pool.TaskManager.Load(task.ID); ok {
-	//		if existingTask, ok := t.(*pool.Task); ok {
-	//			newTask := *existingTask
-	//			newTask.Log = append(newTask.Log, log)
-	//			pool.TaskManager.Store(task.ID, &newTask)
-	//		}
-	//	}
-	//}
-	//return
 }

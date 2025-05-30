@@ -41,13 +41,11 @@ func InitSearch3() {
 	if postgres.DBServer != nil {
 		recreate := os.Getenv("RECREATE_PATH_LIST")
 		if recreate != "" {
-			klog.Info("~~~!!! Test log: recreating path_list table")
 			postgres.RecreateTable(postgres.DBServer, &postgres.PathList{})
-			klog.Info("~~~!!! Test log: init drive path /data list")
 		}
 		postgres.InitDrivePathList()
 	} else {
-		klog.Info("~~~!!! Test log: no postgres server, no need to init path_list for search3")
+		klog.Info("no postgres server, no need to init path_list for search3")
 	}
 }
 

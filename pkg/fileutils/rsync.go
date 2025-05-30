@@ -31,101 +31,6 @@ func init() {
 	}
 }
 
-func ExecuteRsyncSimulated(source, dest string) (chan int, error) {
-	progressChan := make(chan int, 10)
-
-	go func() {
-		defer close(progressChan)
-
-		for i := 0; i <= 100; i++ {
-			klog.Infof("Send progress: %d", i)
-			progressChan <- i
-			time.Sleep(1 * time.Second)
-		}
-	}()
-
-	return progressChan, nil
-}
-
-func ExecuteRsyncBase(source, dest string) (chan int, error) {
-	progressChan := make(chan int, 100)
-	//bwLimit := 1024
-
-	stdoutReader, stdoutWriter := io.Pipe()
-	//cmd := exec.Command("rsync", "-av", "--info=progress2", fmt.Sprintf("--bwlimit=%d", bwLimit), source, dest)
-	cmd := exec.Command("rsync", "-av", "--info=progress2", source, dest)
-	cmd.Stdout = stdoutWriter
-
-	go func() {
-		err := cmd.Start()
-		if err != nil {
-			stdoutWriter.Close()
-			klog.Errorf("Error starting rsync: %v", err)
-			return
-		}
-	}()
-
-	go func() {
-		defer stdoutWriter.Close()
-		defer close(progressChan)
-
-		reader := bufio.NewReader(stdoutReader)
-		buffer := make([]byte, 4096)
-		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
-
-		for {
-			n, err := reader.Read(buffer)
-			if n > 0 {
-				output := string(buffer[:n])
-				klog.Infoln("Rsync output:", output)
-
-				lines := strings.Split(output, "\n")
-				for i, line := range lines {
-					if line != "" {
-						if i == len(lines)-1 && !strings.HasSuffix(line, "\n") {
-							line = strings.TrimSuffix(line, "\r")
-						}
-
-						var matched bool
-
-						matches := re.FindAllStringSubmatch(line, -1)
-						if len(matches) > 0 {
-							for _, match := range matches {
-								if len(match) > 1 {
-									p := int(math.Floor(parseFloat(match[1])))
-									matched = true
-									progressChan <- p
-									fmt.Printf("Progress: %d%%\n", p)
-									klog.Infof("Send progress: %d", p)
-								}
-							}
-						}
-
-						if !matched {
-							klog.Infof("No percent info in: %s", line)
-						}
-					}
-				}
-			}
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				klog.Errorf("Error reading rsync output: %v", err)
-				break
-			}
-		}
-	}()
-
-	go func() {
-		if err := cmd.Wait(); err != nil {
-			klog.Errorf("Rsync command failed: %v", err)
-		}
-	}()
-
-	return progressChan, nil
-}
-
 func parseFloat(s string) float64 {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
@@ -161,7 +66,6 @@ func externalCheckHeartBeat(cmdDone chan struct{}, task *pool.Task, path string,
 	}
 }
 
-// func ExecuteRsyncWithContext(ctx context.Context, source, dest string) (chan int, chan string, chan error, error) {
 func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight int) error {
 	klog.Infoln("Starting ExecuteRsync function")
 
@@ -200,7 +104,6 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 		}()
 	}
 
-	// 启动命令
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -231,7 +134,6 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 		stdoutWriter.Close()
 	}()
 
-	// 处理stdout的goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -243,7 +145,7 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 		re := regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
 		eofCount := 0
-		const maxEOFCount = 10 // 连续读取到 10 个 EOF 后退出
+		const maxEOFCount = 10
 
 		for {
 			select {
@@ -279,7 +181,6 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 										matched = true
 										select {
 										case task.ProgressChan <- p:
-											fmt.Printf("Progress: %d%%\n", p)
 											klog.Infof("Send progress: %d", p)
 										default:
 											klog.Warningf("Progress channel full, dropping %d%%", p)
@@ -293,7 +194,7 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 							}
 						}
 					}
-					eofCount = 0 // 重置 EOF 计数器
+					eofCount = 0
 				}
 				if err != nil {
 					if err != io.EOF {
@@ -306,12 +207,6 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 					} else {
 						eofCount++
 						klog.Infof("Have read %d EOFs", eofCount)
-						//select {
-						//case task.LogChan <- "":
-						//	klog.Infof("Send Log: %s", "EOF")
-						//default:
-						//	klog.Warningf("Log channel full, dropping %s%%", "EOF")
-						//}
 						time.Sleep(100 * time.Millisecond)
 						if eofCount >= maxEOFCount {
 							klog.Infoln("Finished reading stdout after multiple EOFs")
@@ -323,30 +218,26 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 		}
 	}()
 
-	// 取消处理goroutine
 	go func() {
 		klog.Infoln("Starting cancellation handling goroutine")
 		defer klog.Infoln("Cancellation handling goroutine completed")
 
-		// 创建总超时上下文（1小时）
 		totalTimeoutCtx, cancelTotalTimeout := context.WithTimeout(context.Background(), 1*time.Hour)
-		defer cancelTotalTimeout() // 确保释放资源
+		defer cancelTotalTimeout()
 
 		select {
 		case <-totalTimeoutCtx.Done():
-			// 总超时触发：强制清理
 			klog.Errorln("Total timeout (1h) reached! Forcing exit...")
 			if cmd.Process != nil {
 				klog.Infoln("Killing rsync command due to total timeout")
-				cmd.Process.Kill() // 立即强制终止
+				cmd.Process.Kill()
 			}
 			if stdoutWriter != nil {
-				stdoutWriter.Close() // 关闭输出流
+				stdoutWriter.Close()
 			}
-			return // 直接退出goroutine
+			return
 
 		case <-task.Ctx.Done():
-			// 正常取消信号处理逻辑
 			if cmd.Process != nil {
 				klog.Infoln("Sending interrupt signal to rsync command")
 				cmd.Process.Signal(os.Interrupt)
@@ -356,24 +247,21 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 					done <- cmd.Wait()
 				}()
 
-				// 保留原有的5秒超时逻辑
 				select {
 				case <-done:
 					klog.Infoln("Rsync command interrupted successfully")
 				case <-time.After(5 * time.Second):
 					klog.Infoln("Killing rsync command after 5s timeout")
 					cmd.Process.Kill()
-					<-done // 等待实际退出
+					<-done
 				}
 			}
-			// 关闭资源（总超时情况也会执行到这里）
 			if stdoutWriter != nil {
 				stdoutWriter.Close()
 			}
 		}
 	}()
 
-	// 错误处理goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -403,14 +291,6 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 						task.ErrChan <- e.New(errMsg)
 						pool.FailTask(task.ID)
 						return
-
-						//select {
-						//case task.ErrChan <- firstErr:
-						//	firstErr = nil
-						//	klog.Infoln("Error sent to ErrChan")
-						//default:
-						//	klog.Errorf("Rsync command failed: %v (channel full)", firstErr)
-						//}
 					}()
 					return
 				}
@@ -419,7 +299,6 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 		}
 	}()
 
-	// 命令执行状态监控
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

@@ -333,22 +333,18 @@ func GetCloudDriveFocusedMetaInfos(task *pool.Task, src string, w http.ResponseW
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		//klog.Errorln("Error marshalling JSON:", err)
 		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return
 	}
-	//klog.Infoln("Cloud Drive CloudDriveMetaResponseMeta Params:", string(jsonBody))
 	TaskLog(task, "info", "Cloud Drive CloudDriveMetaResponseMeta Params:", string(jsonBody))
 	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
-		//klog.Errorln("Error calling drive/get_file_meta_data:", err)
 		TaskLog(task, "error", "Error calling drive/get_file_meta_data:", err)
 		return
 	}
 
 	var bodyJson CloudDriveMetaResponse
 	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		//klog.Error(err)
 		TaskLog(task, "error", "Error unmarshalling response:", err)
 		return
 	}
@@ -465,19 +461,15 @@ func streamCloudDriveFiles(w http.ResponseWriter, r *http.Request, srcType strin
 
 func CopyCloudDriveSingleFile(task *pool.Task, src, dst string, w http.ResponseWriter, r *http.Request) error {
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
-	//klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	TaskLog(task, "info", "srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
-		//klog.Infoln("Src parse failed.")
 		TaskLog(task, "info", "Src parse failed.")
 		return nil
 	}
 	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst)
-	//klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	TaskLog(task, "info", "dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	dstDir, dstFilename := path.Split(dstPath)
 	if dstDir == "" || dstFilename == "" {
-		//klog.Infoln("Dst parse failed.")
 		TaskLog(task, "info", "Dst parse failed.")
 		return nil
 	}
@@ -496,15 +488,12 @@ func CopyCloudDriveSingleFile(task *pool.Task, src, dst string, w http.ResponseW
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		//klog.Errorln("Error marshalling JSON:", err)
 		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return err
 	}
-	//klog.Infoln("Copy File Params:", string(jsonBody))
 	TaskLog(task, "info", "Copy File Params:", string(jsonBody))
 	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
-		//klog.Errorln("Error calling drive/copy_file:", err)
 		TaskLog(task, "error", "Error calling drive/copy_file:", err)
 		return err
 	}
@@ -513,21 +502,17 @@ func CopyCloudDriveSingleFile(task *pool.Task, src, dst string, w http.ResponseW
 
 func CopyCloudDriveFolder(task *pool.Task, src, dst string, w http.ResponseWriter, r *http.Request, srcPath, srcPathName string) error {
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
-	//klog.Infoln("srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	TaskLog(task, "info", "srcDrive:", srcDrive, "srcName:", srcName, "srcPath:", srcPath)
 	if srcPath == "" {
-		//klog.Infoln("Src parse failed.")
 		TaskLog(task, "info", "Src parse failed.")
 		return nil
 	}
 	srcPath = CloudDriveNormalizationPath(srcPath, srcDrive, true, true)
 
 	dstDrive, dstName, dstPath := ParseCloudDrivePath(dst)
-	//klog.Infoln("dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	TaskLog(task, "info", "dstDrive:", dstDrive, "dstName:", dstName, "dstPath:", dstPath)
 	dstDir, dstFilename := path.Split(strings.TrimSuffix(dstPath, "/"))
 	if dstDir == "" || dstFilename == "" {
-		//klog.Infoln("Dst parse failed.")
 		TaskLog(task, "info", "Dst parse failed.")
 		return nil
 	}
@@ -542,15 +527,12 @@ func CopyCloudDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrite
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		//klog.Errorln("Error marshalling JSON:", err)
 		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return err
 	}
-	//klog.Infoln("Copy File Params:", string(jsonBody))
 	TaskLog(task, "info", "Copy File Params:", string(jsonBody))
 	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, nil, true)
 	if err != nil {
-		//klog.Errorln("Error calling drive/copy_file:", err)
 		TaskLog(task, "error", "Error calling drive/copy_file:", err)
 		return e.New("Error calling drive/copy_file: " + err.Error())
 	}
@@ -580,7 +562,6 @@ func CloudPauseTask(taskId string, w http.ResponseWriter, r *http.Request) error
 		return e.New("Task paused successfully")
 	} else {
 		klog.Errorln("Failed to pause task")
-		//return bufferFileName, e.New("Failed to resume task")
 	}
 	return nil
 }
@@ -722,17 +703,6 @@ func CloudDriveBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.
 		trimmedDstDir = "/"
 	}
 
-	//newBufferFilePath := bufferFilePath
-	//bufferDir, bufferFileName := filepath.Split(bufferFilePath)
-	//if bufferFileName != dstFileName {
-	//	newBufferFilePath = filepath.Join(bufferDir, dstFileName)
-	//	err := os.Rename(bufferFilePath, newBufferFilePath)
-	//	if err != nil {
-	//		klog.Errorln("Error renaming file:", err)
-	//		return common.ErrToStatus(err), err
-	//	}
-	//}
-
 	param := CloudDriveUploadFileParam{
 		ParentPath:    trimmedDstDir,
 		LocalFilePath: bufferFilePath,
@@ -837,15 +807,12 @@ func MoveCloudDriveFolderOrFiles(task *pool.Task, src, dst string, w http.Respon
 
 	jsonBody, err := json.Marshal(param)
 	if err != nil {
-		//klog.Errorln("Error marshalling JSON:", err)
 		TaskLog(task, "error", "Error marshalling JSON:", err)
 		return err
 	}
-	//klog.Infoln("Cloud Drive Move File Params:", string(jsonBody))
 	TaskLog(task, "info", "Cloud Drive Move File Params:", string(jsonBody))
 	_, err = CloudDriveCall("/drive/move_file", "POST", jsonBody, w, r, nil, false)
 	if err != nil {
-		//klog.Errorln("Error calling drive/move_file:", err)
 		TaskLog(task, "error", "Error calling drive/move_file:", err)
 		return err
 	}
@@ -853,9 +820,8 @@ func MoveCloudDriveFolderOrFiles(task *pool.Task, src, dst string, w http.Respon
 }
 
 func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) ([]byte, error) {
-	// 创建带有30秒超时的context
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel() // 确保在函数返回时取消context
+	defer cancel()
 
 	var bflName = ""
 	if header != nil {
@@ -881,7 +847,6 @@ func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrite
 	var datas map[string]interface{}
 
 	for i := 0; i <= maxRetries; i++ {
-		// 创建一个带context的请求
 		var req *http.Request
 		if reqBodyJson != nil {
 			req, err = http.NewRequestWithContext(ctx, method, dstUrl, bytes.NewBuffer(reqBodyJson))
@@ -905,7 +870,6 @@ func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrite
 		client := &http.Client{}
 		resp, err = client.Do(req)
 		if err != nil {
-			// 检查是否是context超时错误
 			if e.Is(err, context.DeadlineExceeded) {
 				klog.Errorln("Request timed out after 30 seconds")
 				return nil, fmt.Errorf("request timed out after 30 seconds")
@@ -915,13 +879,11 @@ func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrite
 		}
 		defer resp.Body.Close()
 
-		// 检查context是否已超时
 		select {
 		case <-ctx.Done():
 			klog.Errorln("Request timed out after 30 seconds")
 			return nil, fmt.Errorf("request timed out after 30 seconds")
 		default:
-			// 继续处理
 		}
 
 		contentType := resp.Header.Get("Content-Type")
@@ -976,7 +938,6 @@ func CloudDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrite
 
 	responseText, err := json.MarshalIndent(datas, "", "  ")
 	if err != nil {
-		//http.Error(w, "Error marshaling JSON response to text: "+err.Error(), http.StatusInternalServerError)
 		return nil, e.New("Error marshaling JSON response to text: " + err.Error())
 	}
 
@@ -1149,8 +1110,6 @@ func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst
 		if err != nil {
 			TaskLog(task, "info", fmt.Sprintf("%s from %s to %s failed when getting meta info", action, src, dst))
 			TaskLog(task, "error", err.Error())
-			//task.ErrChan <- err
-			//task.LogChan <- fmt.Sprintf("%s from %s to %s failed when getting meta info", action, src, dst)
 			pool.FailTask(task.ID)
 			return err
 		}
@@ -1168,12 +1127,9 @@ func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst
 	if err != nil {
 		TaskLog(task, "info", fmt.Sprintf("%s from %s to %s failed", action, src, dst))
 		TaskLog(task, "error", err.Error())
-		//task.LogChan <- fmt.Sprintf("%s from %s to %s failed", action, src, dst)
-		//task.ErrChan <- err
 		pool.FailTask(task.ID)
 	} else {
 		TaskLog(task, "info", fmt.Sprintf("%s from %s to %s successfully", action, src, dst))
-		//task.LogChan <- fmt.Sprintf("%s from %s to %s successfully", action, src, dst)
 		pool.CompleteTask(task.ID)
 	}
 	return err
@@ -1181,8 +1137,6 @@ func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst
 
 func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
-	klog.Infof("~~~Temp log for Cloud Drive PasteDirFrom: srcType: %s, src: %s, dstType: %s, dst: %s", srcType, src, dstType, dst)
-	klog.Infof("~~~Temp log for Cloud Drive PasteDirFrom: driveIdCache: %v", driveIdCache)
 	mode := fileMode
 
 	handler, err := GetResourceService(dstType)
@@ -1199,7 +1153,6 @@ func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, 
 	if driveIdCache[src] != "" {
 		fdstBase = filepath.Join(filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))), driveIdCache[src])
 	}
-	klog.Infof("~~~Temp log for Cloud Drive PasteDirFrom: src: %s, fdstBase: %s, driveIdCache: %v", src, fdstBase, driveIdCache)
 
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
 	srcPath = CloudDriveNormalizationPath(srcPath, srcDrive, true, true)
@@ -1259,7 +1212,6 @@ func (rs *CloudDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, sr
 
 func (rs *CloudDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
-	klog.Infof("~~~Temp log for Cloud Drive PasteFileFrom: srcType: %s, src: %s, dstType: %s, dst: %s", srcType, srcType, dstType, dst)
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
@@ -1295,7 +1247,6 @@ func (rs *CloudDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs,
 	}
 
 	left, mid, right := CalculateProgressRange(task, diskSize)
-	klog.Info("~~~Debug Log: left=", left, "mid=", mid, "right=", right)
 
 	err = CloudDriveFileToBuffer(task, src, bufferFilePath, w, r, left, mid)
 	if err != nil {
@@ -1449,14 +1400,11 @@ func (rs *CloudDriveResourceService) parsePathToURI(path string) (string, string
 func (rs *CloudDriveResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
 	var count int64
 
-	// 获取文件或文件夹的元信息
 	metaInfo, err := GetCloudDriveFocusedMetaInfos(nil, src, w, r)
 	if err != nil {
 		return 0, err
 	}
-	klog.Infof("~~~Debug log: focused meta infos: %v", metaInfo)
 
-	// 如果是文件
 	if !metaInfo.IsDir {
 		if countType == "size" {
 			count += metaInfo.FileSize
@@ -1467,14 +1415,12 @@ func (rs *CloudDriveResourceService) GetFileCount(fs afero.Fs, src, countType st
 	}
 
 	srcDrive, srcName, pathId := ParseCloudDrivePath(src)
-	// 如果是文件夹，使用 BFS 遍历文件夹
-	queue := []string{pathId} // 使用文件夹的路径作为起始点
+	queue := []string{pathId}
 
 	for len(queue) > 0 {
 		currentPath := queue[0]
 		queue = queue[1:]
 
-		// 调用 API 获取当前文件夹下的文件和子文件夹
 		param := CloudDriveListParam{
 			Path:  currentPath,
 			Drive: srcDrive,
@@ -1497,14 +1443,11 @@ func (rs *CloudDriveResourceService) GetFileCount(fs afero.Fs, src, countType st
 			return 0, err
 		}
 
-		// 解析并处理当前目录下的文件和子目录
 		for _, item := range bodyJson.Data {
 			if item.IsDir {
-				// 如果是目录，加入队列继续处理
 				normalizedPath := CloudDriveNormalizationPath(item.Path, "cloud", true, true)
 				queue = append(queue, normalizedPath)
 			} else {
-				// 如果是文件，更新计数器
 				if countType == "size" {
 					count += item.FileSize
 				} else {
@@ -1906,7 +1849,6 @@ func walkCloudDriveDirentsGenerator(body []byte, header *http.Header, r *http.Re
 
 			if firstItem.IsDir {
 				fullPath := filepath.Join(datum.Type, datum.Name, firstItem.Path) + "/"
-				klog.Infof("~~~Temp log: %s fullPath = %s, %s Path = %s", datum.Type, fullPath, datum.Type, firstItem.Path)
 				var parsedTime time.Time
 				var err error
 				if firstItem.Modified != nil && *firstItem.Modified != "" {

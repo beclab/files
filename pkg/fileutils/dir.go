@@ -105,7 +105,6 @@ func FindExistingDir(targetDir string) string {
 		}
 
 		parentDir := filepath.Dir(currentDir)
-		klog.Infof("~~~Debug Log: parent dir: %s", parentDir)
 
 		if parentDir == currentDir || parentDir == "/" || parentDir == "/data" || parentDir == "/data/External" {
 			break
@@ -113,10 +112,6 @@ func FindExistingDir(targetDir string) string {
 
 		currentDir = parentDir
 	}
-
-	//if dirExists(".") {
-	//	return "."
-	//}
 
 	return ""
 }
