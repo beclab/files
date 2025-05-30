@@ -2,6 +2,7 @@ package pool
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/alitto/pond/v2"
 	"k8s.io/klog/v2"
@@ -52,6 +53,23 @@ type Task struct {
 
 type FormattedTask struct {
 	Task
+	showLog bool
+}
+
+func (ft FormattedTask) MarshalJSON() ([]byte, error) {
+	type Alias FormattedTask
+	return json.Marshal(struct {
+		Alias
+		Log interface{} `json:"log,omitempty"`
+	}{
+		Alias: Alias(ft),
+		Log:   ft.Log,
+	})
+}
+
+func (ft FormattedTask) WithLogControl(showLog bool) FormattedTask {
+	ft.showLog = showLog
+	return ft
 }
 
 func (ft FormattedTask) String() string {

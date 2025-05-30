@@ -423,11 +423,11 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 	}
 
 	// no matter what situation, try to rename all first
-	// TODO: temp not Rename for test
-	//if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
-	//	pool.CompleteTask(task.ID)
-	//	return nil
-	//}
+	if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
+		task.Logging(fmt.Sprintf("rename from %s to %s suceessfully", task.Source, task.Dest))
+		pool.CompleteTask(task.ID)
+		return nil
+	}
 
 	// if rename all failed, recursively do things below, without delthumbs any more
 

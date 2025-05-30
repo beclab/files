@@ -96,6 +96,11 @@ func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 		})
 	} else {
 		// 处理单个任务（保持不变）
+		logViewStr := r.URL.Query().Get("log_view")
+		logView := false
+		if logViewStr == "1" {
+			logView = true
+		}
 		if storedTask, ok := pool.TaskManager.Load(taskID); ok {
 			if t, ok := storedTask.(*pool.Task); ok {
 				klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
@@ -104,7 +109,7 @@ func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 				return common.RenderJSON(w, r, map[string]interface{}{
 					"code": 0,
 					"msg":  "success",
-					"task": pool.FormattedTask{Task: *t},
+					"task": pool.FormattedTask{Task: *t}.WithLogControl(logView),
 				})
 			}
 		}
