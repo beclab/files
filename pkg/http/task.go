@@ -106,19 +106,10 @@ func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 				klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 				klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 
-				ft := pool.FormattedTask{Task: *t}
-				ft.WithLogControl(logView)
-				ftByte, _ := ft.MarshalJSON()
-				var ftJson interface{}
-				err := json.Unmarshal(ftByte, &ftJson)
-				if err != nil {
-					klog.Errorf("Failed to unmarshal json: %v", err)
-					ftJson = ftByte
-				}
 				return common.RenderJSON(w, r, map[string]interface{}{
 					"code": 0,
 					"msg":  "success",
-					"task": ftJson,
+					"task": pool.SerializeTask(t, logView),
 				})
 			}
 		}

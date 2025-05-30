@@ -35,7 +35,7 @@ type Task struct {
 	Progress       int                `json:"progress"`
 	TotalFileSize  int64              `json:"total_file_size"`
 	Transferred    int64              `json:"transferred"`
-	Log            []string           `json:"log"`
+	Log            []string           `json:"-"`
 	FailedReason   string             `json:"failed_reason"`
 	Buffers        []string           `json:"buffers"`
 	IsBufferDir    bool               `json:"is_buffer_dir"`
@@ -51,33 +51,39 @@ type Task struct {
 	cancelOnce     *sync.Once
 }
 
+func SerializeTask(t *Task, logView bool) ([]byte, error) {
+	m := map[string]interface{}{
+		"id":               t.ID,
+		"source":           t.Source,
+		"dest":             t.Dest,
+		"src_type":         t.SrcType,
+		"dst_type":         t.DstType,
+		"action":           t.Action,
+		"cancellable":      t.Cancellable,
+		"is_dir":           t.IsDir,
+		"file_type":        t.FileType,
+		"filename":         t.Filename,
+		"dst_filename":     t.DstFilename,
+		"status":           t.Status,
+		"progress":         t.Progress,
+		"total_file_size":  t.TotalFileSize,
+		"transferred":      t.Transferred,
+		"failed_reason":    t.FailedReason,
+		"buffers":          t.Buffers,
+		"is_buffer_dir":    t.IsBufferDir,
+		"relation_task_id": t.RelationTaskID,
+		"relation_node":    t.RelationNode,
+	}
+
+	if logView {
+		m["log"] = t.Log
+	}
+
+	return json.Marshal(m)
+}
+
 type FormattedTask struct {
 	Task
-	showLog bool
-}
-
-func (ft FormattedTask) MarshalJSON() ([]byte, error) {
-	type Alias FormattedTask
-	if ft.showLog {
-		return json.Marshal(struct {
-			Alias
-			Log interface{} `json:"log,omitempty"`
-		}{
-			Alias: Alias(ft),
-			Log:   ft.Task.Log,
-		})
-	} else {
-		return json.Marshal(struct {
-			Alias
-		}{
-			Alias: Alias(ft),
-		})
-	}
-}
-
-func (ft FormattedTask) WithLogControl(showLog bool) FormattedTask {
-	ft.showLog = showLog
-	return ft
 }
 
 func (ft FormattedTask) String() string {
