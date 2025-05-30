@@ -58,13 +58,21 @@ type FormattedTask struct {
 
 func (ft FormattedTask) MarshalJSON() ([]byte, error) {
 	type Alias FormattedTask
-	return json.Marshal(struct {
-		Alias
-		Log interface{} `json:"log,omitempty"`
-	}{
-		Alias: Alias(ft),
-		Log:   ft.Log,
-	})
+	if ft.showLog {
+		return json.Marshal(struct {
+			Alias
+			Log interface{} `json:"log,omitempty"`
+		}{
+			Alias: Alias(ft),
+			Log:   ft.Task.Log,
+		})
+	} else {
+		return json.Marshal(struct {
+			Alias
+		}{
+			Alias: Alias(ft),
+		})
+	}
 }
 
 func (ft FormattedTask) WithLogControl(showLog bool) FormattedTask {
