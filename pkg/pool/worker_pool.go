@@ -2,7 +2,6 @@ package pool
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/alitto/pond/v2"
 	"k8s.io/klog/v2"
@@ -51,7 +50,7 @@ type Task struct {
 	cancelOnce     *sync.Once
 }
 
-func SerializeTask(t *Task, logView bool) ([]byte, error) {
+func SerializeTask(t *Task, logView bool) map[string]interface{} {
 	m := map[string]interface{}{
 		"id":               t.ID,
 		"source":           t.Source,
@@ -79,7 +78,7 @@ func SerializeTask(t *Task, logView bool) ([]byte, error) {
 		m["log"] = t.Log
 	}
 
-	return json.Marshal(m)
+	return m
 }
 
 type FormattedTask struct {

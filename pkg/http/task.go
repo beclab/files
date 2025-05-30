@@ -106,17 +106,10 @@ func resourceTaskGetHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 				klog.Infof("Task %s Infos: %s\n", t.ID, pool.FormattedTask{Task: *t})
 				klog.Infof("Task %s Progress: %d%%\n", t.ID, t.GetProgress())
 
-				var tb interface{}
-				var err error
-				tb, err = pool.SerializeTask(t, logView)
-				if err != nil {
-					klog.Errorf("serialize task %s error: %v", t.ID, err)
-					tb = t
-				}
 				return common.RenderJSON(w, r, map[string]interface{}{
 					"code": 0,
 					"msg":  "success",
-					"task": tb,
+					"task": pool.SerializeTask(t, logView),
 				})
 			}
 		}
