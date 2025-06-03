@@ -394,7 +394,7 @@ func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
 		func() *string {
 			if val, ok := p.userPvcMap[bflName]; ok {
 				if t, ok := p.userPvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
-					p.userPvcTime[bflName] = time.Now()
+					// p.userPvcTime[bflName] = time.Now()
 					return &val
 				}
 			}
@@ -420,7 +420,7 @@ func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
 		func() *string {
 			if val, ok := p.cachePvcMap[bflName]; ok {
 				if t, ok := p.cachePvcTime[bflName]; ok && time.Since(t) <= 2*time.Minute {
-					p.cachePvcTime[bflName] = time.Now()
+					// p.cachePvcTime[bflName] = time.Now()
 					return &val
 				}
 			}
