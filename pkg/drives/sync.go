@@ -1995,6 +1995,8 @@ func ResourceSyncPatch(action, src, dst string, r *http.Request) (int, []byte, e
 	var apiName = "/file/"
 	if strings.HasSuffix(src, "/") {
 		apiName = "/dir/"
+		src = strings.TrimSuffix(src, "/")
+		dst = strings.TrimSuffix(dst, "/")
 	}
 
 	repoID, prefix, filename := ParseSyncPath(src)
