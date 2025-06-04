@@ -34,6 +34,7 @@ type ResourceService interface {
 	PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
 	PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
 	PatchHandler(fileCache fileutils.FileCache) handleFunc
+	BatchDeleteHandler(fileCache fileutils.FileCache, dirents []string) handleFunc
 
 	// raw handler
 	RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
@@ -336,30 +337,14 @@ func (rs *BaseResourceService) DeleteHandler(fileCache fileutils.FileCache) hand
 			return http.StatusForbidden, nil
 		}
 
-		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs,
-			Path:       r.URL.Path,
-			Modify:     true,
-			Expand:     false,
-			ReadHeader: d.Server.TypeDetectionByHeader,
-		})
+		status, err := ResourceDriveDelete(fileCache, r.URL.Path, r.Context(), d)
+		if status != http.StatusOK {
+			return status, os.ErrInvalid
+		}
 		if err != nil {
 			return common.ErrToStatus(err), err
 		}
-
-		// delete thumbnails
-		err = preview.DelThumbs(r.Context(), fileCache, file)
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-
-		err = files.DefaultFs.RemoveAll(r.URL.Path)
-
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-
-		return http.StatusOK, nil
+		return 0, nil
 	}
 }
 
@@ -477,6 +462,28 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 
 		err = common.PatchAction(nil, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 		return common.ErrToStatus(err), err
+	}
+}
+
+func (rs *BaseResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, dirents []string) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		failDirents := []string{}
+		for _, dirent := range dirents {
+			if dirent == "/" {
+				failDirents = append(failDirents, dirent)
+				continue
+			}
+
+			status, err := ResourceDriveDelete(fileCache, dirent, r.Context(), d)
+			if status != http.StatusOK || err != nil {
+				failDirents = append(failDirents, dirent)
+			}
+		}
+
+		if len(failDirents) > 0 {
+			return http.StatusInternalServerError, fmt.Errorf("delete %s failed", strings.Join(failDirents, "; "))
+		}
+		return common.RenderJSON(w, r, map[string]interface{}{"msg": "all dirents deleted"})
 	}
 }
 

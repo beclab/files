@@ -367,6 +367,76 @@ func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 	}
 }
 
+func (rc *SyncResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, dirents []string) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		if len(dirents) == 0 {
+			return http.StatusOK, nil
+		}
+		repoID, _, _ := ParseSyncPath(strings.TrimPrefix(dirents[0], "/"+SrcTypeSync))
+
+		var parentDir string
+		var newDirents []string
+
+		if len(dirents) == 1 {
+			dirent := dirents[0]
+			name := ""
+			_, parentDir, name = ParseSyncPath(strings.TrimSuffix(dirent, "/"))
+			newDirents = []string{name}
+		} else {
+			paths := make([]string, len(dirents))
+			for i, dirent := range dirents {
+				path := strings.TrimPrefix(dirent, "/"+SrcTypeSync+"/"+repoID+"/")
+				path = strings.TrimSuffix(path, "/")
+				paths[i] = path
+			}
+
+			commonPrefix := CommonPrefixMultiple(paths)
+			if i := strings.LastIndexByte(commonPrefix, '/'); i != -1 {
+				commonPrefix = commonPrefix[:i+1]
+			} // this assures commonPrefix ends with "/" or it is totally ""
+
+			parentDir = "/" + commonPrefix
+
+			newDirents = []string{}
+			for _, path := range paths {
+				remaining := strings.TrimPrefix(path, commonPrefix)
+				if remaining == "" {
+					continue
+				}
+				newDirents = append(newDirents, remaining)
+			}
+		}
+
+		requestBody := struct {
+			RepoID    string   `json:"repo_id"`
+			ParentDir string   `json:"parent_dir"`
+			Dirents   []string `json:"dirents"`
+		}{
+			RepoID:    repoID,
+			ParentDir: parentDir,
+			Dirents:   newDirents,
+		}
+
+		jsonData, _ := json.MarshalIndent(requestBody, "", "  ")
+		klog.Infof("jsonData=%v", string(jsonData))
+
+		deleteUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/batch-delete-item/"
+		klog.Infoln(deleteUrl)
+
+		statusCode, deleteBody, err := syncCall(deleteUrl, "DELETE", jsonData, nil, r, nil, true)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		klog.Infoln("Status Code: ", statusCode)
+		if statusCode != http.StatusOK {
+			klog.Infoln(string(deleteBody))
+			return statusCode, fmt.Errorf("file update failed, status code: %d", statusCode)
+		}
+		return common.RenderJSON(w, r, map[string]interface{}{"msg": "all dirents deleted"})
+	}
+}
+
 func (rs *SyncResourceService) RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
 	if src == "" {
