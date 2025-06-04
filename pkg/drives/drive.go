@@ -27,7 +27,7 @@ import (
 var (
 	MountedData   []files.DiskInfo = nil
 	mu            sync.Mutex
-	MountedTicker = time.NewTicker(2 * time.Minute)
+	MountedTicker = time.NewTicker(5 * time.Minute)
 )
 
 // if cache logic is same as drive, it will be written in this file

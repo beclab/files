@@ -6,6 +6,7 @@ import (
 	"errors"
 	"files/pkg/background_task"
 	"files/pkg/crontab"
+	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/pool"
 	"files/pkg/postgres"
@@ -163,6 +164,8 @@ user created with the credentials from options "username" and "password".`,
 		// step5: BackgroundTask
 		// 		- initRpcServer
 		//		- initWatcher
+		drives.GetMountedData(nil)
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		background_task.InitBackgroundTaskManager(ctx)
