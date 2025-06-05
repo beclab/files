@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"mime"
@@ -587,9 +588,68 @@ func (i *FileInfo) detectSubtitles() {
 	}
 }
 
-func (i *FileInfo) readListing(readHeader bool) error {
+func (i *FileInfo) readDirents() ([]os.FileInfo, error) {
+	var (
+		dir      []os.FileInfo
+		firstErr error
+		err      error
+	)
+
 	afs := &afero.Afero{Fs: i.Fs}
-	dir, err := afs.ReadDir(i.Path)
+	dir, err = afs.ReadDir(i.Path)
+	if err != nil {
+		klog.Error(err)
+		if !strings.Contains(err.Error(), "host is down") {
+			return nil, err
+		}
+
+		err = filepath.WalkDir("/data"+i.Path, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if strings.Contains(err.Error(), "host is down") {
+					klog.Warningf("[WARN] skipping %s: %v\n", path, err)
+					return nil
+				}
+				firstErr = fmt.Errorf("walk error %s: %w", path, err)
+				return err
+			}
+
+			if path == "/data"+i.Path {
+				return nil
+			}
+
+			relPath, err := filepath.Rel("/data"+i.Path, path)
+			if err != nil {
+				return nil
+			}
+
+			if strings.Count(relPath, "/") > 0 {
+				return filepath.SkipDir
+			}
+
+			info, err := d.Info()
+			if err != nil {
+				if strings.Contains(err.Error(), "host is down") {
+					klog.Warningf("[WARN] skipping %s: %v\n", path, err)
+					return nil
+				}
+				firstErr = fmt.Errorf("get file info failed %s: %w", path, err)
+				return err
+			}
+
+			dir = append(dir, info)
+			return nil
+		})
+
+		if err != nil {
+			klog.Errorln(firstErr)
+			return nil, err
+		}
+	}
+	return dir, nil
+}
+
+func (i *FileInfo) readListing(readHeader bool) error {
+	dir, err := i.readDirents()
 	if err != nil {
 		return err
 	}
@@ -656,8 +716,7 @@ func (i *FileInfo) readListing(readHeader bool) error {
 }
 
 func (i *FileInfo) readListingWithDiskInfo(readHeader bool, mountedData []DiskInfo) error {
-	afs := &afero.Afero{Fs: i.Fs}
-	dir, err := afs.ReadDir(i.Path)
+	dir, err := i.readDirents()
 	if err != nil {
 		return err
 	}

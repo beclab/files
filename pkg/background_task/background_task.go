@@ -163,7 +163,7 @@ func InitBackgroundTaskManager(ctx context.Context) {
 		name:     "GetMountedData",
 		taskFunc: drives.GetMountedData,
 		taskType: PeriodicTask,
-		interval: 2 * time.Minute,
+		interval: 5 * time.Minute,
 		ticker:   drives.MountedTicker,
 	})
 
