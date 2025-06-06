@@ -538,7 +538,6 @@ func TaskLog(task *pool.Task, level string, args ...interface{}) {
 		case <-task.Ctx.Done():
 			klog.Warningln("Task context has been cancelled, only logging to klog")
 		default:
-			klog.Warningln("LogChan is full, only logging to klog")
 			switch level {
 			case "info", "warning":
 				task.Logging(logMsg)
@@ -551,7 +550,7 @@ func TaskLog(task *pool.Task, level string, args ...interface{}) {
 }
 
 func CalculateProgressRange(task *pool.Task, currentFileSize int64) (left, mid, right int) {
-	klog.Infof("Debug Log: taskProgress=%d, totalFileSize=%d, currentFileSize=%d, transferred=%d",
+	klog.Infof("taskProgress=%d, totalFileSize=%d, currentFileSize=%d, transferred=%d",
 		task.Progress, task.TotalFileSize, currentFileSize, task.Transferred)
 
 	if task.TotalFileSize <= 0 {
@@ -646,9 +645,7 @@ func SimulateProgress(ctx context.Context, left, right int, size, speed int64, t
 			usedTime := int(time.Now().Sub(startTime).Seconds())
 			progress := MapProgressByTime(left, right, size, speed, usedTime)
 			if task.Status == "running" {
-				task.Mu.Lock()
 				task.Progress = progress
-				task.Mu.Unlock()
 			}
 			time.Sleep(1 * time.Second)
 		}

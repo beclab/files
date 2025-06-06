@@ -115,23 +115,42 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 			mu.Lock()
 			if firstErr == nil {
 				firstErr = err
-				klog.Errorf("Failed to start rsync command: %v", firstErr)
+				klog.Errorf("Start failed: %v", err)
 			}
 			mu.Unlock()
-			stdoutWriter.Close()
+			if stdoutWriter != nil {
+				stdoutWriter.Close()
+			}
 			return
 		}
 
-		if err := cmd.Wait(); err != nil {
-			mu.Lock()
-			if firstErr == nil {
-				firstErr = err
-				klog.Errorf("Rsync command failed with error: %v", firstErr)
+		done := make(chan error, 1)
+		go func() {
+			defer close(done)
+			done <- cmd.Wait()
+		}()
+
+		select {
+		case <-task.Ctx.Done():
+			return
+		case err, ok := <-done:
+			if !ok {
+				return
 			}
-			mu.Unlock()
+
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+					klog.Errorf("Wait failed: %v", err)
+				}
+				mu.Unlock()
+			}
 		}
 
-		stdoutWriter.Close()
+		if stdoutWriter != nil {
+			stdoutWriter.Close()
+		}
 	}()
 
 	wg.Add(1)
@@ -225,39 +244,58 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 		totalTimeoutCtx, cancelTotalTimeout := context.WithTimeout(context.Background(), 1*time.Hour)
 		defer cancelTotalTimeout()
 
-		select {
-		case <-totalTimeoutCtx.Done():
-			klog.Errorln("Total timeout (1h) reached! Forcing exit...")
-			if cmd.Process != nil {
-				klog.Infoln("Killing rsync command due to total timeout")
-				cmd.Process.Kill()
-			}
-			if stdoutWriter != nil {
-				stdoutWriter.Close()
-			}
-			return
+		for {
+			select {
+			case <-totalTimeoutCtx.Done():
+				klog.Errorln("Total timeout (1h) reached! Forcing exit...")
+				if cmd.Process != nil {
+					klog.Infoln("Killing rsync command due to total timeout")
+					if err := cmd.Process.Kill(); err != nil {
+						klog.Errorf("Kill failed: %v", err)
+					}
+				}
+				if stdoutWriter != nil {
+					stdoutWriter.Close()
+				}
+				return
 
-		case <-task.Ctx.Done():
-			if cmd.Process != nil {
+			case <-task.Ctx.Done():
+				if cmd.Process == nil {
+					klog.Warningln("Rsync process already exited, skipping cancellation")
+					return
+				}
+
 				klog.Infoln("Sending interrupt signal to rsync command")
-				cmd.Process.Signal(os.Interrupt)
+				if err := cmd.Process.Signal(os.Interrupt); err != nil {
+					klog.Errorf("Failed to send interrupt: %v", err)
+				}
 
-				done := make(chan error)
+				done := make(chan error, 1)
 				go func() {
 					done <- cmd.Wait()
 				}()
 
 				select {
-				case <-done:
-					klog.Infoln("Rsync command interrupted successfully")
+				case err := <-done:
+					if err != nil {
+						klog.Errorf("Rsync exited with error: %v", err)
+					} else {
+						klog.Infoln("Rsync interrupted successfully")
+					}
 				case <-time.After(5 * time.Second):
 					klog.Infoln("Killing rsync command after 5s timeout")
-					cmd.Process.Kill()
+					if cmd.Process != nil {
+						if err := cmd.Process.Kill(); err != nil {
+							klog.Errorf("Kill failed: %v", err)
+						}
+					}
 					<-done
 				}
-			}
-			if stdoutWriter != nil {
-				stdoutWriter.Close()
+
+				if stdoutWriter != nil {
+					stdoutWriter.Close()
+				}
+				return
 			}
 		}
 	}()
@@ -305,9 +343,60 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 		klog.Infoln("Starting command execution state monitoring goroutine")
 		defer klog.Infoln("Command execution state monitoring goroutine completed")
 
-		<-cmdDone
-		klog.Infoln("Rsync command execution state monitored")
-		stdoutWriter.Close()
+		var (
+			lastProgress    int
+			lastLogLength   int
+			noChangeCounter int
+		)
+
+		lastProgress = task.Progress
+		lastLogLength = len(task.Log)
+
+		checkInterval := 1 * time.Second
+		maxStaleChecks := 5
+
+		ticker := time.NewTicker(checkInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-cmdDone:
+				klog.Infoln("Rsync state monitored")
+				if stdoutWriter != nil {
+					stdoutWriter.Close()
+				}
+				return
+
+			case <-ticker.C:
+				currentProgress := task.Progress
+				currentLogLength := len(task.Log)
+
+				if currentProgress == lastProgress && currentLogLength == lastLogLength {
+					noChangeCounter++
+					klog.Warningf("No progress/logs for %d seconds", noChangeCounter*int(checkInterval.Seconds()))
+				} else {
+					noChangeCounter = 0
+					lastProgress = currentProgress
+					lastLogLength = currentLogLength
+					klog.Infoln("Progress/logs updated, resetting counter")
+				}
+
+				if noChangeCounter >= maxStaleChecks {
+					klog.Errorln("Force exiting due to 5 seconds of inactivity")
+					if cmd.Process != nil {
+						klog.Infoln("Killing rsync process")
+						if err := cmd.Process.Kill(); err != nil {
+							klog.Errorf("Kill failed: %v", err)
+						}
+					}
+					if stdoutWriter != nil {
+						stdoutWriter.Close()
+					}
+					task.Cancel()
+					return
+				}
+			}
+		}
 	}()
 
 	klog.Infoln("Waiting for all goroutines to complete")
@@ -317,10 +406,8 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 	if firstErr != nil {
 		if task.Status != "failed" {
 			errMsg := parseRsyncError(firstErr, task)
-			task.Mu.Lock()
 			task.Log = append(task.Log, errMsg)
 			task.FailedReason = errMsg
-			task.Mu.Unlock()
 			pool.FailTask(task.ID)
 		}
 	}
