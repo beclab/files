@@ -11,7 +11,6 @@ import (
 	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
-	"files/pkg/rpc"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
 	"k8s.io/klog/v2"
@@ -173,10 +172,7 @@ user created with the credentials from options "username" and "password".`,
 		pool.WorkerPool = pond.NewPool(1)
 		defer pool.WorkerPool.Stop()
 
-		// TODO: step6: init transmition for search3
-		go rpc.InitSearch3()
-
-		// step7: run http server
+		// step6: run http server
 		server := getRunParams(cmd.Flags())
 		setupLog(server.Log)
 

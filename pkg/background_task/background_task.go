@@ -3,7 +3,6 @@ package background_task
 import (
 	"context"
 	"files/pkg/drives"
-	"files/pkg/postgres"
 	"files/pkg/rpc"
 	"k8s.io/klog/v2"
 	"sync"
@@ -135,29 +134,6 @@ func InitBackgroundTaskManager(ctx context.Context) {
 		taskType: OnceTask,
 		interval: 0,
 	})
-
-	if postgres.DBServer != nil {
-		manager.RegisterTask(Task{
-			name:     "GenerateOtherPathList",
-			taskFunc: postgres.GenerateOtherPathList,
-			taskType: OnceTask,
-			interval: 0,
-		})
-
-		manager.RegisterTask(Task{
-			name:     "PeriodUpdateOtherPathList",
-			taskFunc: postgres.PeriodUpdateOtherPathList,
-			taskType: PeriodicTask,
-			interval: 10 * time.Minute,
-		})
-
-		manager.RegisterTask(Task{
-			name:     "CheckAndUpdateStatus",
-			taskFunc: postgres.CheckAndUpdateStatus,
-			taskType: PeriodicTask,
-			interval: 1 * time.Minute,
-		})
-	}
 
 	manager.RegisterTask(Task{
 		name:     "GetMountedData",
