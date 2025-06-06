@@ -44,7 +44,6 @@ func InitPostgres() {
 
 	klog.Infoln("Successfully connected to PostgreSQL!")
 
-	createPathListTable()
 	createPathInfoTable()
 	createShareLinkTable()
 

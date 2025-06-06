@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -66,15 +65,7 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	drives.GetMountedData(r.Context())
-	callSendSearch3Mount("smb", data.SMBPath)
 	return common.RenderJSON(w, r, respJson)
-}
-
-func callSendSearch3Mount(externalType, smbPath string) {
-	smbName := filepath.Base(smbPath)
-	parsedPath := "smb/smb_device/smb_partition/" + smbName
-	klog.Infof("%s of external_type %s mounted!", parsedPath, externalType)
-	return
 }
 
 func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
@@ -100,14 +91,7 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 	}
 
 	drives.GetMountedData(r.Context())
-	externalType := r.URL.Query().Get("external_type")
-	callSendSearch3Unmount(externalType, drives.ParseExternalPath(file.Path))
 	return common.RenderJSON(w, r, respJson)
-}
-
-func callSendSearch3Unmount(externalType, externalPath string) {
-	klog.Infof("%s of external_type %s unmounted!", externalPath, externalType)
-	return
 }
 
 func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {

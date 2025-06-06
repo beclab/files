@@ -2,15 +2,11 @@ package rpc
 
 import (
 	"files/pkg/files"
-	"files/pkg/fileutils"
-	"files/pkg/parser"
 	"files/pkg/redisutils"
 	"io/fs"
 	"k8s.io/klog/v2"
 	"os"
-	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -82,12 +78,10 @@ func checkString(s string) bool {
 		}
 	}
 	if !hasBase {
-		//klog.Infoln("!hasBase")
 		return false
 	}
 
 	if strings.HasPrefix(s+"/", RootPrefix+files.ExternalPrefix) {
-		//klog.Infoln(s+"/", RootPrefix+files.ExternalPrefix)
 		return false
 		//return true // change to watching external
 	}
@@ -107,7 +101,6 @@ func checkString(s string) bool {
 			}
 		}
 	}
-	//klog.Infoln("slashCount=", slashCount)
 	if slashCount == 1 || slashCount == 2 {
 		return true
 	}
@@ -214,23 +207,6 @@ func WatchPath(addPaths []string, deletePaths []string, focusPaths []string) {
 					}
 				}
 			} else {
-				var search3 bool = true
-				if strings.HasPrefix(path, RootPrefix+files.ExternalPrefix) {
-					klog.Info(path, RootPrefix+files.ExternalPrefix)
-					search3 = false
-				}
-				if search3 && checkString(path) {
-					bflName, err := PVCs.GetBfl(ExtractPvcFromURL(path))
-					if err != nil {
-						klog.Info(err)
-					} else {
-						klog.Info(path, ", bfl-name: ", bflName)
-					}
-					err = updateOrInputDocSearch3(path, bflName)
-					if err != nil {
-						klog.Errorf("udpate or input doc err %v", err)
-					}
-				}
 			}
 			return nil
 		})
@@ -351,14 +327,6 @@ func handleEvent(e jfsnotify.Event) error {
 		return nil
 	}
 
-	// temporarily disable search3 for external
-	var search3 bool = true
-	if strings.HasPrefix(e.Name+"/", RootPrefix+files.ExternalPrefix) {
-		klog.Infoln(e.Name+"/", RootPrefix+files.ExternalPrefix)
-		search3 = false
-	}
-
-	searchId := ""
 	var bflName string
 	var err error
 	if checkString(e.Name) {
@@ -368,39 +336,11 @@ func handleEvent(e jfsnotify.Event) error {
 		} else {
 			klog.Info(e.Name, ", bfl-name: ", bflName)
 		}
-		if search3 {
-			searchId, _, err = getSerachIdOrCache(e.Name, bflName, false)
-			if err != nil {
-				klog.Info(err)
-			} else {
-				klog.Info(e.Name, ", searchId: ", searchId)
-			}
-		}
 	} else {
 		return nil
 	}
 
 	if e.Has(jfsnotify.Remove) || e.Has(jfsnotify.Rename) {
-		//var msg string
-		//if e.Has(jfsnotify.Remove) {
-		//	msg = "Remove event: " + e.Name
-		//} else if e.Has(jfsnotify.Rename) {
-		//	msg = "Rename event: " + e.Name
-		//}
-		//nats.SendMessage(msg)
-
-		//disable nats
-		//klog.Infoln("Add Remove or Rename Event: ", e.Name)
-		//nats.AddEventToQueue(e, true)
-
-		klog.Infof("push indexer task delete %s", e.Name)
-
-		if search3 && searchId != "" {
-			_, err = deleteDocumentSearch3(searchId, bflName)
-			if err != nil {
-				return err
-			}
-		}
 		err = checkOrUpdatePhotosRedis(e.Name, "", 3)
 		if err != nil {
 			klog.Errorf("check or update photos redis err %v", err)
@@ -410,27 +350,6 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Create) {
-		//var msg string
-		//msg = "Create event: " + e.Name
-		//nats.SendMessage(msg)
-
-		//disable nats
-		//klog.Infoln("Add Create Event: ", e.Name)
-		////nats.AddEventToQueue(e)
-		//var fileInfo fs.FileInfo
-		//fileInfo, err = os.Stat(e.Name)
-		//if err != nil {
-		//	klog.Errorf("Error stating file %s: %v\n", e.Name, err)
-		//	return err
-		//}
-		//if fileInfo.IsDir() {
-		//	nats.AddEventToQueue(e, true)
-		//	klog.Infoln("Directory created: ", e.Name)
-		//} else {
-		//	nats.AddEventToQueue(e, false)
-		//	klog.Infoln("File created: ", e.Name)
-		//}
-
 		err = filepath.Walk(e.Name, func(docPath string, info fs.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -445,12 +364,6 @@ func handleEvent(e jfsnotify.Event) error {
 				}
 			} else {
 				if checkString(docPath) {
-					if search3 {
-						err = updateOrInputDocSearch3(docPath, bflName)
-						if err != nil {
-							klog.Errorf("update or input doc error %v", err)
-						}
-					}
 					err = checkOrUpdatePhotosRedis(docPath, "", 2)
 					if err != nil {
 						klog.Errorf("check or update photos redis err %v", err)
@@ -466,139 +379,10 @@ func handleEvent(e jfsnotify.Event) error {
 	}
 
 	if e.Has(jfsnotify.Write) {
-		//disable nats
-		//klog.Infoln("Add Write Event: ", e.Name)
-		//nats.AddEventToQueue(e, false)
-
-		if search3 && checkString(e.Name) {
-			return updateOrInputDocSearch3(e.Name, bflName)
-		}
 	}
 	return nil
 }
 
 func printTime(s string, args ...interface{}) {
 	klog.Infof(time.Now().Format("15:04:05.0000")+" "+s+"\n", args...)
-}
-
-func checkPathPrefix(filepath, prefix string) bool {
-	parts := strings.Split(filepath, "/")
-
-	if len(parts) < 4 {
-		return false
-	}
-
-	remainingPath := "/" + strings.Join(parts[3:], "/")
-
-	if strings.HasPrefix(remainingPath, prefix) {
-		return true
-	}
-	return false
-}
-
-func updateOrInputDocSearch3(filepath, bflName string) error {
-	searchId, _, err := getSerachIdOrCache(filepath, bflName, true)
-	if err != nil {
-		return err
-	}
-
-	// path exist update doc
-	if searchId != "" {
-		size := 0
-		fileInfo, err := os.Stat(filepath)
-		if err == nil {
-			size = int(fileInfo.Size())
-		}
-		//doc changed
-		fileType := parser.GetTypeFromName(filepath)
-		content := "-"
-		if checkPathPrefix(filepath, ContentPath) {
-			if _, ok := parser.ParseAble[fileType]; ok {
-				klog.Infof("push indexer task insert %s", filepath)
-				content, err = parser.ParseDoc(filepath)
-				if err != nil {
-					klog.Errorf("parse doc error %v", err)
-					return err
-				}
-				klog.Infof("update content from old search id %s path %s", searchId, filepath)
-			}
-		}
-		var newDoc map[string]interface{} = nil
-		if content != "" {
-			newDoc = map[string]interface{}{
-				"content": content,
-				"meta": map[string]interface{}{
-					"size":    size,
-					"updated": time.Now().Unix(),
-				},
-			}
-		} else {
-			newDoc = map[string]interface{}{
-				"content": "-",
-				"meta": map[string]interface{}{
-					"size":    size,
-					"updated": time.Now().Unix(),
-				},
-			}
-		}
-		_, err = putDocumentSearch3(searchId, newDoc, bflName)
-		return err
-	}
-
-	klog.Infof("no history doc, add new")
-	fileType := parser.GetTypeFromName(filepath)
-	content := "-"
-	if checkPathPrefix(filepath, ContentPath) {
-		if _, ok := parser.ParseAble[fileType]; ok {
-			klog.Infof("push indexer task insert %s", filepath)
-			content, err = parser.ParseDoc(filepath)
-			if err != nil {
-				klog.Errorf("parse doc error %v", err)
-				return err
-			}
-		}
-	}
-	filename := path.Base(filepath)
-	size := 0
-	fileInfo, err := os.Stat(filepath)
-	if err == nil {
-		size = int(fileInfo.Size())
-	}
-	ownerUID, err := fileutils.GetUID(nil, filepath)
-	if err != nil {
-		return err
-	}
-	var doc map[string]interface{} = nil
-	if content != "" {
-		doc = map[string]interface{}{
-			"title":        filename,
-			"content":      content,
-			"owner_userid": strconv.Itoa(ownerUID),
-			"resource_uri": filepath,
-			"service":      "files",
-			"meta": map[string]interface{}{
-				"size":        size,
-				"created":     time.Now().Unix(),
-				"updated":     time.Now().Unix(),
-				"format_name": FormatFilename(filename),
-			},
-		}
-	} else {
-		doc = map[string]interface{}{
-			"title":        filename,
-			"content":      "-",
-			"owner_userid": strconv.Itoa(ownerUID),
-			"resource_uri": filepath,
-			"service":      "files",
-			"meta": map[string]interface{}{
-				"size":        size,
-				"created":     time.Now().Unix(),
-				"updated":     time.Now().Unix(),
-				"format_name": FormatFilename(filename),
-			},
-		}
-	}
-	id, err := postDocumentSearch3(doc, bflName)
-	klog.Infof("search3 input doc id %s path %s", id, filepath)
-	return err
 }
