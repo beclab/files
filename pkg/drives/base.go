@@ -446,8 +446,10 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
 			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache, action, true, false, isDir, fileType, filename)
 			pool.TaskManager.Store(taskID, task)
-
 			pool.WorkerPool.Submit(func() {
+				klog.Infof("Task %s started", taskID)
+				defer klog.Infof("Task %s exited", taskID)
+
 				if loadedTask, ok := pool.TaskManager.Load(taskID); ok {
 					if concreteTask, ok := loadedTask.(*pool.Task); ok {
 						concreteTask.Status = "running"
@@ -595,6 +597,12 @@ func (rs *BaseResourceService) parsePathToURI(path string) (string, string) {
 
 func executePatchTask(task *pool.Task, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+	select {
+	case <-task.Ctx.Done():
+		return
+	default:
+	}
+
 	// only for cache
 
 	var wg sync.WaitGroup

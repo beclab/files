@@ -36,6 +36,12 @@ type DriveResourceService struct {
 }
 
 func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	srcExternalType := files.GetExternalType(src, MountedData)
 	dstExternalType := files.GetExternalType(dst, MountedData)
 	return common.PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
@@ -43,6 +49,12 @@ func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst stri
 
 func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	srcinfo, err := fs.Stat(src)
 	if err != nil {
 		return err
@@ -73,6 +85,12 @@ func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 	var errs []error
 
 	for _, obj := range obs {
+		select {
+		case <-task.Ctx.Done():
+			return nil
+		default:
+		}
+
 		fsrc := filepath.Join(src, obj.Name())
 		fdst := filepath.Join(fdstBase, obj.Name())
 
@@ -103,6 +121,12 @@ func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 
 func (rs *DriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	mode := fileMode
 	if err := fileutils.MkdirAllWithChown(fs, dst, mode); err != nil {
 		klog.Errorln(err)
@@ -113,6 +137,12 @@ func (rs *DriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, ds
 
 func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
@@ -175,6 +205,12 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 
 func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode,
 	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	status, err := DriveBufferToFile(task, bufferPath, dst, fileMode, d, left, right)
 	if status != http.StatusOK {
 		return os.ErrInvalid
@@ -204,6 +240,12 @@ func (rs *DriveResourceService) GetStat(fs afero.Fs, src string, w http.Response
 
 func (rs *DriveResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	status, err := ResourceDriveDelete(fileCache, src, task.Ctx, d)
 	if status != http.StatusOK {
 		return os.ErrInvalid
