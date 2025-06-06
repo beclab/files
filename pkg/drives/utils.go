@@ -654,3 +654,34 @@ func SimulateProgress(ctx context.Context, left, right int, size, speed int64, t
 		}
 	}
 }
+
+func CommonPrefix(a, b string) string {
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+
+	i := 0
+	for i < minLen && a[i] == b[i] {
+		i++
+	}
+
+	return a[:i]
+}
+
+func CommonPrefixMultiple(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+
+	prefix := paths[0]
+
+	for _, s := range paths[1:] {
+		prefix = CommonPrefix(prefix, s)
+		if prefix == "" {
+			break
+		}
+	}
+
+	return prefix
+}

@@ -15,10 +15,13 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"files/pkg/appdata"
 	"files/pkg/drives"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -54,6 +57,7 @@ const (
 	API_PASTE_PREFIX               = "/api/paste"
 	API_PASTE_CACHE_PREFIX         = "/api/paste/cache"
 	API_CACHE_PREFIX               = "/api/cache"
+	API_BATCH_DELETE_PREFIX        = "/api/batch_delete"
 )
 
 var REWRITE_FOCUSED_PREFIXES = []string{
@@ -194,7 +198,8 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 			!regexp.MustCompile("^"+API_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+UPLOADER_PREFIX+".*").Match([]byte(path)) &&
 			!regexp.MustCompile("^"+MEDIA_PREFIX+".*").Match([]byte(path)) &&
-			!regexp.MustCompile("^"+API_CACHE_PREFIX+".*").Match([]byte(path)) {
+			!regexp.MustCompile("^"+API_CACHE_PREFIX+".*").Match([]byte(path)) &&
+			!regexp.MustCompile("^"+API_BATCH_DELETE_PREFIX+".*").Match([]byte(path)) {
 			klog.Errorln("unimplement api call, ", path)
 			return c.String(http.StatusNotImplemented, "api not found")
 		}
@@ -259,47 +264,6 @@ func (p *BackendProxy) addHandlers(route string, handler GatewayHandler) {
 		klog.Infof("Added handler for route: %s", route)
 		klog.Infof("Current handlers: %+v", p.handlers)
 	}
-}
-
-func minWithNegativeOne(a, b int, aName, bName string) (int, string) {
-	if a == -1 && b == -1 {
-		return -1, ""
-	}
-
-	if a == -1 {
-		return b, bName
-	}
-	if b == -1 {
-		return a, aName
-	}
-
-	if a < b {
-		return a, aName
-	} else {
-		return b, bName
-	}
-}
-
-func FindEarliestIndex(haystack string, needles []string) (int, string) {
-	earliestIndex := -1
-	earliestNeedle := ""
-
-	for _, needle := range needles {
-		if needle == "" {
-			continue
-		}
-
-		currentIndex := strings.Index(haystack, needle)
-
-		if currentIndex >= 0 {
-			if earliestIndex == -1 || currentIndex < earliestIndex {
-				earliestIndex = currentIndex
-				earliestNeedle = needle
-			}
-		}
-	}
-
-	return earliestIndex, earliestNeedle
 }
 
 func rewriteUrl(path string, pvc string, prefix string, hasFocusPrefix bool) string {
@@ -440,6 +404,10 @@ func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
 	)
 }
 
+type BatchDeleteRequest struct {
+	Dirents []string `json:"dirents"`
+}
+
 func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	klog.Infof("Request Headers: %+v", c.Request().Header)
 
@@ -467,6 +435,76 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	}
 
 	var host = ""
+
+	if strings.HasPrefix(path, API_BATCH_DELETE_PREFIX) {
+		var reqBody BatchDeleteRequest
+		if err = json.NewDecoder(c.Request().Body).Decode(&reqBody); err != nil {
+			klog.Info(err)
+		}
+		defer c.Request().Body.Close()
+
+		modifiedDirents := make([]string, len(reqBody.Dirents))
+		srcType := ""
+		if len(reqBody.Dirents) > 0 {
+			srcType, err = drives.ParsePathType(reqBody.Dirents[0], c.Request(), true, false)
+			if err != nil {
+				klog.Errorln(err)
+				srcType = "Parse Error"
+			}
+			klog.Infoln("SRC_TYPE:", srcType)
+
+			for i, dirent := range reqBody.Dirents {
+				klog.Infof("dirents[%d]: %s", i, dirent)
+				if srcType == drives.SrcTypeDrive || srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
+					modifiedDirents[i] = rewriteUrl(dirent, userPvc, "", false)
+				} else if srcType == drives.SrcTypeCache {
+					if strings.HasPrefix(dirent, "/cache") {
+						dirent = strings.TrimPrefix(dirent, "/cache")
+						var dstNode string
+						dstParts := strings.SplitN(strings.TrimPrefix(dirent, "/"), "/", 2)
+
+						if len(dstParts) > 1 {
+							dstNode = dstParts[0]
+							if len(dirent) > len("/"+dstNode) {
+								dirent = "/AppData" + dirent[len("/"+dstNode):]
+							} else {
+								dirent = "/AppData"
+							}
+							klog.Infoln("Node:", dstNode)
+							klog.Infoln("New dirent:", dirent)
+						} else if len(dstParts) > 0 {
+							dstNode = dstParts[0]
+							dirent = "/AppData"
+							klog.Infoln("Node:", dstNode)
+							klog.Infoln("New dirent:", dirent)
+						}
+
+						if len(node) == 0 {
+							c.Request().Header.Set(NODE_HEADER, dstNode)
+							node = c.Request().Header[NODE_HEADER]
+						}
+					} // only for cache for compatible
+					modifiedDirents[i] = rewriteUrl(dirent, cachePvc, "/AppData", false)
+				} else {
+					modifiedDirents[i] = dirent
+				}
+				klog.Infof("modifiedDirents[%d]: %s", i, modifiedDirents[i])
+			}
+		}
+
+		newReqBody := BatchDeleteRequest{Dirents: modifiedDirents}
+		newBody, err := json.Marshal(newReqBody)
+		if err != nil {
+			klog.Errorln(err)
+		}
+
+		c.Request().Body = io.NopCloser(bytes.NewBuffer(newBody))
+		c.Request().ContentLength = int64(len(newBody))
+		c.Request().Header.Set("Content-Type", "application/json")
+		if rc, ok := c.Request().Body.(io.ReadSeeker); ok {
+			rc.Seek(0, io.SeekStart)
+		}
+	}
 
 	if strings.HasPrefix(path, API_PASTE_PREFIX) {
 		oldUrl := c.Request().URL.String()
@@ -572,7 +610,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		klog.Info("new path: ", c.Request().URL.Path)
 	} else {
 		klog.Info("Path: ", path)
-		if strings.HasPrefix(path, API_PASTE_PREFIX) {
+		if strings.HasPrefix(path, API_PASTE_PREFIX) || strings.HasPrefix(path, API_BATCH_DELETE_PREFIX) {
 			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, API_PREFIX) {
 			query := c.Request().URL.Query()

@@ -1311,6 +1311,24 @@ func (rc *GoogleDriveResourceService) PatchHandler(fileCache fileutils.FileCache
 	}
 }
 
+func (rc *GoogleDriveResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, dirents []string) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		failDirents := []string{}
+		for _, dirent := range dirents {
+			_, status, err := ResourceDeleteGoogle(fileCache, dirent, w, r, true)
+			if (status != http.StatusOK && status != 0) || err != nil {
+				klog.Errorf("delete %s failed with status %d and err %v", dirent, status, err)
+				failDirents = append(failDirents, dirent)
+				continue
+			}
+		}
+		if len(failDirents) > 0 {
+			return http.StatusInternalServerError, fmt.Errorf("delete %s failed", strings.Join(failDirents, "; "))
+		}
+		return common.RenderJSON(w, r, map[string]interface{}{"msg": "all dirents deleted"})
+	}
+}
+
 func (rs *GoogleDriveResourceService) RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	src := r.URL.Path
