@@ -204,7 +204,7 @@ type PreCheckRequest struct {
 
 func (s *Service) preCheckHandler(c *gin.Context) {
 	bflName := c.GetHeader("X-Bfl-User")
-	pvc, err := BflPVCs.getUserPVCOrCache(bflName)
+	pvc, err := BflPVCs.GetUserPVCOrCache(bflName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}

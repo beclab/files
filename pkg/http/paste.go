@@ -146,6 +146,9 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		pool.TaskManager.Store(taskID, task)
 
 		pool.WorkerPool.Submit(func() {
+			klog.Infof("Task %s started", taskID)
+			defer klog.Infof("Task %s exited", taskID)
+
 			if loadedTask, ok := pool.TaskManager.Load(taskID); ok {
 				if concreteTask, ok := loadedTask.(*pool.Task); ok {
 					concreteTask.Status = "running"
@@ -205,9 +208,14 @@ func createAndRemoveTempFile(targetDir string) error {
 	filename := fmt.Sprintf("temp_%s_%s.testwriting", timestamp, randomStr)
 	filePath := filepath.Join(dir, filename)
 
+	defer func() {
+		_ = os.Remove(filePath)
+		klog.Infof("Cleaned up temporary file %s", filePath)
+	}()
+
 	klog.Infof("Creating temporary file %s", filePath)
 
-	if err := os.WriteFile(filePath, []byte{}, 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte{0}, 0o644); err != nil {
 		var pathErr *fs.PathError
 		if e.As(err, &pathErr) {
 			if pathErr.Err == syscall.EACCES || pathErr.Err == syscall.EPERM {
@@ -219,15 +227,17 @@ func createAndRemoveTempFile(targetDir string) error {
 		return fmt.Errorf("failed to create file: %v", err)
 	}
 
-	if err := os.Remove(filePath); err != nil {
-		return fmt.Errorf("failed to remove file: %v", err)
-	}
-
 	return nil
 }
 
 func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+	select {
+	case <-task.Ctx.Done():
+		return
+	default:
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -275,6 +285,8 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 		}
 	case <-time.After(5 * time.Second):
 		fmt.Println("ExecuteRsyncWithContext took too long to start, proceeding assuming no initial error.")
+	case <-task.Ctx.Done():
+		return
 	}
 
 	if task.ProgressChan == nil {
@@ -286,6 +298,12 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 }
 
 func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	// path.Clean, only operate on string level, so it fits every src/dst type.
 	if srcType != drives.SrcTypeAWSS3 {
 		if src = path.Clean("/" + src); src == "" {
@@ -339,6 +357,12 @@ func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d 
 }
 
 func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	klog.Infoln("Now deal with ", action, " for same arch ", dstType)
 	klog.Infoln("src: ", src, ", dst: ", dst)
 
@@ -353,9 +377,7 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 			klog.Errorln(err)
 			return err
 		}
-		task.Mu.Lock()
 		task.TotalFileSize = fileCount
-		task.Mu.Unlock()
 
 		err = handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
 		if err != nil {
@@ -382,11 +404,15 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 }
 
 func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	// In this function, context if tied up to src, because src is in the URL
 	xTerminusNode := r.Header.Get("X-Terminus-Node")
-	task.Mu.Lock()
 	task.RelationNode = xTerminusNode
-	task.Mu.Unlock()
 
 	var err error
 	switch action {

@@ -32,6 +32,23 @@ func MoveFile(fs afero.Fs, src, dst string) error {
 	return nil
 }
 
+func MoveFileOs(src, dst string) error {
+	if os.Rename(src, dst) == nil {
+		return nil
+	}
+
+	// fallback
+	err := CopyFileOs(src, dst)
+	if err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+	if err := os.Remove(src); err != nil {
+		return err
+	}
+	return nil
+}
+
 func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error {
 	klog.Infoln("***IoCopyFileWithBufferOs")
 	klog.Infoln("***sourcePath:", sourcePath)
@@ -157,6 +174,25 @@ func CopyFile(fs afero.Fs, source, dest string) error {
 		return err
 	}
 	err = fs.Chmod(dest, info.Mode())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CopyFileOs(source, dest string) error {
+	err := IoCopyFileWithBufferOs(source, dest, 8*1024*1024)
+	if err != nil {
+		return err
+	}
+
+	// Copy the mode
+	info, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+	err = os.Chmod(dest, info.Mode())
 	if err != nil {
 		return err
 	}

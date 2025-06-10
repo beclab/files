@@ -2,6 +2,7 @@ package crontab
 
 import (
 	"files/pkg/redisutils"
+	"files/pkg/upload"
 	"github.com/robfig/cron/v3"
 	"k8s.io/klog/v2"
 	"sync"
@@ -23,6 +24,8 @@ func InitCrontabs() {
 	} else {
 		klog.Info("Crontab task: CleanupOldFilesAndRedisEntries added successfully.")
 	}
+
+	upload.Init(c)
 
 	c.Start()
 }

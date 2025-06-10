@@ -14,12 +14,8 @@ import (
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -31,6 +27,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type SyncResourceService struct {
@@ -611,6 +612,11 @@ func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCac
 
 func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	klog.Infof("Request headers: %v", r.Header)
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go SimulateProgress(ctx, 0, 99, task.TotalFileSize, 50000000, task)
@@ -633,6 +639,12 @@ func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst strin
 
 func (rs *SyncResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	mode := fileMode
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 
@@ -716,6 +728,12 @@ func (rs *SyncResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTyp
 	}
 
 	for _, item := range data.DirentList {
+		select {
+		case <-task.Ctx.Done():
+			return nil
+		default:
+		}
+
 		fsrc := filepath.Join(src, item.Name)
 		fdst := filepath.Join(fdstBase, item.Name)
 
@@ -736,6 +754,12 @@ func (rs *SyncResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTyp
 
 func (rs *SyncResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	if err := SyncMkdirAll(dst, fileMode, true, r); err != nil {
 		return err
@@ -745,6 +769,12 @@ func (rs *SyncResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst
 
 func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
@@ -802,6 +832,12 @@ func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcTy
 
 func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	klog.Infoln("Begin to sync paste!")
 	dst = strings.TrimPrefix(dst, "/"+SrcTypeSync)
 	if err := SyncMkdirAll(dst, fileMode, false, r); err != nil {
@@ -818,9 +854,7 @@ func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferP
 		return err
 	}
 
-	task.Mu.Lock()
 	task.Transferred += diskSize
-	task.Mu.Unlock()
 	return nil
 }
 
@@ -922,6 +956,12 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, src string, w http.ResponseW
 
 func (rs *SyncResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	src = strings.TrimPrefix(src, "/"+SrcTypeSync)
 	status, err := ResourceSyncDelete(src, w, r, false)
 	if status != http.StatusOK && status != 0 {
@@ -1625,13 +1665,11 @@ func SyncFileToBuffer(task *pool.Task, src string, bufferFilePath string, r *htt
 				mappedProgress = right
 			}
 
-			task.Mu.Lock()
 			if lastProgress != progress {
 				task.Log = append(task.Log, fmt.Sprintf("downloaded from seafile %d/%d with progress %d", totalRead, diskSize, progress))
 				lastProgress = progress
 			}
 			task.Progress = mappedProgress
-			task.Mu.Unlock()
 		}
 
 		if er != nil {
@@ -1742,6 +1780,12 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 
 	var chunkStart int64 = 0
 	for chunkNumber := int64(1); chunkNumber <= totalChunks; chunkNumber++ {
+		select {
+		case <-task.Ctx.Done():
+			return 0, nil
+		default:
+		}
+
 		if task.Status != "running" && task.Status != "pending" {
 			return 0, nil
 		}
@@ -1984,17 +2028,13 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath string, dst string, size i
 		}
 
 		TaskLog(task, "info", fmt.Sprintf("Chunk %d/%d from of bytes %d-%d/%d successfully transferred.", chunkNumber, totalChunks, chunkStart, chunkStart+int64(bytesRead)-1, size))
-		task.Mu.Lock()
 		task.Progress = finalProgress
-		task.Mu.Unlock()
 
 		time.Sleep(150 * time.Millisecond)
 	}
 	klog.Infoln("sync buffer to file success!")
 
-	task.Mu.Lock()
 	task.Progress = right
-	task.Mu.Unlock()
 	return 0, nil
 }
 

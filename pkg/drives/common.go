@@ -8,19 +8,6 @@ type DirentGeneratedEntry struct {
 	Mtime time.Time
 }
 
-type DrivesAccounsResponseItem struct {
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	ExpiresAt int64  `json:"expires_at"`
-	Available bool   `json:"available"`
-	CreateAt  int64  `json:"create_at"`
-}
-
-type DriveAccountsResponse struct {
-	Code int                         `json:"code"`
-	Data []DrivesAccounsResponseItem `json:"data"`
-}
-
 type ProcessedPathsEntry struct {
 	Drive string    `json:"drive"`
 	Path  string    `json:"path"`

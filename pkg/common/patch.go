@@ -44,8 +44,14 @@ func AddVersionSuffix(source string, fs afero.Fs, isDir bool) string {
 	}
 
 	for {
-		if _, err := fs.Stat(source); err != nil {
-			break
+		if fs == nil {
+			if _, err := os.Stat(source); err != nil {
+				break
+			}
+		} else {
+			if _, err := fs.Stat(source); err != nil {
+				break
+			}
 		}
 		renamed := fmt.Sprintf("%s(%d)%s", base, counter, ext)
 		source = path.Join(dir, renamed)

@@ -10,17 +10,18 @@ import (
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
@@ -207,7 +208,6 @@ type BaseResourceService struct{}
 func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	xBflUser := r.Header.Get("X-Bfl-User")
 	klog.Infoln("X-Bfl-User: ", xBflUser)
-
 	streamStr := r.URL.Query().Get("stream")
 	stream := 0
 	var err error = nil
@@ -217,7 +217,6 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 			return http.StatusBadRequest, err
 		}
 	}
-
 	var file *files.FileInfo
 	if MountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
@@ -446,8 +445,10 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
 			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache, action, true, false, isDir, fileType, filename)
 			pool.TaskManager.Store(taskID, task)
-
 			pool.WorkerPool.Submit(func() {
+				klog.Infof("Task %s started", taskID)
+				defer klog.Infof("Task %s exited", taskID)
+
 				if loadedTask, ok := pool.TaskManager.Load(taskID); ok {
 					if concreteTask, ok := loadedTask.(*pool.Task); ok {
 						concreteTask.Status = "running"
@@ -595,6 +596,12 @@ func (rs *BaseResourceService) parsePathToURI(path string) (string, string) {
 
 func executePatchTask(task *pool.Task, action, srcType, dstType string, rename bool,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+	select {
+	case <-task.Ctx.Done():
+		return
+	default:
+	}
+
 	// only for cache
 
 	var wg sync.WaitGroup
@@ -628,6 +635,8 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string, rename b
 		}
 	case <-time.After(5 * time.Second):
 		fmt.Println("ExecuteRsyncWithContext took too long to start, proceeding assuming no initial error.")
+	case <-task.Ctx.Done():
+		return
 	}
 
 	if task.ProgressChan == nil {

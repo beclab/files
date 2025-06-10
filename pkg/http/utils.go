@@ -2,10 +2,13 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
+	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -79,4 +82,91 @@ func getOwner(r *http.Request) (ownerID, ownerName string) {
 	ownerID = responseObj.Data.TerminusId
 	ownerName = responseObj.Data.TerminusName
 	return
+}
+
+// Universal form data parser with type conversion and error handling
+func ParseFormData(r *http.Request, v interface{}) error {
+	// 1. Validate content type
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		return fmt.Errorf("invalid content type: expected multipart/form-data")
+	}
+
+	// 2. Parse form with memory limit (32MB)
+	const maxMemory = 32 << 20
+	if err := r.ParseMultipartForm(maxMemory); err != nil {
+		return fmt.Errorf("form parsing failed: %w", err)
+	}
+
+	// 3. Get reflection values
+	val := reflect.ValueOf(v)
+	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Struct {
+		return fmt.Errorf("target must be a struct pointer")
+	}
+	val = val.Elem()
+	typ := val.Type()
+
+	// 4. Get form data
+	form := r.MultipartForm.Value
+	files := r.MultipartForm.File
+
+	// 5. Iterate through struct fields
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		tag := field.Tag.Get("form")
+		if tag == "" {
+			continue // Skip untagged fields
+		}
+
+		// 6. Field assignment with type conversion
+		switch field.Type.Kind() {
+		case reflect.String:
+			if vals, ok := form[tag]; ok && len(vals) > 0 {
+				val.Field(i).SetString(vals[0])
+			}
+
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if vals, ok := form[tag]; ok && len(vals) > 0 {
+				num, err := strconv.ParseInt(vals[0], 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid integer value for field '%s': %v", tag, err)
+				}
+				val.Field(i).SetInt(num)
+			}
+
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			if vals, ok := form[tag]; ok && len(vals) > 0 {
+				num, err := strconv.ParseUint(vals[0], 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid unsigned integer value for field '%s': %v", tag, err)
+				}
+				val.Field(i).SetUint(num)
+			}
+
+		case reflect.Float32, reflect.Float64:
+			if vals, ok := form[tag]; ok && len(vals) > 0 {
+				num, err := strconv.ParseFloat(vals[0], 64)
+				if err != nil {
+					return fmt.Errorf("invalid float value for field '%s': %v", tag, err)
+				}
+				val.Field(i).SetFloat(num)
+			}
+
+		case reflect.Bool:
+			if vals, ok := form[tag]; ok && len(vals) > 0 {
+				b, err := strconv.ParseBool(vals[0])
+				if err != nil {
+					return fmt.Errorf("invalid boolean value for field '%s': %v", tag, err)
+				}
+				val.Field(i).SetBool(b)
+			}
+
+		case reflect.Ptr:
+			// Handle file uploads
+			if fileHeaders, ok := files[tag]; ok && len(fileHeaders) > 0 {
+				val.Field(i).Set(reflect.ValueOf(fileHeaders[0]))
+			}
+		}
+	}
+
+	return nil
 }
