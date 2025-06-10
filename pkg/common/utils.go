@@ -9,12 +9,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"k8s.io/klog/v2"
 )
 
 var RootPrefix = os.Getenv("ROOT_PREFIX")
@@ -84,6 +85,10 @@ func ErrToStatus(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+func RenderSuccess(w http.ResponseWriter, _ *http.Request) (int, error) {
+	return 0, nil
 }
 
 func RenderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, error) {

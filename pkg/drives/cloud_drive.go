@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	e "errors"
 	"files/pkg/common"
+	"files/pkg/drives/model"
+	"files/pkg/drives/storage"
 	"files/pkg/fileutils"
 	"files/pkg/img"
 	"files/pkg/parser"
@@ -14,11 +16,7 @@ import (
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,6 +26,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type CloudDriveListParam struct {
@@ -290,33 +293,29 @@ func CloudDriveNormalizationPath(path, srcType string, same, addSuffix bool) str
 	return path
 }
 
-func GetCloudDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*CloudDriveMetaResponseData, error) {
+func GetCloudDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*model.CloudDriveMetaResponseData, error) {
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
 
-	param := CloudDriveListParam{
+	param := &model.ListParam{
 		Path:  srcPath,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return nil, err
+	cloudStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
 	}
-	klog.Infoln("Cloud Drive List Params:", string(jsonBody))
-	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
+
+	res, err := cloudStorage.GetFileMetaData(param)
 	if err != nil {
-		klog.Errorln("Error calling drive/ls:", err)
+		klog.Errorf("Cloud Drive get_file_meta_data error: %v", err)
 		return nil, err
 	}
 
-	var bodyJson CloudDriveMetaResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		klog.Error(err)
-		return nil, err
-	}
-	return &bodyJson.Data, nil
+	fileMetaDataResp := res.(*model.Response)
+	return fileMetaDataResp.Data, nil
 }
 
 func GetCloudDriveFocusedMetaInfos(task *pool.Task, src string, w http.ResponseWriter, r *http.Request) (info *CloudDriveFocusedMetaInfos, err error) {
@@ -325,43 +324,39 @@ func GetCloudDriveFocusedMetaInfos(task *pool.Task, src string, w http.ResponseW
 
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
 
-	param := CloudDriveListParam{
+	param := &model.ListParam{
 		Path:  srcPath,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		TaskLog(task, "error", "Error marshalling JSON:", err)
-		return
-	}
-	TaskLog(task, "info", "Cloud Drive CloudDriveMetaResponseMeta Params:", string(jsonBody))
-	respBody, err := CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
-	if err != nil {
-		TaskLog(task, "error", "Error calling drive/get_file_meta_data:", err)
-		return
+	cloudStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
 	}
 
-	var bodyJson CloudDriveMetaResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		TaskLog(task, "error", "Error unmarshalling response:", err)
-		return
+	res, err := cloudStorage.GetFileMetaData(param)
+	if err != nil {
+		TaskLog(task, "error", fmt.Sprintf("Cloud Drive get_file_meta_data error: %v", err))
+		return nil, err
 	}
 
-	if bodyJson.StatusCode == "FAIL" {
-		err = e.New(*bodyJson.FailReason)
+	fileMetaDataResp := res.(*model.Response)
+
+	if fileMetaDataResp.StatusCode == "FAIL" {
+		err = e.New(*fileMetaDataResp.FailReason)
 		TaskLog(task, "error", "API call failed:", err)
 		return
 	}
 
 	info = &CloudDriveFocusedMetaInfos{
-		Key:      bodyJson.Data.Meta.Key,
-		Path:     bodyJson.Data.Path,
-		Name:     bodyJson.Data.Name,
-		FileSize: bodyJson.Data.FileSize,
-		Size:     bodyJson.Data.FileSize,
-		IsDir:    bodyJson.Data.IsDir,
+		Key:      fileMetaDataResp.Data.Meta.Key,
+		Path:     fileMetaDataResp.Data.Path,
+		Name:     fileMetaDataResp.Data.Name,
+		FileSize: fileMetaDataResp.Data.FileSize,
+		Size:     fileMetaDataResp.Data.FileSize,
+		IsDir:    fileMetaDataResp.Data.IsDir,
 	}
 	return
 }
@@ -477,8 +472,13 @@ func CopyCloudDriveSingleFile(task *pool.Task, src, dst string, w http.ResponseW
 	if trimmedDstDir == "" {
 		trimmedDstDir = "/"
 	}
+	cloudStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
 
-	param := CloudDriveCopyFileParam{
+	param := &model.CopyFileParam{
 		CloudFilePath:     srcPath,       // id of "path/to/cloud/file.txt",
 		NewCloudDirectory: trimmedDstDir, // id of "new/cloud/directory",
 		NewCloudFileName:  dstFilename,   // "new_file_name.txt",
@@ -486,15 +486,9 @@ func CopyCloudDriveSingleFile(task *pool.Task, src, dst string, w http.ResponseW
 		Name:              dstName,       // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
+	_, err := cloudStorage.CopyFile(param)
 	if err != nil {
-		TaskLog(task, "error", "Error marshalling JSON:", err)
-		return err
-	}
-	TaskLog(task, "info", "Copy File Params:", string(jsonBody))
-	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, nil, true)
-	if err != nil {
-		TaskLog(task, "error", "Error calling drive/copy_file:", err)
+		TaskLog(task, "error", fmt.Sprintf("Cloud Drive copy_file error: %v", err))
 		return err
 	}
 	return nil
@@ -517,7 +511,13 @@ func CopyCloudDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrite
 		return nil
 	}
 
-	param := CloudDriveCopyFileParam{
+	cloudStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.CopyFileParam{
 		CloudFilePath:     srcPath,                              // id of "path/to/cloud/file.txt",
 		NewCloudDirectory: dstDir,                               // id of "new/cloud/directory",
 		NewCloudFileName:  strings.TrimSuffix(dstFilename, "/"), // "new_file_name.txt",
@@ -525,17 +525,12 @@ func CopyCloudDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrite
 		Name:              dstName,                              // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
+	_, err := cloudStorage.CopyFile(param)
 	if err != nil {
-		TaskLog(task, "error", "Error marshalling JSON:", err)
+		TaskLog(task, "error", fmt.Sprintf("Cloud Drive copy_file error: %v", err))
 		return err
 	}
-	TaskLog(task, "info", "Copy File Params:", string(jsonBody))
-	_, err = CloudDriveCall("/drive/copy_file", "POST", jsonBody, w, r, nil, true)
-	if err != nil {
-		TaskLog(task, "error", "Error calling drive/copy_file:", err)
-		return e.New("Error calling drive/copy_file: " + err.Error())
-	}
+
 	return nil
 }
 
@@ -1016,6 +1011,19 @@ func (rc *CloudDriveResourceService) GetHandler(w http.ResponseWriter, r *http.R
 	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
 	klog.Infoln("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
 
+	// ! new
+	var cloudStorage = &storage.CloudStorage{
+		Owner:   r.Header.Get("X-Bfl-User"),
+		Request: r,
+	}
+
+	// ! new
+	var paramx = &model.ListParam{
+		Path:  srcPath,
+		Drive: srcDrive, // "my_drive",
+		Name:  srcName,  // "file_name",
+	}
+
 	param := CloudDriveListParam{
 		Path:  srcPath,
 		Drive: srcDrive, // "my_drive",
@@ -1027,7 +1035,7 @@ func (rc *CloudDriveResourceService) GetHandler(w http.ResponseWriter, r *http.R
 		klog.Errorln("Error marshalling JSON:", err)
 		return common.ErrToStatus(err), err
 	}
-	klog.Infoln("Cloud Drive List Params:", string(jsonBody))
+	klog.Infof("Cloud Drive List Params: %s, stream: %d, meta: %d", string(jsonBody), stream, meta)
 	if stream == 1 {
 		var body []byte
 		body, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
@@ -1038,6 +1046,8 @@ func (rc *CloudDriveResourceService) GetHandler(w http.ResponseWriter, r *http.R
 		_, err = CloudDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, false)
 	} else {
 		_, err = CloudDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, false)
+		// ! new
+		cloudStorage.List(paramx)
 	}
 	if err != nil {
 		klog.Errorln("Error calling drive/ls:", err)

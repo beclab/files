@@ -10,17 +10,18 @@ import (
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
@@ -207,7 +208,6 @@ type BaseResourceService struct{}
 func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	xBflUser := r.Header.Get("X-Bfl-User")
 	klog.Infoln("X-Bfl-User: ", xBflUser)
-
 	streamStr := r.URL.Query().Get("stream")
 	stream := 0
 	var err error = nil
@@ -217,7 +217,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 			return http.StatusBadRequest, err
 		}
 	}
-
+	fmt.Println("---base / GetHandler---", MountedData == nil, len(MountedData))
 	var file *files.FileInfo
 	if MountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
@@ -229,6 +229,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 			Content:    true,
 		}, MountedData)
 	} else {
+		fmt.Println("---base / GetHandler / 2---")
 		file, err = files.NewFileInfo(files.FileOptions{
 			Fs:         files.DefaultFs,
 			Path:       r.URL.Path,
@@ -238,6 +239,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 			Content:    true,
 		})
 	}
+	fmt.Println("---base / GetHandler / 3---", err != nil)
 	if err != nil {
 		if common.ErrToStatus(err) == http.StatusNotFound && r.URL.Path == "/External/" {
 			listing := &files.Listing{
@@ -271,6 +273,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		return common.ErrToStatus(err), err
 	}
 
+	fmt.Println("---base / GetHandler / 4---", file.IsDir, len(MountedData))
 	if file.IsDir {
 		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
 			files.GetExternalExtraInfos(file, MountedData, 1)
@@ -285,6 +288,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	fmt.Println("---base / GetHandler / 5---", r.URL.Query().Get("checksum"))
 	if checksum := r.URL.Query().Get("checksum"); checksum != "" {
 		err := file.Checksum(checksum)
 		if err == errors.ErrInvalidOption {
@@ -297,6 +301,7 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 		file.Content = ""
 	}
 
+	fmt.Println("---base / GetHandler / 6---", file.Type)
 	if file.Type == "video" {
 		osSystemServer := "system-server.user-system-" + xBflUser
 

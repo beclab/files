@@ -5,8 +5,11 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	e "errors"
 	"files/pkg/common"
+	"files/pkg/drives/model"
+	"files/pkg/drives/storage"
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/img"
@@ -15,11 +18,7 @@ import (
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,436 +26,37 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
-type GoogleDriveListParam struct {
-	Path  string `json:"path"`
-	Drive string `json:"drive"`
-	Name  string `json:"name"`
-}
-
-type GoogleDriveListResponse struct {
-	StatusCode string                             `json:"status_code"`
-	FailReason *string                            `json:"fail_reason,omitempty"`
-	Data       []*GoogleDriveListResponseFileData `json:"data,omitempty"`
-	sync.Mutex
-}
-
-type GoogleDriveListResponseFileData struct {
-	Path         string                           `json:"path"`
-	Name         string                           `json:"name"`
-	Size         int64                            `json:"size"`
-	FileSize     int64                            `json:"fileSize"`
-	Extension    string                           `json:"extension"`
-	Modified     time.Time                        `json:"modified"`
-	Mode         string                           `json:"mode"`
-	IsDir        bool                             `json:"isDir"`
-	IsSymlink    bool                             `json:"isSymlink"`
-	Type         string                           `json:"type"`
-	Meta         *GoogleDriveListResponseFileMeta `json:"meta,omitempty"`
-	CanDownload  bool                             `json:"canDownload"`
-	CanExport    bool                             `json:"canExport"`
-	ExportSuffix string                           `json:"exportSuffix"`
-	IdPath       string                           `json:"id_path,omitempty"`
-}
-
-type GoogleDriveListResponseFileMeta struct {
-	Capabilities                 *GoogleDriveListResponseCapabilities      `json:"capabilities,omitempty"`
-	CopyRequiresWriterPermission bool                                      `json:"copyRequiresWriterPermission"`
-	CreatedTime                  time.Time                                 `json:"createdTime"`
-	ExplicitlyTrashed            bool                                      `json:"explicitlyTrashed"`
-	FileExtension                *string                                   `json:"fileExtension,omitempty"`
-	FullFileExtension            *string                                   `json:"fullFileExtension,omitempty"`
-	HasThumbnail                 bool                                      `json:"hasThumbnail"`
-	HeadRevisionId               *string                                   `json:"headRevisionId,omitempty"`
-	IconLink                     string                                    `json:"iconLink"`
-	ID                           string                                    `json:"id"`
-	IsAppAuthorized              bool                                      `json:"isAppAuthorized"`
-	Kind                         string                                    `json:"kind"`
-	LastModifyingUser            *GoogleDriveListResponseUser              `json:"lastModifyingUser,omitempty"`
-	LinkShareMetadata            *GoogleDriveListResponseLinkShareMetadata `json:"linkShareMetadata,omitempty"`
-	MD5Checksum                  *string                                   `json:"md5Checksum,omitempty"`
-	MimeType                     string                                    `json:"mimeType"`
-	ModifiedByMe                 bool                                      `json:"modifiedByMe"`
-	ModifiedTime                 time.Time                                 `json:"modifiedTime"`
-	Name                         string                                    `json:"name"`
-	OriginalFilename             *string                                   `json:"originalFilename,omitempty"`
-	OwnedByMe                    bool                                      `json:"ownedByMe"`
-	Owners                       []*GoogleDriveListResponseUser            `json:"owners,omitempty"`
-	QuotaBytesUsed               string                                    `json:"quotaBytesUsed"`
-	SHA1Checksum                 *string                                   `json:"sha1Checksum,omitempty"`
-	SHA256Checksum               *string                                   `json:"sha256Checksum,omitempty"`
-	Shared                       bool                                      `json:"shared"`
-	SharedWithMeTime             *time.Time                                `json:"sharedWithMeTime,omitempty"`
-	Size                         *string                                   `json:"size,omitempty"`
-	Spaces                       []string                                  `json:"spaces"`
-	Starred                      bool                                      `json:"starred"`
-	ThumbnailLink                *string                                   `json:"thumbnailLink,omitempty"`
-	ThumbnailVersion             string                                    `json:"thumbnailVersion"`
-	Title                        *string                                   `json:"title,omitempty"`
-	Trashed                      bool                                      `json:"trashed"`
-	Version                      string                                    `json:"version"`
-	ViewedByMe                   bool                                      `json:"viewedByMe"`
-	ViewedByMeTime               time.Time                                 `json:"viewedByMeTime"`
-	ViewersCanCopyContent        bool                                      `json:"viewersCanCopyContent"`
-	WebContentLink               *string                                   `json:"webContentLink,omitempty"`
-	WebViewLink                  string                                    `json:"webViewLink"`
-	WritersCanShare              bool                                      `json:"writersCanShare"`
-}
-
-type GoogleDriveListResponseCapabilities struct {
-	CanAcceptOwnership                    bool `json:"canAcceptOwnership"`
-	CanAddChildren                        bool `json:"canAddChildren"`
-	CanAddMyDriveParent                   bool `json:"canAddMyDriveParent"`
-	CanChangeCopyRequiresWriterPermission bool `json:"canChangeCopyRequiresWriterPermission"`
-	CanChangeSecurityUpdateEnabled        bool `json:"canChangeSecurityUpdateEnabled"`
-	CanChangeViewersCanCopyContent        bool `json:"canChangeViewersCanCopyContent"`
-	CanComment                            bool `json:"canComment"`
-	CanCopy                               bool `json:"canCopy"`
-	CanDelete                             bool `json:"canDelete"`
-	CanDownload                           bool `json:"canDownload"`
-	CanEdit                               bool `json:"canEdit"`
-	CanListChildren                       bool `json:"canListChildren"`
-	CanModifyContent                      bool `json:"canModifyContent"`
-	CanModifyContentRestriction           bool `json:"canModifyContentRestriction"`
-	CanModifyEditorContentRestriction     bool `json:"canModifyEditorContentRestriction"`
-	CanModifyLabels                       bool `json:"canModifyLabels"`
-	CanModifyOwnerContentRestriction      bool `json:"canModifyOwnerContentRestriction"`
-	CanMoveChildrenWithinDrive            bool `json:"canMoveChildrenWithinDrive"`
-	CanMoveItemIntoTeamDrive              bool `json:"canMoveItemIntoTeamDrive"`
-	CanMoveItemOutOfDrive                 bool `json:"canMoveItemOutOfDrive"`
-	CanMoveItemWithinDrive                bool `json:"canMoveItemWithinDrive"`
-	CanReadLabels                         bool `json:"canReadLabels"`
-	CanReadRevisions                      bool `json:"canReadRevisions"`
-	CanRemoveChildren                     bool `json:"canRemoveChildren"`
-	CanRemoveContentRestriction           bool `json:"canRemoveContentRestriction"`
-	CanRemoveMyDriveParent                bool `json:"canRemoveMyDriveParent"`
-	CanRename                             bool `json:"canRename"`
-	CanShare                              bool `json:"canShare"`
-	CanTrash                              bool `json:"canTrash"`
-	CanUntrash                            bool `json:"canUntrash"`
-}
-
-type GoogleDriveListResponseUser struct {
-	DisplayName  string `json:"displayName"`
-	EmailAddress string `json:"emailAddress"`
-	Kind         string `json:"kind"`
-	Me           bool   `json:"me"`
-	PermissionID string `json:"permissionId"`
-}
-
-type GoogleDriveListResponseLinkShareMetadata struct {
-	SecurityUpdateEligible bool `json:"securityUpdateEligible"`
-	SecurityUpdateEnabled  bool `json:"securityUpdateEnabled"`
-}
-
-type GoogleDriveMetaResponse struct {
-	Data       GoogleDriveMetaData `json:"data"`
-	FailReason *string             `json:"fail_reason,omitempty"`
-	StatusCode string              `json:"status_code"`
-}
-
-type GoogleDriveMetaData struct {
-	ID           string                   `json:"id"`
-	Extension    string                   `json:"extension"`
-	FileSize     int64                    `json:"fileSize"`
-	IsDir        bool                     `json:"isDir"`
-	IsSymlink    bool                     `json:"isSymlink"`
-	Meta         *GoogleDriveMetaFileMeta `json:"meta"`
-	Mode         string                   `json:"mode"`
-	Modified     time.Time                `json:"modified"`
-	Name         string                   `json:"name"`
-	Path         string                   `json:"path"`
-	Size         int64                    `json:"size"`
-	Type         string                   `json:"type"`
-	CanDownload  bool                     `json:"canDownload"`
-	CanExport    bool                     `json:"canExport"`
-	ExportSuffix string                   `json:"exportSuffix"`
-}
-
-type GoogleDriveMetaFileMeta struct {
-	Capabilities                 GoogleDriveMetaCapabilities      `json:"capabilities"`
-	CopyRequiresWriterPermission bool                             `json:"copyRequiresWriterPermission"`
-	CreatedTime                  time.Time                        `json:"createdTime"`
-	ExplicitlyTrashed            bool                             `json:"explicitlyTrashed"`
-	FileExtension                *string                          `json:"fileExtension,omitempty"`
-	FullFileExtension            *string                          `json:"fullFileExtension,omitempty"`
-	HasThumbnail                 bool                             `json:"hasThumbnail"`
-	HeadRevisionId               *string                          `json:"headRevisionId,omitempty"`
-	IconLink                     string                           `json:"iconLink"`
-	ID                           string                           `json:"id"`
-	IsAppAuthorized              bool                             `json:"isAppAuthorized"`
-	Kind                         string                           `json:"kind"`
-	LastModifyingUser            GoogleDriveMetaUser              `json:"lastModifyingUser"`
-	LinkShareMetadata            GoogleDriveMetaLinkShareMetadata `json:"linkShareMetadata"`
-	MD5Checksum                  *string                          `json:"md5Checksum,omitempty"`
-	MIMEType                     string                           `json:"mimeType"`
-	ModifiedByMe                 bool                             `json:"modifiedByMe"`
-	ModifiedTime                 time.Time                        `json:"modifiedTime"`
-	Name                         string                           `json:"name"`
-	OriginalFilename             *string                          `json:"originalFilename,omitempty"`
-	OwnedByMe                    bool                             `json:"ownedByMe"`
-	Owners                       []GoogleDriveMetaUser            `json:"owners"`
-	QuotaBytesUsed               string                           `json:"quotaBytesUsed"`
-	SHA1Checksum                 *string                          `json:"sha1Checksum,omitempty"`
-	SHA256Checksum               *string                          `json:"sha256Checksum,omitempty"`
-	Shared                       bool                             `json:"shared"`
-	SharedWithMeTime             *time.Time                       `json:"sharedWithMeTime,omitempty"`
-	Size                         *string                          `json:"size,omitempty"`
-	Spaces                       []string                         `json:"spaces"`
-	Starred                      bool                             `json:"starred"`
-	ThumbnailLink                *string                          `json:"thumbnailLink,omitempty"`
-	ThumbnailVersion             string                           `json:"thumbnailVersion"`
-	Title                        *string                          `json:"title,omitempty"`
-	Trashed                      bool                             `json:"trashed"`
-	Version                      string                           `json:"version"`
-	ViewedByMe                   bool                             `json:"viewedByMe"`
-	ViewedByMeTime               time.Time                        `json:"viewedByMeTime"`
-	ViewersCanCopyContent        bool                             `json:"viewersCanCopyContent"`
-	WebContentLink               *string                          `json:"webContentLink,omitempty"`
-	WebViewLink                  string                           `json:"webViewLink"`
-	WritersCanShare              bool                             `json:"writersCanShare"`
-}
-
-type GoogleDriveMetaCapabilities struct {
-	CanAcceptOwnership                    bool `json:"canAcceptOwnership"`
-	CanAddChildren                        bool `json:"canAddChildren"`
-	CanAddMyDriveParent                   bool `json:"canAddMyDriveParent"`
-	CanChangeCopyRequiresWriterPermission bool `json:"canChangeCopyRequiresWriterPermission"`
-	CanChangeSecurityUpdateEnabled        bool `json:"canChangeSecurityUpdateEnabled"`
-	CanChangeViewersCanCopyContent        bool `json:"canChangeViewersCanCopyContent"`
-	CanComment                            bool `json:"canComment"`
-	CanCopy                               bool `json:"canCopy"`
-	CanDelete                             bool `json:"canDelete"`
-	CanDownload                           bool `json:"canDownload"`
-	CanEdit                               bool `json:"canEdit"`
-	CanListChildren                       bool `json:"canListChildren"`
-	CanModifyContent                      bool `json:"canModifyContent"`
-	CanModifyContentRestriction           bool `json:"canModifyContentRestriction"`
-	CanModifyEditorContentRestriction     bool `json:"canModifyEditorContentRestriction"`
-	CanModifyLabels                       bool `json:"canModifyLabels"`
-	CanModifyOwnerContentRestriction      bool `json:"canModifyOwnerContentRestriction"`
-	CanMoveChildrenWithinDrive            bool `json:"canMoveChildrenWithinDrive"`
-	CanMoveItemIntoTeamDrive              bool `json:"canMoveItemIntoTeamDrive"`
-	CanMoveItemOutOfDrive                 bool `json:"canMoveItemOutOfDrive"`
-	CanMoveItemWithinDrive                bool `json:"canMoveItemWithinDrive"`
-	CanReadLabels                         bool `json:"canReadLabels"`
-	CanReadRevisions                      bool `json:"canReadRevisions"`
-	CanRemoveChildren                     bool `json:"canRemoveChildren"`
-	CanRemoveContentRestriction           bool `json:"canRemoveContentRestriction"`
-	CanRemoveMyDriveParent                bool `json:"canRemoveMyDriveParent"`
-	CanRename                             bool `json:"canRename"`
-	CanShare                              bool `json:"canShare"`
-	CanTrash                              bool `json:"canTrash"`
-	CanUntrash                            bool `json:"canUntrash"`
-}
-
-type GoogleDriveMetaUser struct {
-	DisplayName  string `json:"displayName"`
-	EmailAddress string `json:"emailAddress"`
-	Kind         string `json:"kind"`
-	Me           bool   `json:"me"`
-	PermissionID string `json:"permissionId"`
-}
-
-type GoogleDriveMetaLinkShareMetadata struct {
-	SecurityUpdateEligible bool `json:"securityUpdateEligible"`
-	SecurityUpdateEnabled  bool `json:"securityUpdateEnabled"`
-}
-
-type GoogleDrivePostParam struct {
-	ParentPath string `json:"parent_path"`
-	FolderName string `json:"folder_name"`
-	Drive      string `json:"drive"`
-	Name       string `json:"name"`
-}
-
-type GoogleDrivePostResponseFileMeta struct {
-	Capabilities                 *bool       `json:"capabilities,omitempty"`
-	CopyRequiresWriterPermission *bool       `json:"copyRequiresWriterPermission,omitempty"`
-	CreatedTime                  *time.Time  `json:"createdTime,omitempty"`
-	ExplicitlyTrashed            *bool       `json:"explicitlyTrashed,omitempty"`
-	FileExtension                *string     `json:"fileExtension,omitempty"`
-	FullFileExtension            *string     `json:"fullFileExtension,omitempty"`
-	HasThumbnail                 *bool       `json:"hasThumbnail,omitempty"`
-	HeadRevisionId               *string     `json:"headRevisionId,omitempty"`
-	IconLink                     *string     `json:"iconLink,omitempty"`
-	ID                           string      `json:"id"`
-	IsAppAuthorized              *bool       `json:"isAppAuthorized,omitempty"`
-	Kind                         string      `json:"kind"`
-	LastModifyingUser            *struct{}   `json:"lastModifyingUser,omitempty"`
-	LinkShareMetadata            *struct{}   `json:"linkShareMetadata,omitempty"`
-	MD5Checksum                  *string     `json:"md5Checksum,omitempty"`
-	MimeType                     string      `json:"mimeType"`
-	ModifiedByMe                 *bool       `json:"modifiedByMe,omitempty"`
-	ModifiedTime                 *time.Time  `json:"modifiedTime,omitempty"`
-	Name                         string      `json:"name"`
-	OriginalFilename             *string     `json:"originalFilename,omitempty"`
-	OwnedByMe                    *bool       `json:"ownedByMe,omitempty"`
-	Owners                       []*struct{} `json:"owners,omitempty"`
-	QuotaBytesUsed               *int64      `json:"quotaBytesUsed,omitempty"`
-	SHA1Checksum                 *string     `json:"sha1Checksum,omitempty"`
-	SHA256Checksum               *string     `json:"sha256Checksum,omitempty"`
-	Shared                       *bool       `json:"shared,omitempty"`
-	SharedWithMeTime             *time.Time  `json:"sharedWithMeTime,omitempty"`
-	Size                         *int64      `json:"size,omitempty"`
-	Spaces                       *string     `json:"spaces,omitempty"`
-	Starred                      *bool       `json:"starred,omitempty"`
-	ThumbnailLink                *string     `json:"thumbnailLink,omitempty"`
-	ThumbnailVersion             *int64      `json:"thumbnailVersion,omitempty"`
-	Title                        *string     `json:"title,omitempty"`
-	Trashed                      *bool       `json:"trashed,omitempty"`
-	Version                      *int64      `json:"version,omitempty"`
-	ViewedByMe                   *bool       `json:"viewedByMe,omitempty"`
-	ViewedByMeTime               *time.Time  `json:"viewedByMeTime,omitempty"`
-	ViewersCanCopyContent        *bool       `json:"viewersCanCopyContent,omitempty"`
-	WebContentLink               *string     `json:"webContentLink,omitempty"`
-	WebViewLink                  *string     `json:"webViewLink,omitempty"`
-	WritersCanShare              *bool       `json:"writersCanShare,omitempty"`
-}
-
-type GoogleDrivePostResponseFileData struct {
-	Extension string                          `json:"extension"`
-	FileSize  int64                           `json:"fileSize"`
-	IsDir     bool                            `json:"isDir"`
-	IsSymlink bool                            `json:"isSymlink"`
-	Meta      GoogleDrivePostResponseFileMeta `json:"meta"`
-	Mode      string                          `json:"mode"`
-	Modified  string                          `json:"modified"`
-	Name      string                          `json:"name"`
-	Path      string                          `json:"path"`
-	Size      int64                           `json:"size"`
-	Type      string                          `json:"type"`
-}
-
-type GoogleDrivePostResponse struct {
-	Data       GoogleDrivePostResponseFileData `json:"data"`
-	FailReason *string                         `json:"fail_reason,omitempty"`
-	StatusCode string                          `json:"status_code"`
-}
-
-type GoogleDrivePatchParam struct {
-	Path        string `json:"path"`
-	NewFileName string `json:"new_file_name"`
-	Drive       string `json:"drive"`
-	Name        string `json:"name"`
-}
-
-type GoogleDriveDeleteParam struct {
-	Path  string `json:"path"`
-	Drive string `json:"drive"`
-	Name  string `json:"name"`
-}
-
-type GoogleDriveCopyFileParam struct {
-	CloudFilePath     string `json:"cloud_file_path"`
-	NewCloudDirectory string `json:"new_cloud_directory"`
-	NewCloudFileName  string `json:"new_cloud_file_name"`
-	Drive             string `json:"drive"`
-	Name              string `json:"name"`
-}
-
-type GoogleDriveMoveFileParam struct {
-	CloudFilePath     string `json:"cloud_file_path"`
-	NewCloudDirectory string `json:"new_cloud_directory"`
-	Drive             string `json:"drive"`
-	Name              string `json:"name"`
-}
-
-type GoogleDriveDownloadFileParam struct {
-	LocalFolder   string `json:"local_folder"`
-	CloudFilePath string `json:"cloud_file_path"`
-	Drive         string `json:"drive"`
-	Name          string `json:"name"`
-	LocalFileName string `json:"local_file_name,omitempty"`
-}
-
-type GoogleDriveUploadFileParam struct {
-	ParentPath    string `json:"parent_path"`
-	LocalFilePath string `json:"local_file_path"`
-	Drive         string `json:"drive"`
-	Name          string `json:"name"`
-}
-
-type GoogleDriveTaskParameter struct {
-	Drive         string `json:"drive"`
-	LocalFilePath string `json:"local_file_path"`
-	Name          string `json:"name"`
-	ParentPath    string `json:"parent_path"`
-}
-
-type GoogleDriveTaskPauseInfo struct {
-	FileSize  int64  `json:"file_size"`
-	Location  string `json:"location"`
-	NextStart int64  `json:"next_start"`
-}
-
-type GoogleDriveTaskResultData struct {
-	FileInfo                 *GoogleDriveListResponseFileData `json:"file_info,omitempty"`
-	UploadFirstOperationTime int64                            `json:"upload_first_operation_time"`
-}
-
-type GoogleDriveTaskData struct {
-	ID            string                     `json:"id"`
-	TaskType      string                     `json:"task_type"`
-	Status        string                     `json:"status"`
-	Progress      float64                    `json:"progress"`
-	TaskParameter GoogleDriveTaskParameter   `json:"task_parameter"`
-	PauseInfo     *GoogleDriveTaskPauseInfo  `json:"pause_info"`
-	ResultData    *GoogleDriveTaskResultData `json:"result_data"`
-	UserName      string                     `json:"user_name"`
-	DriverName    string                     `json:"driver_name"`
-	FailedReason  string                     `json:"failed_reason"`
-	WorkerName    string                     `json:"worker_name"`
-	CreatedAt     int64                      `json:"created_at"`
-	UpdatedAt     int64                      `json:"updated_at"`
-}
-
-type GoogleDriveTaskResponse struct {
-	StatusCode string              `json:"status_code"`
-	FailReason string              `json:"fail_reason"`
-	Data       GoogleDriveTaskData `json:"data"`
-}
-
-type GoogleDriveTaskQueryParam struct {
-	TaskIds []string `json:"task_ids"`
-}
-
-type GoogleDriveTaskQueryResponse struct {
-	StatusCode string                `json:"status_code"`
-	FailReason string                `json:"fail_reason"`
-	Data       []GoogleDriveTaskData `json:"data"`
-}
-
-func GetGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*GoogleDriveMetaData, error) {
+func GetGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*model.ResponseData, error) {
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 
-	param := GoogleDriveListParam{
+	param := &model.ListParam{
 		Path:  pathId,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return nil, err
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
 	}
-	klog.Infoln("Google Drive List Params:", string(jsonBody))
-	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
+
+	res, err := googleDriveStorage.GetFileMetaData(param)
 	if err != nil {
-		klog.Errorln("Error calling drive/ls:", err)
+		klog.Errorf("Google Drive get_file_meta_data error: %v", err)
 		return nil, err
 	}
 
-	var bodyJson GoogleDriveMetaResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		klog.Error(err)
-		return nil, err
-	}
-	return &bodyJson.Data, nil
+	fileMetadata := res.(*model.Response)
+	return fileMetadata.Data, nil
 }
 
 type GoogleDriveIdFocusedMetaInfos struct {
@@ -486,46 +86,42 @@ func GetGoogleDriveIdFocusedMetaInfos(task *pool.Task, src string, w http.Respon
 		return
 	}
 
-	param := GoogleDriveListParam{
+	param := &model.ListParam{
 		Path:  pathId,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		TaskLog(task, "error", "Error marshalling JSON:", err)
-		return
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
 	}
-	TaskLog(task, "info", "Google Drive Meta Params:", string(jsonBody))
-	respBody, err := GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, true)
+
+	res, err := googleDriveStorage.GetFileMetaData(param)
 	if err != nil {
-		TaskLog(task, "error", "Error calling drive/get_file_meta_data:", err)
+		TaskLog(task, "error", fmt.Sprintf("Google Drive get_file_meta_data error: %v", err))
 		return
 	}
 
-	var bodyJson GoogleDriveMetaResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		TaskLog(task, "error", err)
-		return
-	}
+	var fileMetadata = res.(*model.GoogleDriveMetaResponse)
 
-	if bodyJson.StatusCode == "FAIL" {
-		err = e.New(*bodyJson.FailReason)
-		TaskLog(task, "error", *bodyJson.FailReason)
+	if !fileMetadata.IsSuccess() {
+		err = e.New(fileMetadata.FailMessage())
+		TaskLog(task, "error", fileMetadata.FailMessage())
 		return
 	}
 
 	info = &GoogleDriveIdFocusedMetaInfos{
 		ID:           pathId,
-		Path:         bodyJson.Data.Path,
-		Name:         bodyJson.Data.Name,
-		Size:         bodyJson.Data.FileSize,
-		FileSize:     bodyJson.Data.FileSize,
-		IsDir:        bodyJson.Data.IsDir,
-		CanDownload:  bodyJson.Data.CanDownload,
-		CanExport:    bodyJson.Data.CanExport,
-		ExportSuffix: bodyJson.Data.ExportSuffix,
+		Path:         fileMetadata.Data.Path,
+		Name:         fileMetadata.Data.Name,
+		Size:         fileMetadata.Data.FileSize,
+		FileSize:     fileMetadata.Data.FileSize,
+		IsDir:        fileMetadata.Data.IsDir,
+		CanDownload:  fileMetadata.Data.CanDownload,
+		CanExport:    fileMetadata.Data.CanExport,
+		ExportSuffix: fileMetadata.Data.ExportSuffix,
 	}
 	if info.Path == "/My Drive" {
 		info.Name = "/"
@@ -533,19 +129,13 @@ func GetGoogleDriveIdFocusedMetaInfos(task *pool.Task, src string, w http.Respon
 	return
 }
 
-func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataChan chan<- string, w http.ResponseWriter, r *http.Request, param GoogleDriveListParam) {
+func generateGoogleDriveFilesData(googleDriveStorage *storage.CloudStorage, files *model.ListResponse, stopChan <-chan struct{}, dataChan chan<- string, param *model.ListParam) {
 	defer close(dataChan)
 
-	var bodyJson GoogleDriveListResponse
-	if err := json.Unmarshal(body, &bodyJson); err != nil {
-		klog.Error(err)
-		return
-	}
-
-	var A []*GoogleDriveListResponseFileData
-	bodyJson.Lock()
-	A = append(A, bodyJson.Data...)
-	bodyJson.Unlock()
+	var A []*model.ResponseData //[]*model.GoogleDriveListResponseFileData
+	files.Lock()
+	A = append(A, files.Data...)
+	files.Unlock()
 
 	for len(A) > 0 {
 		klog.Infoln("len(A): ", len(A))
@@ -555,27 +145,28 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 
 		if firstItem.IsDir {
 			pathId := firstItem.Meta.ID
-			firstParam := GoogleDriveListParam{
+			nextParam := &model.ListParam{
 				Path:  pathId,
 				Drive: param.Drive,
 				Name:  param.Name,
 			}
-			klog.Infoln("firstParam pathId:", pathId)
-			firstJsonBody, err := json.Marshal(firstParam)
-			if err != nil {
-				klog.Errorln("Error marshalling JSON:", err)
-				return
-			}
-			var firstRespBody []byte
-			firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, nil, true)
 
-			var firstBodyJson GoogleDriveListResponse
-			if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
+			klog.Infoln("firstParam pathId:", pathId)
+			res, err := googleDriveStorage.List(nextParam)
+			if err != nil {
 				klog.Error(err)
 				return
 			}
 
-			A = append(firstBodyJson.Data, A[1:]...)
+			var listFiles = res.(*model.ListResponse)
+			if !listFiles.IsSuccess() {
+				klog.Error(listFiles.FailMessage())
+				return
+			}
+
+			klog.Infof("Google Drive List Stream Result, count: %d", len(listFiles.Data))
+
+			A = append(listFiles.Data, A[1:]...)
 		} else {
 			dataChan <- formatSSEvent(firstItem)
 
@@ -590,7 +181,10 @@ func generateGoogleDriveFilesData(body []byte, stopChan <-chan struct{}, dataCha
 	}
 }
 
-func streamGoogleDriveFiles(w http.ResponseWriter, r *http.Request, body []byte, param GoogleDriveListParam) {
+func streamGoogleDriveFiles(googleDriveStorage *storage.CloudStorage, files *model.ListResponse, param *model.ListParam) {
+	var w = googleDriveStorage.ResponseWriter
+	var r = googleDriveStorage.Request
+
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -598,7 +192,7 @@ func streamGoogleDriveFiles(w http.ResponseWriter, r *http.Request, body []byte,
 	stopChan := make(chan struct{})
 	dataChan := make(chan string)
 
-	go generateGoogleDriveFilesData(body, stopChan, dataChan, w, r, param)
+	go generateGoogleDriveFilesData(googleDriveStorage, files, stopChan, dataChan, param)
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -641,7 +235,13 @@ func CopyGoogleDriveSingleFile(task *pool.Task, src, dst string, w http.Response
 	}
 	dstFilename = strings.TrimSuffix(dstFilename, "/")
 
-	param := GoogleDriveCopyFileParam{
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.CopyFileParam{
 		CloudFilePath:     srcPathId,   // id of "path/to/cloud/file.txt",
 		NewCloudDirectory: dstPathId,   // id of "new/cloud/directory",
 		NewCloudFileName:  dstFilename, // "new_file_name.txt",
@@ -649,17 +249,13 @@ func CopyGoogleDriveSingleFile(task *pool.Task, src, dst string, w http.Response
 		Name:              dstName,     // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
+	res, err := googleDriveStorage.CopyFile(param)
 	if err != nil {
-		TaskLog(task, "error", "Error marshalling JSON:", err)
-		return err
+		TaskLog(task, "error", fmt.Sprintf("Google Drive copy_file error: %v", err))
+		return fmt.Errorf("Google Drive copy_file error: %v", err)
 	}
-	TaskLog(task, "info", "Copy File Params:", string(jsonBody))
-	_, err = GoogleDriveCall("/drive/copy_file", "POST", jsonBody, w, r, nil, true)
-	if err != nil {
-		TaskLog(task, "error", "Error calling drive/copy_file:", err)
-		return e.New("Error calling drive/copy_file:" + err.Error())
-	}
+
+	_ = res
 
 	_, _, right := CalculateProgressRange(task, fileSize)
 	task.Mu.Lock()
@@ -684,15 +280,21 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 		return nil
 	}
 
+	var googleDriveStorage = &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
 	var CopyTempGoogleDrivePathIdCache = make(map[string]string)
 	var recursivePath = srcPath
 	var recursivePathId = srcPathId
-	var A []*GoogleDriveListResponseFileData
+	var A []*model.ResponseData
 	for {
 		TaskLog(task, "info", "len(A): ", len(A))
 
 		var isDir = true
-		var firstItem *GoogleDriveListResponseFileData
+		var firstItem *model.ResponseData
 		if len(A) > 0 {
 			firstItem = A[0]
 			recursivePathId = firstItem.Meta.ID
@@ -710,58 +312,42 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 				parentPathId = CopyTempGoogleDrivePathIdCache[filepath.Dir(firstItem.Path)]
 				folderName = filepath.Base(firstItem.Path)
 			}
-			postParam := GoogleDrivePostParam{
+			postParam := &model.PostParam{
 				ParentPath: parentPathId,
 				FolderName: folderName,
 				Drive:      srcDrive,
 				Name:       srcName,
 			}
-			postJsonBody, err := json.Marshal(postParam)
+
+			folderres, err := googleDriveStorage.CreateFolder(postParam)
 			if err != nil {
-				TaskLog(task, "error", "Error marshalling JSON:", err)
+				TaskLog(task, "error", fmt.Sprintf("Google Drive create_folder error: %v", err))
 				return err
 			}
-			TaskLog(task, "info", "Google Drive Post Params:", string(postJsonBody))
-			var postRespBody []byte
-			postRespBody, err = GoogleDriveCall("/drive/create_folder", "POST", postJsonBody, w, r, nil, true)
-			if err != nil {
-				TaskLog(task, "error", "Error calling drive/create_folder:", err)
-				return err
-			}
-			var postBodyJson GoogleDrivePostResponse
-			if err = json.Unmarshal(postRespBody, &postBodyJson); err != nil {
-				TaskLog(task, "error", err)
-				return err
-			}
-			CopyTempGoogleDrivePathIdCache[recursivePath] = postBodyJson.Data.Meta.ID
+
+			createFolder := folderres.(*model.Response)
+			CopyTempGoogleDrivePathIdCache[recursivePath] = createFolder.Data.Meta.ID
 
 			// list it and get its sub folders and files
-			firstParam := GoogleDriveListParam{
+			firstParam := &model.ListParam{
 				Path:  recursivePathId,
 				Drive: srcDrive,
 				Name:  srcName,
 			}
 
 			TaskLog(task, "info", "firstParam pathId:", recursivePathId)
-			var firstJsonBody []byte
-			firstJsonBody, err = json.Marshal(firstParam)
+			listres, err := googleDriveStorage.List(firstParam)
 			if err != nil {
-				TaskLog(task, "error", "Error marshalling JSON:", err)
+				TaskLog(task, "error", fmt.Sprintf("Google Drive list error: %v", err))
 				return err
 			}
-			var firstRespBody []byte
-			firstRespBody, err = GoogleDriveCall("/drive/ls", "POST", firstJsonBody, w, r, nil, true)
 
-			var firstBodyJson GoogleDriveListResponse
-			if err = json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
-				TaskLog(task, "error", err)
-				return err
-			}
+			files := listres.(*model.ListResponse)
 
 			if len(A) == 0 {
-				A = firstBodyJson.Data
+				A = files.Data
 			} else {
-				A = append(firstBodyJson.Data, A[1:]...)
+				A = append(files.Data, A[1:]...)
 			}
 		} else {
 			if len(A) > 0 {
@@ -786,25 +372,21 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 }
 
 func GooglePauseTask(taskId string, w http.ResponseWriter, r *http.Request) error {
-	resumeURL := fmt.Sprintf("/patch/task/pause/%s", taskId)
-	resumeRespBody, err := GoogleDriveCall(resumeURL, "PATCH", nil, w, r, nil, true)
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	res, err := googleDriveStorage.PauseTask(taskId)
 	if err != nil {
-		klog.Errorln("Error calling patch/task/pause:", err)
+		klog.Errorf("Google Drive pause task error: %v", err)
 		return err
 	}
 
-	var resumeRespJson struct {
-		StatusCode string      `json:"status_code"`
-		FailReason interface{} `json:"fail_reason"`
-		Data       interface{} `json:"data"`
-	}
+	taskResp := res.(*model.TaskResponse)
 
-	if err := json.Unmarshal(resumeRespBody, &resumeRespJson); err != nil {
-		klog.Error(err)
-		return err
-	}
-
-	if resumeRespJson.StatusCode == "SUCCESS" {
+	if taskResp.StatusCode == "SUCCESS" {
 		return e.New("Task paused successfully")
 	} else {
 		klog.Errorln("Failed to pause task")
@@ -826,7 +408,7 @@ func GoogleFileToBuffer(task *pool.Task, src, bufferFilePath, bufferFileName str
 		return bufferFileName, nil
 	}
 
-	param := GoogleDriveDownloadFileParam{
+	param := &model.DownloadAsyncParam{
 		LocalFolder:   bufferFilePath,
 		CloudFilePath: srcPathId,
 		Drive:         srcDrive,
@@ -836,57 +418,44 @@ func GoogleFileToBuffer(task *pool.Task, src, bufferFilePath, bufferFileName str
 		param.LocalFileName = bufferFileName
 	}
 
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return bufferFileName, err
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
 	}
-	klog.Infoln("Download File Params:", string(jsonBody))
 
-	var respBody []byte
-	respBody, err = GoogleDriveCall("/drive/download_async", "POST", jsonBody, w, r, nil, true)
+	res, err := googleDriveStorage.DownloadAsync(param)
 	if err != nil {
 		klog.Errorln("Error calling drive/download_async:", err)
 		return bufferFileName, err
 	}
-	var respJson GoogleDriveTaskResponse
-	if err = json.Unmarshal(respBody, &respJson); err != nil {
-		klog.Error(err)
-		return bufferFileName, err
-	}
-	taskId := respJson.Data.ID
-	taskParam := GoogleDriveTaskQueryParam{
+
+	downloadAsyncResp := res.(*model.TaskResponse)
+	// todo check Success
+
+	taskId := downloadAsyncResp.Data.ID
+	taskParam := &model.QueryTaskParam{
 		TaskIds: []string{taskId},
 	}
-	taskJsonBody, err := json.Marshal(taskParam)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return bufferFileName, err
-	}
-	klog.Infoln("Task Params:", string(taskJsonBody))
 
 	if task == nil {
 		for {
 			time.Sleep(1000 * time.Millisecond)
-			var taskRespBody []byte
-			taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, nil, true)
+			res, err := googleDriveStorage.QueryTask(taskParam)
 			if err != nil {
 				klog.Errorln("Error calling drive/download_async:", err)
 				return bufferFileName, err
 			}
-			var taskRespJson GoogleDriveTaskQueryResponse
-			if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
-				klog.Error(err)
-				return bufferFileName, err
-			}
-			if len(taskRespJson.Data) == 0 {
+			var taskQueryResp = res.(*model.TaskQueryResponse)
+
+			if len(taskQueryResp.Data) == 0 {
 				return bufferFileName, e.New("Task Info Not Found")
 			}
-			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-				if taskRespJson.Data[0].Status == "Completed" {
+			if taskQueryResp.Data[0].Status != "Waiting" && taskQueryResp.Data[0].Status != "InProgress" {
+				if taskQueryResp.Data[0].Status == "Completed" {
 					return bufferFileName, nil
 				}
-				return bufferFileName, e.New(taskRespJson.Data[0].Status)
+				return bufferFileName, e.New(taskQueryResp.Data[0].Status)
 			}
 		}
 	}
@@ -901,31 +470,26 @@ func GoogleFileToBuffer(task *pool.Task, src, bufferFilePath, bufferFileName str
 
 		default:
 			time.Sleep(1000 * time.Millisecond)
-			var taskRespBody []byte
-			taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, nil, true)
+			res, err := googleDriveStorage.QueryTask(taskParam)
 			if err != nil {
 				klog.Errorln("Error calling drive/download_async:", err)
 				return bufferFileName, err
 			}
-			var taskRespJson GoogleDriveTaskQueryResponse
-			if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
-				klog.Error(err)
-				return bufferFileName, err
-			}
-			if len(taskRespJson.Data) == 0 {
+			var taskQueryResp = res.(*model.TaskQueryResponse)
+			if len(taskQueryResp.Data) == 0 {
 				return bufferFileName, e.New("Task Info Not Found")
 			}
-			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-				if taskRespJson.Data[0].Status == "Completed" {
+			if taskQueryResp.Data[0].Status != "Waiting" && taskQueryResp.Data[0].Status != "InProgress" {
+				if taskQueryResp.Data[0].Status == "Completed" {
 					task.Mu.Lock()
 					task.Progress = right
 					task.Mu.Unlock()
 					return bufferFileName, nil
 				}
-				return bufferFileName, e.New(taskRespJson.Data[0].Status)
-			} else if taskRespJson.Data[0].Status == "InProgress" {
+				return bufferFileName, e.New(taskQueryResp.Data[0].Status)
+			} else if taskQueryResp.Data[0].Status == "InProgress" {
 				task.Mu.Lock()
-				task.Progress = MapProgress(taskRespJson.Data[0].Progress, left, right)
+				task.Progress = MapProgress(taskQueryResp.Data[0].Progress, left, right)
 				task.Mu.Unlock()
 			}
 		}
@@ -940,41 +504,31 @@ func GoogleBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.Resp
 		return http.StatusBadRequest, nil
 	}
 
-	param := GoogleDriveUploadFileParam{
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.UploadAsyncParam{
 		ParentPath:    dstPathId,
 		LocalFilePath: bufferFilePath,
 		Drive:         dstDrive,
 		Name:          dstName,
 	}
 
-	jsonBody, err := json.Marshal(param)
+	uploadRes, err := googleDriveStorage.UploadAsync(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		klog.Errorf("UploadAsync error: %v", err)
 		return common.ErrToStatus(err), err
 	}
-	klog.Infoln("Upload File Params:", string(jsonBody))
 
-	var respBody []byte
-	respBody, err = GoogleDriveCall("/drive/upload_async", "POST", jsonBody, w, r, nil, true)
-	if err != nil {
-		klog.Errorln("Error calling drive/upload_async:", err)
-		return common.ErrToStatus(err), err
-	}
-	var respJson GoogleDriveTaskResponse
-	if err = json.Unmarshal(respBody, &respJson); err != nil {
-		klog.Error(err)
-		return common.ErrToStatus(err), err
-	}
-	taskId := respJson.Data.ID
-	taskParam := GoogleDriveTaskQueryParam{
+	uploadResp := uploadRes.(*model.TaskResponse)
+
+	taskId := uploadResp.Data.ID
+	taskParam := &model.QueryTaskParam{
 		TaskIds: []string{taskId},
 	}
-	taskJsonBody, err := json.Marshal(taskParam)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return common.ErrToStatus(err), err
-	}
-	klog.Infoln("Task Params:", string(taskJsonBody))
 
 	for {
 		select {
@@ -985,34 +539,30 @@ func GoogleBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.Resp
 			}
 		default:
 			time.Sleep(500 * time.Millisecond)
-			var taskRespBody []byte
-			taskRespBody, err = GoogleDriveCall("/drive/task/query/task_ids", "POST", taskJsonBody, w, r, nil, true)
+			queryTaskRes, err := googleDriveStorage.QueryTask(taskParam)
 			if err != nil {
-				klog.Errorln("Error calling drive/download_async:", err)
+				klog.Errorf("DownloadAsync error: %v", err)
 				return common.ErrToStatus(err), err
 			}
-			var taskRespJson GoogleDriveTaskQueryResponse
-			if err = json.Unmarshal(taskRespBody, &taskRespJson); err != nil {
-				klog.Error(err)
-				return common.ErrToStatus(err), err
-			}
-			if len(taskRespJson.Data) == 0 {
+			queryTask := queryTaskRes.(*model.TaskQueryResponse)
+
+			if len(queryTask.Data) == 0 {
 				err = e.New("Task Info Not Found")
 				return common.ErrToStatus(err), err
 			}
-			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-				if taskRespJson.Data[0].Status == "Completed" {
+			if queryTask.Data[0].Status != "Waiting" && queryTask.Data[0].Status != "InProgress" {
+				if queryTask.Data[0].Status == "Completed" {
 					task.Mu.Lock()
 					task.Progress = right
 					task.Mu.Unlock()
 					return http.StatusOK, nil
 				}
-				err = e.New(taskRespJson.Data[0].Status)
+				err = e.New(queryTask.Data[0].Status)
 				return common.ErrToStatus(err), err
-			} else if taskRespJson.Data[0].Status == "InProgress" {
+			} else if queryTask.Data[0].Status == "InProgress" {
 				if task != nil {
 					task.Mu.Lock()
-					task.Progress = MapProgress(taskRespJson.Data[0].Progress, left, right)
+					task.Progress = MapProgress(queryTask.Data[0].Progress, left, right)
 					task.Mu.Unlock()
 				}
 			}
@@ -1024,24 +574,26 @@ func MoveGoogleDriveFolderOrFiles(task *pool.Task, src, dst string, w http.Respo
 	srcDrive, srcName, srcPathId, _ := ParseGoogleDrivePath(src)
 	_, _, dstPathId, _ := ParseGoogleDrivePath(dst)
 
-	param := GoogleDriveMoveFileParam{
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.MoveFileParam{
 		CloudFilePath:     srcPathId,
 		NewCloudDirectory: dstPathId,
 		Drive:             srcDrive, // "my_drive",
 		Name:              srcName,  // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		TaskLog(task, "error", "Error marshalling JSON:", err)
-		return err
-	}
-	TaskLog(task, "info", "Google Drive Patch Params:", string(jsonBody))
-	_, err = GoogleDriveCall("/drive/move_file", "POST", jsonBody, w, r, nil, false)
+	_, err := googleDriveStorage.MoveFile(param)
 	if err != nil {
 		TaskLog(task, "error", "Error calling drive/move_file:", err)
 		return err
 	}
+
+	// todo error
 	return nil
 }
 
@@ -1174,7 +726,8 @@ func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWrit
 			continue
 		}
 
-		klog.Infoln("Parsed JSON response:", datas)
+		klog.Infoln("Parsed JSON response:", string(body))
+		// klog.Infoln("Parsed JSON response:", datas)
 
 		break
 	}
@@ -1233,6 +786,9 @@ type GoogleDriveResourceService struct {
 func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	streamStr := r.URL.Query().Get("stream")
 	stream := 0
+
+	var res any
+	var listFiles *model.ListResponse
 	var err error
 	if streamStr != "" {
 		stream, err = strconv.Atoi(streamStr)
@@ -1258,7 +814,13 @@ func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.
 
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 
-	param := GoogleDriveListParam{
+	var googleDriveStorage = &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	var param = &model.ListParam{
 		Path:  pathId,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
@@ -1269,23 +831,55 @@ func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.
 		klog.Errorln("Error marshalling JSON:", err)
 		return common.ErrToStatus(err), err
 	}
-	klog.Infoln("Google Drive List Params:", string(jsonBody))
+	klog.Infof("Google Drive List Params: %s, stream: %d, meta: %d", string(jsonBody), stream, meta)
+
 	if stream == 1 {
-		var body []byte
-		body, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
-		streamGoogleDriveFiles(w, r, body, param)
-		return 0, nil
+		res, err = googleDriveStorage.List(param)
+		if err != nil {
+			klog.Errorf("List error: %v", err)
+			return common.ErrToStatus(err), err
+		}
+
+		listFiles = res.(*model.ListResponse)
+		if !listFiles.IsSuccess() {
+			err = errors.New(listFiles.FailMessage())
+			return common.ErrToStatus(err), err
+		}
+
+		streamGoogleDriveFiles(googleDriveStorage, listFiles, param)
+		return common.RenderSuccess(w, r)
 	}
+
 	if meta == 1 {
-		_, err = GoogleDriveCall("/drive/get_file_meta_data", "POST", jsonBody, w, r, nil, false)
-	} else {
-		_, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, false)
+		res, err = googleDriveStorage.GetFileMetaData(param)
+		if err != nil {
+			klog.Errorf("GetFileMetaData error: %v", err)
+			return common.ErrToStatus(err), err
+		}
+
+		var fileMetadata = res.(*model.GoogleDriveMetaResponse)
+		if !fileMetadata.IsSuccess() {
+			err = errors.New(fileMetadata.FailMessage())
+			return common.ErrToStatus(err), err
+		}
+		return common.RenderJSON(w, r, fileMetadata)
 	}
+
+	res, err = googleDriveStorage.List(param)
 	if err != nil {
-		klog.Errorln("Error calling drive/ls:", err)
+		klog.Errorf("List error: %v", err)
 		return common.ErrToStatus(err), err
 	}
-	return 0, nil
+
+	listFiles = res.(*model.ListResponse)
+	if !listFiles.IsSuccess() {
+		err = errors.New(listFiles.FailMessage())
+		return common.ErrToStatus(err), err
+	}
+
+	klog.Infof("Google Drive List Result, count: %d", len(listFiles.Data))
+
+	return common.RenderJSON(w, r, listFiles)
 }
 
 func (rc *GoogleDriveResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
@@ -1431,30 +1025,25 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs,
 
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 
-	param := GoogleDriveListParam{
+	param := &model.ListParam{
 		Path:  pathId,
 		Drive: srcDrive,
 		Name:  srcName,
 	}
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
 
-	jsonBody, err := json.Marshal(param)
+	res, err := googleDriveStorage.List(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		klog.Errorf("List error: %v", err)
 		return err
 	}
-	klog.Infoln("Google Drive List Params:", string(jsonBody))
-	var respBody []byte
-	respBody, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
-	if err != nil {
-		klog.Errorln("Error calling drive/ls:", err)
-		return err
-	}
-	var bodyJson GoogleDriveListResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		klog.Error(err)
-		return err
-	}
-	for _, item := range bodyJson.Data {
+
+	var files = res.(*model.ListResponse)
+	for _, item := range files.Data {
 		fsrc := filepath.Join(filepath.Dir(strings.TrimSuffix(src, "/")), item.Meta.ID)
 		fdst := filepath.Join(fdstBase, item.Name)
 		klog.Infoln(fsrc, fdst)
@@ -1476,13 +1065,11 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs,
 
 func (rs *GoogleDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
-	respBody, _, err := ResourcePostGoogle(dst, w, r, true)
-	var bodyJson GoogleDrivePostResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		klog.Error(err)
-		return err
+	createResp, _, err := ResourcePostGoogle(dst, w, r, true)
+	if !createResp.IsSuccess() {
+		return errors.New(createResp.FailMessage())
 	}
-	driveIdCache[src] = bodyJson.Data.Meta.ID
+	driveIdCache[src] = createResp.Data.Meta.ID
 	if err != nil {
 		return err
 	}
@@ -1612,50 +1199,45 @@ func (rs *GoogleDriveResourceService) GeneratePathList(db *gorm.DB, rootPath str
 	for bflName, cookie := range common.BflCookieCache {
 		klog.Infof("Key: %s, Value: %s\n", bflName, cookie)
 
-		header := make(http.Header)
-		header.Set("Content-Type", "application/json")
-		header.Set("X-Bfl-User", bflName)
-		header.Set("Cookie", cookie)
+		tempRequest := &http.Request{}
+		tempRequest.Header.Set("Content-Type", "application/json")
+		tempRequest.Header.Set("X-Bfl-User", bflName)
+		tempRequest.Header.Set("Cookie", cookie)
 
-		repoRespBody, err := GoogleDriveCall("/drive/accounts", "POST", nil, nil, nil, &header, true)
+		googleDriveStorage := &storage.CloudStorage{
+			Owner:   bflName,
+			Request: tempRequest,
+		}
+
+		accountRes, err := googleDriveStorage.QueryAccount()
 		if err != nil {
-			klog.Errorf("GoogleDriveCall failed: %v\n", err)
+			klog.Errorf("QueryAccount error: %v", err)
 			return err
 		}
 
-		var data DriveAccountsResponse
-		err = json.Unmarshal(repoRespBody, &data)
-		if err != nil {
-			klog.Errorf("unmarshal repo response failed: %v\n", err)
-			return err
-		}
-
-		for _, datum := range data.Data {
+		accountResp := accountRes.(*model.AccountResponse)
+		for _, datum := range accountResp.Data {
 			klog.Infof("datum=%v", datum)
 
 			if datum.Type != SrcTypeGoogle {
 				continue
 			}
 
-			rootParam := GoogleDriveListParam{
+			rootParam := &model.ListParam{
 				Path:  rootPath,
 				Drive: datum.Type,
 				Name:  datum.Name,
 			}
-			rootJsonBody, err := json.Marshal(rootParam)
+
+			listRes, err := googleDriveStorage.List(rootParam)
 			if err != nil {
-				klog.Errorln("Error marshalling JSON:", err)
+				klog.Errorf("List error: %v", err)
 				return err
 			}
 
-			var direntRespBody []byte
-			direntRespBody, err = GoogleDriveCall("/drive/ls", "POST", rootJsonBody, nil, nil, &header, true)
-			if err != nil {
-				klog.Errorf("fetch repo response failed: %v\n", err)
-				return err
-			}
+			listResp := listRes.(*model.ListResponse)
 
-			generator := walkGoogleDriveDirentsGenerator(direntRespBody, &header, nil, datum)
+			generator := walkGoogleDriveDirentsGenerator(listResp, googleDriveStorage, datum)
 
 			for dirent := range generator {
 				key := fmt.Sprintf("%s:%s", dirent.Drive, dirent.Path)
@@ -1699,33 +1281,30 @@ func (rs *GoogleDriveResourceService) GetFileCount(fs afero.Fs, src, countType s
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 	queue := []string{pathId}
 
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
 	for len(queue) > 0 {
 		currentID := queue[0]
 		queue = queue[1:]
 
-		param := GoogleDriveListParam{
+		param := &model.ListParam{
 			Path:  currentID,
 			Drive: srcDrive,
 			Name:  srcName,
 		}
 
-		jsonBody, err := json.Marshal(param)
+		res, err := googleDriveStorage.List(param)
 		if err != nil {
 			return 0, err
 		}
 
-		var respBody []byte
-		respBody, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
-		if err != nil {
-			return 0, err
-		}
+		files := res.(*model.ListResponse)
 
-		var bodyJson GoogleDriveListResponse
-		if err := json.Unmarshal(respBody, &bodyJson); err != nil {
-			return 0, err
-		}
-
-		for _, item := range bodyJson.Data {
+		for _, item := range files.Data {
 			if item.IsDir {
 				queue = append(queue, item.Meta.ID)
 			} else {
@@ -1760,7 +1339,7 @@ func (rs *GoogleDriveResourceService) parsePathToURI(path string) (string, strin
 	return SrcTypeDrive, path
 }
 
-func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
+func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.GoogleDriveDeleteResponse, int, error) {
 	if src == "" {
 		src = r.URL.Path
 	}
@@ -1771,40 +1350,42 @@ func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.Resp
 
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 
-	param := GoogleDriveDeleteParam{
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.DeleteParam{
 		Path:  pathId,
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return nil, common.ErrToStatus(err), err
-	}
-	klog.Infoln("Google Drive List Params:", string(jsonBody))
+	// jsonBody, err := json.Marshal(param)
+	// if err != nil {
+	// 	klog.Errorln("Error marshalling JSON:", err)
+	// 	return nil, common.ErrToStatus(err), err
+	// }
+	// klog.Infoln("Google Drive Delete Params:", string(jsonBody))
 
 	// delete thumbnails
-	err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
+	var err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
 	if err != nil {
 		return nil, common.ErrToStatus(err), err
 	}
 
-	var respBody []byte = nil
-	if returnResp {
-		respBody, err = GoogleDriveCall("/drive/delete", "POST", jsonBody, w, r, nil, true)
-		klog.Infoln(string(respBody))
-	} else {
-		_, err = GoogleDriveCall("/drive/delete", "POST", jsonBody, w, r, nil, false)
-	}
+	res, err := googleDriveStorage.Delete(param)
 	if err != nil {
-		klog.Errorln("Error calling drive/delete:", err)
+		klog.Errorf("Google Drive delete error: %v", err)
 		return nil, common.ErrToStatus(err), err
 	}
-	return respBody, 0, nil
+
+	deleteResp := res.(*model.GoogleDriveDeleteResponse)
+	return deleteResp, 0, nil
 }
 
-func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, returnResp bool) ([]byte, int, error) {
+func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.Response, int, error) {
 	if src == "" {
 		src = r.URL.Path
 	}
@@ -1813,30 +1394,28 @@ func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 
 	srcDrive, srcName, pathId, srcNewName := ParseGoogleDrivePath(src)
 
-	param := GoogleDrivePostParam{
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.PostParam{
 		ParentPath: pathId,
 		FolderName: srcNewName,
 		Drive:      srcDrive, // "my_drive",
 		Name:       srcName,  // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
+	res, err := googleDriveStorage.CreateFolder(param)
 	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
+		klog.Errorf("Google Drive create_folder error: %v", err)
 		return nil, common.ErrToStatus(err), err
 	}
-	klog.Infoln("Google Drive Post Params:", string(jsonBody))
-	var respBody []byte = nil
-	if returnResp {
-		respBody, err = GoogleDriveCall("/drive/create_folder", "POST", jsonBody, w, r, nil, true)
-	} else {
-		_, err = GoogleDriveCall("/drive/create_folder", "POST", jsonBody, w, r, nil, false)
-	}
-	if err != nil {
-		klog.Errorln("Error calling drive/create_folder:", err)
-		return respBody, common.ErrToStatus(err), err
-	}
-	return respBody, 0, nil
+
+	createResp := res.(*model.Response)
+
+	return createResp, 0, nil
 }
 
 func ResourcePatchGoogle(fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
@@ -1847,19 +1426,18 @@ func ResourcePatchGoogle(fileCache fileutils.FileCache, w http.ResponseWriter, r
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 	_, _, _, dstFilename := ParseGoogleDrivePath(dst)
 
-	param := GoogleDrivePatchParam{
+	param := &model.PatchParam{
 		Path:        pathId,
 		NewFileName: dstFilename,
 		Drive:       srcDrive, // "my_drive",
 		Name:        srcName,  // "file_name",
 	}
 
-	jsonBody, err := json.Marshal(param)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return common.ErrToStatus(err), err
+	googleDriveStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
 	}
-	klog.Infoln("Google Drive Patch Params:", string(jsonBody))
 
 	// delete thumbnails
 	err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
@@ -1867,12 +1445,16 @@ func ResourcePatchGoogle(fileCache fileutils.FileCache, w http.ResponseWriter, r
 		return common.ErrToStatus(err), err
 	}
 
-	_, err = GoogleDriveCall("/drive/rename", "POST", jsonBody, w, r, nil, false)
+	res, err := googleDriveStorage.Rename(param)
 	if err != nil {
-		klog.Errorln("Error calling drive/rename:", err)
+		klog.Errorf("Google Drive rename error: %v", err)
 		return common.ErrToStatus(err), err
 	}
-	return 0, nil
+
+	renameResult := res.(*model.GoogleDriveRenameResponse)
+	klog.Infoln("Google Drive Patch Result:", renameResult)
+
+	return common.RenderSuccess(w, r)
 }
 
 func setContentDispositionGoogle(w http.ResponseWriter, r *http.Request, fileName string) {
@@ -1883,12 +1465,12 @@ func setContentDispositionGoogle(w http.ResponseWriter, r *http.Request, fileNam
 	}
 }
 
-func previewCacheKeyGoogle(f *GoogleDriveMetaData, previewSize preview.PreviewSize) string {
+func previewCacheKeyGoogle(f *model.ResponseData, previewSize preview.PreviewSize) string {
 	return fmt.Sprintf("%x%x%x", f.ID, f.Modified.Unix(), previewSize)
 }
 
 func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, imgSvc preview.ImgService, fileCache fileutils.FileCache,
-	file *GoogleDriveMetaData, previewSize preview.PreviewSize, bflName string) ([]byte, error) {
+	file *model.ResponseData, previewSize preview.PreviewSize, bflName string) ([]byte, error) {
 	klog.Infoln("!!!!CreatePreview:", previewSize)
 
 	var err error
@@ -1961,7 +1543,7 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 	return buf.Bytes(), nil
 }
 
-func RawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, file *GoogleDriveMetaData, bflName string) (int, error) {
+func RawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, file *model.ResponseData, bflName string) (int, error) {
 	var err error
 	diskSize := file.Size
 	_, err = CheckBufferDiskSpace(diskSize)
@@ -2012,7 +1594,7 @@ func handleImagePreviewGoogle(
 	src string,
 	imgSvc preview.ImgService,
 	fileCache fileutils.FileCache,
-	file *GoogleDriveMetaData,
+	file *model.ResponseData,
 	previewSize preview.PreviewSize,
 	enableThumbnails, resizePreview bool,
 ) (int, error) {
@@ -2085,7 +1667,7 @@ func PreviewGetGoogle(w http.ResponseWriter, r *http.Request, previewSize previe
 func delThumbsGoogle(ctx context.Context, fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request) error {
 	metaData, err := GetGoogleDriveMetadata(src, w, r)
 	if err != nil {
-		klog.Errorln("Error calling drive/get_file_meta_data:", err)
+		klog.Errorf("Google Drive get_file_meta_data error: %v", err)
 		return err
 	}
 
@@ -2104,21 +1686,15 @@ func delThumbsGoogle(ctx context.Context, fileCache fileutils.FileCache, src str
 	return nil
 }
 
-func walkGoogleDriveDirentsGenerator(body []byte, header *http.Header, r *http.Request, datum DrivesAccounsResponseItem) <-chan DirentGeneratedEntry {
+func walkGoogleDriveDirentsGenerator(list *model.ListResponse, googleDriveStorage *storage.CloudStorage, datum *model.AccounResponseItem) <-chan DirentGeneratedEntry {
 	ch := make(chan DirentGeneratedEntry)
 	go func() {
 		defer close(ch)
 
-		var bodyJson GoogleDriveListResponse
-		if err := json.Unmarshal(body, &bodyJson); err != nil {
-			klog.Error(err)
-			return
-		}
-
-		queue := make([]*GoogleDriveListResponseFileData, 0)
-		bodyJson.Lock()
-		queue = append(queue, bodyJson.Data...)
-		bodyJson.Unlock()
+		queue := make([]*model.ResponseData, 0)
+		list.Lock()
+		queue = append(queue, list.Data...)
+		list.Unlock()
 
 		for len(queue) > 0 {
 			firstItem := queue[0]
@@ -2133,29 +1709,19 @@ func walkGoogleDriveDirentsGenerator(body []byte, header *http.Header, r *http.R
 				}
 				ch <- entry
 
-				firstParam := GoogleDriveListParam{
+				firstParam := &model.ListParam{
 					Path:  firstItem.Meta.ID,
 					Drive: datum.Type,
 					Name:  datum.Name,
 				}
-				firstJsonBody, err := json.Marshal(firstParam)
-				if err != nil {
-					klog.Errorln("Error marshalling JSON:", err)
-					continue
-				}
-
-				firstRespBody, err := GoogleDriveCall("/drive/ls", "POST", firstJsonBody, nil, r, header, true)
+				nextRes, err := googleDriveStorage.List(firstParam)
 				if err != nil {
 					klog.Error(err)
 					continue
 				}
-
-				var firstBodyJson GoogleDriveListResponse
-				if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
-					klog.Error(err)
-					continue
-				}
-				queue = append(queue, firstBodyJson.Data...)
+				nextList := nextRes.(*model.ListResponse)
+				// todo if data is nil, or failed
+				queue = append(queue, nextList.Data...)
 			}
 		}
 	}()
