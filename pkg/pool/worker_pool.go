@@ -154,16 +154,14 @@ func ProcessProgress(progress, lowerBound, upperBound int) int {
 }
 
 func (t *Task) UpdateProgress() {
-	if t.Status == "completed" {
+	if t.Status == "completed" || t.Status == "cancelled" || t.Status == "failed" {
 		return
 	}
 
-	t.Mu.Lock()
 	t.Status = "running"
 	t.Progress = 0
 	t.Log = []string{}
 	TaskManager.Store(t.ID, t)
-	t.Mu.Unlock()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -177,9 +175,7 @@ func (t *Task) UpdateProgress() {
 					return
 				}
 				if log != "" {
-					t.Mu.Lock()
 					t.Log = append(t.Log, log)
-					t.Mu.Unlock()
 					klog.Infof("[%s] Log collected: %s (total: %d)", t.ID, log, len(t.Log))
 				}
 			case <-t.Ctx.Done():
@@ -194,9 +190,18 @@ func (t *Task) UpdateProgress() {
 	for {
 		select {
 		case <-t.Ctx.Done():
-			wg.Wait()
+			done := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(done)
+			}()
 
-			t.Mu.Lock()
+			select {
+			case <-done:
+			case <-time.After(3 * time.Second):
+				klog.Errorf("Task %s force exited after wait timeout", t.ID)
+			}
+
 			if t.Progress < 100 {
 				if t.Status != "failed" {
 					t.Status = "cancelled"
@@ -205,7 +210,6 @@ func (t *Task) UpdateProgress() {
 				t.Status = "completed"
 			}
 			TaskManager.Store(t.ID, t)
-			t.Mu.Unlock()
 
 			if t.Status == "cancelled" {
 				klog.Infof("Task %s cancelled with Progress %d", t.ID, t.Progress)
@@ -217,6 +221,7 @@ func (t *Task) UpdateProgress() {
 			return
 
 		case <-timeout:
+			FailTask(t.ID)
 			klog.Errorf("Task %s timeout", t.ID)
 			return
 
@@ -226,16 +231,23 @@ func (t *Task) UpdateProgress() {
 				break
 			}
 			klog.Errorf("[%s Error] %v", t.ID, err)
-			t.Mu.Lock()
 			t.Log = append(t.Log, fmt.Sprintf("ERROR: %v", err))
 			t.FailedReason = err.Error()
-			t.Mu.Unlock()
 
 		case progress, ok := <-t.ProgressChan:
 			if !ok {
-				wg.Wait()
+				done := make(chan struct{})
+				go func() {
+					wg.Wait()
+					close(done)
+				}()
 
-				t.Mu.Lock()
+				select {
+				case <-done:
+				case <-time.After(3 * time.Second):
+					klog.Errorf("Task %s force exited after wait timeout", t.ID)
+				}
+
 				if t.Progress < 100 {
 					if t.Status != "failed" {
 						t.Status = "cancelled"
@@ -244,7 +256,6 @@ func (t *Task) UpdateProgress() {
 					t.Status = "completed"
 				}
 				TaskManager.Store(t.ID, t)
-				t.Mu.Unlock()
 				return
 			}
 
@@ -268,10 +279,8 @@ func (t *Task) UpdateProgress() {
 					FailTask(t.ID)
 				}
 			} else {
-				t.Mu.Lock()
 				t.Progress = processedProgress
 				TaskManager.Store(t.ID, t)
-				t.Mu.Unlock()
 				klog.Infof("[%s] %s", t.ID, FormattedTask{Task: *t})
 			}
 
@@ -283,28 +292,20 @@ func (t *Task) UpdateProgress() {
 
 func (t *Task) Logging(entry string) {
 	klog.Infof("TASK LOGGING [%s] %s", t.ID, entry)
-	t.Mu.Lock()
-	defer t.Mu.Unlock()
 	t.Log = append(t.Log, entry)
 }
 
 func (t *Task) LoggingError(entry string) {
 	klog.Infof("TASK LOGGING ERROR [%s] %s", t.ID, entry)
-	t.Mu.Lock()
-	defer t.Mu.Unlock()
 	t.Log = append(t.Log, "[ERROR] "+entry)
 	t.FailedReason = entry
 }
 
 func (t *Task) AddBuffer(entry string) {
-	t.Mu.Lock()
-	defer t.Mu.Unlock()
 	t.Buffers = append(t.Buffers, entry)
 }
 
 func (t *Task) RemoveBuffer(entry string) {
-	t.Mu.Lock()
-	defer t.Mu.Unlock()
 	for i, buf := range t.Buffers {
 		if buf == entry {
 			t.Buffers = append(t.Buffers[:i], t.Buffers[i+1:]...)
@@ -339,15 +340,12 @@ func (t *Task) DeleteBuffers() {
 	}
 	if len(t.Buffers) > 0 {
 		t.Logging("Removed all buffers")
-		t.Mu.Lock()
 		t.Buffers = make([]string, 0)
-		t.Mu.Unlock()
 	}
+	return
 }
 
 func (t *Task) GetProgress() int {
-	t.Mu.Lock()
-	defer t.Mu.Unlock()
 	return t.Progress
 }
 
@@ -374,7 +372,6 @@ func CancelTask(taskID string, delete bool) {
 
 			if t.Status != "cancelled" {
 				t.DeleteBuffers()
-				t.Mu.Lock()
 				t.Status = "cancelled"
 				TaskManager.Store(taskID, t)
 
@@ -393,7 +390,6 @@ func CancelTask(taskID string, delete bool) {
 						t.timer.Stop()
 					}
 				})
-				t.Mu.Unlock()
 			}
 
 			// after cancel, delete info
@@ -426,7 +422,6 @@ func CompleteTask(taskID string) {
 
 			t.cancelOnce.Do(func() {
 				t.DeleteBuffers()
-				t.Mu.Lock()
 				t.Progress = 100
 				t.Status = "completed"
 				t.FailedReason = ""
@@ -443,7 +438,6 @@ func CompleteTask(taskID string) {
 					close(t.ProgressChan)
 				}
 				t.Cancel()
-				t.Mu.Unlock()
 			})
 			klog.Infof("Task %s has completed", taskID)
 		}
@@ -463,7 +457,6 @@ func FailTask(taskID string) {
 
 			t.DeleteBuffers()
 			t.cancelOnce.Do(func() {
-				t.Mu.Lock()
 				t.Status = "failed"
 				TaskManager.Store(taskID, t)
 				klog.Infof("Task %s has failed with Progress %d", taskID, t.Progress)
@@ -478,7 +471,6 @@ func FailTask(taskID string) {
 					close(t.ProgressChan)
 				}
 				t.Cancel()
-				t.Mu.Unlock()
 			})
 			klog.Infof("Task %s has failed", taskID)
 		}
