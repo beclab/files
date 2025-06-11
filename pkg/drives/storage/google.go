@@ -3,90 +3,94 @@ package storage
 import (
 	"encoding/json"
 	"files/pkg/common"
+	"files/pkg/drives/base"
 	"files/pkg/drives/model"
 	"files/pkg/utils"
 	"fmt"
 	"net/http"
 )
 
-type CloudStorage struct {
+var _ base.Lister = (*GoogleDriveStorage)(nil)
+
+type GoogleDriveStorage struct {
 	Owner          string
 	ResponseWriter http.ResponseWriter
 	Request        *http.Request
 }
 
-func (s *CloudStorage) List(param *model.ListParam) (any, error) {
+// ls
+func (s *GoogleDriveStorage) List(param *model.ListParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveList)
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
 
-	return utils.RequestWithContext[model.CloudListResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext[model.GoogleDriveListResponse](url, http.MethodPost, &header, paramBody)
 }
 
 // get_file_meta_data
-func (s *CloudStorage) GetFileMetaData(param *model.ListParam) (any, error) {
+func (s *GoogleDriveStorage) GetFileMetaData(param *model.ListParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveGetFileMetaData)
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext[model.GoogleDriveResponse](url, http.MethodPost, &header, paramBody)
 }
 
 // copy_file
-func (s *CloudStorage) CopyFile(param *model.CopyFileParam) (any, error) {
+func (s *GoogleDriveStorage) CopyFile(param *model.CopyFileParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveCopyFile)
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext[model.GoogleDriveResponse](url, http.MethodPost, &header, paramBody)
 }
 
 // move_file
-func (s *CloudStorage) MoveFile(param *model.MoveFileParam) (any, error) {
+func (s *GoogleDriveStorage) MoveFile(param *model.MoveFileParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveMoveFile)
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext[model.GoogleDriveResponse](url, http.MethodPost, &header, paramBody)
 }
 
 // delete
-func (s *CloudStorage) Delete(param *model.DeleteParam) (any, error) {
+func (s *GoogleDriveStorage) Delete(param *model.DeleteParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveDelete)
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext[model.GoogleDriveResponse](url, http.MethodPost, &header, paramBody)
 }
 
 // rename
-func (s *CloudStorage) Rename(param *model.PatchParam) (any, error) {
+func (s *GoogleDriveStorage) Rename(param *model.PatchParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveRename)
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext[model.GoogleDriveResponse](url, http.MethodPost, &header, paramBody)
 }
 
 // create_folder
-func (s *CloudStorage) CreateFolder(param *model.PostParam) (any, error) {
+func (s *GoogleDriveStorage) CreateFolder(param *model.PostParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveCreateFolder)
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext[model.GoogleDriveResponse](url, http.MethodPost, &header, paramBody)
 }
 
 // download_async
-func (s *CloudStorage) DownloadAsync(param *model.DownloadAsyncParam) (any, error) {
+func (s *GoogleDriveStorage) DownloadAsync(param *model.DownloadAsyncParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveDownloadAsync)
 
@@ -96,7 +100,7 @@ func (s *CloudStorage) DownloadAsync(param *model.DownloadAsyncParam) (any, erro
 }
 
 // upload_async
-func (s *CloudStorage) UploadAsync(param *model.UploadAsyncParam) (any, error) {
+func (s *GoogleDriveStorage) UploadAsync(param *model.UploadAsyncParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveUploadAsync)
 
@@ -106,7 +110,7 @@ func (s *CloudStorage) UploadAsync(param *model.UploadAsyncParam) (any, error) {
 }
 
 // task/query/task_ids
-func (s *CloudStorage) QueryTask(param *model.QueryTaskParam) (any, error) {
+func (s *GoogleDriveStorage) QueryTask(param *model.QueryTaskParam) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveQueryTask)
 
@@ -115,7 +119,7 @@ func (s *CloudStorage) QueryTask(param *model.QueryTaskParam) (any, error) {
 	return utils.RequestWithContext[model.TaskQueryResponse](url, http.MethodPost, &header, paramBody)
 }
 
-func (s *CloudStorage) QueryAccount() (any, error) {
+func (s *GoogleDriveStorage) QueryAccount() (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveQueryAccount)
 
@@ -123,7 +127,7 @@ func (s *CloudStorage) QueryAccount() (any, error) {
 	return utils.RequestWithContext[model.AccountResponse](url, http.MethodPost, &header, nil)
 }
 
-func (s *CloudStorage) PauseTask(taskId string) (any, error) {
+func (s *GoogleDriveStorage) PauseTask(taskId string) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s/%s", host, UrlDrivePauseTask, taskId)
 
@@ -131,7 +135,7 @@ func (s *CloudStorage) PauseTask(taskId string) (any, error) {
 	return utils.RequestWithContext[model.TaskResponse](url, http.MethodPatch, &header, nil)
 }
 
-func (s *CloudStorage) ResumeTask(taskId string) (any, error) {
+func (s *GoogleDriveStorage) ResumeTask(taskId string) (any, error) {
 	var host = common.GetHost(s.Owner)
 	var url = fmt.Sprintf("%s/%s/%s", host, UrlDriveResumeTask, taskId)
 

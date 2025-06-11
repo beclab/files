@@ -52,6 +52,7 @@ type DownloadAsyncParam struct {
 type UploadAsyncParam struct {
 	ParentPath    string `json:"parent_path"`
 	LocalFilePath string `json:"local_file_path"`
+	NewFileName   string `json:"new_file_name,omitempty"`
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
 }

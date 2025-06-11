@@ -1,11 +1,11 @@
-package storage
+package utils
 
 import (
 	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -15,29 +15,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const (
-	UrlDriveList            = "drive/ls"
-	UrlDriveGetFileMetaData = "drive/get_file_meta_data"
-	UrlDriveDelete          = "drive/delete"
-	UrlDriveCreateFolder    = "drive/create_folder"
-	UrlDriveCopyFile        = "drive/copy_file"
-	UrlDriveMoveFile        = "drive/move_file"
-	UrlDriveRename          = "drive/rename"
-	UrlDriveDownloadAsync   = "drive/download_async"
-	UrlDriveUploadAsync     = "drive/upload_async"
-	UrlDriveQueryTask       = "drive/task/query/task_ids"
-	UrlDriveQueryAccount    = "drive/accounts"
-	UrlDrivePauseTask       = "patch/task/pause"
-	UrlDriveResumeTask      = "patch/task/pause"
-)
-
-var (
-	RETRY error = errors.New("retry")
-)
-
 func RequestWithContext[T any](u string, method string, header *http.Header, requestParams []byte) (*T, error) {
-	var ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	var backoff = wait.Backoff{
 		Duration: 2 * time.Second,
@@ -55,6 +33,9 @@ func RequestWithContext[T any](u string, method string, header *http.Header, req
 	if err := retry.OnError(backoff, func(err error) bool {
 		return true
 	}, func() error {
+		var ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
 		var newRequest *http.Request
 		newRequest, err := http.NewRequestWithContext(ctx, method, u, requestBody)
 		if err != nil {
@@ -73,7 +54,7 @@ func RequestWithContext[T any](u string, method string, header *http.Header, req
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return RETRY
+			return fmt.Errorf("Error request with status code %d", resp.StatusCode)
 		}
 
 		var body []byte

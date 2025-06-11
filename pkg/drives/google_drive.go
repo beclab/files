@@ -2,7 +2,6 @@ package drives
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,7 +17,6 @@ import (
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,7 +32,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func GetGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*model.ResponseData, error) {
+func GetGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*model.GoogleDriveResponseData, error) {
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 
 	param := &model.ListParam{
@@ -43,7 +41,7 @@ func GetGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) 
 		Name:  srcName,  // "file_name",
 	}
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -55,7 +53,7 @@ func GetGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) 
 		return nil, err
 	}
 
-	fileMetadata := res.(*model.Response)
+	fileMetadata := res.(*model.GoogleDriveResponse)
 	return fileMetadata.Data, nil
 }
 
@@ -92,7 +90,7 @@ func GetGoogleDriveIdFocusedMetaInfos(task *pool.Task, src string, w http.Respon
 		Name:  srcName,  // "file_name",
 	}
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -104,7 +102,7 @@ func GetGoogleDriveIdFocusedMetaInfos(task *pool.Task, src string, w http.Respon
 		return
 	}
 
-	var fileMetadata = res.(*model.GoogleDriveMetaResponse)
+	var fileMetadata = res.(*model.GoogleDriveResponse)
 
 	if !fileMetadata.IsSuccess() {
 		err = e.New(fileMetadata.FailMessage())
@@ -129,10 +127,10 @@ func GetGoogleDriveIdFocusedMetaInfos(task *pool.Task, src string, w http.Respon
 	return
 }
 
-func generateGoogleDriveFilesData(googleDriveStorage *storage.CloudStorage, files *model.ListResponse, stopChan <-chan struct{}, dataChan chan<- string, param *model.ListParam) {
+func generateGoogleDriveFilesData(googleDriveStorage *storage.GoogleDriveStorage, files *model.GoogleDriveListResponse, stopChan <-chan struct{}, dataChan chan<- string, param *model.ListParam) {
 	defer close(dataChan)
 
-	var A []*model.ResponseData //[]*model.GoogleDriveListResponseFileData
+	var A []*model.GoogleDriveResponseData //[]*model.GoogleDriveListResponseFileData
 	files.Lock()
 	A = append(A, files.Data...)
 	files.Unlock()
@@ -158,7 +156,7 @@ func generateGoogleDriveFilesData(googleDriveStorage *storage.CloudStorage, file
 				return
 			}
 
-			var listFiles = res.(*model.ListResponse)
+			var listFiles = res.(*model.GoogleDriveListResponse)
 			if !listFiles.IsSuccess() {
 				klog.Error(listFiles.FailMessage())
 				return
@@ -181,7 +179,7 @@ func generateGoogleDriveFilesData(googleDriveStorage *storage.CloudStorage, file
 	}
 }
 
-func streamGoogleDriveFiles(googleDriveStorage *storage.CloudStorage, files *model.ListResponse, param *model.ListParam) {
+func streamGoogleDriveFiles(googleDriveStorage *storage.GoogleDriveStorage, files *model.GoogleDriveListResponse, param *model.ListParam) {
 	var w = googleDriveStorage.ResponseWriter
 	var r = googleDriveStorage.Request
 
@@ -235,7 +233,7 @@ func CopyGoogleDriveSingleFile(task *pool.Task, src, dst string, w http.Response
 	}
 	dstFilename = strings.TrimSuffix(dstFilename, "/")
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -278,7 +276,7 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 		return nil
 	}
 
-	var googleDriveStorage = &storage.CloudStorage{
+	var googleDriveStorage = &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -287,7 +285,7 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 	var CopyTempGoogleDrivePathIdCache = make(map[string]string)
 	var recursivePath = srcPath
 	var recursivePathId = srcPathId
-	var A []*model.ResponseData
+	var A []*model.GoogleDriveResponseData
 	for {
 		select {
 		case <-task.Ctx.Done():
@@ -298,7 +296,7 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 		TaskLog(task, "info", "len(A): ", len(A))
 
 		var isDir = true
-		var firstItem *model.ResponseData
+		var firstItem *model.GoogleDriveResponseData
 		if len(A) > 0 {
 			firstItem = A[0]
 			recursivePathId = firstItem.Meta.ID
@@ -329,7 +327,7 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 				return err
 			}
 
-			createFolder := folderres.(*model.Response)
+			createFolder := folderres.(*model.GoogleDriveResponse)
 			CopyTempGoogleDrivePathIdCache[recursivePath] = createFolder.Data.Meta.ID
 
 			// list it and get its sub folders and files
@@ -346,7 +344,7 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 				return err
 			}
 
-			files := listres.(*model.ListResponse)
+			files := listres.(*model.GoogleDriveListResponse)
 
 			if len(A) == 0 {
 				A = files.Data
@@ -376,7 +374,7 @@ func CopyGoogleDriveFolder(task *pool.Task, src, dst string, w http.ResponseWrit
 }
 
 func GooglePauseTask(taskId string, w http.ResponseWriter, r *http.Request) error {
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -422,7 +420,7 @@ func GoogleFileToBuffer(task *pool.Task, src, bufferFilePath, bufferFileName str
 		param.LocalFileName = bufferFileName
 	}
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -483,14 +481,14 @@ func GoogleFileToBuffer(task *pool.Task, src, bufferFilePath, bufferFileName str
 			if len(taskQueryResp.Data) == 0 {
 				return bufferFileName, e.New("Task Info Not Found")
 			}
-			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-				if taskRespJson.Data[0].Status == "Completed" {
+			if taskQueryResp.Data[0].Status != "Waiting" && taskQueryResp.Data[0].Status != "InProgress" {
+				if taskQueryResp.Data[0].Status == "Completed" {
 					task.Progress = right
 					return bufferFileName, nil
 				}
-				return bufferFileName, e.New(taskRespJson.Data[0].Status)
-			} else if taskRespJson.Data[0].Status == "InProgress" {
-				task.Progress = MapProgress(taskRespJson.Data[0].Progress, left, right)
+				return bufferFileName, e.New(taskQueryResp.Data[0].Status)
+			} else if taskQueryResp.Data[0].Status == "InProgress" {
+				task.Progress = MapProgress(taskQueryResp.Data[0].Progress, left, right)
 			}
 		}
 	}
@@ -504,7 +502,7 @@ func GoogleBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.Resp
 		return http.StatusBadRequest, nil
 	}
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -550,8 +548,8 @@ func GoogleBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.Resp
 				err = e.New("Task Info Not Found")
 				return common.ErrToStatus(err), err
 			}
-			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
-				if taskRespJson.Data[0].Status == "Completed" {
+			if queryTask.Data[0].Status != "Waiting" && queryTask.Data[0].Status != "InProgress" {
+				if queryTask.Data[0].Status == "Completed" {
 					task.Progress = right
 					return http.StatusOK, nil
 				}
@@ -559,7 +557,7 @@ func GoogleBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.Resp
 				return common.ErrToStatus(err), err
 			} else if queryTask.Data[0].Status == "InProgress" {
 				if task != nil {
-					task.Progress = MapProgress(taskRespJson.Data[0].Progress, left, right)
+					task.Progress = MapProgress(queryTask.Data[0].Progress, left, right)
 				}
 			}
 		}
@@ -570,7 +568,7 @@ func MoveGoogleDriveFolderOrFiles(task *pool.Task, src, dst string, w http.Respo
 	srcDrive, srcName, srcPathId, _ := ParseGoogleDrivePath(src)
 	_, _, dstPathId, _ := ParseGoogleDrivePath(dst)
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -591,154 +589,6 @@ func MoveGoogleDriveFolderOrFiles(task *pool.Task, src, dst string, w http.Respo
 
 	// todo error
 	return nil
-}
-
-func GoogleDriveCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *http.Request, header *http.Header, returnResp bool) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	var bflName = ""
-	if header != nil {
-		bflName = header.Get("X-Bfl-User")
-	} else {
-		bflName = r.Header.Get("X-Bfl-User")
-	}
-	if bflName == "" {
-		return nil, os.ErrPermission
-	}
-
-	host := common.GetHost(bflName)
-	dstUrl := host + dst
-
-	klog.Infoln("dstUrl:", dstUrl)
-
-	const maxRetries = 3
-	const retryDelay = 2 * time.Second
-
-	var resp *http.Response
-	var err error
-	var body []byte
-	var datas map[string]interface{}
-
-	for i := 0; i <= maxRetries; i++ {
-		var req *http.Request
-		if reqBodyJson != nil {
-			req, err = http.NewRequestWithContext(ctx, method, dstUrl, bytes.NewBuffer(reqBodyJson))
-		} else {
-			req, err = http.NewRequestWithContext(ctx, method, dstUrl, nil)
-		}
-
-		if err != nil {
-			klog.Errorln("Error creating request:", err)
-			return nil, err
-		}
-
-		if header != nil {
-			req.Header = *header
-		} else {
-			req.Header = r.Header.Clone()
-			req.Header.Set("Content-Type", "application/json")
-		}
-		RemoveAdditionalHeaders(&req.Header)
-
-		client := &http.Client{}
-		resp, err = client.Do(req)
-		if err != nil {
-			if e.Is(err, context.DeadlineExceeded) {
-				klog.Errorln("Request timed out after 30 seconds")
-				return nil, fmt.Errorf("request timed out after 30 seconds")
-			}
-			klog.Errorln("Error making request:", err)
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		select {
-		case <-ctx.Done():
-			klog.Errorln("Request timed out after 30 seconds")
-			return nil, fmt.Errorf("request timed out after 30 seconds")
-		default:
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			if i < maxRetries {
-				time.Sleep(retryDelay)
-				continue
-			}
-
-			var responseBody []byte
-			if resp.Header.Get("Content-Encoding") == "gzip" {
-				reader, err := gzip.NewReader(resp.Body)
-				if err != nil {
-					klog.Errorln("Error creating gzip reader:", err)
-					return nil, err
-				}
-				defer reader.Close()
-				responseBody, err = ioutil.ReadAll(reader)
-			} else {
-				responseBody, err = ioutil.ReadAll(resp.Body)
-			}
-			if err != nil {
-				klog.Errorln("Error reading response body:", err)
-				return nil, err
-			}
-			klog.Infof("Non-200 response status: %d, body: %s\n", resp.StatusCode, responseBody)
-			return nil, fmt.Errorf("non-200 response status: %d", resp.StatusCode)
-		}
-
-		contentType := resp.Header.Get("Content-Type")
-		if !strings.HasPrefix(contentType, "application/json") {
-			klog.Infoln("GoogleDrive Call BflResponse is not JSON format:", contentType)
-		}
-
-		if resp.Header.Get("Content-Encoding") == "gzip" {
-			reader, err := gzip.NewReader(resp.Body)
-			if err != nil {
-				klog.Errorln("Error creating gzip reader:", err)
-				return nil, err
-			}
-			defer reader.Close()
-
-			body, err = ioutil.ReadAll(reader)
-			if err != nil {
-				klog.Errorln("Error reading gzipped response body:", err)
-				return nil, err
-			}
-		} else {
-			body, err = ioutil.ReadAll(resp.Body)
-			if err != nil {
-				klog.Errorln("Error reading response body:", err)
-				return nil, err
-			}
-		}
-
-		err = json.Unmarshal(body, &datas)
-		if err != nil {
-			klog.Errorln("Error unmarshaling JSON response:", err)
-			if i == maxRetries {
-				return nil, err
-			}
-			time.Sleep(retryDelay)
-			continue
-		}
-
-		klog.Infoln("Parsed JSON response:", string(body))
-		// klog.Infoln("Parsed JSON response:", datas)
-
-		break
-	}
-
-	responseText, err := json.MarshalIndent(datas, "", "  ")
-	if err != nil {
-		return nil, e.New("Error marshaling JSON response to text: " + err.Error())
-	}
-
-	if returnResp {
-		return responseText, nil
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Write([]byte(responseText))
-	return nil, nil
 }
 
 func ParseGoogleDrivePath(path string) (drive, name, dir, filename string) {
@@ -784,7 +634,7 @@ func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.
 	stream := 0
 
 	var res any
-	var listFiles *model.ListResponse
+	var listFiles *model.GoogleDriveListResponse
 	var err error
 	if streamStr != "" {
 		stream, err = strconv.Atoi(streamStr)
@@ -810,7 +660,7 @@ func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.
 
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 
-	var googleDriveStorage = &storage.CloudStorage{
+	var googleDriveStorage = &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -836,7 +686,7 @@ func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.
 			return common.ErrToStatus(err), err
 		}
 
-		listFiles = res.(*model.ListResponse)
+		listFiles = res.(*model.GoogleDriveListResponse)
 		if !listFiles.IsSuccess() {
 			err = errors.New(listFiles.FailMessage())
 			return common.ErrToStatus(err), err
@@ -853,7 +703,7 @@ func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.
 			return common.ErrToStatus(err), err
 		}
 
-		var fileMetadata = res.(*model.GoogleDriveMetaResponse)
+		var fileMetadata = res.(*model.GoogleDriveResponse)
 		if !fileMetadata.IsSuccess() {
 			err = errors.New(fileMetadata.FailMessage())
 			return common.ErrToStatus(err), err
@@ -867,7 +717,7 @@ func (rc *GoogleDriveResourceService) GetHandler(w http.ResponseWriter, r *http.
 		return common.ErrToStatus(err), err
 	}
 
-	listFiles = res.(*model.ListResponse)
+	listFiles = res.(*model.GoogleDriveListResponse)
 	if !listFiles.IsSuccess() {
 		err = errors.New(listFiles.FailMessage())
 		return common.ErrToStatus(err), err
@@ -1038,7 +888,7 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs,
 		Drive: srcDrive,
 		Name:  srcName,
 	}
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -1049,19 +899,8 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs,
 		klog.Errorf("List error: %v", err)
 		return err
 	}
-	klog.Infoln("Google Drive List Params:", string(jsonBody))
-	var respBody []byte
-	respBody, err = GoogleDriveCall("/drive/ls", "POST", jsonBody, w, r, nil, true)
-	if err != nil {
-		klog.Errorln("Error calling drive/ls:", err)
-		return err
-	}
-	var bodyJson GoogleDriveListResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		klog.Error(err)
-		return err
-	}
-	for _, item := range bodyJson.Data {
+	result := res.(*model.GoogleDriveListResponse)
+	for _, item := range result.Data {
 		select {
 		case <-task.Ctx.Done():
 			return nil
@@ -1084,24 +923,26 @@ func (rs *GoogleDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs,
 			}
 		}
 	}
+
 	return nil
 }
 
-func (rs *GoogleDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
-	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+func (rs *GoogleDriveResourceService) PasteDirTo(task *pool.Task,
+	fs afero.Fs,
+	src, dst string,
+	fileMode os.FileMode,
+	fileCount int64,
+	w http.ResponseWriter,
+	r *http.Request,
+	d *common.Data, driveIdCache map[string]string) error {
 	select {
 	case <-task.Ctx.Done():
 		return nil
 	default:
 	}
 
-	respBody, _, err := ResourcePostGoogle(dst, w, r, true)
-	var bodyJson GoogleDrivePostResponse
-	if err = json.Unmarshal(respBody, &bodyJson); err != nil {
-		klog.Error(err)
-		return err
-	}
-	driveIdCache[src] = createResp.Data.Meta.ID
+	resp, _, err := ResourcePostGoogle(dst, w, r, true)
+	driveIdCache[src] = resp.Data.Meta.ID
 	if err != nil {
 		return err
 	}
@@ -1252,7 +1093,7 @@ func (rs *GoogleDriveResourceService) GeneratePathList(db *gorm.DB, rootPath str
 		tempRequest.Header.Set("X-Bfl-User", bflName)
 		tempRequest.Header.Set("Cookie", cookie)
 
-		googleDriveStorage := &storage.CloudStorage{
+		googleDriveStorage := &storage.GoogleDriveStorage{
 			Owner:   bflName,
 			Request: tempRequest,
 		}
@@ -1283,7 +1124,7 @@ func (rs *GoogleDriveResourceService) GeneratePathList(db *gorm.DB, rootPath str
 				return err
 			}
 
-			listResp := listRes.(*model.ListResponse)
+			listResp := listRes.(*model.GoogleDriveListResponse)
 
 			generator := walkGoogleDriveDirentsGenerator(listResp, googleDriveStorage, datum)
 
@@ -1329,7 +1170,7 @@ func (rs *GoogleDriveResourceService) GetFileCount(fs afero.Fs, src, countType s
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 	queue := []string{pathId}
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -1350,7 +1191,7 @@ func (rs *GoogleDriveResourceService) GetFileCount(fs afero.Fs, src, countType s
 			return 0, err
 		}
 
-		files := res.(*model.ListResponse)
+		files := res.(*model.GoogleDriveListResponse)
 
 		for _, item := range files.Data {
 			if item.IsDir {
@@ -1387,7 +1228,7 @@ func (rs *GoogleDriveResourceService) parsePathToURI(path string) (string, strin
 	return SrcTypeDrive, path
 }
 
-func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.GoogleDriveDeleteResponse, int, error) {
+func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.GoogleDriveResponse, int, error) {
 	if src == "" {
 		src = r.URL.Path
 	}
@@ -1398,7 +1239,7 @@ func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.Resp
 
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -1409,13 +1250,6 @@ func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.Resp
 		Drive: srcDrive, // "my_drive",
 		Name:  srcName,  // "file_name",
 	}
-
-	// jsonBody, err := json.Marshal(param)
-	// if err != nil {
-	// 	klog.Errorln("Error marshalling JSON:", err)
-	// 	return nil, common.ErrToStatus(err), err
-	// }
-	// klog.Infoln("Google Drive Delete Params:", string(jsonBody))
 
 	// delete thumbnails
 	var err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
@@ -1429,11 +1263,11 @@ func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.Resp
 		return nil, common.ErrToStatus(err), err
 	}
 
-	deleteResp := res.(*model.GoogleDriveDeleteResponse)
+	deleteResp := res.(*model.GoogleDriveResponse)
 	return deleteResp, 0, nil
 }
 
-func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.Response, int, error) {
+func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.GoogleDriveResponse, int, error) {
 	if src == "" {
 		src = r.URL.Path
 	}
@@ -1442,7 +1276,7 @@ func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 
 	srcDrive, srcName, pathId, srcNewName := ParseGoogleDrivePath(src)
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -1461,7 +1295,7 @@ func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 		return nil, common.ErrToStatus(err), err
 	}
 
-	createResp := res.(*model.Response)
+	createResp := res.(*model.GoogleDriveResponse)
 
 	return createResp, 0, nil
 }
@@ -1481,7 +1315,7 @@ func ResourcePatchGoogle(fileCache fileutils.FileCache, w http.ResponseWriter, r
 		Name:        srcName,  // "file_name",
 	}
 
-	googleDriveStorage := &storage.CloudStorage{
+	googleDriveStorage := &storage.GoogleDriveStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
 		ResponseWriter: w,
 		Request:        r,
@@ -1499,7 +1333,7 @@ func ResourcePatchGoogle(fileCache fileutils.FileCache, w http.ResponseWriter, r
 		return common.ErrToStatus(err), err
 	}
 
-	renameResult := res.(*model.GoogleDriveRenameResponse)
+	renameResult := res.(*model.GoogleDriveResponse)
 	klog.Infoln("Google Drive Patch Result:", renameResult)
 
 	return common.RenderSuccess(w, r)
@@ -1513,12 +1347,12 @@ func setContentDispositionGoogle(w http.ResponseWriter, r *http.Request, fileNam
 	}
 }
 
-func previewCacheKeyGoogle(f *model.ResponseData, previewSize preview.PreviewSize) string {
+func previewCacheKeyGoogle(f *model.GoogleDriveResponseData, previewSize preview.PreviewSize) string {
 	return fmt.Sprintf("%x%x%x", f.ID, f.Modified.Unix(), previewSize)
 }
 
 func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, imgSvc preview.ImgService, fileCache fileutils.FileCache,
-	file *model.ResponseData, previewSize preview.PreviewSize, bflName string) ([]byte, error) {
+	file *model.GoogleDriveResponseData, previewSize preview.PreviewSize, bflName string) ([]byte, error) {
 	klog.Infoln("!!!!CreatePreview:", previewSize)
 
 	var err error
@@ -1591,7 +1425,7 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 	return buf.Bytes(), nil
 }
 
-func RawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, file *model.ResponseData, bflName string) (int, error) {
+func RawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, file *model.GoogleDriveResponseData, bflName string) (int, error) {
 	var err error
 	diskSize := file.Size
 	_, err = CheckBufferDiskSpace(diskSize)
@@ -1642,7 +1476,7 @@ func handleImagePreviewGoogle(
 	src string,
 	imgSvc preview.ImgService,
 	fileCache fileutils.FileCache,
-	file *model.ResponseData,
+	file *model.GoogleDriveResponseData,
 	previewSize preview.PreviewSize,
 	enableThumbnails, resizePreview bool,
 ) (int, error) {
@@ -1734,12 +1568,12 @@ func delThumbsGoogle(ctx context.Context, fileCache fileutils.FileCache, src str
 	return nil
 }
 
-func walkGoogleDriveDirentsGenerator(list *model.ListResponse, googleDriveStorage *storage.CloudStorage, datum *model.AccounResponseItem) <-chan DirentGeneratedEntry {
+func walkGoogleDriveDirentsGenerator(list *model.GoogleDriveListResponse, googleDriveStorage *storage.GoogleDriveStorage, datum *model.AccounResponseItem) <-chan DirentGeneratedEntry {
 	ch := make(chan DirentGeneratedEntry)
 	go func() {
 		defer close(ch)
 
-		queue := make([]*model.ResponseData, 0)
+		queue := make([]*model.GoogleDriveResponseData, 0)
 		list.Lock()
 		queue = append(queue, list.Data...)
 		list.Unlock()
@@ -1767,7 +1601,7 @@ func walkGoogleDriveDirentsGenerator(list *model.ListResponse, googleDriveStorag
 					klog.Error(err)
 					continue
 				}
-				nextList := nextRes.(*model.ListResponse)
+				nextList := nextRes.(*model.GoogleDriveListResponse)
 				// todo if data is nil, or failed
 				queue = append(queue, nextList.Data...)
 			}

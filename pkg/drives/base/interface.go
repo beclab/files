@@ -11,7 +11,7 @@ type MetadataGetter interface {
 }
 
 type CopierMover interface {
-	CopyFile(param *model.GoogleDriveCopyFileParam) (any, error)
+	CopyFile(param *model.CopyFileParam) (any, error)
 	MoveFile(param *model.MoveFileParam) (any, error)
 }
 
