@@ -10,17 +10,18 @@ import (
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
@@ -207,7 +208,6 @@ type BaseResourceService struct{}
 func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	xBflUser := r.Header.Get("X-Bfl-User")
 	klog.Infoln("X-Bfl-User: ", xBflUser)
-
 	streamStr := r.URL.Query().Get("stream")
 	stream := 0
 	var err error = nil
@@ -217,7 +217,6 @@ func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request
 			return http.StatusBadRequest, err
 		}
 	}
-
 	var file *files.FileInfo
 	if MountedData != nil {
 		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
