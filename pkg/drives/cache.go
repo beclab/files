@@ -110,9 +110,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 				}
 
 				if apiResponse.Task.FailedReason != "" {
-					task.Mu.Lock()
 					task.FailedReason = apiResponse.Task.FailedReason
-					task.Mu.Unlock()
 				}
 
 				if apiResponse.Task.Status == "failed" {
@@ -167,6 +165,12 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 }
 
 func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&rename=" + strconv.FormatBool(rename) + "&task=1"
 	method := "PATCH"
 	payload := []byte(``)
@@ -194,11 +198,9 @@ func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string,
 		return fmt.Errorf("failed to parse task_id: %v", err)
 	}
 
-	task.Mu.Lock()
 	task.RelationTaskID = response.TaskID
 	xTerminusNode := r.Header.Get("X-Terminus-Node")
 	task.RelationNode = xTerminusNode
-	task.Mu.Unlock()
 
 	go func() {
 		err = ExecuteCacheSameTask(task, r)
@@ -213,6 +215,12 @@ func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string,
 
 func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	mode := fileMode
 
 	handler, err := GetResourceService(dstType)
@@ -305,6 +313,12 @@ func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 	}
 
 	for _, item := range data.Items {
+		select {
+		case <-task.Ctx.Done():
+			return nil
+		default:
+		}
+
 		fsrc := filepath.Join(src, item.Name)
 		fdst := filepath.Join(fdstBase, item.Name)
 
@@ -325,6 +339,12 @@ func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 
 func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	if err := CacheMkdirAll(dst, fileMode, r); err != nil {
 		return err
 	}
@@ -333,6 +353,12 @@ func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, ds
 
 func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
@@ -389,6 +415,12 @@ func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 
 func (rs *CacheResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	status, err := CacheBufferToFile(task, bufferPath, dst, fileMode, d, left, right)
 	if status != http.StatusOK {
 		return os.ErrInvalid
@@ -464,6 +496,12 @@ func (rs *CacheResourceService) GetStat(fs afero.Fs, src string, w http.Response
 
 func (rs *CacheResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	status, err := ResourceCacheDelete(fileCache, src, task.Ctx, d, r)
 	if status != http.StatusOK {
 		return os.ErrInvalid

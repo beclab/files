@@ -669,16 +669,12 @@ func CloudDriveFileToBuffer(task *pool.Task, src, bufferFilePath string, w http.
 			}
 			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
 				if taskRespJson.Data[0].Status == "Completed" {
-					task.Mu.Lock()
 					task.Progress = right
-					task.Mu.Unlock()
 					return nil
 				}
 				return e.New(taskRespJson.Data[0].Status)
 			} else if taskRespJson.Data[0].Status == "InProgress" {
-				task.Mu.Lock()
 				task.Progress = MapProgress(taskRespJson.Data[0].Progress, left, right)
-				task.Mu.Unlock()
 			}
 		}
 	}
@@ -764,18 +760,14 @@ func CloudDriveBufferToFile(task *pool.Task, bufferFilePath, dst string, w http.
 			}
 			if taskRespJson.Data[0].Status != "Waiting" && taskRespJson.Data[0].Status != "InProgress" {
 				if taskRespJson.Data[0].Status == "Completed" {
-					task.Mu.Lock()
 					task.Progress = right
-					task.Mu.Unlock()
 					return http.StatusOK, nil
 				}
 				err = e.New(taskRespJson.Data[0].Status)
 				return common.ErrToStatus(err), err
 			} else if taskRespJson.Data[0].Status == "InProgress" {
 				if task != nil {
-					task.Mu.Lock()
 					task.Progress = MapProgress(taskRespJson.Data[0].Progress, left, right)
-					task.Mu.Unlock()
 				}
 			}
 		}
@@ -1126,6 +1118,12 @@ func (rs *CloudDriveResourceService) PreviewHandler(imgSvc preview.ImgService, f
 }
 
 func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Ensure context is canceled when main exits
 	go SimulateProgress(ctx, 0, 99, task.TotalFileSize, 25000000, task)
@@ -1165,6 +1163,12 @@ func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst
 
 func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	mode := fileMode
 
 	handler, err := GetResourceService(dstType)
@@ -1209,6 +1213,12 @@ func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, 
 		return err
 	}
 	for _, item := range bodyJson.Data {
+		select {
+		case <-task.Ctx.Done():
+			return nil
+		default:
+		}
+
 		fsrc := filepath.Join(src, item.Name)
 		fdst := filepath.Join(fdstBase, item.Name)
 		klog.Infoln(fsrc, fdst)
@@ -1231,6 +1241,12 @@ func (rs *CloudDriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, 
 
 func (rs *CloudDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	_, _, err := ResourcePostCloudDrive(dst, w, r, false)
 	if err != nil {
 		return err
@@ -1240,6 +1256,12 @@ func (rs *CloudDriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, sr
 
 func (rs *CloudDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return os.ErrPermission
@@ -1300,6 +1322,12 @@ func (rs *CloudDriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs,
 
 func (rs *CloudDriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode,
 	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	klog.Infoln("Begin to paste!")
 	klog.Infoln("dst: ", dst)
 	status, err := CloudDriveBufferToFile(task, bufferPath, dst, w, r, left, right)
@@ -1309,9 +1337,7 @@ func (rs *CloudDriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, b
 	if err != nil {
 		return err
 	}
-	task.Mu.Lock()
 	task.Transferred += diskSize
-	task.Mu.Unlock()
 	return nil
 }
 
@@ -1331,6 +1357,12 @@ func (rs *CloudDriveResourceService) GetStat(fs afero.Fs, src string, w http.Res
 
 func (rs *CloudDriveResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
+	select {
+	case <-task.Ctx.Done():
+		return nil
+	default:
+	}
+
 	_, status, err := ResourceDeleteCloudDrive(fileCache, src, w, r, true)
 	if status != http.StatusOK && status != 0 {
 		return os.ErrInvalid
