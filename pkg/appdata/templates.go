@@ -17,12 +17,13 @@ package appdata
 import (
 	"context"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
 	"os"
 	"strings"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -72,7 +73,7 @@ func getPodIP(client *kubernetes.Clientset, prefix, serviceName, namespace, node
 func GetAppDataServiceEndpoint(client *kubernetes.Clientset, nodeName string) string {
 	prefix := "appdata-backend"
 	serviceName := "appdata-backend-headless"
-	namespace := "os-system"
+	namespace := "os-framework"
 
 	dnsName, err := getPodIP(client, prefix, serviceName, namespace, nodeName)
 	if err != nil {

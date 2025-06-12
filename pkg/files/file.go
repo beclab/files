@@ -13,7 +13,6 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"mime"
 	"net/http"
 	"os"
@@ -21,6 +20,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"k8s.io/klog/v2"
 
 	"github.com/spf13/afero"
 
@@ -53,6 +54,14 @@ type FileInfo struct {
 	Token        string            `json:"token,omitempty"`
 	ExternalType string            `json:"externalType,omitempty"`
 	ReadOnly     *bool             `json:"readOnly,omitempty"`
+}
+
+func (fi *FileInfo) String() string {
+	res, err := json.Marshal(fi)
+	if err != nil {
+		return ""
+	}
+	return string(res)
 }
 
 // FileOptions are the options when getting a file info.

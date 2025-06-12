@@ -4,9 +4,10 @@ import (
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"files/pkg/rpc"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"k8s.io/klog/v2"
-	"net/http"
 
 	"github.com/gorilla/mux"
 
@@ -43,7 +44,8 @@ func NewHandler(
 
 	api := r.PathPrefix("/api").Subrouter()
 
-	api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
+	api.PathPrefix("/resources").Handler(monkey(listHandler, "/api/resources")).Methods("GET")
+	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
 	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
 	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST")
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")
