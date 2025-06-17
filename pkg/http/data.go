@@ -2,23 +2,83 @@ package http
 
 import (
 	"encoding/json"
+	"files/pkg/drivers"
 	"files/pkg/drives"
+	"files/pkg/models"
 	"files/pkg/rpc"
-	"github.com/gorilla/mux"
-	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gorilla/mux"
+	"k8s.io/klog/v2"
+
 	"github.com/tomasen/realip"
 
 	"files/pkg/common"
+	"files/pkg/drivers/base"
 	"files/pkg/settings"
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+type fileHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (int, error)
+
+func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.DriverHandler, server *settings.Server) http.Handler {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
+		r.URL.RawPath = strings.TrimPrefix(r.URL.RawPath, prefix)
+
+		paramStr := r.Header.Get("GATEWAY_FILE_PARAM")
+		if paramStr == "" {
+			http.Error(w, "driver not found", http.StatusBadRequest)
+		}
+
+		var fileParam *models.FileParam
+		if err := json.Unmarshal([]byte(paramStr), &fileParam); err != nil {
+			http.Error(w, "unmarshal params error:"+err.Error(), http.StatusBadRequest)
+		}
+
+		klog.Infof("srcType: %s, url: %s, param: %s", fileParam.FileType, r.URL.Path, fileParam.Json())
+		var handlerParam = &base.HandlerParam{
+			Owner:          r.Header.Get("X-Bfl-User"),
+			ResponseWriter: w,
+			Request:        r,
+			Data: &common.Data{
+				Server: server,
+			},
+		}
+
+		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam)
+		if status >= 400 || err != nil {
+			clientIP := realip.FromRequest(r)
+			klog.Errorf("%s: %v %s %v", r.URL.Path, status, clientIP, err)
+		}
+
+		if status != 0 {
+			if status == http.StatusInternalServerError {
+				txt := http.StatusText(status)
+				if err != nil {
+					txt = err.Error()
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(status)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"code":    1,
+					"message": txt,
+				})
+			} else {
+				txt := http.StatusText(status)
+				http.Error(w, strconv.Itoa(status)+" "+txt, status)
+			}
+			return
+		}
+	})
+
+	return handler
+}
 
 func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

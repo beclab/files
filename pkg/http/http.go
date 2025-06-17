@@ -1,6 +1,7 @@
 package http
 
 import (
+	"files/pkg/drivers"
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"files/pkg/rpc"
@@ -17,6 +18,7 @@ import (
 func NewHandler(
 	imgSvc preview.ImgService,
 	fileCache fileutils.FileCache,
+	driverHandler *drivers.DriverHandler,
 	server *settings.Server,
 ) (http.Handler, error) {
 	server.Clean()
@@ -40,11 +42,18 @@ func NewHandler(
 		return handle(fn, prefix, server)
 	}
 
+	wrapWithParms := func(fn fileHandlerFunc, prefix string) http.Handler {
+		return fileHandle(fn, prefix, driverHandler, server)
+	}
+
 	r.HandleFunc("/health", healthHandler)
 
 	api := r.PathPrefix("/api").Subrouter()
 
-	api.PathPrefix("/resources").Handler(monkey(listHandler, "/api/resources")).Methods("GET")
+	// ! demo
+	// api.PathPrefix("/list").Handler(wrapWithParms(listHandler, "/api/list")).Methods("GET") // todo
+	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources")).Methods("GET")
+
 	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
 	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
 	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST")

@@ -15,7 +15,12 @@
 package proxy
 
 import (
+	"files/pkg/models"
+	"net/http"
+	"strings"
+
 	"github.com/labstack/echo/v4"
+	"k8s.io/klog/v2"
 )
 
 func (p *BackendProxy) listNodesOrNot(listFunc GatewayHandler) GatewayHandler {
@@ -24,5 +29,53 @@ func (p *BackendProxy) listNodesOrNot(listFunc GatewayHandler) GatewayHandler {
 			return true, nil
 		}
 		return listFunc(c)
+	}
+}
+
+func (p *BackendProxy) nextListHandle(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var path = c.Request().URL.Path
+		if !strings.HasPrefix(path, "/api/resources") {
+			return next(c)
+		}
+
+		var users = c.Request().Header[BFL_HEADER]
+
+		if users == nil || len(users) == 0 {
+			return c.String(http.StatusBadRequest, "users not found")
+		}
+
+		var owner string
+		if len(users) > 0 {
+			owner = users[0]
+		}
+
+		klog.Info("Owner: ", owner)
+
+		userPvc, err := PVCs.getUserPVCOrCache(owner)
+		if err != nil {
+			return c.String(http.StatusBadRequest, "users not found")
+		}
+
+		cachePvc, err := PVCs.getCachePVCOrCache(owner)
+		if err != nil {
+			return c.String(http.StatusBadRequest, "users not found")
+		}
+
+		var data = models.PathFormatter(path)
+		var param = &models.FileParam{
+			Query:    c.Request().URL.Query(),
+			Header:   c.Request().Header,
+			UserPvc:  userPvc,
+			CachePvc: cachePvc,
+		}
+
+		param.ConvertToBackendUrl(data)
+		paramdata := param.Json()
+		klog.Infof("file param: %s", paramdata)
+
+		c.Request().Header.Add("GATEWAY_FILE_PARAM", paramdata)
+
+		return next(c)
 	}
 }

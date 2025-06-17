@@ -6,14 +6,13 @@ import (
 	"errors"
 	"files/pkg/background_task"
 	"files/pkg/crontab"
+	"files/pkg/drivers"
 	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
-	"k8s.io/klog/v2"
 	"net"
 	"net/http"
 	"os"
@@ -22,7 +21,11 @@ import (
 	"strings"
 	"syscall"
 
+	"gopkg.in/natefinch/lumberjack.v2"
+	"k8s.io/klog/v2"
+
 	"files/pkg/diskcache"
+
 	"github.com/alitto/pond/v2"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/afero"
@@ -205,11 +208,14 @@ user created with the credentials from options "username" and "password".`,
 			checkErr(err)
 		}
 
+		// step7: build driver handler
+		driverHandler := &drivers.DriverHandler{}
+
 		sigc := make(chan os.Signal, 1)
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 		go cleanupHandler(listener, sigc)
 
-		handler, err := fbhttp.NewHandler(imgSvc, fileCache, server)
+		handler, err := fbhttp.NewHandler(imgSvc, fileCache, driverHandler, server)
 		checkErr(err)
 
 		defer listener.Close()

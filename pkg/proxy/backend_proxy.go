@@ -58,6 +58,7 @@ const (
 	API_PASTE_CACHE_PREFIX         = "/api/paste/cache"
 	API_CACHE_PREFIX               = "/api/cache"
 	API_BATCH_DELETE_PREFIX        = "/api/batch_delete"
+	API_LIST_PREFIX                = "/api/list"
 )
 
 var REWRITE_FOCUSED_PREFIXES = []string{
@@ -131,6 +132,7 @@ func (b *BackendProxyBuilder) Build() *BackendProxy {
 	proxy.Use(middleware.Logger())
 	proxy.Use(backendProxy.validate)
 	proxy.Use(backendProxy.preHandle)
+	proxy.Use(backendProxy.nextListHandle)
 
 	config := middleware.DefaultProxyConfig
 	config.Balancer = backendProxy
@@ -412,7 +414,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	klog.Infof("Request Headers: %+v", c.Request().Header)
 
 	node := c.Request().Header[NODE_HEADER]
-	path := c.Request().URL.Path
+	path := c.Request().URL.Path // ! /api/resources/Home/
 	bfl := c.Request().Header[BFL_HEADER]
 	bflName := ""
 	if len(bfl) > 0 {
