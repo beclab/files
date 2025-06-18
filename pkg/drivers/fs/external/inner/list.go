@@ -10,6 +10,8 @@ import (
 )
 
 func (s *InternalStorage) List(fileParam *models.FileParam) (int, error) {
+	return s.Base.List(fileParam)
+
 	var r = s.Base.Handler.Request
 	var w = s.Base.Handler.ResponseWriter
 

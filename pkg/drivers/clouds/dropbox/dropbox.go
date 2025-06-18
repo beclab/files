@@ -12,3 +12,7 @@ type DropBoxStorage struct {
 func (s *DropBoxStorage) List(fileParam *models.FileParam) (int, error) {
 	return s.Base.List(fileParam)
 }
+
+func (s *DropBoxStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
+	return s.Base.CreateFolder(fileParam)
+}

@@ -2,6 +2,8 @@ package models
 
 import (
 	"encoding/json"
+	"files/pkg/constant"
+	"fmt"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -11,13 +13,16 @@ import (
 )
 
 type FileParam struct {
-	FileType string      `json:"file_type"` // drive data cache internal usb smb hdd sync cloud
-	Extend   string      `json:"extend"`    // node repo key deviceId diskId ...
-	Path     string      `json:"path"`      // path
-	Query    url.Values  `json:"query"`
-	Header   http.Header `json:"header"`
-	UserPvc  string      `json:"user_pvc"`
-	CachePvc string      `json:"cache_pvc"`
+	FileType     string      `json:"file_type"` // drive data cache internal usb smb hdd sync cloud
+	SubType      string      `json:"sub_type"`
+	RootPrefix   string      `json:"root_prefix"`
+	Extend       string      `json:"extend"`        // node repo key deviceId diskId ...
+	Path         string      `json:"path"`          // path
+	AppendPrefix string      `json:"append_prefix"` // used for cache,
+	Query        url.Values  `json:"query"`
+	Header       http.Header `json:"header"`
+	UserPvc      string      `json:"user_pvc"`
+	CachePvc     string      `json:"cache_pvc"`
 }
 
 func (r *FileParam) Json() string {
@@ -34,24 +39,41 @@ func (r *FileParam) ConvertToBackendUrl(data PathFormatter) {
 	switch routerType {
 	case "home":
 		r.FileType = "drive"
+		r.RootPrefix = constant.ROOT_PREFIX
+		r.Extend = r.UserPvc
 		r.Path = data.DrivePath(r.UserPvc)
-	case "application":
+	case "data":
 		r.FileType = "data"
+		r.RootPrefix = constant.ROOT_PREFIX
+		r.Extend = r.UserPvc
 		r.Path = data.DataPath(r.UserPvc)
-	case "appdata":
+	case "cache":
 		r.FileType = "cache"
-		r.Extend = data.CacheNode()
-		r.Path = data.CachePath(r.CachePvc)
+		r.RootPrefix = constant.CACHE_PREFIX
+		r.Extend = data.CacheNode(r.CachePvc)
+		r.Path = data.CachePath()
+		r.AppendPrefix = "Cache"
 	case "sync":
 		r.FileType = "sync"
 		r.Extend = data.SyncRepo()
 		r.Path = data.SyncPath()
-	case "cloud":
+	// case "drive": // old cloud format
+	// 	r.FileType = "cloud"
+	// 	r.SubType = data.CloudSubType("drive")
+	// 	r.Extend = data.CloudExtend("drive")
+	// 	r.Path = data.CloudPath("drive")
+	case "cloud", "drive":
 		r.FileType = "cloud"
-		r.Extend = data.CloudExtend()
-		r.Path = data.CloudPath()
+		r.SubType = data.CloudSubType(routerType)
+		r.Extend = data.CloudExtend(routerType)
+		r.Path = data.CloudPath(routerType)
+	case "external":
+		r.FileType = "external"
+		r.RootPrefix = constant.EXTERNAL_PREFIX
+		r.Extend = ""
+		r.Path = ""
 	case "internal", "usb", "smb", "hdd":
-		// r.FileType = routerType
+	// r.FileType = routerType
 	// r.Extend = ""
 	// r.Path = ""
 	default:
@@ -79,47 +101,73 @@ func (p PathFormatter) Type() string {
 }
 
 func (p PathFormatter) DrivePath(userPvc string) string {
-	s := strings.TrimPrefix(p.String(), "/api/resources/Home/")
-	return filepath.Join(userPvc, "Home", s)
+	s := strings.TrimPrefix(p.String(), "/api/resources/home/") // Home
+	return filepath.Join("/", "Home", s)                        // Include the prefix symbol: /
 }
 
 func (p PathFormatter) DataPath(userPvc string) string {
-	s := strings.TrimPrefix(p.String(), "/api/resources/Application/")
-	return filepath.Join(userPvc, "Data", s)
+	s := strings.TrimPrefix(p.String(), "/api/resources/data/") // Application
+	return filepath.Join("/", "Data", s)                        // Include the prefix symbol: /
 }
 
-func (p PathFormatter) CacheNode() string {
-	if strings.HasPrefix(p.String(), "/api/resources/AppData") {
-		return ""
-	}
-
-	if strings.HasPrefix(p.String(), "/api/cache/") {
-		s := strings.TrimPrefix(p.String(), "/api/cache/")
-		ss := strings.Split(s, "/")
-		if ss == nil || len(ss) < 3 {
-			return ""
+func (p PathFormatter) CacheNode(cachePvc string) string {
+	if strings.HasPrefix(p.String(), "/api/resources/cache/") { // AppData
+		s := strings.TrimPrefix(p.String(), "/api/resources/cache/")
+		s = strings.Trim(s, "/")
+		a := strings.Split(s, "/")
+		if a == nil || len(a) < 1 {
+			return cachePvc
 		}
-		return ss[0]
+		if a[0] == "olares" {
+			return cachePvc
+		}
+		return filepath.Join(a[0], cachePvc)
 	}
+	return cachePvc
 
-	return ""
+	// if strings.HasPrefix(p.String(), "/api/cache/") {
+	// 	s := strings.TrimPrefix(p.String(), "/api/cache/")
+	// 	ss := strings.Split(s, "/")
+	// 	fmt.Println("---node / 1---", ss)
+	// 	if ss == nil || len(ss) < 3 {
+	// 		return ""
+	// 	}
+	// 	return filepath.Join(ss[0], cachePvc) //ss[0]
+	// }
+
+	// return ""
 }
 
-func (p PathFormatter) CachePath(cachePvc string) string {
-	var pf = "/AppData"
-	var pos int
-	if strings.HasPrefix(p.String(), "/api/resources/AppData") {
-		pos = strings.Index(p.String(), pf)
+func (p PathFormatter) CachePath() string {
+	// var pf = "/AppData"
+	// var pos int
+	if strings.HasPrefix(p.String(), "/api/resources/cache") { // AppData
+		// pos = strings.Index(p.String(), pf)
+		var tmp = strings.TrimPrefix(p.String(), "/api/resources/cache/")
+		tmp = strings.Trim(tmp, "/")
+		s := strings.Split(tmp, "/")
+		fmt.Println("---1---", s, len(s))
+		if s == nil || len(s) < 1 {
+			return "/"
+		}
+
+		res := filepath.Join(s[1:]...)
+		if res == "" {
+			return "/"
+		}
+		return res
 	}
-	if strings.HasPrefix(p.String(), "/api/cache/") {
-		pos = strings.Index(p.String(), pf)
-	}
-	if pos < 0 {
-		return ""
-	}
-	var res = p.String()[pos+len(pf):]
-	res = strings.TrimLeft(res, "/")
-	return filepath.Join(cachePvc, res)
+	return "/"
+
+	// if strings.HasPrefix(p.String(), "/api/cache/") {
+	// 	pos = strings.Index(p.String(), pf)
+	// }
+	// if pos < 0 {
+	// 	return "/"
+	// }
+	// var res = p.String()[pos+len(pf):]
+	// res = strings.TrimLeft(res, "/")
+	// return res
 }
 
 func (p PathFormatter) SyncRepo() string {
@@ -137,13 +185,20 @@ func (p PathFormatter) SyncPath() string {
 	s = strings.Trim(s, "/")
 	var a = strings.Split(s, "/")
 	if a == nil || len(a) < 2 {
-		return ""
+		return "/"
 	}
 	return filepath.Join(a[1:]...)
 }
 
-func (p PathFormatter) CloudExtend() string {
-	var s = strings.TrimPrefix(p.String(), "/api/resources/cloud/")
+func (p PathFormatter) CloudSubType(tag string) string {
+	var s = strings.TrimPrefix(p.String(), fmt.Sprintf("/api/resources/%s/", tag))
+	s = strings.Trim(s, "/")
+	var a = strings.Split(s, "/")
+	return a[0]
+}
+
+func (p PathFormatter) CloudExtend(tag string) string { // cloud Drive
+	var s = strings.TrimPrefix(p.String(), fmt.Sprintf("/api/resources/%s/", tag))
 	s = strings.Trim(s, "/")
 	var a = strings.Split(s, "/")
 	if a == nil || len(a) < 2 {
@@ -156,8 +211,8 @@ func (p PathFormatter) CloudExtend() string {
 	return a[1]
 }
 
-func (p PathFormatter) CloudPath() string {
-	var s = strings.TrimPrefix(p.String(), "/api/resources/cloud/")
+func (p PathFormatter) CloudPath(tag string) string { // cloud Drive
+	var s = strings.TrimPrefix(p.String(), fmt.Sprintf("/api/resources/%s/", tag))
 	s = strings.Trim(s, "/")
 	var a = strings.Split(s, "/")
 	if a == nil || len(a) < 2 {

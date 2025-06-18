@@ -12,3 +12,7 @@ type TencentStorage struct {
 func (s *TencentStorage) List(fileParam *models.FileParam) (int, error) {
 	return s.Base.List(fileParam)
 }
+
+func (s *TencentStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
+	return s.Base.CreateFolder(fileParam)
+}

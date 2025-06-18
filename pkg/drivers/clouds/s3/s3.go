@@ -12,3 +12,7 @@ type S3Storage struct {
 func (s *S3Storage) List(fileParam *models.FileParam) (int, error) {
 	return s.Base.List(fileParam)
 }
+
+func (s *S3Storage) CreateFolder(fileParam *models.FileParam) (int, error) {
+	return s.Base.CreateFolder(fileParam)
+}

@@ -54,6 +54,7 @@ type FileInfo struct {
 	Token        string            `json:"token,omitempty"`
 	ExternalType string            `json:"externalType,omitempty"`
 	ReadOnly     *bool             `json:"readOnly,omitempty"`
+	AppendPrefix string            `json:"appendPrefix,omitempty"`
 }
 
 func (fi *FileInfo) String() string {
@@ -66,13 +67,14 @@ func (fi *FileInfo) String() string {
 
 // FileOptions are the options when getting a file info.
 type FileOptions struct {
-	Fs         afero.Fs
-	Path       string
-	Modify     bool
-	Expand     bool
-	ReadHeader bool
-	Token      string
-	Content    bool
+	Fs           afero.Fs
+	Path         string
+	Modify       bool
+	Expand       bool
+	ReadHeader   bool
+	Token        string
+	Content      bool
+	AppendPrefix string
 }
 
 var TerminusdHost = os.Getenv("TERMINUSD_HOST")
@@ -395,16 +397,17 @@ func stat(opts FileOptions) (*FileInfo, error) {
 			return nil, err
 		}
 		file = &FileInfo{
-			Fs:        opts.Fs,
-			Path:      opts.Path,
-			Name:      info.Name(),
-			ModTime:   info.ModTime(),
-			Mode:      info.Mode(),
-			IsDir:     info.IsDir(),
-			IsSymlink: IsSymlink(info.Mode()),
-			Size:      info.Size(),
-			Extension: filepath.Ext(info.Name()),
-			Token:     opts.Token,
+			Fs:           opts.Fs,
+			Path:         opts.Path,
+			Name:         info.Name(),
+			ModTime:      info.ModTime(),
+			Mode:         info.Mode(),
+			IsDir:        info.IsDir(),
+			IsSymlink:    IsSymlink(info.Mode()),
+			Size:         info.Size(),
+			Extension:    filepath.Ext(info.Name()),
+			Token:        opts.Token,
+			AppendPrefix: opts.AppendPrefix,
 		}
 	}
 
@@ -431,15 +434,16 @@ func stat(opts FileOptions) (*FileInfo, error) {
 	}
 
 	file = &FileInfo{
-		Fs:        opts.Fs,
-		Path:      opts.Path,
-		Name:      info.Name(),
-		ModTime:   info.ModTime(),
-		Mode:      info.Mode(),
-		IsDir:     info.IsDir(),
-		Size:      info.Size(),
-		Extension: filepath.Ext(info.Name()),
-		Token:     opts.Token,
+		Fs:           opts.Fs,
+		Path:         opts.Path,
+		Name:         info.Name(),
+		ModTime:      info.ModTime(),
+		Mode:         info.Mode(),
+		IsDir:        info.IsDir(),
+		Size:         info.Size(),
+		Extension:    filepath.Ext(info.Name()),
+		Token:        opts.Token,
+		AppendPrefix: opts.AppendPrefix,
 	}
 
 	return file, nil
@@ -658,7 +662,13 @@ func (i *FileInfo) readDirents() ([]os.FileInfo, error) {
 }
 
 func (i *FileInfo) readListing(readHeader bool) error {
-	dir, err := i.readDirents()
+	// dir, err := i.readDirents()
+	// if err != nil {
+	// 	return err
+	// }
+
+	afs := &afero.Afero{Fs: i.Fs}
+	dir, err := afs.ReadDir(i.Path)
 	if err != nil {
 		return err
 	}
@@ -696,7 +706,7 @@ func (i *FileInfo) readListing(readHeader bool) error {
 			IsDir:     f.IsDir(),
 			IsSymlink: isSymlink,
 			Extension: filepath.Ext(name),
-			Path:      fPath,
+			Path:      filepath.Join("/", i.AppendPrefix, fPath), //fPath,
 		}
 
 		if file.IsDir {

@@ -12,3 +12,7 @@ type DriveStorage struct {
 func (s *DriveStorage) List(fileParam *models.FileParam) (int, error) {
 	return s.Base.List(fileParam)
 }
+
+func (s *DriveStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
+	return s.Base.CreateFolder(fileParam)
+}

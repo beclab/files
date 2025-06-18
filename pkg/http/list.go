@@ -9,6 +9,10 @@ func listHandler(handler base.Execute, fileParam *models.FileParam) (int, error)
 	return handler.List(fileParam)
 }
 
+func createHandler(handler base.Execute, fileParam *models.FileParam) (int, error) {
+	return handler.CreateFolder(fileParam)
+}
+
 // func listHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 // srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
 // if err != nil {

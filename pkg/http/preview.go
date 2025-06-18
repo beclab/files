@@ -6,8 +6,9 @@ import (
 	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/preview"
-	"github.com/gorilla/mux"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 var (

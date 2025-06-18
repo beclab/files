@@ -12,3 +12,7 @@ type SmbStorage struct {
 func (s *SmbStorage) List(fileParam *models.FileParam) (int, error) {
 	return s.Base.List(fileParam)
 }
+
+func (s *SmbStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
+	return s.Base.CreateFolder(fileParam)
+}

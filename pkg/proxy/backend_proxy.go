@@ -158,7 +158,7 @@ func (p *BackendProxy) validate(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// deal for new cache method
 		cachePrefixMap := map[string]string{
-			API_RESOURCES_CACHE_PREFIX:     "resources",
+			// API_RESOURCES_CACHE_PREFIX:     "resources",
 			API_RAW_CACHE_PREFIX:           "raw",
 			API_MD5_CACHE_PREFIX:           "md5",
 			API_PREVIEW_THUMB_CACHE_PREFIX: "preview/thumb",
@@ -411,7 +411,7 @@ type BatchDeleteRequest struct {
 }
 
 func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
-	klog.Infof("Request Headers: %+v", c.Request().Header)
+	// klog.Infof("Request Headers: %+v", c.Request().Header)
 
 	node := c.Request().Header[NODE_HEADER]
 	path := c.Request().URL.Path // ! /api/resources/Home/
@@ -595,7 +595,8 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 				c.Request().URL.RawQuery = query.Encode()
 			}
 
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX, true)
+			var rr = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX, true)
+			c.Request().URL.Path = rr //rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX, true)
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX, true)
 		} else if strings.HasPrefix(path, API_MD5_PREFIX) {
@@ -607,7 +608,13 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		} else if strings.HasPrefix(path, API_PERMISSION_PREFIX) {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PERMISSION_PREFIX, true)
 		}
-		host = appdata.GetAppDataServiceEndpoint(p.k8sClient, node[0])
+
+		if node != nil && len(node) == 1 && node[0] == "olares" {
+			host = "127.0.0.1:8110"
+		} else {
+			host = appdata.GetAppDataServiceEndpoint(p.k8sClient, node[0])
+		}
+
 		klog.Info("host: ", host)
 		klog.Info("new path: ", c.Request().URL.Path)
 	} else {

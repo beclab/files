@@ -46,17 +46,20 @@ func NewHandler(
 		return fileHandle(fn, prefix, driverHandler, server)
 	}
 
+	_ = wrapWithParms
+
 	r.HandleFunc("/health", healthHandler)
 
 	api := r.PathPrefix("/api").Subrouter()
 
 	// ! demo
-	// api.PathPrefix("/list").Handler(wrapWithParms(listHandler, "/api/list")).Methods("GET") // todo
-	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources")).Methods("GET")
+	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources")).Methods("GET") // list
+	// api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources")).Methods("POST") // create
 
 	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
-	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
 	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST")
+	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
+
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")
 	api.PathPrefix("/resources").Handler(monkey(resourcePatchHandler(fileCache), "/api/resources")).Methods("PATCH")
 	api.PathPrefix("/batch_delete").Handler(monkey(batchDeleteHandler(fileCache), "/api/batch_delete")).Methods("DELETE")

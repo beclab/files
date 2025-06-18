@@ -50,7 +50,7 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 			},
 		}
 
-		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam)
+		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, fileParam.SubType, handlerParam), fileParam)
 		if status >= 400 || err != nil {
 			clientIP := realip.FromRequest(r)
 			klog.Errorf("%s: %v %s %v", r.URL.Path, status, clientIP, err)

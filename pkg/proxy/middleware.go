@@ -50,7 +50,7 @@ func (p *BackendProxy) nextListHandle(next echo.HandlerFunc) echo.HandlerFunc {
 			owner = users[0]
 		}
 
-		klog.Info("Owner: ", owner)
+		klog.Infof("Owner: %s, Path: %s", owner, path)
 
 		userPvc, err := PVCs.getUserPVCOrCache(owner)
 		if err != nil {

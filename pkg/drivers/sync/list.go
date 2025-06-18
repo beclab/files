@@ -34,7 +34,7 @@ func (s *SyncStorage) List(fileParam *models.FileParam) (int, error) {
 			return common.ErrToStatus(err), err
 		}
 
-		common.RenderJSON(w, r, res)
+		return common.RenderJSON(w, r, res)
 	}
 
 	if !strings.HasPrefix(r.URL.Path, "/sync") || strings.HasSuffix(src, "/") {
@@ -48,8 +48,17 @@ func (s *SyncStorage) List(fileParam *models.FileParam) (int, error) {
 		if err != nil {
 			return common.ErrToStatus(err), err
 		}
-		common.RenderJSON(w, r, res)
+		return common.RenderJSON(w, r, res)
 	}
 
-	return common.RenderSuccess(w, r)
+	repoID, prefix, filename := ParseSyncPath(src)
+	getUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file" + common.EscapeURLWithSpace(prefix) + common.EscapeURLWithSpace(filename) + "?dict=1"
+	klog.Infoln(getUrl)
+
+	res, err := s.Service.Get(getUrl, http.MethodGet, nil)
+	if err != nil {
+		return common.ErrToStatus(err), err
+	}
+
+	return common.RenderJSON(w, r, res)
 }
