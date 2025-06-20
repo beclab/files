@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"files/pkg/constant"
 	"files/pkg/drivers"
 	"files/pkg/drives"
 	"files/pkg/models"
@@ -27,22 +28,26 @@ type fileHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (in
 
 func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.DriverHandler, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
-		r.URL.RawPath = strings.TrimPrefix(r.URL.RawPath, prefix)
+		var path = r.URL.Path
 
-		paramStr := r.Header.Get("GATEWAY_FILE_PARAM")
-		if paramStr == "" {
-			http.Error(w, "driver not found", http.StatusBadRequest)
+		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+		if owner == "" {
+			http.Error(w, "user not found", http.StatusBadRequest)
+			return
 		}
 
-		var fileParam *models.FileParam
-		if err := json.Unmarshal([]byte(paramStr), &fileParam); err != nil {
-			http.Error(w, "unmarshal params error:"+err.Error(), http.StatusBadRequest)
+		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
+
+		var fileParam, err = models.CreateFileParam(owner, path)
+		if err != nil {
+			klog.Errorf("file param invalid: %v, owner: %s", err, owner)
+			http.Error(w, "param invalid found", http.StatusBadRequest)
+			return
 		}
 
-		klog.Infof("srcType: %s, url: %s, param: %s", fileParam.FileType, r.URL.Path, fileParam.Json())
+		klog.Infof("srcType: %s, url: %s, param: %s, header: %+v", fileParam.FileType, r.URL.Path, fileParam.Json(), r.Header)
 		var handlerParam = &base.HandlerParam{
-			Owner:          r.Header.Get("X-Bfl-User"),
+			Owner:          owner,
 			ResponseWriter: w,
 			Request:        r,
 			Data: &common.Data{
@@ -50,7 +55,7 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 			},
 		}
 
-		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, fileParam.SubType, handlerParam), fileParam)
+		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam)
 		if status >= 400 || err != nil {
 			clientIP := realip.FromRequest(r)
 			klog.Errorf("%s: %v %s %v", r.URL.Path, status, clientIP, err)

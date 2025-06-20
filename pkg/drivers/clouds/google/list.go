@@ -1,10 +1,10 @@
 package google
 
 import (
-	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +14,7 @@ import (
 
 // List implements base.DriverInterface.
 func (g *GoogleStorage) List(fileParam *models.FileParam) (int, error) {
+	klog.Infof("CLOUD GOOGLE list, owner: %s, param: %s", g.Base.Handler.Owner, fileParam.Json())
 	var w = g.Base.Handler.ResponseWriter
 	var r = g.Base.Handler.Request
 	var err error
@@ -33,20 +34,13 @@ func (g *GoogleStorage) List(fileParam *models.FileParam) (int, error) {
 		src += "/"
 	}
 
-	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
-
 	var data = &models.ListParam{
-		Path:  pathId,
-		Drive: srcDrive, // "my_drive",
-		Name:  srcName,  // "file_name",
+		Drive: fileParam.FileType,
+		Name:  fileParam.Extend,
+		Path:  fileParam.Path,
 	}
 
-	jsonBody, err := json.Marshal(data)
-	if err != nil {
-		klog.Errorln("Error marshalling JSON:", err)
-		return common.ErrToStatus(err), err
-	}
-	klog.Infof("Google Drive List Params: %s, meta: %d", string(jsonBody), meta)
+	klog.Infof("GOOGLE BASE list, owner: %s, get: %s", g.Base.Handler.Owner, utils.ToJson(data))
 
 	if meta == 1 {
 		res, err := g.Service.GetFileMetaData(data)
@@ -75,7 +69,7 @@ func (g *GoogleStorage) List(fileParam *models.FileParam) (int, error) {
 		return common.ErrToStatus(err), err
 	}
 
-	klog.Infof("Google Drive List Result, count: %d", len(listFiles.Data))
+	klog.Infof("CLOUD GOOGLE list result, count: %d", len(listFiles.Data))
 
 	return common.RenderJSON(w, r, listFiles)
 

@@ -16,9 +16,11 @@ package main
 
 import (
 	"context"
+	"files/pkg/appdata"
 	"files/pkg/proxy"
 	"files/pkg/signals"
 	"flag"
+
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -38,6 +40,8 @@ func main() {
 		MainCtx:    ctx,
 		KubeConfig: config,
 	}
+
+	appdata.NewAppData(config)
 
 	backendProxy := builder.Build()
 	proxy.PVCs = proxy.NewPVCCache(backendProxy)

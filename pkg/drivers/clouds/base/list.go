@@ -3,6 +3,7 @@ package base
 import (
 	"files/pkg/common"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"net/http"
 	"strconv"
 
@@ -10,6 +11,8 @@ import (
 )
 
 func (s *CloudStorage) List(fileParam *models.FileParam) (int, error) {
+	klog.Infof("CLOUD BASE list, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+
 	var w = s.Handler.ResponseWriter
 	var r = s.Handler.Request
 	var err error
@@ -26,15 +29,18 @@ func (s *CloudStorage) List(fileParam *models.FileParam) (int, error) {
 	src := r.URL.Path
 	klog.Infoln("src Path:", src)
 
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
-	klog.Infoln("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
+	var path = fileParam.Path
+	if fileParam.FileType == "dropbox" {
+		path = "/" + path
+	}
 
 	var data = &models.ListParam{
-		Path:  srcPath,
-		Drive: srcDrive, // "my_drive",
-		Name:  srcName,  // "file_name",
+		Drive: fileParam.FileType,
+		Name:  fileParam.Extend,
+		Path:  path,
 	}
-	klog.Infof("Cloud Drive List Params: %+v, meta: %d", data, meta)
+
+	klog.Infof("CLOUD BASE list, owner: %s, get: %s", s.Handler.Owner, utils.ToJson(data))
 
 	if meta == 1 {
 		res, err := s.Service.GetFileMetaData(data)

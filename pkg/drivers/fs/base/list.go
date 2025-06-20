@@ -1,6 +1,7 @@
 package base
 
 import (
+	"errors"
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/models"
@@ -22,18 +23,28 @@ var (
 func (s *FSStorage) List(fileParam *models.FileParam) (int, error) {
 	var r = s.Handler.Request
 	var w = s.Handler.ResponseWriter
+	var fsType = fileParam.FileType
+
+	var rootPrefix = s.GetRoot(fsType)
+	if rootPrefix == "" {
+		return 400, errors.New("type root path invalid")
+	}
+
+	var pvc, err = s.GetPvc(fsType)
+	if err != nil {
+		return 400, errors.New("pvc not found")
+	}
 
 	var file *files.FileInfo
-	var basePath = filepath.Join(fileParam.RootPrefix, fileParam.Extend)
-	klog.Infof("Posix drive list, owner: %s, basepath: %s, param: %s", s.Handler.Owner, filepath.Join(fileParam.RootPrefix, fileParam.Extend), fileParam.Json())
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:           afero.NewBasePathFs(afero.NewOsFs(), basePath),
-		Path:         fileParam.Path,
-		Modify:       true,
-		Expand:       true,
-		ReadHeader:   s.Handler.Data.Server.TypeDetectionByHeader,
-		Content:      true,
-		AppendPrefix: fileParam.AppendPrefix,
+	var basePath = filepath.Join(rootPrefix, pvc, fileParam.Extend)
+	klog.Infof("POSIX BASE list, owner: %s, basepath: %s, param: %s", s.Handler.Owner, basePath, fileParam.Json())
+	file, err = files.NewFileInfo(files.FileOptions{
+		Fs:         afero.NewBasePathFs(afero.NewOsFs(), basePath),
+		Path:       fileParam.Path,
+		Modify:     true,
+		Expand:     true,
+		ReadHeader: s.Handler.Data.Server.TypeDetectionByHeader,
+		Content:    true,
 	})
 
 	if err != nil {

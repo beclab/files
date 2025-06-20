@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"files/pkg/appdata"
 	"files/pkg/background_task"
 	"files/pkg/crontab"
 	"files/pkg/drivers"
@@ -36,6 +37,8 @@ import (
 	fbhttp "files/pkg/http"
 	"files/pkg/img"
 	"files/pkg/settings"
+
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 var (
@@ -65,7 +68,7 @@ func init() {
 func addServerFlags(flags *pflag.FlagSet) {
 	flags.StringP("address", "a", "127.0.0.1", "address to listen on")
 	flags.StringP("log", "l", "stdout", "log output")
-	flags.StringP("port", "p", "8110", "port to listen on")
+	flags.StringP("port", "p", "8080", "port to listen on") // 8110
 	flags.StringP("cert", "t", "", "tls certificate")
 	flags.StringP("key", "k", "", "tls key")
 	flags.StringP("root", "r", ".", "root to prepend to relative paths")
@@ -210,6 +213,10 @@ user created with the credentials from options "username" and "password".`,
 
 		// step7: build driver handler
 		driverHandler := &drivers.DriverHandler{}
+
+		// stop8: init appdata
+		config := ctrl.GetConfigOrDie()
+		appdata.NewAppData(config)
 
 		sigc := make(chan os.Signal, 1)
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
