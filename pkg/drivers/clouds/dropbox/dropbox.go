@@ -16,3 +16,7 @@ func (s *DropBoxStorage) List(fileParam *models.FileParam) (int, error) {
 func (s *DropBoxStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
 	return s.Base.CreateFolder(fileParam)
 }
+
+func (s *DropBoxStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return s.Base.Rename(fileParam)
+}

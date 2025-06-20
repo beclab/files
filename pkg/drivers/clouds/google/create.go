@@ -1,8 +1,9 @@
-package base
+package google
 
 import (
 	"errors"
 	"files/pkg/common"
+	"files/pkg/drives/model"
 	"files/pkg/models"
 	"files/pkg/utils"
 	"path/filepath"
@@ -11,8 +12,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (s *CloudStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
-	klog.Infof("CLOUD BASE create, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+func (s *GoogleStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
+	klog.Infof("CLOUD GOOGLE create, owner: %s, param: %s", s.Base.Handler.Owner, fileParam.Json())
+	var w = s.Base.Handler.ResponseWriter
+	var r = s.Base.Handler.Request
+	var err error
 
 	var path = strings.Trim(fileParam.Path, "/")
 	if path == "" {
@@ -32,16 +36,16 @@ func (s *CloudStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
 		ParentPath: parentPath,
 		FolderName: folderName,
 	}
-	klog.Infof("CLOUD BASE create, owner: %s, post: %s", s.Handler.Owner, utils.ToJson(param))
+
+	klog.Infof("GOOGLE BASE create, owner: %s, post: %s", s.Base.Handler.Owner, utils.ToJson(param))
 
 	res, err := s.Service.CreateFolder(param)
 	if err != nil {
-		klog.Errorln("Error calling drive/create_folder:", err)
+		klog.Errorf("CLOUD GOOGLE create folder error: %v, owner: %s", err, s.Base.Handler.Owner)
 		return common.ErrToStatus(err), err
 	}
 
-	result := res.(*models.CloudResponse)
-	klog.Infof("CLOUD BASE create, owner: %s, result: %+v", s.Handler.Owner, result)
-	return 0, nil
-
+	result := res.(*model.GoogleDriveResponse)
+	klog.Infof("CLOUD GOOGLE create, owner: %s, result: %+v", s.Base.Handler.Owner, result)
+	return common.RenderSuccess(w, r)
 }

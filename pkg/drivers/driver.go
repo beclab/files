@@ -9,16 +9,16 @@ import (
 
 type DriverHandler struct{}
 
-func (d *DriverHandler) NewFileHandler(fileType string, subType string, handlerParam *base.HandlerParam) base.Execute {
+func (d *DriverHandler) NewFileHandler(fileType string, handlerParam *base.HandlerParam) base.Execute {
 	switch fileType {
 	case "drive", "data", "cache", "internal", "hdd", "smb", "usb":
 		return fs.NewFsStorage(fileType, handlerParam)
-	case "external": // temp
+	case "external": // todo
 		return fs.NewFsStorage(fileType, handlerParam)
 	case "sync":
 		return syncs.NewSyncStorage(handlerParam)
-	case "cloud":
-		return clouds.NewCloudStorage(subType, handlerParam)
+	case "google", "awss3", "", "tencent", "dropbox":
+		return clouds.NewCloudStorage(fileType, handlerParam)
 
 	default:
 		panic("driver not found")

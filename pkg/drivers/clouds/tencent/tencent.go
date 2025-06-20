@@ -16,3 +16,7 @@ func (s *TencentStorage) List(fileParam *models.FileParam) (int, error) {
 func (s *TencentStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
 	return s.Base.CreateFolder(fileParam)
 }
+
+func (s *TencentStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return s.Base.Rename(fileParam)
+}

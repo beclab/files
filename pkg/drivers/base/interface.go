@@ -7,6 +7,7 @@ import (
 type Execute interface {
 	List(fileParam *models.FileParam) (int, error)
 	CreateFolder(fileParam *models.FileParam) (int, error)
+	Rename(fileParam *models.FileParam) (int, error)
 }
 
 type CloudServiceInterface interface {

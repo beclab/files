@@ -16,3 +16,7 @@ func (s *SmbStorage) List(fileParam *models.FileParam) (int, error) {
 func (s *SmbStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
 	return s.Base.CreateFolder(fileParam)
 }
+
+func (s *SmbStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return s.Base.Rename(fileParam)
+}

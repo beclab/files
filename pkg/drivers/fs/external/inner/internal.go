@@ -12,3 +12,7 @@ type InternalStorage struct {
 func (s *InternalStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
 	return s.Base.CreateFolder(fileParam)
 }
+
+func (s *InternalStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return s.Base.Rename(fileParam)
+}
