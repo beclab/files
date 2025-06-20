@@ -58,6 +58,7 @@ const (
 	API_PASTE_CACHE_PREFIX         = "/api/paste/cache"
 	API_CACHE_PREFIX               = "/api/cache"
 	API_BATCH_DELETE_PREFIX        = "/api/batch_delete"
+	API_LIST_PREFIX                = "/api/list"
 )
 
 var REWRITE_FOCUSED_PREFIXES = []string{
@@ -279,6 +280,8 @@ func rewriteUrl(path string, pvc string, prefix string, hasFocusPrefix bool) str
 				}
 			}
 		}
+		// fPrefix = "/api/paste/"
+		// dealPath = "cache/olares/os_framework_search3.sql?action=copy&destination=/cache/olares/tailscale/os_framework_search3.sql&override=false&rename=true"
 		dealPath = strings.TrimPrefix(dealPath, "/")
 		klog.Infof("Rewriting url for: %s with a focus prefix: %s", dealPath, focusPrefix)
 		klog.Infof("pvc: %s", pvc)
@@ -409,10 +412,10 @@ type BatchDeleteRequest struct {
 }
 
 func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
-	klog.Infof("Request Headers: %+v", c.Request().Header)
+	// klog.Infof("Request Headers: %+v", c.Request().Header)
 
 	node := c.Request().Header[NODE_HEADER]
-	path := c.Request().URL.Path
+	path := c.Request().URL.Path // ! /api/resources/Home/
 	bfl := c.Request().Header[BFL_HEADER]
 	bflName := ""
 	if len(bfl) > 0 {
@@ -592,7 +595,6 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 				query.Set("destination", dst)
 				c.Request().URL.RawQuery = query.Encode()
 			}
-
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX, true)
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
 			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX, true)

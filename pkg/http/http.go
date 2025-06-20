@@ -1,12 +1,14 @@
 package http
 
 import (
+	"files/pkg/drivers"
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"files/pkg/rpc"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"k8s.io/klog/v2"
-	"net/http"
 
 	"github.com/gorilla/mux"
 
@@ -16,6 +18,7 @@ import (
 func NewHandler(
 	imgSvc preview.ImgService,
 	fileCache fileutils.FileCache,
+	driverHandler *drivers.DriverHandler,
 	server *settings.Server,
 ) (http.Handler, error) {
 	server.Clean()
@@ -39,22 +42,33 @@ func NewHandler(
 		return handle(fn, prefix, server)
 	}
 
+	wrapWithParms := func(fn fileHandlerFunc, prefix string) http.Handler {
+		return fileHandle(fn, prefix, driverHandler, server)
+	}
+
+	_ = wrapWithParms
+
 	r.HandleFunc("/health", healthHandler)
 
 	api := r.PathPrefix("/api").Subrouter()
 
-	api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
+	// ! demo
+	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources")).Methods("GET")    // list
+	api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources")).Methods("POST") // create folder
+
+	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
+	// api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST") // create
 	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
-	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST")
-	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")
-	api.PathPrefix("/resources").Handler(monkey(resourcePatchHandler(fileCache), "/api/resources")).Methods("PATCH")
+
+	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")                // ??
+	api.PathPrefix("/resources").Handler(monkey(resourcePatchHandler(fileCache), "/api/resources")).Methods("PATCH") // todo rename
 	api.PathPrefix("/batch_delete").Handler(monkey(batchDeleteHandler(fileCache), "/api/batch_delete")).Methods("DELETE")
 	api.PathPrefix("/mounted").Handler(monkey(resourceMountedHandler, "/api/mounted")).Methods("GET")
 	api.PathPrefix("/mount").Handler(monkey(resourceMountHandler, "/api/mount")).Methods("POST")
 	api.PathPrefix("/unmount").Handler(monkey(resourceUnmountHandler, "/api/unmount")).Methods("DELETE")
 	// Because /api/resources/AppData is proxied under current arch, new api must be of a different prefix,
 	// and try to access /api/resources/AppData in the handle func.
-	api.PathPrefix("/paste").Handler(monkey(resourcePasteHandler(fileCache), "/api/paste")).Methods("PATCH")
+	api.PathPrefix("/paste").Handler(monkey(resourcePasteHandler(fileCache), "/api/paste")).Methods("PATCH") // paste
 	api.PathPrefix("/task").Handler(monkey(resourceTaskGetHandler, "/api/task")).Methods("GET")
 	api.PathPrefix("/task").Handler(monkey(resourceTaskDeleteHandler, "/api/task")).Methods("DELETE")
 

@@ -26,9 +26,7 @@ func RequestWithContext[T any](u string, method string, header *http.Header, req
 
 	var result *T
 	var requestBody *bytes.Buffer = nil
-	if requestParams != nil {
-		requestBody = bytes.NewBuffer(requestParams)
-	}
+	requestBody = bytes.NewBuffer(requestParams)
 
 	if err := retry.OnError(backoff, func(err error) bool {
 		return true

@@ -1,0 +1,22 @@
+package dropbox
+
+import (
+	"files/pkg/drivers/clouds/base"
+	"files/pkg/models"
+)
+
+type DropBoxStorage struct {
+	Base *base.CloudStorage
+}
+
+func (s *DropBoxStorage) List(fileParam *models.FileParam) (int, error) {
+	return s.Base.List(fileParam)
+}
+
+func (s *DropBoxStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
+	return s.Base.CreateFolder(fileParam)
+}
+
+func (s *DropBoxStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return s.Base.Rename(fileParam)
+}
