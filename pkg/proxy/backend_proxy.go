@@ -266,7 +266,7 @@ func (p *BackendProxy) addHandlers(route string, handler GatewayHandler) {
 	}
 }
 
-func rewriteUrl(path string, pvc string, prefix string, hasFocusPrefix bool) string {
+func RewriteUrl(path string, pvc string, prefix string, hasFocusPrefix bool) string {
 	if prefix == "" {
 		dealPath := path
 		focusPrefix := "/"
@@ -352,7 +352,7 @@ func (p *PVCCache) getFromCache(cached func() *string, fetch func() (string, err
 	}()
 }
 
-func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
+func (p *PVCCache) GetUserPVCOrCache(bflName string) (string, error) {
 
 	return p.getFromCache(
 		func() *string {
@@ -379,7 +379,7 @@ func (p *PVCCache) getUserPVCOrCache(bflName string) (string, error) {
 
 }
 
-func (p *PVCCache) getCachePVCOrCache(bflName string) (string, error) {
+func (p *PVCCache) GetCachePVCOrCache(bflName string) (string, error) {
 	return p.getFromCache(
 		func() *string {
 			if val, ok := p.cachePvcMap[bflName]; ok {
@@ -420,14 +420,14 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 	}
 	klog.Info("BFL_NAME: ", bflName)
 
-	userPvc, err := PVCs.getUserPVCOrCache(bflName)
+	userPvc, err := PVCs.GetUserPVCOrCache(bflName)
 	if err != nil {
 		klog.Info(err)
 	} else {
 		klog.Info("user-space pvc: ", userPvc)
 	}
 
-	cachePvc, err := PVCs.getCachePVCOrCache(bflName)
+	cachePvc, err := PVCs.GetCachePVCOrCache(bflName)
 	if err != nil {
 		klog.Info(err)
 	} else {
@@ -456,7 +456,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 			for i, dirent := range reqBody.Dirents {
 				klog.Infof("dirents[%d]: %s", i, dirent)
 				if srcType == drives.SrcTypeDrive || srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
-					modifiedDirents[i] = rewriteUrl(dirent, userPvc, "", false)
+					modifiedDirents[i] = RewriteUrl(dirent, userPvc, "", false)
 				} else if srcType == drives.SrcTypeCache {
 					if strings.HasPrefix(dirent, "/cache") {
 						dirent = strings.TrimPrefix(dirent, "/cache")
@@ -484,7 +484,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 							node = c.Request().Header[NODE_HEADER]
 						}
 					} // only for cache for compatible
-					modifiedDirents[i] = rewriteUrl(dirent, cachePvc, "/AppData", false)
+					modifiedDirents[i] = RewriteUrl(dirent, cachePvc, "/AppData", false)
 				} else {
 					modifiedDirents[i] = dirent
 				}
@@ -533,13 +533,13 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 		klog.Infoln("DST_TYPE:", dstType)
 
 		if srcType == drives.SrcTypeDrive || srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
-			src = rewriteUrl(src, userPvc, "", true)
+			src = RewriteUrl(src, userPvc, "", true)
 		} else if srcType == drives.SrcTypeCache {
-			src = rewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData", true)
+			src = RewriteUrl(src, cachePvc, API_PASTE_PREFIX+"/AppData", true)
 		}
 
 		if dstType == drives.SrcTypeDrive || dstType == drives.SrcTypeData || dstType == drives.SrcTypeExternal {
-			dst = rewriteUrl(dst, userPvc, "", false)
+			dst = RewriteUrl(dst, userPvc, "", false)
 			query.Set("destination", dst)
 		} else if dstType == drives.SrcTypeCache {
 			if strings.HasPrefix(dst, "/cache") {
@@ -567,7 +567,7 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 					c.Request().Header.Set(NODE_HEADER, dstNode)
 				}
 			} // only for cache for compatible
-			dst = rewriteUrl(dst, cachePvc, "/AppData", false)
+			dst = RewriteUrl(dst, cachePvc, "/AppData", false)
 			query.Set("destination", dst)
 		}
 
@@ -587,23 +587,23 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 				if strings.HasPrefix(dst, "/cache") {
 					dst = strings.TrimPrefix(dst, "/cache")
 				} // only for cache for compatible
-				dst = rewriteUrl(dst, cachePvc, "/AppData", false)
+				dst = RewriteUrl(dst, cachePvc, "/AppData", false)
 				dst = strings.Replace(dst, "/"+node[0], "", 1)
 				query.Set("destination", dst)
 				c.Request().URL.RawQuery = query.Encode()
 			}
 
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RESOURCES_PREFIX, true)
+			c.Request().URL.Path = RewriteUrl(path, cachePvc, API_RESOURCES_PREFIX, true)
 		} else if strings.HasPrefix(path, API_RAW_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_RAW_PREFIX, true)
+			c.Request().URL.Path = RewriteUrl(path, cachePvc, API_RAW_PREFIX, true)
 		} else if strings.HasPrefix(path, API_MD5_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_MD5_PREFIX, true)
+			c.Request().URL.Path = RewriteUrl(path, cachePvc, API_MD5_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PREVIEW_THUMB_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_THUMB_PREFIX, true)
+			c.Request().URL.Path = RewriteUrl(path, cachePvc, API_PREVIEW_THUMB_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PREVIEW_BIG_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PREVIEW_BIG_PREFIX, true)
+			c.Request().URL.Path = RewriteUrl(path, cachePvc, API_PREVIEW_BIG_PREFIX, true)
 		} else if strings.HasPrefix(path, API_PERMISSION_PREFIX) {
-			c.Request().URL.Path = rewriteUrl(path, cachePvc, API_PERMISSION_PREFIX, true)
+			c.Request().URL.Path = RewriteUrl(path, cachePvc, API_PERMISSION_PREFIX, true)
 		}
 		host = appdata.GetAppDataServiceEndpoint(p.k8sClient, node[0])
 		klog.Info("host: ", host)
@@ -620,14 +620,15 @@ func (p *BackendProxy) Next(c echo.Context) *middleware.ProxyTarget {
 					dst = strings.TrimPrefix(dst, "/cache")
 				} // only for cache for compatible
 				klog.Infoln("DST:", dst)
-				dst = rewriteUrl(dst, userPvc, "", false)
+				dst = RewriteUrl(dst, userPvc, "", false)
 				query.Set("destination", dst)
 				c.Request().URL.RawQuery = query.Encode()
 			}
-			c.Request().URL.Path = rewriteUrl(path, userPvc, "", true)
+			c.Request().URL.Path = RewriteUrl(path, userPvc, "", true)
 			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, UPLOADER_PREFIX) {
-			host = "127.0.0.1:40030"
+			//host = "127.0.0.1:40030"
+			host = "127.0.0.1:8110"
 		} else if strings.HasPrefix(path, MEDIA_PREFIX) {
 			host = "127.0.0.1:9090"
 		}

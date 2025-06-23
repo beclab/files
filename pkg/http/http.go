@@ -41,6 +41,12 @@ func NewHandler(
 
 	r.HandleFunc("/health", healthHandler)
 
+	uploader := r.PathPrefix("/upload").Subrouter()
+
+	uploader.PathPrefix("/upload-link").Handler(monkey(uploadLinkHandler, "/upload/upload-link")).Methods("GET")
+	uploader.PathPrefix("/file-uploaded-bytes").Handler(monkey(uploadedBytesHandler, "/upload/file-uploaded-bytes")).Methods("GET")
+	uploader.PathPrefix("/upload-link/{uid}").Handler(monkey(uploadChunksHandler, "/upload/upload-link")).Methods("POST")
+
 	api := r.PathPrefix("/api").Subrouter()
 
 	api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
