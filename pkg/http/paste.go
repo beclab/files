@@ -208,9 +208,14 @@ func createAndRemoveTempFile(targetDir string) error {
 	filename := fmt.Sprintf("temp_%s_%s.testwriting", timestamp, randomStr)
 	filePath := filepath.Join(dir, filename)
 
+	defer func() {
+		_ = os.Remove(filePath)
+		klog.Infof("Cleaned up temporary file %s", filePath)
+	}()
+
 	klog.Infof("Creating temporary file %s", filePath)
 
-	if err := os.WriteFile(filePath, []byte{}, 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte{0}, 0o644); err != nil {
 		var pathErr *fs.PathError
 		if e.As(err, &pathErr) {
 			if pathErr.Err == syscall.EACCES || pathErr.Err == syscall.EPERM {
@@ -220,10 +225,6 @@ func createAndRemoveTempFile(targetDir string) error {
 			}
 		}
 		return fmt.Errorf("failed to create file: %v", err)
-	}
-
-	if err := os.Remove(filePath); err != nil {
-		return fmt.Errorf("failed to remove file: %v", err)
 	}
 
 	return nil
