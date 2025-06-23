@@ -203,7 +203,7 @@ func GetAnnotation(ctx context.Context, client *kubernetes.Clientset, key string
 	return bfl.Annotations[key], nil
 }
 
-func (p *BflPVCCache) getUserPVCOrCache(bflName string) (string, error) {
+func (p *BflPVCCache) GetUserPVCOrCache(bflName string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -223,7 +223,7 @@ func (p *BflPVCCache) getUserPVCOrCache(bflName string) (string, error) {
 	return userPvc, nil
 }
 
-func (p *BflPVCCache) getCachePVCOrCache(bflName string) (string, error) {
+func (p *BflPVCCache) GetCachePVCOrCache(bflName string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
