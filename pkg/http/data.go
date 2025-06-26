@@ -324,10 +324,10 @@ func commonHandle(fn commonFunc) http.Handler {
 
 func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		checked := CheckPathOwner(r, prefix)
-		if !checked {
-			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-		}
+		//checked := CheckPathOwner(r, prefix)
+		//if !checked {
+		//	http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		//}
 
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 

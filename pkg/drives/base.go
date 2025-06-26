@@ -7,12 +7,14 @@ import (
 	"files/pkg/errors"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/models"
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,10 +34,10 @@ type ResourceService interface {
 	// resource handlers
 	GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
 	DeleteHandler(fileCache fileutils.FileCache) handleFunc
-	PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-	PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-	PatchHandler(fileCache fileutils.FileCache) handleFunc
-	BatchDeleteHandler(fileCache fileutils.FileCache, dirents []string) handleFunc
+	PostHandler(fileParam *models.FileParam) handleFunc
+	PutHandler(fileParam *models.FileParam) handleFunc
+	PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc
+	BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc
 
 	// raw handler
 	RawHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
@@ -83,6 +85,10 @@ const (
 	SrcTypeAWSS3    = "awss3"
 	SrcTypeTencent  = "tencent"
 	SrcTypeDropbox  = "dropbox"
+	SrcTypeInternal = "internal"
+	SrcTypeUsb      = "usb"
+	SrcTypeSmb      = "smb"
+	SrcTypeHdd      = "hdd"
 )
 
 var ValidSrcTypes = map[string]bool{
@@ -96,11 +102,15 @@ var ValidSrcTypes = map[string]bool{
 	SrcTypeAWSS3:    true,
 	SrcTypeTencent:  true,
 	SrcTypeDropbox:  true,
+	SrcTypeInternal: true,
+	SrcTypeUsb:      true,
+	SrcTypeSmb:      true,
+	SrcTypeHdd:      true,
 }
 
 func GetResourceService(srcType string) (ResourceService, error) {
 	switch srcType {
-	case SrcTypeDrive, SrcTypeData, SrcTypeExternal:
+	case SrcTypeDrive, SrcTypeData, SrcTypeExternal, SrcTypeInternal, SrcTypeUsb, SrcTypeSmb, SrcTypeHdd:
 		return DriveService, nil
 	case SrcTypeCache:
 		return CacheService, nil
@@ -347,58 +357,81 @@ func (rs *BaseResourceService) DeleteHandler(fileCache fileutils.FileCache) hand
 	}
 }
 
-func (rs *BaseResourceService) PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	modeParam := r.URL.Query().Get("mode")
+func (rs *BaseResourceService) PostHandler(fileParam *models.FileParam) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		modeParam := r.URL.Query().Get("mode")
 
-	mode, err := strconv.ParseUint(modeParam, 8, 32)
-	if err != nil || modeParam == "" {
-		mode = 0775
-	}
+		mode, err := strconv.ParseUint(modeParam, 8, 32)
+		if err != nil || modeParam == "" {
+			mode = 0775
+		}
 
-	fileMode := os.FileMode(mode)
+		fileMode := os.FileMode(mode)
 
-	// Directories creation on POST.
-	if strings.HasSuffix(r.URL.Path, "/") {
-		if err = fileutils.MkdirAllWithChown(files.DefaultFs, r.URL.Path, fileMode); err != nil {
+		uri, err := fileParam.GetResourceUri()
+		if err != nil {
+			klog.Errorln(err)
+			return common.ErrToStatus(err), err
+		}
+		urlPath := uri + fileParam.Path
+		klog.Infoln("~~~Debug log: urlPath:", urlPath)
+		if err = fileutils.MkdirAllWithChown(nil, urlPath, fileMode); err != nil {
 			klog.Errorln(err)
 			return common.ErrToStatus(err), err
 		}
 		return http.StatusOK, nil
 	}
-	return http.StatusBadRequest, fmt.Errorf("%s is not a valid directory path", r.URL.Path)
 }
 
-func (rs *BaseResourceService) PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	// Only allow PUT for files.
-	if strings.HasSuffix(r.URL.Path, "/") {
-		return http.StatusMethodNotAllowed, nil
-	}
-
-	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	if !exists {
-		return http.StatusNotFound, nil
-	}
-
-	info, err := fileutils.WriteFile(files.DefaultFs, r.URL.Path, r.Body)
-	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
-	w.Header().Set("ETag", etag)
-
-	return common.ErrToStatus(err), err
-}
-
-func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
+func (rs *BaseResourceService) PutHandler(fileParam *models.FileParam) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		src := r.URL.Path
-		dst := r.URL.Query().Get("destination")
-		action := r.URL.Query().Get("action")
-		dst, err := common.UnescapeURLIfEscaped(dst)
+		// Only allow PUT for files.
+		if strings.HasSuffix(fileParam.Path, "/") {
+			return http.StatusMethodNotAllowed, nil
+		}
 
+		uri, err := fileParam.GetResourceUri()
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		urlPath := strings.TrimPrefix(uri+fileParam.Path, "/data")
+
+		exists, err := afero.Exists(files.DefaultFs, urlPath)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+		if !exists {
+			return http.StatusNotFound, nil
+		}
+
+		info, err := fileutils.WriteFile(files.DefaultFs, urlPath, r.Body)
+		etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
+		w.Header().Set("ETag", etag)
+
+		return common.ErrToStatus(err), err
+	}
+}
+
+func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		action := "rename" // only this for PATCH /api/resources
+
+		uri, err := fileParam.GetResourceUri()
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+
+		src := strings.TrimPrefix(uri+fileParam.Path, "/data")
+		dst := r.URL.Query().Get("destination") // only a name in PATCH /api/resources now
+		dst, err = common.UnescapeURLIfEscaped(dst)
 		if err != nil {
 			return common.ErrToStatus(err), err
 		}
+		dst = filepath.Join(filepath.Dir(strings.TrimSuffix(src, "/")), dst)
+		if strings.HasSuffix(src, "/") {
+			dst += "/"
+		}
+
 		if dst == "/" || src == "/" {
 			return http.StatusForbidden, nil
 		}
@@ -408,20 +441,12 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 			return http.StatusBadRequest, err
 		}
 
-		rename := r.URL.Query().Get("rename") == "true"
-		if !rename {
-			if _, err = files.DefaultFs.Stat(dst); err == nil {
-				return http.StatusConflict, nil
-			}
-		}
-		if rename {
-			dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
-		}
+		dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 
 		srcExternalType := files.GetExternalType(src, MountedData)
 		dstExternalType := files.GetExternalType(dst, MountedData)
 
-		klog.Infoln("Before patch action:", src, dst, action, rename)
+		klog.Infoln("Before patch action:", src, dst)
 
 		needTaskStr := r.URL.Query().Get("task")
 		needTask := 0
@@ -454,7 +479,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 						concreteTask.Status = "running"
 						concreteTask.Progress = 0
 
-						executePatchTask(concreteTask, action, SrcTypeCache, SrcTypeCache, rename, d, fileCache, w, r)
+						executePatchTask(concreteTask, action, SrcTypeCache, SrcTypeCache, d, fileCache, w, r)
 					}
 				}
 			})
@@ -466,11 +491,19 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache) handl
 	}
 }
 
-func (rs *BaseResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, dirents []string) handleFunc {
+func (rs *BaseResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		failDirents := []string{}
-		for _, dirent := range dirents {
-			if dirent == "/" {
+		for _, fileParam := range fileParams {
+			uri, err := fileParam.GetResourceUri()
+			if err != nil {
+				klog.Errorln(err)
+				failDirents = append(failDirents, fileParam.Path)
+			}
+
+			dirent := strings.TrimPrefix(uri+fileParam.Path, "/data")
+			klog.Infoln("~~~Debug log: dirent:", dirent)
+			if fileParam.Path == "/" {
 				failDirents = append(failDirents, dirent)
 				continue
 			}
@@ -594,7 +627,7 @@ func (rs *BaseResourceService) parsePathToURI(path string) (string, string) {
 	return "error", ""
 }
 
-func executePatchTask(task *pool.Task, action, srcType, dstType string, rename bool,
+func executePatchTask(task *pool.Task, action, srcType, dstType string,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
 	select {
 	case <-task.Ctx.Done():
