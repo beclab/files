@@ -9,6 +9,7 @@ import (
 	"files/pkg/drives/storage"
 	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/models"
 	"files/pkg/parser"
 	"files/pkg/pool"
 	"files/pkg/preview"
@@ -51,6 +52,29 @@ func CloudDriveNormalizationPath(path, srcType string, same, addSuffix bool) str
 	}
 
 	return path
+}
+
+func GetCloudDriveMetadataFileParam(fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) (*model.CloudResponseData, error) {
+	param := &model.ListParam{
+		Path:  fileParam.Path,
+		Drive: fileParam.FileType, // "my_drive",
+		Name:  fileParam.Extend,   // "file_name",
+	}
+
+	cloudStorage := &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	res, err := cloudStorage.GetFileMetaData(param)
+	if err != nil {
+		klog.Errorf("Cloud Drive get_file_meta_data error: %v", err)
+		return nil, err
+	}
+
+	fileMetaDataResp := res.(*model.CloudResponse)
+	return fileMetaDataResp.Data, nil
 }
 
 func GetCloudDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*model.CloudResponseData, error) {
@@ -638,30 +662,34 @@ func (rc *CloudDriveResourceService) DeleteHandler(fileCache fileutils.FileCache
 	}
 }
 
-func (rc *CloudDriveResourceService) PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	_, status, err := ResourcePostCloudDrive(r.URL.Path, w, r, true)
-	return status, err
-}
-
-func (rc *CloudDriveResourceService) PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	// not public api for cloud drive, so it is not implemented
-	return http.StatusNotImplemented, fmt.Errorf("cloud drive does not supoort editing files")
-}
-
-func (rc *CloudDriveResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
+func (rc *CloudDriveResourceService) PostHandler(fileParam *models.FileParam) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		return ResourcePatchCloudDrive(fileCache, w, r)
+		_, status, err := ResourcePostCloudDriveFileParam(fileParam, w, r, true)
+		return status, err
 	}
 }
 
-func (rc *CloudDriveResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, dirents []string) handleFunc {
+func (rc *CloudDriveResourceService) PutHandler(fileParam *models.FileParam) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		// not public api for cloud drive, so it is not implemented
+		return http.StatusNotImplemented, fmt.Errorf("cloud drive does not supoort editing files")
+	}
+}
+
+func (rc *CloudDriveResourceService) PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		return ResourcePatchCloudDrive(fileCache, fileParam, w, r)
+	}
+}
+
+func (rc *CloudDriveResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		failDirents := []string{}
-		for _, dirent := range dirents {
-			_, status, err := ResourceDeleteCloudDrive(fileCache, dirent, w, r, true)
+		for _, fileParam := range fileParams {
+			_, status, err := ResourceDeleteCloudDriveFileParam(fileCache, fileParam, w, r, true)
 			if (status != http.StatusOK && status != 0) || err != nil {
-				klog.Errorf("delete %s failed with status %d and err %v", dirent, status, err)
-				failDirents = append(failDirents, dirent)
+				klog.Errorf("delete %s failed with status %d and err %v", fileParam.Path, status, err)
+				failDirents = append(failDirents, fileParam.Path)
 				continue
 			}
 		}
@@ -1101,6 +1129,34 @@ func (rs *CloudDriveResourceService) GetTaskFileInfo(fs afero.Fs, src string, w 
 	return isDir, fileType, filename, nil
 }
 
+func ResourceDeleteCloudDriveFileParam(fileCache fileutils.FileCache, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.CloudResponse, int, error) {
+	var storage = &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.DeleteParam{
+		Path:  fileParam.Path,
+		Drive: fileParam.FileType, // "my_drive",
+		Name:  fileParam.Extend,   // "file_name",
+	}
+
+	// del thumbnails for Cloud Drive
+	err := delThumbsCloudDriveFileParam(r.Context(), fileCache, fileParam, w, r)
+	if err != nil {
+		return nil, common.ErrToStatus(err), err
+	}
+
+	res, err := storage.Delete(param)
+	if err != nil {
+		klog.Errorln("Error calling drive/delete:", err)
+		return nil, common.ErrToStatus(err), err
+	}
+	result := res.(*model.CloudResponse)
+	return result, 0, nil
+}
+
 func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.CloudResponse, int, error) {
 	if src == "" {
 		src = r.URL.Path
@@ -1133,6 +1189,32 @@ func ResourceDeleteCloudDrive(fileCache fileutils.FileCache, src string, w http.
 		klog.Errorln("Error calling drive/delete:", err)
 		return nil, common.ErrToStatus(err), err
 	}
+	result := res.(*model.CloudResponse)
+	return result, 0, nil
+}
+
+func ResourcePostCloudDriveFileParam(fileParam *models.FileParam, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.CloudResponse, int, error) {
+	path, newName := path.Split(fileParam.Path)
+
+	var storage = &storage.CloudStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.PostParam{
+		ParentPath: path,
+		FolderName: newName,
+		Drive:      fileParam.FileType, // "my_drive",
+		Name:       fileParam.Extend,   // "file_name",
+	}
+
+	res, err := storage.CreateFolder(param)
+	if err != nil {
+		klog.Errorln("Error calling drive/create_folder:", err)
+		return nil, common.ErrToStatus(err), err
+	}
+
 	result := res.(*model.CloudResponse)
 	return result, 0, nil
 }
@@ -1171,16 +1253,12 @@ func ResourcePostCloudDrive(src string, w http.ResponseWriter, r *http.Request, 
 	return result, 0, nil
 }
 
-func ResourcePatchCloudDrive(fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
-	src := r.URL.Path
+func ResourcePatchCloudDrive(fileCache fileutils.FileCache, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) (int, error) {
 	dst := r.URL.Query().Get("destination")
-	dst, err := common.UnescapeURLIfEscaped(dst)
-
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
-	_, _, dstPath := ParseCloudDrivePath(dst)
-	klog.Infoln("dstPath=", dstPath)
-	dstDir, dstFilename := path.Split(dstPath)
-	klog.Infoln("dstDir=", dstDir, ", dstFilename=", dstFilename)
+	dstFilename, err := common.UnescapeURLIfEscaped(dst)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
 
 	var storage = &storage.CloudStorage{
 		Owner:          r.Header.Get("X-Bfl-User"),
@@ -1189,21 +1267,14 @@ func ResourcePatchCloudDrive(fileCache fileutils.FileCache, w http.ResponseWrite
 	}
 
 	param := &model.PatchParam{
-		Path:        srcPath,
+		Path:        fileParam.Path,
 		NewFileName: dstFilename,
-		Drive:       srcDrive, // "my_drive",
-		Name:        srcName,  // "file_name",
+		Drive:       fileParam.FileType, // "my_drive",
+		Name:        fileParam.Extend,   // "file_name",
 	}
 
-	// jsonBody, err := json.Marshal(param)
-	// if err != nil {
-	// 	klog.Errorln("Error marshalling JSON:", err)
-	// 	return common.ErrToStatus(err), err
-	// }
-	// klog.Infoln("Cloud Drive Patch Params:", string(jsonBody))
-
 	// del thumbnails for Cloud Drive
-	err = delThumbsCloudDrive(r.Context(), fileCache, src, w, r)
+	err = delThumbsCloudDriveFileParam(r.Context(), fileCache, fileParam, w, r)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
@@ -1428,6 +1499,28 @@ func PreviewGetCloudDrive(w http.ResponseWriter, r *http.Request, previewSize pr
 	} else {
 		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", fileType)
 	}
+}
+
+func delThumbsCloudDriveFileParam(ctx context.Context, fileCache fileutils.FileCache, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) error {
+	metaData, err := GetCloudDriveMetadataFileParam(fileParam, w, r)
+	if err != nil {
+		klog.Errorln("Error calling drive/get_file_meta_data:", err)
+		return err
+	}
+
+	for _, previewSizeName := range preview.PreviewSizeNames() {
+		size, _ := preview.ParsePreviewSize(previewSizeName)
+		cacheKey := previewCacheKeyCloudDrive(metaData, size)
+		if err := fileCache.Delete(ctx, cacheKey); err != nil {
+			return err
+		}
+		err := redisutils.DelThumbRedisKey(redisutils.GetFileName(cacheKey))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func delThumbsCloudDrive(ctx context.Context, fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request) error {
