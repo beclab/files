@@ -10,6 +10,9 @@ import (
 	"files/pkg/redisutils"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
+
 	"k8s.io/klog/v2"
 )
 
@@ -25,6 +28,15 @@ type ImgService interface {
 	FormatFromExtension(ext string) (img.Format, error)
 	Resize(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...img.Option) error
 	Resize2(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...img.Option) error
+}
+
+func SetContentDisposition(w http.ResponseWriter, r *http.Request, file *files.FileInfo) {
+	if r.URL.Query().Get("inline") == "true" {
+		w.Header().Set("Content-Disposition", "inline")
+	} else {
+		// As per RFC6266 section 4.3
+		w.Header().Set("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(file.Name))
+	}
 }
 
 func CreatePreview(imgSvc ImgService, fileCache fileutils.FileCache,

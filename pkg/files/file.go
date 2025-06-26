@@ -13,7 +13,6 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"mime"
 	"net/http"
 	"os"
@@ -21,6 +20,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"k8s.io/klog/v2"
 
 	"github.com/spf13/afero"
 
@@ -37,6 +38,8 @@ var DefaultSorting = Sorting{
 type FileInfo struct {
 	*Listing
 	Fs           afero.Fs          `json:"-"`
+	FsType       string            `json:"-"`
+	FsExtend     string            `json:"-"`
 	Path         string            `json:"path"`
 	Name         string            `json:"name"`
 	Size         int64             `json:"size"`
@@ -55,9 +58,19 @@ type FileInfo struct {
 	ReadOnly     *bool             `json:"readOnly,omitempty"`
 }
 
+func (fi *FileInfo) String() string {
+	res, err := json.Marshal(fi)
+	if err != nil {
+		return ""
+	}
+	return string(res)
+}
+
 // FileOptions are the options when getting a file info.
 type FileOptions struct {
 	Fs         afero.Fs
+	FsType     string
+	FsExtend   string
 	Path       string
 	Modify     bool
 	Expand     bool
@@ -387,6 +400,8 @@ func stat(opts FileOptions) (*FileInfo, error) {
 		}
 		file = &FileInfo{
 			Fs:        opts.Fs,
+			FsType:    opts.FsType,
+			FsExtend:  opts.FsExtend,
 			Path:      opts.Path,
 			Name:      info.Name(),
 			ModTime:   info.ModTime(),
@@ -649,7 +664,8 @@ func (i *FileInfo) readDirents() ([]os.FileInfo, error) {
 }
 
 func (i *FileInfo) readListing(readHeader bool) error {
-	dir, err := i.readDirents()
+	afs := &afero.Afero{Fs: i.Fs}
+	dir, err := afs.ReadDir(i.Path)
 	if err != nil {
 		return err
 	}
@@ -680,6 +696,7 @@ func (i *FileInfo) readListing(readHeader bool) error {
 
 		file := &FileInfo{
 			Fs:        i.Fs,
+			Path:      fPath,
 			Name:      name,
 			Size:      f.Size(),
 			ModTime:   f.ModTime(),
@@ -687,7 +704,6 @@ func (i *FileInfo) readListing(readHeader bool) error {
 			IsDir:     f.IsDir(),
 			IsSymlink: isSymlink,
 			Extension: filepath.Ext(name),
-			Path:      fPath,
 		}
 
 		if file.IsDir {

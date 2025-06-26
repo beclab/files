@@ -22,7 +22,7 @@ func (s *CloudStorage) List(param *model.ListParam) (any, error) {
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
 
-	return utils.RequestWithContext[model.CloudListResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // get_file_meta_data
@@ -32,7 +32,7 @@ func (s *CloudStorage) GetFileMetaData(param *model.ListParam) (any, error) {
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // copy_file
@@ -42,7 +42,7 @@ func (s *CloudStorage) CopyFile(param *model.CopyFileParam) (any, error) {
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // move_file
@@ -52,7 +52,7 @@ func (s *CloudStorage) MoveFile(param *model.MoveFileParam) (any, error) {
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // delete
@@ -62,7 +62,7 @@ func (s *CloudStorage) Delete(param *model.DeleteParam) (any, error) {
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // rename
@@ -72,7 +72,7 @@ func (s *CloudStorage) Rename(param *model.PatchParam) (any, error) {
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // create_folder
@@ -82,7 +82,7 @@ func (s *CloudStorage) CreateFolder(param *model.PostParam) (any, error) {
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.CloudResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // download_async
@@ -92,7 +92,7 @@ func (s *CloudStorage) DownloadAsync(param *model.DownloadAsyncParam) (any, erro
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.TaskResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // upload_async
@@ -102,7 +102,7 @@ func (s *CloudStorage) UploadAsync(param *model.UploadAsyncParam) (any, error) {
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.TaskResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 // task/query/task_ids
@@ -112,7 +112,7 @@ func (s *CloudStorage) QueryTask(param *model.QueryTaskParam) (any, error) {
 
 	paramBody, _ := json.Marshal(param)
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.TaskQueryResponse](url, http.MethodPost, &header, paramBody)
+	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
 }
 
 func (s *CloudStorage) QueryAccount() (any, error) {
@@ -120,7 +120,7 @@ func (s *CloudStorage) QueryAccount() (any, error) {
 	var url = fmt.Sprintf("%s/%s", host, UrlDriveQueryAccount)
 
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.AccountResponse](url, http.MethodPost, &header, nil)
+	return utils.RequestWithContext(url, http.MethodPost, &header, nil)
 }
 
 func (s *CloudStorage) PauseTask(taskId string) (any, error) {
@@ -128,7 +128,7 @@ func (s *CloudStorage) PauseTask(taskId string) (any, error) {
 	var url = fmt.Sprintf("%s/%s/%s", host, UrlDrivePauseTask, taskId)
 
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.TaskResponse](url, http.MethodPatch, &header, nil)
+	return utils.RequestWithContext(url, http.MethodPatch, &header, nil)
 }
 
 func (s *CloudStorage) ResumeTask(taskId string) (any, error) {
@@ -136,5 +136,5 @@ func (s *CloudStorage) ResumeTask(taskId string) (any, error) {
 	var url = fmt.Sprintf("%s/%s/%s", host, UrlDriveResumeTask, taskId)
 
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext[model.TaskResponse](url, http.MethodPatch, &header, nil)
+	return utils.RequestWithContext(url, http.MethodPatch, &header, nil)
 }

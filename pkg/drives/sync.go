@@ -14,12 +14,8 @@ import (
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -31,6 +27,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type SyncResourceService struct {

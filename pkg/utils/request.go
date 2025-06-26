@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -15,8 +14,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func RequestWithContext[T any](u string, method string, header *http.Header, requestParams []byte) (*T, error) {
-
+func RequestWithContext(u string, method string, header *http.Header, requestParams []byte) ([]byte, error) {
 	var backoff = wait.Backoff{
 		Duration: 2 * time.Second,
 		Factor:   2,
@@ -24,28 +22,35 @@ func RequestWithContext[T any](u string, method string, header *http.Header, req
 		Steps:    3,
 	}
 
-	var result *T
+	var result []byte
+	var err error
+	var newRequest *http.Request
+	_ = newRequest
 	var requestBody *bytes.Buffer = nil
-	if requestParams != nil {
-		requestBody = bytes.NewBuffer(requestParams)
-	}
+	requestBody = bytes.NewBuffer(requestParams)
 
 	if err := retry.OnError(backoff, func(err error) bool {
 		return true
 	}, func() error {
-		var ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
+		var ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		var newRequest *http.Request
-		newRequest, err := http.NewRequestWithContext(ctx, method, u, requestBody)
+		if requestParams != nil {
+			newRequest, err = http.NewRequestWithContext(ctx, method, u, requestBody)
+		} else {
+			newRequest, err = http.NewRequestWithContext(ctx, method, u, nil)
+		}
+
 		if err != nil {
 			return err
 		}
 
+		var body []byte
 		newRequest.Header = *header
 		newRequest.Header.Set("Content-Type", "application/json")
-		// newRequest.Header.Del("Traceparent")
-		// newRequest.Header.Del("Tracestate")
+		newRequest.Header.Del("Traceparent")
+		newRequest.Header.Del("Tracestate")
 
 		client := &http.Client{}
 		resp, err := client.Do(newRequest)
@@ -56,8 +61,6 @@ func RequestWithContext[T any](u string, method string, header *http.Header, req
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Errorf("Error request with status code %d", resp.StatusCode)
 		}
-
-		var body []byte
 
 		if resp.Header.Get("Content-Encoding") == "gzip" {
 			reader, err := gzip.NewReader(resp.Body)
@@ -79,12 +82,7 @@ func RequestWithContext[T any](u string, method string, header *http.Header, req
 				return err
 			}
 		}
-
-		if err = json.Unmarshal(body, &result); err != nil {
-			klog.Errorln("Error unmarshaling JSON response:", err)
-			return err
-		}
-
+		result = body
 		return nil
 	}); err != nil {
 		return nil, err
