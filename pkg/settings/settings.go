@@ -28,7 +28,7 @@ func NewDefaultServer() *Server {
 		Socket:                "",
 		TLSKey:                "",
 		TLSCert:               "",
-		Port:                  "8110",
+		Port:                  "8080",
 		Address:               "",
 		Log:                   "stdout",
 		EnableThumbnails:      true,

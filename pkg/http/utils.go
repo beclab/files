@@ -2,6 +2,9 @@ package http
 
 import (
 	"encoding/json"
+	"files/pkg/constant"
+	"files/pkg/drives"
+	"files/pkg/models"
 	"fmt"
 	"io/ioutil"
 	"k8s.io/klog/v2"
@@ -169,4 +172,23 @@ func ParseFormData(r *http.Request, v interface{}) error {
 	}
 
 	return nil
+}
+
+func UrlPrep(r *http.Request, path string) (*models.FileParam, drives.ResourceService, error) {
+	var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+	if path == "" {
+		path = r.URL.Path
+	}
+	fileParam, err := models.CreateFileParam(owner, path)
+	if err != nil {
+		return nil, nil, err
+	}
+	srcType := fileParam.FileType
+	klog.Infof("~~~Debug log: fileParam=%v", fileParam)
+
+	handler, err := drives.GetResourceService(srcType)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fileParam, handler, nil
 }

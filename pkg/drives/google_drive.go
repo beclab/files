@@ -12,6 +12,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/models"
 	"files/pkg/parser"
 	"files/pkg/pool"
 	"files/pkg/preview"
@@ -31,6 +32,29 @@ import (
 	"gorm.io/gorm"
 	"k8s.io/klog/v2"
 )
+
+func GetGoogleDriveMetadataFileParam(fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) (*model.GoogleDriveResponseData, error) {
+	param := &model.ListParam{
+		Path:  strings.Trim(fileParam.Path, "/"),
+		Drive: fileParam.FileType, // "my_drive",
+		Name:  fileParam.Extend,   // "file_name",
+	}
+
+	googleDriveStorage := &storage.GoogleDriveStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	res, err := googleDriveStorage.GetFileMetaData(param)
+	if err != nil {
+		klog.Errorf("Google Drive get_file_meta_data error: %v", err)
+		return nil, err
+	}
+
+	fileMetadata := res.(*model.GoogleDriveResponse)
+	return fileMetadata.Data, nil
+}
 
 func GetGoogleDriveMetadata(src string, w http.ResponseWriter, r *http.Request) (*model.GoogleDriveResponseData, error) {
 	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
@@ -735,30 +759,34 @@ func (rc *GoogleDriveResourceService) DeleteHandler(fileCache fileutils.FileCach
 	}
 }
 
-func (rc *GoogleDriveResourceService) PostHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	_, status, err := ResourcePostGoogle(r.URL.Path, w, r, true)
-	return status, err
-}
-
-func (rc *GoogleDriveResourceService) PutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	// not public api for google drive, so it is not implemented
-	return http.StatusNotImplemented, fmt.Errorf("google drive does not supoort editing files")
-}
-
-func (rc *GoogleDriveResourceService) PatchHandler(fileCache fileutils.FileCache) handleFunc {
+func (rc *GoogleDriveResourceService) PostHandler(fileParam *models.FileParam) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		return ResourcePatchGoogle(fileCache, w, r)
+		_, status, err := ResourcePostGoogleFileParam(fileParam, w, r, true)
+		return status, err
 	}
 }
 
-func (rc *GoogleDriveResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, dirents []string) handleFunc {
+func (rc *GoogleDriveResourceService) PutHandler(fileParam *models.FileParam) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		// not public api for google drive, so it is not implemented
+		return http.StatusNotImplemented, fmt.Errorf("google drive does not supoort editing files")
+	}
+}
+
+func (rc *GoogleDriveResourceService) PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+		return ResourcePatchGoogle(fileCache, fileParam, w, r)
+	}
+}
+
+func (rc *GoogleDriveResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		failDirents := []string{}
-		for _, dirent := range dirents {
-			_, status, err := ResourceDeleteGoogle(fileCache, dirent, w, r, true)
+		for _, fileParam := range fileParams {
+			_, status, err := ResourceDeleteGoogleFileParam(fileCache, fileParam, w, r, true)
 			if (status != http.StatusOK && status != 0) || err != nil {
-				klog.Errorf("delete %s failed with status %d and err %v", dirent, status, err)
-				failDirents = append(failDirents, dirent)
+				klog.Errorf("delete %s failed with status %d and err %v", fileParam.Path, status, err)
+				failDirents = append(failDirents, fileParam.Path)
 				continue
 			}
 		}
@@ -1228,6 +1256,35 @@ func (rs *GoogleDriveResourceService) parsePathToURI(path string) (string, strin
 	return SrcTypeDrive, path
 }
 
+func ResourceDeleteGoogleFileParam(fileCache fileutils.FileCache, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.GoogleDriveResponse, int, error) {
+	googleDriveStorage := &storage.GoogleDriveStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.DeleteParam{
+		Path:  strings.Trim(fileParam.Path, "/"),
+		Drive: fileParam.FileType, // "my_drive",
+		Name:  fileParam.Extend,   // "file_name",
+	}
+
+	// delete thumbnails
+	var err = delThumbsGoogleFileParam(r.Context(), fileCache, fileParam, w, r)
+	if err != nil {
+		return nil, common.ErrToStatus(err), err
+	}
+
+	res, err := googleDriveStorage.Delete(param)
+	if err != nil {
+		klog.Errorf("Google Drive delete error: %v", err)
+		return nil, common.ErrToStatus(err), err
+	}
+
+	deleteResp := res.(*model.GoogleDriveResponse)
+	return deleteResp, 0, nil
+}
+
 func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.GoogleDriveResponse, int, error) {
 	if src == "" {
 		src = r.URL.Path
@@ -1267,6 +1324,34 @@ func ResourceDeleteGoogle(fileCache fileutils.FileCache, src string, w http.Resp
 	return deleteResp, 0, nil
 }
 
+func ResourcePostGoogleFileParam(fileParam *models.FileParam, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.GoogleDriveResponse, int, error) {
+	pathId, srcNewName := filepath.Split(strings.TrimSuffix(fileParam.Path, "/"))
+	pathId = strings.Trim(pathId, "/")
+
+	googleDriveStorage := &storage.GoogleDriveStorage{
+		Owner:          r.Header.Get("X-Bfl-User"),
+		ResponseWriter: w,
+		Request:        r,
+	}
+
+	param := &model.PostParam{
+		ParentPath: pathId,
+		FolderName: srcNewName,
+		Drive:      fileParam.FileType, // "my_drive",
+		Name:       fileParam.Extend,   // "file_name",
+	}
+
+	res, err := googleDriveStorage.CreateFolder(param)
+	if err != nil {
+		klog.Errorf("Google Drive create_folder error: %v", err)
+		return nil, common.ErrToStatus(err), err
+	}
+
+	createResp := res.(*model.GoogleDriveResponse)
+
+	return createResp, 0, nil
+}
+
 func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, returnResp bool) (*model.GoogleDriveResponse, int, error) {
 	if src == "" {
 		src = r.URL.Path
@@ -1300,19 +1385,18 @@ func ResourcePostGoogle(src string, w http.ResponseWriter, r *http.Request, retu
 	return createResp, 0, nil
 }
 
-func ResourcePatchGoogle(fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) (int, error) {
-	src := r.URL.Path
+func ResourcePatchGoogle(fileCache fileutils.FileCache, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) (int, error) {
 	dst := r.URL.Query().Get("destination")
-	dst, err := common.UnescapeURLIfEscaped(dst)
-
-	srcDrive, srcName, pathId, _ := ParseGoogleDrivePath(src)
-	_, _, _, dstFilename := ParseGoogleDrivePath(dst)
+	dstFilename, err := common.UnescapeURLIfEscaped(dst)
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
 
 	param := &model.PatchParam{
-		Path:        pathId,
+		Path:        strings.Trim(fileParam.Path, "/"),
 		NewFileName: dstFilename,
-		Drive:       srcDrive, // "my_drive",
-		Name:        srcName,  // "file_name",
+		Drive:       fileParam.FileType, // "my_drive",
+		Name:        fileParam.Extend,   // "file_name",
 	}
 
 	googleDriveStorage := &storage.GoogleDriveStorage{
@@ -1322,7 +1406,7 @@ func ResourcePatchGoogle(fileCache fileutils.FileCache, w http.ResponseWriter, r
 	}
 
 	// delete thumbnails
-	err = delThumbsGoogle(r.Context(), fileCache, src, w, r)
+	err = delThumbsGoogleFileParam(r.Context(), fileCache, fileParam, w, r)
 	if err != nil {
 		return common.ErrToStatus(err), err
 	}
@@ -1544,6 +1628,28 @@ func PreviewGetGoogle(w http.ResponseWriter, r *http.Request, previewSize previe
 	} else {
 		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", metaData.Type)
 	}
+}
+
+func delThumbsGoogleFileParam(ctx context.Context, fileCache fileutils.FileCache, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) error {
+	metaData, err := GetGoogleDriveMetadataFileParam(fileParam, w, r)
+	if err != nil {
+		klog.Errorf("Google Drive get_file_meta_data error: %v", err)
+		return err
+	}
+
+	for _, previewSizeName := range preview.PreviewSizeNames() {
+		size, _ := preview.ParsePreviewSize(previewSizeName)
+		cacheKey := previewCacheKeyGoogle(metaData, size)
+		if err := fileCache.Delete(ctx, cacheKey); err != nil {
+			return err
+		}
+		err := redisutils.DelThumbRedisKey(redisutils.GetFileName(cacheKey))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func delThumbsGoogle(ctx context.Context, fileCache fileutils.FileCache, src string, w http.ResponseWriter, r *http.Request) error {

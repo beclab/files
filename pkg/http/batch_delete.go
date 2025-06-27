@@ -5,6 +5,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drives"
 	"files/pkg/fileutils"
+	"files/pkg/models"
 	"fmt"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -29,16 +30,28 @@ func batchDeleteHandler(fileCache fileutils.FileCache) handleFunc {
 
 		klog.Infof("dirents: %v", dirents)
 
-		srcType, err := drives.ParsePathType(dirents[0], r, false, true)
-		if err != nil {
-			return http.StatusBadRequest, err
+		var handler drives.ResourceService
+		var err error
+		fileParams := []*models.FileParam{}
+		for _, dirent := range dirents {
+			var fileParam *models.FileParam
+			fileParam, handler, err = UrlPrep(r, dirent)
+			if err != nil {
+				return http.StatusBadRequest, err
+			}
+			fileParams = append(fileParams, fileParam)
 		}
 
-		handler, err := drives.GetResourceService(srcType)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
+		//srcType, err := drives.ParsePathType(dirents[0], r, false, true)
+		//if err != nil {
+		//	return http.StatusBadRequest, err
+		//}
+		//
+		//handler, err := drives.GetResourceService(srcType)
+		//if err != nil {
+		//	return http.StatusBadRequest, err
+		//}
 
-		return handler.BatchDeleteHandler(fileCache, dirents)(w, r, d)
+		return handler.BatchDeleteHandler(fileCache, fileParams)(w, r, d)
 	}
 }

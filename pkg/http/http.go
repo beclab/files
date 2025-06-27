@@ -65,19 +65,20 @@ func NewHandler(
 	api := r.PathPrefix("/api").Subrouter()
 
 	// ! demo
-	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET")    // list
-	api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST") // create folder
+	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET") // list
+	//api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST") // create folder
 	// api.PathPrefix("/resources").Handler(wrapWithParms(renameHandler, "/api/resources")).Methods("PATCH") // rename
 
 	api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandlerEx, "/api/preview/")).Methods("GET") // preview
 
 	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
-	// api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST") // create
-	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
+	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST") // create
+	//api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
+	api.PathPrefix("/resources").Handler(monkey(batchDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
 
-	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")                // ??
+	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")                // edit txt
 	api.PathPrefix("/resources").Handler(monkey(resourcePatchHandler(fileCache), "/api/resources")).Methods("PATCH") // todo rename
-	api.PathPrefix("/batch_delete").Handler(monkey(batchDeleteHandler(fileCache), "/api/batch_delete")).Methods("DELETE")
+
 	api.PathPrefix("/mounted").Handler(monkey(resourceMountedHandler, "/api/mounted")).Methods("GET")
 	api.PathPrefix("/mount").Handler(monkey(resourceMountHandler, "/api/mount")).Methods("POST")
 	api.PathPrefix("/unmount").Handler(monkey(resourceUnmountHandler, "/api/unmount")).Methods("DELETE")
