@@ -10,6 +10,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/models"
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/redisutils"
@@ -29,7 +30,7 @@ import (
 	"time"
 )
 
-func PasteAddVersionSuffix(source string, dstType string, isDir bool, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
+func PasteAddVersionSuffix(source string, fileParam *models.FileParam, isDir bool, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {
 	if strings.HasSuffix(source, "/") {
 		source = strings.TrimSuffix(source, "/")
 	}
@@ -40,22 +41,22 @@ func PasteAddVersionSuffix(source string, dstType string, isDir bool, fs afero.F
 	base := strings.TrimSuffix(name, ext)
 	renamed := ""
 	bubble := ""
-	if dstType == SrcTypeSync {
+	if fileParam.FileType == SrcTypeSync {
 		bubble = " "
 	}
 
 	var err error
-	handler, err := GetResourceService(dstType)
+	handler, err := GetResourceService(fileParam.FileType)
 	if err != nil {
 		return ""
 	}
 
 	for {
-		statSource := source
-		if isDir {
-			statSource += "/"
-		}
-		if _, _, _, _, err = handler.GetStat(fs, statSource, w, r); err != nil {
+		//statSource := source
+		//if isDir {
+		//	statSource += "/"
+		//}
+		if _, _, _, _, err = handler.GetStat(fs, fileParam, w, r); err != nil {
 			break
 		}
 		if !isDir {
@@ -70,6 +71,12 @@ func PasteAddVersionSuffix(source string, dstType string, isDir bool, fs afero.F
 	if isDir {
 		source += "/"
 	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return ""
+	}
+	fileParam.Path = strings.TrimPrefix(source, uri)
 
 	return source
 }

@@ -347,7 +347,7 @@ func PatchAction(task *pool.Task, ctx context.Context, action, src, dst, srcExte
 	switch action {
 	case "copy":
 		return fileutils.Copy(files.DefaultFs, task, src, dst)
-	case "rename":
+	case "rename", "move":
 		return Move(ctx, files.DefaultFs, task, src, dst, srcExternalType, dstExternalType, fileCache)
 	default:
 		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)

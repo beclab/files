@@ -9,6 +9,7 @@ import (
 	"files/pkg/errors"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/models"
 	"files/pkg/pool"
 	"fmt"
 	"github.com/spf13/afero"
@@ -28,33 +29,45 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		var err error
 
-		src := r.URL.Path
-		dst := r.URL.Query().Get("destination")
-		srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
+		//src := r.URL.Path
+		//dst := r.URL.Query().Get("destination")
+		//srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
+		//if err != nil {
+		//	return http.StatusBadRequest, err
+		//}
+		//dstType, err := drives.ParsePathType(r.URL.Query().Get("destination"), r, true, true)
+		//if err != nil {
+		//	return http.StatusBadRequest, err
+		//}
+		//
+		//if !drives.ValidSrcTypes[srcType] {
+		//	klog.Infoln("Src type is invalid!")
+		//	return http.StatusForbidden, nil
+		//}
+		//if !drives.ValidSrcTypes[dstType] {
+		//	klog.Infoln("Dst type is invalid!")
+		//	return http.StatusForbidden, nil
+		//}
+		srcFileParam, handler, err := UrlPrep(r, "")
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
-		dstType, err := drives.ParsePathType(r.URL.Query().Get("destination"), r, true, true)
+
+		dstFileParam, _, err := UrlPrep(r, r.URL.Query().Get("destination"))
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
 
-		if !drives.ValidSrcTypes[srcType] {
-			klog.Infoln("Src type is invalid!")
-			return http.StatusForbidden, nil
-		}
-		if !drives.ValidSrcTypes[dstType] {
-			klog.Infoln("Dst type is invalid!")
-			return http.StatusForbidden, nil
-		}
+		detailSrcType := srcFileParam.FileType
+		detailDstType := dstFileParam.FileType
 
-		detailSrcType := srcType
-		detailDstType := dstType
+		srcType := detailSrcType
+		dstType := detailDstType
 
-		if srcType == drives.SrcTypeData || srcType == drives.SrcTypeExternal {
+		if detailSrcType == drives.SrcTypeData || detailSrcType == drives.SrcTypeExternal {
 			srcType = drives.SrcTypeDrive // In paste, data and external is dealt as same as drive
 		}
-		if dstType == drives.SrcTypeData || dstType == drives.SrcTypeExternal {
+		if detailDstType == drives.SrcTypeData || detailDstType == drives.SrcTypeExternal {
 			dstType = drives.SrcTypeDrive // In paste, data and external is dealt as same as drive
 		}
 
@@ -65,20 +78,31 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		}
 		action := r.URL.Query().Get("action")
 
-		klog.Infoln("src:", src)
-		src, err = common.UnescapeURLIfEscaped(src)
-		klog.Infoln("src:", src, "err:", err)
-		klog.Infoln("dst:", dst)
-		dst, err = common.UnescapeURLIfEscaped(dst)
-		klog.Infoln("dst:", dst, "err:", err)
+		//klog.Infoln("src:", src)
+		//src, err = common.UnescapeURLIfEscaped(src)
+		//klog.Infoln("src:", src, "err:", err)
+		//klog.Infoln("dst:", dst)
+		//dst, err = common.UnescapeURLIfEscaped(dst)
+		//klog.Infoln("dst:", dst, "err:", err)
+		//if err != nil {
+		//	return common.ErrToStatus(err), err
+		//}
+		srcUri, err := srcFileParam.GetResourceUri()
 		if err != nil {
-			return common.ErrToStatus(err), err
+			return http.StatusBadRequest, err
 		}
-		if dst == "/" || src == "/" {
+		src := srcUri + srcFileParam.Path
+		dstUri, err := dstFileParam.GetResourceUri()
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		dst := dstUri + dstFileParam.Path
+
+		if dstFileParam.Path == "/" || srcFileParam.Path == "/" {
 			return http.StatusForbidden, nil
 		}
 
-		if dstType == drives.SrcTypeSync && strings.Contains(dst, "\\") {
+		if dstType == drives.SrcTypeSync && strings.Contains(dstFileParam.Path, "\\") {
 			response := map[string]interface{}{
 				"code": -1,
 				"msg":  "Sync does not support directory entries with backslashes in their names.",
@@ -86,26 +110,22 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			return common.RenderJSON(w, r, response)
 		}
 
-		rename := r.URL.Query().Get("rename") == "true"
-		if !rename {
-			if _, err := files.DefaultFs.Stat(dst); err == nil {
-				return http.StatusConflict, nil
-			}
-		}
-		isDir := strings.HasSuffix(src, "/")
+		isDir := strings.HasSuffix(srcFileParam.Path, "/")
 		if srcType == drives.SrcTypeGoogle && dstType != drives.SrcTypeGoogle {
-			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfos(nil, src, w, r)
+			srcInfo, err := drives.GetGoogleDriveIdFocusedMetaInfosFileParam(nil, srcFileParam, w, r)
 			if err != nil {
 				return http.StatusInternalServerError, err
 			}
 			srcName := srcInfo.Name
 			formattedSrcName := common.RemoveSlash(srcName)
 			dst = strings.ReplaceAll(dst, srcName, formattedSrcName)
+			dstFileParam.Path = strings.ReplaceAll(dstFileParam.Path, srcName, formattedSrcName) // TODO no need to deal here
 			isDir = srcInfo.IsDir
 
 			if !srcInfo.CanDownload {
 				if srcInfo.CanExport {
 					dst += srcInfo.ExportSuffix
+					dstFileParam.Path += srcInfo.ExportSuffix // TODO this is ugly
 				} else {
 					response := map[string]interface{}{
 						"code": -1,
@@ -115,34 +135,37 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 				}
 			}
 		}
-		if rename && dstType != drives.SrcTypeGoogle {
-			dst = drives.PasteAddVersionSuffix(dst, dstType, isDir, files.DefaultFs, w, r)
+		if dstType != drives.SrcTypeGoogle {
+			dst = drives.PasteAddVersionSuffix(dst, dstFileParam, isDir, files.DefaultFs, w, r)
 		}
+
+		//// dst changes huge, need to recreate dstFileParam
+		//dstFileParam, _, err = UrlPrep(r, dst)
+		//if err != nil {
+		//	return http.StatusBadRequest, err
+		//}
+
 		var same = srcType == dstType
 		// all cloud drives of two users must be seen as diff archs
 		var srcName, dstName string
-		if srcType == drives.SrcTypeGoogle {
-			_, srcName, _, _ = drives.ParseGoogleDrivePath(src)
-		} else if drives.IsCloudDrives(srcType) {
-			_, srcName, _ = drives.ParseCloudDrivePath(src)
+		if drives.IsThridPartyDrives(srcType) {
+			srcName = srcFileParam.Extend
 		}
-		if dstType == drives.SrcTypeGoogle {
-			_, dstName, _, _ = drives.ParseGoogleDrivePath(dst)
-		} else if drives.IsCloudDrives(srcType) {
-			_, dstName, _ = drives.ParseCloudDrivePath(dst)
+		if drives.IsThridPartyDrives(dstType) {
+			dstName = dstFileParam.Extend
 		}
 		if srcName != dstName {
 			same = false
 		}
 
-		handler, err := drives.GetResourceService(srcType)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-		_, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, src, w, r)
+		//handler, err := drives.GetResourceService(srcType)
+		//if err != nil {
+		//	return http.StatusBadRequest, err
+		//}
+		_, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, srcFileParam, w, r)
 
 		taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-		task := pool.NewTask(taskID, src, dst, detailSrcType, detailDstType, action, drives.TaskCancellable(srcType, dstType, same), drives.IsThridPartyDrives(srcType), isDir, fileType, filename)
+		task := pool.NewTask(taskID, strings.TrimPrefix(src, "/data"), strings.TrimPrefix(dst, "/data"), detailSrcType, detailDstType, action, drives.TaskCancellable(srcType, dstType, same), drives.IsThridPartyDrives(srcType), isDir, fileType, filename)
 		pool.TaskManager.Store(taskID, task)
 
 		pool.WorkerPool.Submit(func() {
@@ -154,7 +177,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 					concreteTask.Status = "running"
 					concreteTask.Progress = 0
 
-					executePasteTask(concreteTask, same, action, srcType, dstType, rename, d, fileCache, w, r)
+					executePasteTask(concreteTask, same, action, srcType, dstType, srcFileParam, dstFileParam, d, fileCache, w, r)
 				}
 			}
 		})
@@ -230,7 +253,7 @@ func createAndRemoveTempFile(targetDir string) error {
 	return nil
 }
 
-func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, rename bool,
+func executePasteTask(task *pool.Task, same bool, action, srcType, dstType string, srcFileParam, dstFileParam *models.FileParam,
 	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
 	select {
 	case <-task.Ctx.Done():
@@ -255,9 +278,9 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 
 		if err == nil {
 			if same {
-				err = pasteActionSameArch(task, action, srcType, task.Source, dstType, task.Dest, rename, fileCache, w, r)
+				err = pasteActionSameArch(task, action, srcFileParam, srcType, task.Source, dstFileParam, dstType, task.Dest, fileCache, w, r)
 			} else {
-				err = pasteActionDiffArch(task, action, srcType, task.Source, dstType, task.Dest, d, fileCache, w, r)
+				err = pasteActionDiffArch(task, action, srcFileParam, srcType, task.Source, dstFileParam, dstType, task.Dest, d, fileCache, w, r)
 			}
 			if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
 				fmt.Fprintln(w, err.Error())
@@ -297,7 +320,8 @@ func executePasteTask(task *pool.Task, same bool, action, srcType, dstType strin
 	wg.Wait()
 }
 
-func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
+func doPaste(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+	dstFileParam *models.FileParam, dstType, dst string, d *common.Data, w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
 		return nil
@@ -332,23 +356,23 @@ func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d 
 		return err
 	}
 
-	_, size, mode, isDir, err := handler.GetStat(fs, src, w, r)
+	_, size, mode, isDir, err := handler.GetStat(fs, srcFileParam, w, r)
 	if err != nil {
 		return err
 	}
 
 	var copyTempGoogleDrivePathIdCache = make(map[string]string)
 
-	fileCount, err := handler.GetFileCount(fs, src, "size", w, r)
+	fileCount, err := handler.GetFileCount(fs, srcFileParam, "size", w, r)
 	if err != nil {
 		klog.Errorln(err)
 		return err
 	}
 	task.TotalFileSize = fileCount
 	if isDir {
-		err = handler.PasteDirFrom(task, fs, srcType, src, dstType, dst, d, mode, fileCount, w, r, copyTempGoogleDrivePathIdCache)
+		err = handler.PasteDirFrom(task, fs, srcFileParam, srcType, src, dstFileParam, dstType, dst, d, mode, fileCount, w, r, copyTempGoogleDrivePathIdCache)
 	} else {
-		err = handler.PasteFileFrom(task, fs, srcType, src, dstType, dst, d, mode, size, fileCount, w, r, copyTempGoogleDrivePathIdCache)
+		err = handler.PasteFileFrom(task, fs, srcFileParam, srcType, src, dstFileParam, dstType, dst, d, mode, size, fileCount, w, r, copyTempGoogleDrivePathIdCache)
 	}
 	if err != nil {
 		return err
@@ -356,7 +380,8 @@ func doPaste(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d 
 	return nil
 }
 
-func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionSameArch(task *pool.Task, action string, srcFileParam *models.FileParam, srcType, src string,
+	dstFileParam *models.FileParam, dstType, dst string, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
 		return nil
@@ -372,14 +397,14 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 			return err
 		}
 
-		fileCount, err := handler.GetFileCount(files.DefaultFs, src, "size", w, r)
+		fileCount, err := handler.GetFileCount(files.DefaultFs, srcFileParam, "size", w, r)
 		if err != nil {
 			klog.Errorln(err)
 			return err
 		}
 		task.TotalFileSize = fileCount
 
-		err = handler.PasteSame(task, action, src, dst, rename, fileCache, w, r)
+		err = handler.PasteSame(task, action, src, dst, srcFileParam, dstFileParam, fileCache, w, r)
 		if err != nil {
 			return err
 		}
@@ -403,7 +428,8 @@ func pasteActionSameArch(task *pool.Task, action, srcType, src, dstType, dst str
 	}
 }
 
-func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func pasteActionDiffArch(task *pool.Task, action string, srcFileParam *models.FileParam, srcType, src string,
+	dstFileParam *models.FileParam, dstType, dst string, d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
 		return nil
@@ -417,9 +443,9 @@ func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst str
 	var err error
 	switch action {
 	case "copy":
-		err = doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
-	case "rename":
-		err = doPaste(task, files.DefaultFs, srcType, src, dstType, dst, d, w, r)
+		err = doPaste(task, files.DefaultFs, srcFileParam, srcType, src, dstFileParam, dstType, dst, d, w, r)
+	case "move":
+		err = doPaste(task, files.DefaultFs, srcFileParam, srcType, src, dstFileParam, dstType, dst, d, w, r)
 		if err != nil {
 			break
 		}
@@ -429,7 +455,7 @@ func pasteActionDiffArch(task *pool.Task, action, srcType, src, dstType, dst str
 		if err != nil {
 			break
 		}
-		err = handler.MoveDelete(task, fileCache, src, d, w, r)
+		err = handler.MoveDelete(task, fileCache, srcFileParam, d, w, r)
 		if err != nil {
 			break
 		}

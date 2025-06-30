@@ -1,25 +1,24 @@
 package drives
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
+	e "errors"
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/fileutils"
+	"files/pkg/models"
 	"files/pkg/parser"
 	"files/pkg/pool"
+	"files/pkg/preview"
 	"fmt"
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
 	"io"
-	"io/ioutil"
 	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -164,56 +163,62 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 	}
 }
 
-func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string, rename bool, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
+	fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
 		return nil
 	default:
 	}
 
-	patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&rename=" + strconv.FormatBool(rename) + "&task=1"
-	method := "PATCH"
-	payload := []byte(``)
-	klog.Infoln(patchUrl)
+	srcExternalType := srcFileParam.FileType
+	dstExternalType := dstFileParam.FileType
+	return common.PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
 
-	client := &http.Client{}
-	req, err := http.NewRequest(method, patchUrl, bytes.NewBuffer(payload))
-	if err != nil {
-		return err
-	}
-
-	req.Header = r.Header.Clone()
-
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	var response struct {
-		TaskID string `json:"task_id"`
-	}
-
-	if err = json.NewDecoder(res.Body).Decode(&response); err != nil {
-		return fmt.Errorf("failed to parse task_id: %v", err)
-	}
-
-	task.RelationTaskID = response.TaskID
-	xTerminusNode := r.Header.Get("X-Terminus-Node")
-	task.RelationNode = xTerminusNode
-
-	go func() {
-		err = ExecuteCacheSameTask(task, r)
-		if err != nil {
-			klog.Errorf("Failed to initialize rsync: %v\n", err)
-			return
-		}
-	}()
-
-	return nil
+	//patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&task=1"
+	//method := "PATCH"
+	//payload := []byte(``)
+	//klog.Infoln(patchUrl)
+	//
+	//client := &http.Client{}
+	//req, err := http.NewRequest(method, patchUrl, bytes.NewBuffer(payload))
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//req.Header = r.Header.Clone()
+	//
+	//res, err := client.Do(req)
+	//if err != nil {
+	//	return err
+	//}
+	//defer res.Body.Close()
+	//
+	//var response struct {
+	//	TaskID string `json:"task_id"`
+	//}
+	//
+	//if err = json.NewDecoder(res.Body).Decode(&response); err != nil {
+	//	return fmt.Errorf("failed to parse task_id: %v", err)
+	//}
+	//
+	//task.RelationTaskID = response.TaskID
+	//xTerminusNode := r.Header.Get("X-Terminus-Node")
+	//task.RelationNode = xTerminusNode
+	//
+	//go func() {
+	//	err = ExecuteCacheSameTask(task, r)
+	//	if err != nil {
+	//		klog.Errorf("Failed to initialize rsync: %v\n", err)
+	//		return
+	//	}
+	//}()
+	//
+	//return nil
 }
 
-func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	select {
 	case <-task.Ctx.Done():
@@ -221,14 +226,29 @@ func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 	default:
 	}
 
-	mode := fileMode
+	srcUri, err := srcFileParam.GetResourceUri()
+	if err != nil {
+		return err
+	}
+	srcUrlPath := srcUri + srcFileParam.Path
+
+	dstUri, err := dstFileParam.GetResourceUri()
+	if err != nil {
+		return err
+	}
+
+	srcinfo, err := fs.Stat(strings.TrimPrefix(srcUrlPath, "/data"))
+	if err != nil {
+		return err
+	}
+	mode := srcinfo.Mode()
 
 	handler, err := GetResourceService(dstType)
 	if err != nil {
 		return err
 	}
 
-	err = handler.PasteDirTo(task, fs, src, dst, mode, fileCount, w, r, d, driveIdCache)
+	err = handler.PasteDirTo(task, fs, src, dst, srcFileParam, dstFileParam, mode, fileCount, w, r, d, driveIdCache)
 	if err != nil {
 		return err
 	}
@@ -238,106 +258,179 @@ func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcTy
 		fdstBase = filepath.Join(filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))), driveIdCache[src])
 	}
 
-	type Item struct {
-		Path      string `json:"path"`
-		Name      string `json:"name"`
-		Size      int64  `json:"size"`
-		Extension string `json:"extension"`
-		Modified  string `json:"modified"`
-		Mode      uint32 `json:"mode"`
-		IsDir     bool   `json:"isDir"`
-		IsSymlink bool   `json:"isSymlink"`
-		Type      string `json:"type"`
-	}
-
-	type ResponseData struct {
-		Items    []Item `json:"items"`
-		NumDirs  int    `json:"numDirs"`
-		NumFiles int    `json:"numFiles"`
-		Sorting  struct {
-			By  string `json:"by"`
-			Asc bool   `json:"asc"`
-		} `json:"sorting"`
-		Path      string `json:"path"`
-		Name      string `json:"name"`
-		Size      int64  `json:"size"`
-		Extension string `json:"extension"`
-		Modified  string `json:"modified"`
-		Mode      uint32 `json:"mode"`
-		IsDir     bool   `json:"isDir"`
-		IsSymlink bool   `json:"isSymlink"`
-		Type      string `json:"type"`
-	}
-
-	infoURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(src)
-
-	client := &http.Client{}
-	request, err := http.NewRequest("GET", infoURL, nil)
-	if err != nil {
-		klog.Errorf("create request failed: %v\n", err)
-		return err
-	}
-
-	request.Header = r.Header.Clone()
-
-	response, err := client.Do(request)
-	if err != nil {
-		klog.Errorf("request failed: %v\n", err)
-		return err
-	}
-	defer response.Body.Close()
-
-	var bodyReader io.Reader = response.Body
-
-	if response.Header.Get("Content-Encoding") == "gzip" {
-		gzipReader, err := gzip.NewReader(response.Body)
-		if err != nil {
-			klog.Errorf("unzip response failed: %v\n", err)
-			return err
-		}
-		defer gzipReader.Close()
-
-		bodyReader = gzipReader
-	}
-
-	body, err := ioutil.ReadAll(bodyReader)
-	if err != nil {
-		klog.Errorf("read response failed: %v\n", err)
-		return err
-	}
-
-	var data ResponseData
-	err = json.Unmarshal(body, &data)
+	dir, _ := fs.Open(src)
+	obs, err := dir.Readdir(-1)
 	if err != nil {
 		return err
 	}
 
-	for _, item := range data.Items {
+	var errs []error
+
+	for _, obj := range obs {
 		select {
 		case <-task.Ctx.Done():
 			return nil
 		default:
 		}
 
-		fsrc := filepath.Join(src, item.Name)
-		fdst := filepath.Join(fdstBase, item.Name)
+		fsrc := filepath.Join(src, obj.Name())
+		fdst := filepath.Join(fdstBase, obj.Name())
 
-		if item.IsDir {
-			err := rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), fileCount, w, r, driveIdCache)
+		fsrcFileParam := &models.FileParam{
+			Owner:    srcFileParam.Owner,
+			FileType: srcFileParam.FileType,
+			Extend:   srcFileParam.Extend,
+			Path:     strings.TrimPrefix(fsrc, strings.TrimPrefix(srcUri, "/data")),
+		}
+		fdstFileParam := &models.FileParam{
+			Owner:    dstFileParam.Owner,
+			FileType: dstFileParam.FileType,
+			Extend:   dstFileParam.Extend,
+			Path:     strings.TrimPrefix(fdst, strings.TrimPrefix(dstUri, "/data")),
+		}
+
+		if obj.IsDir() {
+			// Create sub-directories, recursively.
+			err = rs.PasteDirFrom(task, fs, fsrcFileParam, srcType, fsrc, fdstFileParam, dstType, fdst, d, obj.Mode(), fileCount, w, r, driveIdCache)
 			if err != nil {
-				return err
+				errs = append(errs, err)
 			}
 		} else {
-			err := rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), item.Size, fileCount, w, r, driveIdCache)
+			// Perform the file copy.
+			err = rs.PasteFileFrom(task, fs, fsrcFileParam, srcType, fsrc, fdstFileParam, dstType, fdst, d, obj.Mode(), obj.Size(), fileCount, w, r, driveIdCache)
 			if err != nil {
-				return err
+				errs = append(errs, err)
 			}
 		}
 	}
+	var errString string
+	for _, err := range errs {
+		errString += err.Error() + "\n"
+	}
+
+	if errString != "" {
+		return e.New(errString)
+	}
 	return nil
+
+	//mode := fileMode
+	//
+	//handler, err := GetResourceService(dstType)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//err = handler.PasteDirTo(task, fs, src, dst, mode, fileCount, w, r, d, driveIdCache)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//var fdstBase string = dst
+	//if driveIdCache[src] != "" {
+	//	fdstBase = filepath.Join(filepath.Dir(filepath.Dir(strings.TrimSuffix(dst, "/"))), driveIdCache[src])
+	//}
+	//
+	//type Item struct {
+	//	Path      string `json:"path"`
+	//	Name      string `json:"name"`
+	//	Size      int64  `json:"size"`
+	//	Extension string `json:"extension"`
+	//	Modified  string `json:"modified"`
+	//	Mode      uint32 `json:"mode"`
+	//	IsDir     bool   `json:"isDir"`
+	//	IsSymlink bool   `json:"isSymlink"`
+	//	Type      string `json:"type"`
+	//}
+	//
+	//type ResponseData struct {
+	//	Items    []Item `json:"items"`
+	//	NumDirs  int    `json:"numDirs"`
+	//	NumFiles int    `json:"numFiles"`
+	//	Sorting  struct {
+	//		By  string `json:"by"`
+	//		Asc bool   `json:"asc"`
+	//	} `json:"sorting"`
+	//	Path      string `json:"path"`
+	//	Name      string `json:"name"`
+	//	Size      int64  `json:"size"`
+	//	Extension string `json:"extension"`
+	//	Modified  string `json:"modified"`
+	//	Mode      uint32 `json:"mode"`
+	//	IsDir     bool   `json:"isDir"`
+	//	IsSymlink bool   `json:"isSymlink"`
+	//	Type      string `json:"type"`
+	//}
+	//
+	//infoURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(src)
+	//
+	//client := &http.Client{}
+	//request, err := http.NewRequest("GET", infoURL, nil)
+	//if err != nil {
+	//	klog.Errorf("create request failed: %v\n", err)
+	//	return err
+	//}
+	//
+	//request.Header = r.Header.Clone()
+	//
+	//response, err := client.Do(request)
+	//if err != nil {
+	//	klog.Errorf("request failed: %v\n", err)
+	//	return err
+	//}
+	//defer response.Body.Close()
+	//
+	//var bodyReader io.Reader = response.Body
+	//
+	//if response.Header.Get("Content-Encoding") == "gzip" {
+	//	gzipReader, err := gzip.NewReader(response.Body)
+	//	if err != nil {
+	//		klog.Errorf("unzip response failed: %v\n", err)
+	//		return err
+	//	}
+	//	defer gzipReader.Close()
+	//
+	//	bodyReader = gzipReader
+	//}
+	//
+	//body, err := ioutil.ReadAll(bodyReader)
+	//if err != nil {
+	//	klog.Errorf("read response failed: %v\n", err)
+	//	return err
+	//}
+	//
+	//var data ResponseData
+	//err = json.Unmarshal(body, &data)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//for _, item := range data.Items {
+	//	select {
+	//	case <-task.Ctx.Done():
+	//		return nil
+	//	default:
+	//	}
+	//
+	//	fsrc := filepath.Join(src, item.Name)
+	//	fdst := filepath.Join(fdstBase, item.Name)
+	//
+	//	if item.IsDir {
+	//		err := rs.PasteDirFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), fileCount, w, r, driveIdCache)
+	//		if err != nil {
+	//			return err
+	//		}
+	//	} else {
+	//		err := rs.PasteFileFrom(task, fs, srcType, fsrc, dstType, fdst, d, os.FileMode(item.Mode), item.Size, fileCount, w, r, driveIdCache)
+	//		if err != nil {
+	//			return err
+	//		}
+	//	}
+	//}
+	//return nil
 }
 
-func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
+func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string,
+	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	select {
 	case <-task.Ctx.Done():
@@ -345,13 +438,19 @@ func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, ds
 	default:
 	}
 
-	if err := CacheMkdirAll(dst, fileMode, r); err != nil {
+	mode := fileMode
+	if err := fileutils.MkdirAllWithChown(fs, dst, mode); err != nil {
+		klog.Errorln(err)
 		return err
 	}
+	//if err := CacheMkdirAll(dst, fileMode, r); err != nil {
+	//	return err
+	//}
 	return nil
 }
 
-func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcType, src, dstType, dst string, d *common.Data,
+func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	select {
 	case <-task.Ctx.Done():
@@ -402,7 +501,7 @@ func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 			return err
 		}
 
-		err = handler.PasteFileTo(task, fs, bufferPath, dst, mode, mid, right, w, r, d, diskSize)
+		err = handler.PasteFileTo(task, fs, bufferPath, dst, srcFileParam, dstFileParam, mode, mid, right, w, r, d, diskSize)
 		if err != nil {
 			return err
 		}
@@ -413,7 +512,8 @@ func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcT
 	return nil
 }
 
-func (rs *CacheResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, fileMode os.FileMode, left, right int, w http.ResponseWriter,
+func (rs *CacheResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string,
+	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	select {
 	case <-task.Ctx.Done():
@@ -432,69 +532,22 @@ func (rs *CacheResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, buffer
 	return nil
 }
 
-func (rs *CacheResourceService) GetStat(fs afero.Fs, src string, w http.ResponseWriter,
+func (rs *CacheResourceService) GetStat(fs afero.Fs, fileParam *models.FileParam, w http.ResponseWriter,
 	r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error) {
-	src, err := common.UnescapeURLIfEscaped(src)
+	uri, err := fileParam.GetResourceUri()
 	if err != nil {
 		return nil, 0, 0, false, err
 	}
+	urlPath := uri + fileParam.Path
 
-	infoURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(src)
-
-	client := &http.Client{}
-	request, err := http.NewRequest("GET", infoURL, nil)
+	info, err := fs.Stat(strings.TrimPrefix(urlPath, "/data"))
 	if err != nil {
-		klog.Errorf("create request failed: %v\n", err)
 		return nil, 0, 0, false, err
 	}
-
-	request.Header = r.Header.Clone()
-
-	response, err := client.Do(request)
-	if err != nil {
-		klog.Errorf("request failed: %v\n", err)
-		return nil, 0, 0, false, err
-	}
-	defer response.Body.Close()
-
-	var bodyReader io.Reader = response.Body
-
-	if response.Header.Get("Content-Encoding") == "gzip" {
-		gzipReader, err := gzip.NewReader(response.Body)
-		if err != nil {
-			klog.Errorf("unzip response failed: %v\n", err)
-			return nil, 0, 0, false, err
-		}
-		defer gzipReader.Close()
-
-		bodyReader = gzipReader
-	}
-
-	body, err := ioutil.ReadAll(bodyReader)
-	if err != nil {
-		klog.Errorf("read response failed: %v\n", err)
-		return nil, 0, 0, false, err
-	}
-
-	var fileInfo struct {
-		Size  int64       `json:"size"`
-		Mode  os.FileMode `json:"mode"`
-		IsDir bool        `json:"isDir"`
-		Path  string      `json:"path"`
-		Name  string      `json:"name"`
-		Type  string      `json:"type"`
-	}
-
-	err = json.Unmarshal(body, &fileInfo)
-	if err != nil {
-		klog.Errorf("parse response failed: %v\n", err)
-		return nil, 0, 0, false, err
-	}
-
-	return nil, fileInfo.Size, fileInfo.Mode, fileInfo.IsDir, nil
+	return info, info.Size(), info.Mode(), info.IsDir(), nil
 }
 
-func (rs *CacheResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, src string, d *common.Data,
+func (rs *CacheResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, fileParam *models.FileParam, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
@@ -502,7 +555,16 @@ func (rs *CacheResourceService) MoveDelete(task *pool.Task, fileCache fileutils.
 	default:
 	}
 
-	status, err := ResourceCacheDelete(fileCache, src, task.Ctx, d, r)
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		klog.Errorln(err)
+		return err
+	}
+
+	dirent := strings.TrimPrefix(uri+fileParam.Path, "/data")
+	klog.Infoln("~~~Debug log: dirent:", dirent)
+
+	status, err := ResourceCacheDelete(fileCache, dirent, task.Ctx, d, r)
 	if status != http.StatusOK {
 		return os.ErrInvalid
 	}
@@ -597,9 +659,15 @@ func (rs *CacheResourceService) parsePathToURI(path string) (string, string) {
 	return "error", path
 }
 
-func (rs *CacheResourceService) GetFileCount(fs afero.Fs, src, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
-	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
-	klog.Infoln(newSrc)
+func (rs *CacheResourceService) GetFileCount(fs afero.Fs, fileParam *models.FileParam, countType string, w http.ResponseWriter, r *http.Request) (int64, error) {
+	//newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
+	//klog.Infoln(newSrc)
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return 0, err
+	}
+	newSrc := uri + fileParam.Path
+
 	srcinfo, err := os.Stat(newSrc)
 	if err != nil {
 		return 0, err
@@ -638,10 +706,14 @@ func (rs *CacheResourceService) GetFileCount(fs afero.Fs, src, countType string,
 	return count, nil
 }
 
-func (rs *CacheResourceService) GetTaskFileInfo(fs afero.Fs, src string, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
-	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
-	klog.Infoln(newSrc)
-	srcinfo, err := os.Stat(newSrc)
+func (rs *CacheResourceService) GetTaskFileInfo(fs afero.Fs, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error) {
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return false, "", "", err
+	}
+	urlPath := uri + fileParam.Path
+
+	srcinfo, err := os.Stat(urlPath)
 	if err != nil {
 		return false, "", "", err
 	}
@@ -732,23 +804,90 @@ func ResourceCacheDelete(fileCache fileutils.FileCache, path string, ctx context
 		return http.StatusForbidden, nil
 	}
 
-	infoURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(path)
-
-	client := &http.Client{}
-	request, err := http.NewRequest("DELETE", infoURL, nil)
+	srcinfo, err := files.DefaultFs.Stat(path)
 	if err != nil {
-		klog.Errorf("delete request failed: %v\n", err)
 		return common.ErrToStatus(err), err
 	}
 
-	request.Header = r.Header
+	if srcinfo.IsDir() {
+		// first recursively delete all thumbs
+		err = filepath.Walk("/data"+path, func(subPath string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
 
-	response, err := client.Do(request)
+			if !info.IsDir() {
+				file, err := files.NewFileInfo(files.FileOptions{
+					Fs:         files.DefaultFs,
+					Path:       subPath,
+					Modify:     true,
+					Expand:     false,
+					ReadHeader: false,
+				})
+				if err != nil {
+					return err
+				}
+
+				// delete thumbnails
+				err = preview.DelThumbs(ctx, fileCache, file)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			klog.Infoln("Error walking the directory:", err)
+		} else {
+			klog.Infoln("Directory traversal completed.")
+		}
+	} else {
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:         files.DefaultFs,
+			Path:       path,
+			Modify:     true,
+			Expand:     false,
+			ReadHeader: false,
+		})
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+
+		// delete thumbnails
+		err = preview.DelThumbs(ctx, fileCache, file)
+		if err != nil {
+			return common.ErrToStatus(err), err
+		}
+	}
+
+	err = files.DefaultFs.RemoveAll(path)
+
 	if err != nil {
-		klog.Errorf("request failed: %v\n", err)
 		return common.ErrToStatus(err), err
 	}
-	defer response.Body.Close()
 
 	return http.StatusOK, nil
+	//if path == "/" {
+	//	return http.StatusForbidden, nil
+	//}
+	//
+	//infoURL := "http://127.0.0.1:80/api/resources" + common.EscapeURLWithSpace(path)
+	//
+	//client := &http.Client{}
+	//request, err := http.NewRequest("DELETE", infoURL, nil)
+	//if err != nil {
+	//	klog.Errorf("delete request failed: %v\n", err)
+	//	return common.ErrToStatus(err), err
+	//}
+	//
+	//request.Header = r.Header
+	//
+	//response, err := client.Do(request)
+	//if err != nil {
+	//	klog.Errorf("request failed: %v\n", err)
+	//	return common.ErrToStatus(err), err
+	//}
+	//defer response.Body.Close()
+	//
+	//return http.StatusOK, nil
 }

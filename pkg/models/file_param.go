@@ -133,6 +133,10 @@ func (r *FileParam) GetResourceUri() (string, error) {
 		return filepath.Join(constant.EXTERNAL_PREFIX), nil
 	} else if r.FileType == "internal" || r.FileType == "smb" || r.FileType == "usb" || r.FileType == "hdd" {
 		return filepath.Join(constant.EXTERNAL_PREFIX), nil
+	} else if r.FileType == "sync" {
+		return filepath.Join(r.FileType, r.Extend), nil
+	} else if r.FileType == "google" || r.FileType == "dropbox" || r.FileType == "awss3" {
+		return filepath.Join("drive", r.FileType, r.Extend), nil
 	}
 
 	return "", fmt.Errorf("invalid file type: %s", r.FileType)
