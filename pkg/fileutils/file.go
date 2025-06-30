@@ -2,15 +2,16 @@ package fileutils
 
 import (
 	"fmt"
-	"github.com/spf13/afero"
 	"io"
-	"k8s.io/klog/v2"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 )
 
 // MoveFile moves file from src to dst.
@@ -421,4 +422,13 @@ func WriteFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 
 	klog.Infoln(info)
 	return info, nil
+}
+
+// FilePathExists returns a boolean, whether the file or directory is exists
+func FilePathExists(name string) bool {
+	_, err := os.Stat(name)
+	if err != nil && os.IsNotExist(err) {
+		return false
+	}
+	return true
 }

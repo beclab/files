@@ -5,34 +5,30 @@ import (
 	"files/pkg/drivers/clouds"
 	"files/pkg/drivers/posix"
 	syncs "files/pkg/drivers/sync"
+
+	"k8s.io/klog/v2"
 )
 
 type DriverHandler struct{}
 
 func (d *DriverHandler) NewFileHandler(fileType string, handlerParam *base.HandlerParam) base.Execute {
 	switch fileType {
-	case "external":
-		return &posix.ExternalStorage{
-			Posix: &posix.PosixStorage{
-				Handler: handlerParam,
-			},
-		}
-	case "drive", "data", "internal", "hdd", "smb", "usb":
+	case "drive", "external", "internal", "hdd", "smb", "usb", "cache":
 		return &posix.PosixStorage{
 			Handler: handlerParam,
 		}
-	case "cache":
-		return &posix.CacheStorage{
-			Posix: &posix.PosixStorage{
-				Handler: handlerParam,
-			},
-		}
 	case "sync":
-		return syncs.NewSyncStorage(handlerParam)
+		return &syncs.SyncStorage{
+			Handler: handlerParam,
+			Service: syncs.NewService(handlerParam),
+		}
 	case "google", "awss3", "tencent", "dropbox":
-		return clouds.NewCloudStorage(fileType, handlerParam)
-
+		return &clouds.CloudStorage{
+			Handler: handlerParam,
+			Service: clouds.NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
+		}
 	default:
-		panic("driver not found")
+		klog.Errorf("driver not found, fileType: %s", fileType)
+		return nil
 	}
 }

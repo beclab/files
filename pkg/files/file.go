@@ -38,8 +38,8 @@ var DefaultSorting = Sorting{
 type FileInfo struct {
 	*Listing
 	Fs           afero.Fs          `json:"-"`
-	FsType       string            `json:"-"`
-	FsExtend     string            `json:"-"`
+	FsType       string            `json:"fileType"`
+	FsExtend     string            `json:"fileExtend"`
 	Path         string            `json:"path"`
 	Name         string            `json:"name"`
 	Size         int64             `json:"size"`
@@ -126,6 +126,7 @@ type DiskInfo struct {
 }
 
 func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
+
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -154,7 +155,6 @@ func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
 	if response.Code != 200 {
 		return nil, fmt.Errorf("error code received: %d", response.Code)
 	}
-
 	return response.Data, nil
 }
 
@@ -438,6 +438,8 @@ func stat(opts FileOptions) (*FileInfo, error) {
 
 	file = &FileInfo{
 		Fs:        opts.Fs,
+		FsType:    opts.FsType,
+		FsExtend:  opts.FsExtend,
 		Path:      opts.Path,
 		Name:      info.Name(),
 		ModTime:   info.ModTime(),
@@ -696,6 +698,8 @@ func (i *FileInfo) readListing(readHeader bool) error {
 
 		file := &FileInfo{
 			Fs:        i.Fs,
+			FsType:    i.FsType,
+			FsExtend:  i.FsExtend,
 			Path:      fPath,
 			Name:      name,
 			Size:      f.Size(),

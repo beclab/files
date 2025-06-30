@@ -1,70 +1,71 @@
 package preview
 
 import (
-	"bytes"
 	"files/pkg/diskcache"
 	"files/pkg/files"
-	"files/pkg/fileutils"
 	"files/pkg/img"
+	"files/pkg/models"
 	"files/pkg/redisutils"
-	"files/pkg/settings"
-	"net/http"
+	"io"
 
 	"k8s.io/klog/v2"
 )
 
 func HandleImagePreview(
-	w http.ResponseWriter,
-	r *http.Request,
-	imgSvc ImgService,
-	fileCache fileutils.FileCache,
 	file *files.FileInfo,
-	server *settings.Server,
-) (int, error) {
-	var size = r.URL.Query().Get("size")
-	if size == "" {
-		size = "thumb"
-	}
+	queryParam *models.QueryParam,
+) (*models.PreviewHandlerResponse, error) {
+	var fileCache = diskcache.GetFileCache()
+	var imgSvc = img.GetImageService()
+	var size = queryParam.PreviewSize
+	var fileData []byte
 
 	previewSize, err := ParsePreviewSize(size)
 	if err != nil {
-		return http.StatusBadRequest, err
+		return nil, err
 	}
 
-	var enableThumbnails = server.EnableThumbnails
-	var resizePreview = server.ResizePreview
+	var enableThumbnails = queryParam.PreviewEnableThumbnails
+	var resizePreview = queryParam.PreviewResizePreview
+
 	if (previewSize == PreviewSizeBig && !resizePreview) ||
 		(previewSize == PreviewSizeThumb && !enableThumbnails) {
-		return RawFileHandler(w, r, file)
+		fileData, err = RawFileHandler(file)
+		if err != nil {
+			return nil, err
+		}
+		return &models.PreviewHandlerResponse{
+			Data: fileData,
+		}, nil
 	}
 
 	format, err := imgSvc.FormatFromExtension(file.Extension)
 	// Unsupported extensions directly return the raw data
 	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
-		return RawFileHandler(w, r, file)
+		fileData, err = RawFileHandler(file)
+		if err != nil {
+			return nil, err
+		}
+		return &models.PreviewHandlerResponse{
+			Data: fileData,
+		}, nil
 	}
 	if err != nil {
-		return 400, err
+		return nil, err
 	}
 
 	cacheKey := PreviewCacheKey(file, previewSize)
 	klog.Infoln("cacheKey:", cacheKey)
 	klog.Infoln("f.RealPath:", file.RealPath())
-	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
+	resizedImage, ok, err := fileCache.Load(queryParam.Ctx, cacheKey)
 	if err != nil {
-		return 400, err
+		return nil, err
 	}
 	if !ok {
 		resizedImage, err = CreatePreview(imgSvc, fileCache, file, previewSize, 1)
 		if err != nil {
 			klog.Errorf("create preview error: %v", err)
-			// klog.Infoln("first method failed!")
-			// resizedImage, err = preview.CreatePreview(imgSvc, fileCache, file, previewSize, 2)
-			// if err != nil {
-			// 	klog.Infoln("second method failed!")
-			// 	return RawFileHandler(w, r, file)
-			// }
-			return 400, err
+			return nil, err
 		}
 	}
 
@@ -72,20 +73,22 @@ func HandleImagePreview(
 		redisutils.UpdateFileAccessTimeToRedis(redisutils.GetFileName(cacheKey))
 	}
 
-	w.Header().Set("Cache-Control", "private")
-	http.ServeContent(w, r, file.Name, file.ModTime, bytes.NewReader(resizedImage))
-
-	return 0, nil
+	return &models.PreviewHandlerResponse{
+		Data: resizedImage,
+	}, nil
 }
 
-func RawFileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo) (int, error) {
+func RawFileHandler(file *files.FileInfo) ([]byte, error) {
 	fd, err := file.Fs.Open(file.Path)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return nil, err
 	}
 	defer fd.Close()
 
-	w.Header().Set("Cache-Control", "private")
-	http.ServeContent(w, r, file.Name, file.ModTime, fd)
-	return 0, nil
+	data, err := io.ReadAll(fd)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }

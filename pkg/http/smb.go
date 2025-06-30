@@ -69,14 +69,24 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 }
 
 func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	// for compatible
-	if strings.HasPrefix(r.URL.Path, "/external") {
-		r.URL.Path = "/External" + r.URL.Path[len("/external"):]
+	fileParam, _, err := UrlPrep(r, "")
+	if err != nil {
+		return http.StatusBadRequest, err
 	}
+
+	if fileParam.FileType == drives.SrcTypeSync {
+		return md5Sync(fileParam, w, r)
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	urlPath := uri + fileParam.Path
 
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         files.DefaultFs,
-		Path:       r.URL.Path,
+		Path:       strings.TrimPrefix(urlPath, "/data"),
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.Server.TypeDetectionByHeader,

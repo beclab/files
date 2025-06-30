@@ -56,7 +56,3 @@ type UploadAsyncParam struct {
 	Drive         string `json:"drive"`
 	Name          string `json:"name"`
 }
-
-type QueryTaskParam struct {
-	TaskIds []string `json:"task_ids"`
-}

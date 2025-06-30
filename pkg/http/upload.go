@@ -5,6 +5,7 @@ import (
 	e "errors"
 	"files/pkg/common"
 	"files/pkg/fileutils"
+	"files/pkg/models"
 	"files/pkg/upload"
 	"fmt"
 	"github.com/gorilla/mux"
@@ -17,30 +18,41 @@ import (
 )
 
 func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	_, userPvc, cachePvc, uploadsDir, err := upload.GetPVC(r)
+	owner, _, _, uploadsDir, err := upload.GetPVC(r)
 	if err != nil {
 		return http.StatusBadRequest, e.New("bfl header missing or invalid")
 	}
 
-	path := r.URL.Query().Get("p")
-	if path == "" {
+	p := r.URL.Query().Get("file_path")
+	if p == "" {
 		return http.StatusBadRequest, e.New("missing path query parameter")
 	}
 
-	if !strings.HasSuffix(path, "/") {
-		path = path + "/"
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
 	}
 
-	if strings.HasPrefix(path, upload.CacheRequestPrefix) {
-		path = upload.CachePathPrefix + strings.TrimPrefix(path, upload.CacheRequestPrefix)
-		path = upload.RewriteUrl(path, cachePvc, upload.CachePathPrefix, "")
-	} else {
-		focusPrefix := "/"
-		if strings.HasPrefix(path, "/data/") {
-			focusPrefix = "/data/"
-		}
-		path = upload.RewriteUrl(path, userPvc, "", focusPrefix)
+	fileParam, err := models.CreateFileParam(owner, p)
+	if err != nil {
+		return http.StatusBadRequest, err
 	}
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	path := uri + fileParam.Path
+	klog.Infof("~~~Debug log: path=%s", path)
+
+	//if strings.HasPrefix(path, upload.CacheRequestPrefix) {
+	//	path = upload.CachePathPrefix + strings.TrimPrefix(path, upload.CacheRequestPrefix)
+	//	path = upload.RewriteUrl(path, cachePvc, upload.CachePathPrefix, "")
+	//} else {
+	//	focusPrefix := "/"
+	//	if strings.HasPrefix(path, "/data/") {
+	//		focusPrefix = "/data/"
+	//	}
+	//	path = upload.RewriteUrl(path, userPvc, "", focusPrefix)
+	//}
 
 	// change temp file location
 	extracted := upload.ExtractPart(path)
@@ -70,29 +82,41 @@ func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (
 }
 
 func uploadedBytesHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	_, userPvc, cachePvc, uploadsDir, err := upload.GetPVC(r)
+	owner, _, _, uploadsDir, err := upload.GetPVC(r)
 	if err != nil {
 		return http.StatusBadRequest, e.New("bfl header missing or invalid")
 	}
 
-	parentDir := r.URL.Query().Get("parent_dir")
-	if parentDir == "" {
+	p := r.URL.Query().Get("parent_dir")
+	if p == "" {
 		return http.StatusBadRequest, e.New("missing parent_dir query parameter")
 	}
 
-	if !strings.HasSuffix(parentDir, "/") {
-		parentDir += "/"
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
 	}
-	if strings.HasPrefix(parentDir, upload.CacheRequestPrefix) {
-		parentDir = upload.CachePathPrefix + strings.TrimPrefix(parentDir, upload.CacheRequestPrefix)
-		parentDir = upload.RewriteUrl(parentDir, cachePvc, upload.CachePathPrefix, "")
-	} else {
-		focusPrefix := "/"
-		if strings.HasPrefix(parentDir, "/data/") {
-			focusPrefix = "/data/"
-		}
-		parentDir = upload.RewriteUrl(parentDir, userPvc, "", focusPrefix)
+
+	fileParam, err := models.CreateFileParam(owner, p)
+	if err != nil {
+		return http.StatusBadRequest, err
 	}
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	parentDir := uri + fileParam.Path
+	klog.Infof("~~~Debug log: parentDir=%s", parentDir)
+
+	//if strings.HasPrefix(parentDir, upload.CacheRequestPrefix) {
+	//	parentDir = upload.CachePathPrefix + strings.TrimPrefix(parentDir, upload.CacheRequestPrefix)
+	//	parentDir = upload.RewriteUrl(parentDir, cachePvc, upload.CachePathPrefix, "")
+	//} else {
+	//	focusPrefix := "/"
+	//	if strings.HasPrefix(parentDir, "/data/") {
+	//		focusPrefix = "/data/"
+	//	}
+	//	parentDir = upload.RewriteUrl(parentDir, userPvc, "", focusPrefix)
+	//}
 
 	if !upload.CheckDirExist(parentDir) {
 		klog.Warningf("Storage path %s is not exist or is not a dir", parentDir)
@@ -182,7 +206,7 @@ func uploadChunksHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 	vars := mux.Vars(r)
 	uploadID := vars["uid"]
 
-	_, userPvc, cachePvc, uploadsDir, err := upload.GetPVC(r)
+	owner, _, _, uploadsDir, err := upload.GetPVC(r)
 	if err != nil {
 		return http.StatusBadRequest, e.New("bfl header missing or invalid")
 	}
@@ -197,20 +221,36 @@ func uploadChunksHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 		return http.StatusBadRequest, e.New("param invalid")
 	}
 
-	parentDir := resumableInfo.ParentDir
-	if !strings.HasSuffix(parentDir, "/") {
-		parentDir += "/"
+	//parentDir := resumableInfo.ParentDir
+	//if !strings.HasSuffix(parentDir, "/") {
+	//	parentDir += "/"
+	//}
+	//if strings.HasPrefix(parentDir, upload.CacheRequestPrefix) {
+	//	parentDir = upload.CachePathPrefix + strings.TrimPrefix(parentDir, upload.CacheRequestPrefix)
+	//	parentDir = upload.RewriteUrl(parentDir, cachePvc, upload.CachePathPrefix, "")
+	//} else {
+	//	focusPrefix := "/"
+	//	if strings.HasPrefix(parentDir, "/data/") {
+	//		focusPrefix = "/data/"
+	//	}
+	//	parentDir = upload.RewriteUrl(parentDir, userPvc, "", focusPrefix)
+	//}
+
+	p := resumableInfo.ParentDir
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
 	}
-	if strings.HasPrefix(parentDir, upload.CacheRequestPrefix) {
-		parentDir = upload.CachePathPrefix + strings.TrimPrefix(parentDir, upload.CacheRequestPrefix)
-		parentDir = upload.RewriteUrl(parentDir, cachePvc, upload.CachePathPrefix, "")
-	} else {
-		focusPrefix := "/"
-		if strings.HasPrefix(parentDir, "/data/") {
-			focusPrefix = "/data/"
-		}
-		parentDir = upload.RewriteUrl(parentDir, userPvc, "", focusPrefix)
+
+	fileParam, err := models.CreateFileParam(owner, p)
+	if err != nil {
+		return http.StatusBadRequest, err
 	}
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	parentDir := uri + fileParam.Path
+	klog.Infof("~~~Debug log: parentDir=%s", parentDir)
 
 	extracted := upload.ExtractPart(parentDir)
 	if extracted != "" {

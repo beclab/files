@@ -5,10 +5,11 @@ import (
 	"files/pkg/constant"
 	"files/pkg/drivers"
 	"files/pkg/drives"
-	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/preview"
 	"files/pkg/rpc"
+	"files/pkg/utils"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -25,11 +26,12 @@ import (
 	"files/pkg/settings"
 )
 
-type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-type fileHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (int, error)
-type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, imgSvc preview.ImgService, fileCache fileutils.FileCache) (int, error)
+type fileHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error)
+type rawHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (io.ReadCloser, error)
 
-func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.DriverHandler, imgSvc preview.ImgService, fileCache fileutils.FileCache, server *settings.Server) http.Handler {
+type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+
+func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var path = strings.TrimPrefix(r.URL.Path, prefix)
 
@@ -37,7 +39,6 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 			http.Error(w, "path invalid", http.StatusBadRequest)
 			return
 		}
-
 		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
 		if owner == "" {
 			http.Error(w, "user not found", http.StatusBadRequest)
@@ -46,28 +47,59 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 
 		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
 
-		var fileParam, err = models.CreateFileParam(owner, path)
+		queryParam := models.CreateQueryParam(owner, r, false, false)
+
+		fileParam, err := models.CreateFileParam(owner, path)
 		if err != nil {
 			klog.Errorf("file param invalid: %v, owner: %s", err, owner)
-			http.Error(w, "param invalid found", http.StatusBadRequest)
+			http.Error(w, "file param invalid found", http.StatusBadRequest)
 			return
 		}
 
-		klog.Infof("srcType: %s, url: %s, param: %s", fileParam.FileType, r.URL.Path, fileParam.Json())
+		klog.Infof("srcType: %s, url: %s, param: %s, header: %+v", fileParam.FileType, r.URL.Path, fileParam.Json(), r.Header)
 		var handlerParam = &base.HandlerParam{
+			Ctx:            r.Context(),
 			Owner:          owner,
 			ResponseWriter: w,
 			Request:        r,
-			Data: &common.Data{
-				Server: server,
-			},
 		}
 
-		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, imgSvc, fileCache)
-		if status >= 400 || err != nil {
-			clientIP := realip.FromRequest(r)
-			klog.Errorf("%s: %v %s %v", r.URL.Path, status, clientIP, err)
+		var handler = driverHandler.NewFileHandler(fileParam.FileType, handlerParam)
+		if handler == nil {
+			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
+			return
 		}
+
+		reader, err := fn(handler, fileParam)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"code":    1,
+				"message": err.Error(),
+			})
+			return
+		}
+
+		_ = reader
+
+		if queryParam.RawInline == "true" {
+
+		} else {
+			// w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, safeFilename))
+			// w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
+			// w.Header().Set("Content-Length", response.Header.Get("Content-Length"))
+
+			// _, err = io.Copy(w, reader)
+			// if err != nil {
+			// 	json.NewEncoder(w).Encode(map[string]interface{}{
+			// 		"code":    1,
+			// 		"message": err.Error(),
+			// 	})
+			// 	return
+			// }
+		}
+
+		return
+
 	})
 
 	return handler
@@ -75,31 +107,20 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 
 func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.DriverHandler, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var path = strings.TrimPrefix(r.URL.Path, prefix)
 
-		if path == "" {
-			http.Error(w, "path invalid", http.StatusBadRequest)
-			return
-		}
-
-		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
-		if owner == "" {
-			http.Error(w, "user not found", http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
-
-		var fileParam, err = models.CreateFileParam(owner, path)
+		contextArg, err := models.NewHttpContextArgs(r, prefix, false, false)
 		if err != nil {
-			klog.Errorf("file param invalid: %v, owner: %s", err, owner)
-			http.Error(w, "param invalid found", http.StatusBadRequest)
+			klog.Errorf("context args error: %v, path: %s", err, r.URL.Path)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		klog.Infof("srcType: %s, url: %s, param: %s, header: %+v", fileParam.FileType, r.URL.Path, fileParam.Json(), r.Header)
+		klog.Infof("Incoming Path: %s, user: %s, method: %s, fileType: %s, args: %s",
+			contextArg.RequestPath, contextArg.FileParam.Owner, r.Method, contextArg.FileParam.FileType, utils.ToJson(contextArg))
+
 		var handlerParam = &base.HandlerParam{
-			Owner:          owner,
+			Ctx:            r.Context(),
+			Owner:          contextArg.FileParam.Owner,
 			ResponseWriter: w,
 			Request:        r,
 			Data: &common.Data{
@@ -107,31 +128,24 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 			},
 		}
 
-		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam)
-		if status >= 400 || err != nil {
-			clientIP := realip.FromRequest(r)
-			klog.Errorf("%s: %v %s %v", r.URL.Path, status, clientIP, err)
-		}
-
-		if status != 0 {
-			if status == http.StatusInternalServerError {
-				txt := http.StatusText(status)
-				if err != nil {
-					txt = err.Error()
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(status)
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"code":    1,
-					"message": txt,
-				})
-			} else {
-				txt := http.StatusText(status)
-				http.Error(w, strconv.Itoa(status)+" "+txt, status)
-			}
+		var handler = driverHandler.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
+		if handler == nil {
+			http.Error(w, fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType), http.StatusBadRequest)
 			return
 		}
+
+		res, err := fn(handler, contextArg)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"code":    1,
+				"message": err.Error(),
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(res)
+		return
 	})
 
 	return handler
@@ -139,10 +153,10 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 
 func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		checked := CheckPathOwner(r, prefix)
-		if !checked {
-			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-		}
+		//checked := CheckPathOwner(r, prefix)
+		//if !checked {
+		//	http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		//}
 
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 

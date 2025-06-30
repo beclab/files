@@ -8,10 +8,23 @@ import (
 	"github.com/spf13/afero"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
+	fileParam, _, err := UrlPrep(r, "")
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	urlPath := uri + fileParam.Path
+	dealUrlPath := strings.TrimPrefix(urlPath, "/data")
+
+	exists, err := afero.Exists(files.DefaultFs, dealUrlPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -20,7 +33,7 @@ func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	responseData := make(map[string]interface{})
-	responseData["uid"], err = fileutils.GetUID(files.DefaultFs, r.URL.Path)
+	responseData["uid"], err = fileutils.GetUID(files.DefaultFs, dealUrlPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -28,7 +41,19 @@ func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 }
 
 func permissionPutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
+	fileParam, _, err := UrlPrep(r, "")
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	urlPath := uri + fileParam.Path
+	dealUrlPath := strings.TrimPrefix(urlPath, "/data")
+
+	exists, err := afero.Exists(files.DefaultFs, dealUrlPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -56,9 +81,9 @@ func permissionPutHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	if recursive == 0 {
-		err = fileutils.Chown(files.DefaultFs, r.URL.Path, uid, gid)
+		err = fileutils.Chown(files.DefaultFs, dealUrlPath, uid, gid)
 	} else {
-		err = fileutils.ChownRecursive("/data"+r.URL.Path, uid, gid)
+		err = fileutils.ChownRecursive(urlPath, uid, gid)
 	}
 	if err != nil {
 		return http.StatusInternalServerError, err
