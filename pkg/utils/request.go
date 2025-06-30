@@ -47,7 +47,10 @@ func RequestWithContext(u string, method string, header *http.Header, requestPar
 		}
 
 		var body []byte
-		newRequest.Header = *header
+		if header != nil {
+			newRequest.Header = *header
+		}
+
 		newRequest.Header.Set("Content-Type", "application/json")
 		newRequest.Header.Del("Traceparent")
 		newRequest.Header.Del("Tracestate")

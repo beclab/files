@@ -38,6 +38,10 @@ func NewHandler(
 	// URLs https://www.gorillatoolkit.org/pkg/mux#Router.SkipClean
 	r = r.SkipClean(true)
 
+	common := func(fn commonFunc) http.Handler {
+		return commonHandle(fn)
+	}
+
 	monkey := func(fn handleFunc, prefix string) http.Handler {
 		return handle(fn, prefix, server)
 	}
@@ -54,7 +58,6 @@ func NewHandler(
 	_ = wrapWithPreviewParms
 
 	r.HandleFunc("/health", healthHandler)
-	r.HandleFunc("/api/nodes", nodesGetHandler).Methods("GET")
 
 	uploader := r.PathPrefix("/upload").Subrouter()
 
@@ -64,9 +67,12 @@ func NewHandler(
 
 	api := r.PathPrefix("/api").Subrouter()
 
+	api.PathPrefix("/nodes").Handler(common(nodesGetHandler)).Methods("GET")
+	api.PathPrefix("/repos").Handler(common(reposGetHandler)).Methods("GET")
+
 	// ! demo
-	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET")    // list
-	api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST") // create folder
+	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET") // list
+	// api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST") // create folder
 	// api.PathPrefix("/resources").Handler(wrapWithParms(renameHandler, "/api/resources")).Methods("PATCH") // rename
 
 	api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandlerEx, "/api/preview/")).Methods("GET") // preview

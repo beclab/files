@@ -25,6 +25,7 @@ import (
 	"files/pkg/settings"
 )
 
+type commonFunc func(owner string) ([]byte, error)
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
 type fileHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (int, error)
 type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, imgSvc preview.ImgService, fileCache fileutils.FileCache) (int, error)
@@ -132,6 +133,37 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 			}
 			return
 		}
+	})
+
+	return handler
+}
+
+func commonHandle(fn commonFunc) http.Handler {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var path = r.URL.Path
+		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+		if owner == "" {
+			http.Error(w, "user not found", http.StatusBadRequest)
+			return
+		}
+
+		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
+
+		res, err := fn(owner)
+		w.Header().Set("Content-Type", "application/json")
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"code":    1,
+				"message": err.Error(),
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(res)
+		return
 	})
 
 	return handler
