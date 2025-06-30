@@ -5,10 +5,10 @@ import (
 	"files/pkg/constant"
 	"files/pkg/drivers"
 	"files/pkg/drives"
-	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/preview"
 	"files/pkg/rpc"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -26,12 +26,16 @@ import (
 )
 
 type commonFunc func(owner string) ([]byte, error)
+type fileHandlerFunc func(handler base.Execute, fileParam *models.FileParam) ([]byte, error)
+type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error)
+type rawHandlerFunc func(handler base.Execute) (io.ReadCloser, error)
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-type fileHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (int, error)
-type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, imgSvc preview.ImgService, fileCache fileutils.FileCache) (int, error)
 
-func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.DriverHandler, imgSvc preview.ImgService, fileCache fileutils.FileCache, server *settings.Server) http.Handler {
+func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var enableThumbnails = true
+		var resizePreview = true
+
 		var path = strings.TrimPrefix(r.URL.Path, prefix)
 
 		if path == "" {
@@ -47,28 +51,45 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 
 		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
 
-		var fileParam, err = models.CreateFileParam(owner, path)
+		queryParam, err := models.CreateQueryParam(owner, r, enableThumbnails, resizePreview)
 		if err != nil {
-			klog.Errorf("file param invalid: %v, owner: %s", err, owner)
-			http.Error(w, "param invalid found", http.StatusBadRequest)
+			klog.Errorf("query param error: %v, owner: %s", err, owner)
+			http.Error(w, fmt.Sprintf("query param error: %v"), http.StatusBadRequest)
 			return
 		}
 
-		klog.Infof("srcType: %s, url: %s, param: %s", fileParam.FileType, r.URL.Path, fileParam.Json())
+		fileParam, err := models.CreateFileParam(owner, path)
+		if err != nil {
+			klog.Errorf("file param error: %v, owner: %s", err, owner)
+			http.Error(w, fmt.Sprintf("file param error: %v"), http.StatusBadRequest)
+			return
+		}
+
+		klog.Infof("srcType: %s, url: %s, param: %s, query: %s", fileParam.FileType, r.URL.Path, fileParam.Json(), queryParam.Json())
 		var handlerParam = &base.HandlerParam{
 			Owner:          owner,
 			ResponseWriter: w,
 			Request:        r,
-			Data: &common.Data{
-				Server: server,
-			},
 		}
 
-		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, imgSvc, fileCache)
-		if status >= 400 || err != nil {
-			clientIP := realip.FromRequest(r)
-			klog.Errorf("%s: %v %s %v", r.URL.Path, status, clientIP, err)
+		res, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, queryParam)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"code":    1,
+				"message": err.Error(),
+			})
+			return
 		}
+
+		if queryParam.Inline == "true" {
+			w.Header().Set("Content-Disposition", "inline")
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "private")
+		w.Header().Set("Content-Length", strconv.Itoa(len(res)))
+		w.Write(res)
+		return
 	})
 
 	return handler
@@ -91,7 +112,7 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 
 		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
 
-		var fileParam, err = models.CreateFileParam(owner, path)
+		fileParam, err := models.CreateFileParam(owner, path)
 		if err != nil {
 			klog.Errorf("file param invalid: %v, owner: %s", err, owner)
 			http.Error(w, "param invalid found", http.StatusBadRequest)
@@ -108,31 +129,18 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 			},
 		}
 
-		status, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam)
-		if status >= 400 || err != nil {
-			clientIP := realip.FromRequest(r)
-			klog.Errorf("%s: %v %s %v", r.URL.Path, status, clientIP, err)
-		}
-
-		if status != 0 {
-			if status == http.StatusInternalServerError {
-				txt := http.StatusText(status)
-				if err != nil {
-					txt = err.Error()
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(status)
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"code":    1,
-					"message": txt,
-				})
-			} else {
-				txt := http.StatusText(status)
-				http.Error(w, strconv.Itoa(status)+" "+txt, status)
-			}
+		res, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"code":    1,
+				"message": err.Error(),
+			})
 			return
 		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(res)
+		return
 	})
 
 	return handler
@@ -161,7 +169,6 @@ func commonHandle(fn commonFunc) http.Handler {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		w.Write(res)
 		return
 	})

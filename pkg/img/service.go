@@ -6,18 +6,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/disintegration/imaging"
-	"github.com/dsoprea/go-exif/v3"
-	"github.com/marusama/semaphore/v2"
-	"github.com/nfnt/resize"
 	"image"
 	"image/png"
 	_ "image/png"
 	"io"
+
+	"github.com/disintegration/imaging"
+	"github.com/dsoprea/go-exif/v3"
+	"github.com/marusama/semaphore/v2"
+	"github.com/nfnt/resize"
 	"k8s.io/klog/v2"
 
 	exifcommon "github.com/dsoprea/go-exif/v3/common"
 )
+
+var imgSvc *Service
 
 // ErrUnsupportedFormat means the given image format is not supported.
 var ErrUnsupportedFormat = errors.New("unsupported image format")
@@ -28,9 +31,14 @@ type Service struct {
 }
 
 func New(workers int) *Service {
-	return &Service{
+	imgSvc = &Service{
 		sem: semaphore.New(workers),
 	}
+	return imgSvc
+}
+
+func GetImageService() *Service {
+	return imgSvc
 }
 
 // Format is an image file format.

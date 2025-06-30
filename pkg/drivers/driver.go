@@ -17,21 +17,20 @@ func (d *DriverHandler) NewFileHandler(fileType string, handlerParam *base.Handl
 				Handler: handlerParam,
 			},
 		}
-	case "drive", "data", "internal", "hdd", "smb", "usb":
+	case "drive", "internal", "hdd", "smb", "usb", "cache":
 		return &posix.PosixStorage{
 			Handler: handlerParam,
 		}
-	case "cache":
-		return &posix.CacheStorage{
-			Posix: &posix.PosixStorage{
-				Handler: handlerParam,
-			},
-		}
 	case "sync":
-		return syncs.NewSyncStorage(handlerParam)
+		return &syncs.SyncStorage{
+			Handler: handlerParam,
+			Service: syncs.NewService(handlerParam),
+		}
 	case "google", "awss3", "tencent", "dropbox":
-		return clouds.NewCloudStorage(fileType, handlerParam)
-
+		return &clouds.CloudStorage{
+			Handler: handlerParam,
+			Service: clouds.NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
+		}
 	default:
 		panic("driver not found")
 	}

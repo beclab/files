@@ -11,6 +11,6 @@ func HandlerTextPreview(w http.ResponseWriter,
 	r *http.Request,
 	fileCache fileutils.FileCache,
 	file *files.FileInfo,
-	server *settings.Server) (int, error) {
-	return RawFileHandler(w, r, file)
+	server *settings.Server) ([]byte, error) {
+	return RawFileHandler(file)
 }

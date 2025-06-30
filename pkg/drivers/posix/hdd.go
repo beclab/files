@@ -1,27 +1,22 @@
 package posix
 
 import (
-	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/preview"
+	"io"
 )
 
 type HddStorage struct {
 	Posix *PosixStorage
 }
 
-func (s *HddStorage) List(fileParam *models.FileParam) (int, error) {
+func (s *HddStorage) List(fileParam *models.FileParam) ([]byte, error) {
 	return s.Posix.List(fileParam)
 }
 
-func (s *HddStorage) CreateFolder(fileParam *models.FileParam) (int, error) {
-	return s.Posix.CreateFolder(fileParam)
+func (s *HddStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error) {
+	return s.Posix.Preview(fileParam, queryParam)
 }
 
-func (s *HddStorage) Rename(fileParam *models.FileParam) (int, error) {
-	return s.Posix.Rename(fileParam)
-}
-
-func (s *HddStorage) Preview(fileParam *models.FileParam, imgSvc preview.ImgService, fileCache fileutils.FileCache) (int, error) {
-	return s.Posix.Preview(fileParam, imgSvc, fileCache)
+func (s *HddStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, error) {
+	return s.Posix.Raw(fileParam, queryParam)
 }

@@ -76,9 +76,18 @@ func (p *FileParam) convert(url string) (err error) {
 		p.Extend = extend
 		p.Path = subPath
 
-	} else if fileType == constant.GoogleDrive || fileType == constant.DropBox || fileType == constant.AwsS3 {
+	} else if fileType == constant.AwsS3 || fileType == constant.DropBox {
 
 		p.FileType = fileType
+		p.Extend = extend
+		p.Path = subPath
+
+	} else if fileType == constant.GoogleDrive {
+
+		if subPath != "/" {
+			subPath = strings.Trim(subPath, "/")
+		}
+		p.FileType = constant.GoogleDrive
 		p.Extend = extend
 		p.Path = subPath
 

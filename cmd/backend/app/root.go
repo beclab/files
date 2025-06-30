@@ -147,7 +147,7 @@ user created with the credentials from options "username" and "password".`,
 		if workersCount < 1 {
 			klog.Fatal("Image resize workers count could not be < 1")
 		}
-		imgSvc := img.New(workersCount)
+		imgSvc := img.New(workersCount) // init global image service
 
 		// Step3-2: Build file cache
 		var fileCache diskcache.Interface = diskcache.NewNoOp()

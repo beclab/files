@@ -1,17 +1,18 @@
 package base
 
 import (
-	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/preview"
+	"io"
 )
 
 type Execute interface {
-	List(fileParam *models.FileParam) (int, error)
-	CreateFolder(fileParam *models.FileParam) (int, error)
-	Rename(fileParam *models.FileParam) (int, error)
+	List(fileParam *models.FileParam) ([]byte, error)
+	Preview(fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error)
+	Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, error)
 
-	Preview(fileParam *models.FileParam, imgSvc preview.ImgService, fileCache fileutils.FileCache) (int, error)
+	// CreateFolder(fileParam *models.FileParam) (int, error)
+	// Rename(fileParam *models.FileParam) (int, error)
+
 }
 
 type CloudServiceInterface interface {
@@ -27,41 +28,41 @@ type CloudServiceInterface interface {
 }
 
 type Lister interface {
-	List(param *models.ListParam) (any, error)
+	List(param *models.ListParam) ([]byte, error)
 }
 
 type MetadataGetter interface {
-	GetFileMetaData(param *models.ListParam) (any, error)
+	GetFileMetaData(param *models.ListParam) ([]byte, error)
 }
 
 type CopierMover interface {
-	CopyFile(param *models.CopyFileParam) (any, error)
-	MoveFile(param *models.MoveFileParam) (any, error)
+	CopyFile(param *models.CopyFileParam) ([]byte, error)
+	MoveFile(param *models.MoveFileParam) ([]byte, error)
 }
 
 type DeleterRenamer interface {
-	Delete(param *models.DeleteParam) (any, error)
-	Rename(param *models.PatchParam) (any, error)
+	Delete(param *models.DeleteParam) ([]byte, error)
+	Rename(param *models.PatchParam) ([]byte, error)
 }
 
 type FolderCreator interface {
-	CreateFolder(param *models.PostParam) (any, error)
+	CreateFolder(param *models.PostParam) ([]byte, error)
 }
 
 type Downloader interface {
-	DownloadAsync(param *models.DownloadAsyncParam) (any, error)
+	DownloadAsync(param *models.DownloadAsyncParam) ([]byte, error)
 }
 
 type Uploader interface {
-	UploadAsync(param *models.UploadAsyncParam) (any, error)
+	UploadAsync(param *models.UploadAsyncParam) ([]byte, error)
 }
 
 type Queryer interface {
-	QueryTask(param *models.QueryTaskParam) (any, error)
-	QueryAccount() (any, error)
+	QueryTask(param *models.QueryTaskParam) ([]byte, error)
+	QueryAccount() ([]byte, error)
 }
 
 type Task interface {
-	PauseTask(taskId string) (any, error)
-	ResumeTask(taskId string) (any, error)
+	PauseTask(taskId string) ([]byte, error)
+	ResumeTask(taskId string) ([]byte, error)
 }

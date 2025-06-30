@@ -2,6 +2,10 @@ package models
 
 import "time"
 
+type QueryTaskParam struct {
+	TaskIds []string `json:"task_ids"`
+}
+
 type TaskQueryResponse struct {
 	StatusCode string      `json:"status_code"`
 	FailReason string      `json:"fail_reason"`
@@ -49,19 +53,19 @@ type TaskResultData struct {
 }
 
 type TaskFileInfo struct {
-	Path         string                       `json:"path"`
-	Name         string                       `json:"name"`
-	Size         int64                        `json:"size"`
-	FileSize     int64                        `json:"fileSize"`
-	Extension    string                       `json:"extension"`
-	Modified     time.Time                    `json:"modified"`
-	Mode         string                       `json:"mode"`
-	IsDir        bool                         `json:"isDir"`
-	IsSymlink    bool                         `json:"isSymlink"`
-	Type         string                       `json:"type"`
-	Meta         *GoogleDriveResponseDataMeta `json:"meta,omitempty"`
-	CanDownload  bool                         `json:"canDownload"`
-	CanExport    bool                         `json:"canExport"`
-	ExportSuffix string                       `json:"exportSuffix"`
-	IdPath       string                       `json:"id_path,omitempty"`
+	Path         string                 `json:"path"`
+	Name         string                 `json:"name"`
+	Size         int64                  `json:"size"`
+	FileSize     int64                  `json:"fileSize"`
+	Extension    string                 `json:"extension"`
+	Modified     time.Time              `json:"modified"`
+	Mode         string                 `json:"mode"`
+	IsDir        bool                   `json:"isDir"`
+	IsSymlink    bool                   `json:"isSymlink"`
+	Type         string                 `json:"type"`
+	Meta         *CloudResponseDataMeta `json:"meta,omitempty"`
+	CanDownload  bool                   `json:"canDownload"`
+	CanExport    bool                   `json:"canExport"`
+	ExportSuffix string                 `json:"exportSuffix"`
+	IdPath       string                 `json:"id_path,omitempty"`
 }

@@ -1373,13 +1373,13 @@ func handleImagePreviewCloudDrive(
 
 	if (previewSize == preview.PreviewSizeBig && !resizePreview) ||
 		(previewSize == preview.PreviewSizeThumb && !enableThumbnails) {
-		return RawFileHandlerCloudDrive(src, w, r, file, bflName)
+		return RawFileHandlerCloudDrive(src, w, r, file, bflName) // + preview
 	}
 
 	format, err := imgSvc.FormatFromExtension(path.Ext(file.Name))
 	// Unsupported extensions directly return the raw data
 	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
-		return RawFileHandlerCloudDrive(src, w, r, file, bflName)
+		return RawFileHandlerCloudDrive(src, w, r, file, bflName) // + preview
 	}
 	if err != nil {
 		return common.ErrToStatus(err), err
@@ -1393,7 +1393,7 @@ func handleImagePreviewCloudDrive(
 		return common.ErrToStatus(err), err
 	}
 	if !ok {
-		resizedImage, err = createPreviewCloudDrive(w, r, src, imgSvc, fileCache, file, previewSize, bflName)
+		resizedImage, err = createPreviewCloudDrive(w, r, src, imgSvc, fileCache, file, previewSize, bflName) // + preview
 		if err != nil {
 			return common.ErrToStatus(err), err
 		}
@@ -1420,11 +1420,11 @@ func PreviewGetCloudDrive(w http.ResponseWriter, r *http.Request, previewSize pr
 		return common.ErrToStatus(err), err
 	}
 
-	setContentDispositionCloudDrive(w, r, metaData.Name)
+	setContentDispositionCloudDrive(w, r, metaData.Name) // + preview
 
 	fileType := parser.MimeTypeByExtension(metaData.Name)
 	if strings.HasPrefix(fileType, "image") {
-		return handleImagePreviewCloudDrive(w, r, src, imgSvc, fileCache, metaData, previewSize, enableThumbnails, resizePreview)
+		return handleImagePreviewCloudDrive(w, r, src, imgSvc, fileCache, metaData, previewSize, enableThumbnails, resizePreview) // + preview
 	} else {
 		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", fileType)
 	}

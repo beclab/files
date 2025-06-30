@@ -51,7 +51,7 @@ func NewHandler(
 	}
 
 	wrapWithPreviewParms := func(fn previewHandlerFunc, prefix string) http.Handler {
-		return previewHandle(fn, prefix, driverHandler, imgSvc, fileCache, server)
+		return previewHandle(fn, prefix, driverHandler)
 	}
 
 	_ = wrapWithParms
@@ -72,13 +72,13 @@ func NewHandler(
 
 	// ! demo
 	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET") // list
-	// api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST") // create folder
-	// api.PathPrefix("/resources").Handler(wrapWithParms(renameHandler, "/api/resources")).Methods("PATCH") // rename
 
+	// todo Iterate through all subdirectories and files in the current directory.
+	// api.PathPrefix("/stream").Handler(wrapWithParms(streamHandler, "/api/stream/")).Methods("GET") // todo stream
 	api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandlerEx, "/api/preview/")).Methods("GET") // preview
 
 	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
-	// api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST") // create
+	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST") // create
 	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
 
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")                // ??
