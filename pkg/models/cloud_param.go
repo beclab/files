@@ -44,6 +44,9 @@ func (c *CloudListResponse) FailMessage() string {
 
 type CloudResponseData struct {
 	ID           string                 `json:"id,omitempty"`
+	FsType       string                 `json:"fileType"`
+	FsExtend     string                 `json:"fileExtend"`
+	FsPath       string                 `json:"filePath"`
 	IdPath       string                 `json:"id_path,omitempty"`
 	Path         string                 `json:"path"`
 	Name         string                 `json:"name"`

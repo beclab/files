@@ -38,6 +38,8 @@ var DefaultSorting = Sorting{
 type FileInfo struct {
 	*Listing
 	Fs           afero.Fs          `json:"-"`
+	FsType       string            `json:"fileType"`
+	FsExtend     string            `json:"fileExtend"`
 	Path         string            `json:"path"`
 	Name         string            `json:"name"`
 	Size         int64             `json:"size"`
@@ -67,6 +69,8 @@ func (fi *FileInfo) String() string {
 // FileOptions are the options when getting a file info.
 type FileOptions struct {
 	Fs         afero.Fs
+	FsType     string
+	FsExtend   string
 	Path       string
 	Modify     bool
 	Expand     bool
@@ -396,6 +400,8 @@ func stat(opts FileOptions) (*FileInfo, error) {
 		}
 		file = &FileInfo{
 			Fs:        opts.Fs,
+			FsType:    opts.FsType,
+			FsExtend:  opts.FsExtend,
 			Path:      opts.Path,
 			Name:      info.Name(),
 			ModTime:   info.ModTime(),
@@ -432,6 +438,8 @@ func stat(opts FileOptions) (*FileInfo, error) {
 
 	file = &FileInfo{
 		Fs:        opts.Fs,
+		FsType:    opts.FsType,
+		FsExtend:  opts.FsExtend,
 		Path:      opts.Path,
 		Name:      info.Name(),
 		ModTime:   info.ModTime(),
@@ -690,6 +698,8 @@ func (i *FileInfo) readListing(readHeader bool) error {
 
 		file := &FileInfo{
 			Fs:        i.Fs,
+			FsType:    i.FsType,
+			FsExtend:  i.FsExtend,
 			Path:      fPath,
 			Name:      name,
 			Size:      f.Size(),

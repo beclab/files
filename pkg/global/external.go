@@ -69,7 +69,8 @@ func (m *Mount) watchMounted() {
 				klog.Errorf("watcher error: %v", err)
 			case e, ok := <-externalWatcher.Events:
 				if !ok {
-					continue
+					klog.Warning("watcher event channel closed")
+					return
 				}
 
 				if e.Has(fsnotify.Chmod) {

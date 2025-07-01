@@ -12,9 +12,9 @@ import (
 
 type FileParam struct {
 	Owner    string `json:"owner"`
-	FileType string `json:"file_type"` // drive data cache internal usb smb hdd sync cloud
-	Extend   string `json:"extend"`    // node repo key deviceId diskId ...
-	Path     string `json:"path"`      // path
+	FileType string `json:"file_type,omitempty"` // drive data cache internal usb smb hdd sync cloud
+	Extend   string `json:"extend,omitempty"`    // node repo key deviceId diskId ...
+	Path     string `json:"path,omitempty"`      // path
 }
 
 func CreateFileParam(owner string, path string) (*FileParam, error) {
@@ -137,4 +137,13 @@ func (r *FileParam) GetResourceUri() (string, error) {
 
 	return "", fmt.Errorf("invalid file type: %s", r.FileType)
 
+}
+
+func (r *FileParam) IsFile() (string, bool) {
+	var p = strings.Split(r.Path, "/")
+	var fileName = p[len(p)-1]
+	if fileName != "" {
+		return fileName, true
+	}
+	return "", false
 }

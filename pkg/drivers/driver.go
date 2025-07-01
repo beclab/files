@@ -11,13 +11,7 @@ type DriverHandler struct{}
 
 func (d *DriverHandler) NewFileHandler(fileType string, handlerParam *base.HandlerParam) base.Execute {
 	switch fileType {
-	case "external":
-		return &posix.ExternalStorage{
-			Posix: &posix.PosixStorage{
-				Handler: handlerParam,
-			},
-		}
-	case "drive", "internal", "hdd", "smb", "usb", "cache":
+	case "drive", "external", "internal", "hdd", "smb", "usb", "cache":
 		return &posix.PosixStorage{
 			Handler: handlerParam,
 		}

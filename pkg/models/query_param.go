@@ -35,24 +35,9 @@ func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resi
 		queryParam.Stream = &streamQueryInt
 	}
 
-	var sizeQuery = r.URL.Query().Get("size")
-	if sizeQuery != "" {
-		queryParam.Size = sizeQuery
-	} else {
-		queryParam.Size = "thumb"
-	}
-
-	var inlineQuery = r.URL.Query().Get("inline")
-	if inlineQuery != "" {
-		queryParam.Inline = inlineQuery
-	} else {
-		queryParam.Inline = "true"
-	}
-
-	var filesQuery = r.URL.Query().Get("files")
-	if filesQuery != "" {
-		queryParam.Files = filesQuery
-	}
+	queryParam.Size = r.URL.Query().Get("size")
+	queryParam.Inline = r.URL.Query().Get("inline")
+	queryParam.Files = r.URL.Query().Get("files")
 
 	return queryParam, nil
 

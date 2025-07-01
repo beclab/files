@@ -8,7 +8,8 @@ import (
 type Execute interface {
 	List(fileParam *models.FileParam) ([]byte, error)
 	Preview(fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error)
-	Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, error)
+	Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error)
+	Stream(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
 
 	// CreateFolder(fileParam *models.FileParam) (int, error)
 	// Rename(fileParam *models.FileParam) (int, error)
