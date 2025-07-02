@@ -51,6 +51,11 @@ func PasteAddVersionSuffix(source string, fileParam *models.FileParam, isDir boo
 		return ""
 	}
 
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return ""
+	}
+
 	for {
 		//statSource := source
 		//if isDir {
@@ -65,6 +70,7 @@ func PasteAddVersionSuffix(source string, fileParam *models.FileParam, isDir boo
 			renamed = fmt.Sprintf("%s%s(%d)", name, bubble, counter)
 		}
 		source = path.Join(dir, renamed)
+		fileParam.Path = strings.TrimPrefix(source, uri)
 		counter++
 	}
 
@@ -72,10 +78,6 @@ func PasteAddVersionSuffix(source string, fileParam *models.FileParam, isDir boo
 		source += "/"
 	}
 
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		return ""
-	}
 	fileParam.Path = strings.TrimPrefix(source, uri)
 
 	return source

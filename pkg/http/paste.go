@@ -1,8 +1,10 @@
 package http
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	e "errors"
 	"files/pkg/common"
 	"files/pkg/drives"
@@ -13,6 +15,7 @@ import (
 	"files/pkg/pool"
 	"fmt"
 	"github.com/spf13/afero"
+	"io"
 	"io/fs"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -29,31 +32,33 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		var err error
 
-		//src := r.URL.Path
-		//dst := r.URL.Query().Get("destination")
-		//srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
-		//if err != nil {
-		//	return http.StatusBadRequest, err
-		//}
-		//dstType, err := drives.ParsePathType(r.URL.Query().Get("destination"), r, true, true)
-		//if err != nil {
-		//	return http.StatusBadRequest, err
-		//}
-		//
-		//if !drives.ValidSrcTypes[srcType] {
-		//	klog.Infoln("Src type is invalid!")
-		//	return http.StatusForbidden, nil
-		//}
-		//if !drives.ValidSrcTypes[dstType] {
-		//	klog.Infoln("Dst type is invalid!")
-		//	return http.StatusForbidden, nil
-		//}
+		rawBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		r.Body = io.NopCloser(bytes.NewBuffer(rawBody))
+		klog.Infof("~~~Debug log: origin request body: %s", string(rawBody))
+
+		var requestBody struct {
+			Action      string `json:"action"`
+			Destination string `json:"destination"`
+		}
+
+		if err := json.Unmarshal(rawBody, &requestBody); err != nil {
+			return http.StatusBadRequest, err
+		}
+
+		action := requestBody.Action
+		destination := requestBody.Destination
+
+		klog.Infof("~~~Debug log: action: %s, destination: %s", action, destination)
+
 		srcFileParam, handler, err := UrlPrep(r, "")
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
 
-		dstFileParam, _, err := UrlPrep(r, r.URL.Query().Get("destination"))
+		dstFileParam, _, err := UrlPrep(r, destination)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
@@ -76,17 +81,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		} else {
 			klog.Infoln("Src and dst are of different arches!")
 		}
-		action := r.URL.Query().Get("action")
 
-		//klog.Infoln("src:", src)
-		//src, err = common.UnescapeURLIfEscaped(src)
-		//klog.Infoln("src:", src, "err:", err)
-		//klog.Infoln("dst:", dst)
-		//dst, err = common.UnescapeURLIfEscaped(dst)
-		//klog.Infoln("dst:", dst, "err:", err)
-		//if err != nil {
-		//	return common.ErrToStatus(err), err
-		//}
 		srcUri, err := srcFileParam.GetResourceUri()
 		if err != nil {
 			return http.StatusBadRequest, err
@@ -97,6 +92,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 			return http.StatusBadRequest, err
 		}
 		dst := dstUri + dstFileParam.Path
+		klog.Infof("~~~Debug log: src=%s, dst=%s", src, dst)
 
 		if dstFileParam.Path == "/" || srcFileParam.Path == "/" {
 			return http.StatusForbidden, nil
@@ -137,6 +133,7 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		}
 		if dstType != drives.SrcTypeGoogle {
 			dst = drives.PasteAddVersionSuffix(dst, dstFileParam, isDir, files.DefaultFs, w, r)
+			klog.Infof("~~~Debug log: src=%s, dst=%s, srcFileParam=%v, dstFileParam=%v", src, dst, srcFileParam, dstFileParam)
 		}
 
 		//// dst changes huge, need to recreate dstFileParam

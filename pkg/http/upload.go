@@ -23,7 +23,7 @@ func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (
 		return http.StatusBadRequest, e.New("bfl header missing or invalid")
 	}
 
-	p := r.URL.Query().Get("p")
+	p := r.URL.Query().Get("file_path")
 	if p == "" {
 		return http.StatusBadRequest, e.New("missing path query parameter")
 	}
@@ -41,6 +41,7 @@ func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (
 		return http.StatusBadRequest, err
 	}
 	path := uri + fileParam.Path
+	klog.Infof("~~~Debug log: path=%s", path)
 
 	//if strings.HasPrefix(path, upload.CacheRequestPrefix) {
 	//	path = upload.CachePathPrefix + strings.TrimPrefix(path, upload.CacheRequestPrefix)
@@ -104,6 +105,7 @@ func uploadedBytesHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 		return http.StatusBadRequest, err
 	}
 	parentDir := uri + fileParam.Path
+	klog.Infof("~~~Debug log: parentDir=%s", parentDir)
 
 	//if strings.HasPrefix(parentDir, upload.CacheRequestPrefix) {
 	//	parentDir = upload.CachePathPrefix + strings.TrimPrefix(parentDir, upload.CacheRequestPrefix)
@@ -248,6 +250,7 @@ func uploadChunksHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 		return http.StatusBadRequest, err
 	}
 	parentDir := uri + fileParam.Path
+	klog.Infof("~~~Debug log: parentDir=%s", parentDir)
 
 	extracted := upload.ExtractPart(parentDir)
 	if extracted != "" {

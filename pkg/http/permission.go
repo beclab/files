@@ -33,7 +33,7 @@ func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	responseData := make(map[string]interface{})
-	responseData["uid"], err = fileutils.GetUID(files.DefaultFs, r.URL.Path)
+	responseData["uid"], err = fileutils.GetUID(files.DefaultFs, dealUrlPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
