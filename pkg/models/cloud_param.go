@@ -13,6 +13,13 @@ type CloudResponse struct {
 	Message    *string            `json:"message"`
 }
 
+func (s *CloudResponse) Modified() string {
+	if s.Data.Modified != nil {
+		return *s.Data.Modified
+	}
+	return ""
+}
+
 func (c *CloudResponse) IsSuccess() bool {
 	return c.StatusCode == "SUCCESS"
 }

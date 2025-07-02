@@ -14,10 +14,11 @@ import (
 func HandleImagePreview(
 	file *files.FileInfo,
 	queryParam *models.QueryParam,
-) ([]byte, error) {
+) (*models.PreviewHandlerResponse, error) {
 	var fileCache = diskcache.GetFileCache()
 	var imgSvc = img.GetImageService()
 	var size = queryParam.Size
+	var fileData []byte
 
 	previewSize, err := ParsePreviewSize(size)
 	if err != nil {
@@ -29,13 +30,25 @@ func HandleImagePreview(
 
 	if (previewSize == PreviewSizeBig && !resizePreview) ||
 		(previewSize == PreviewSizeThumb && !enableThumbnails) {
-		return RawFileHandler(file)
+		fileData, err = RawFileHandler(file)
+		if err != nil {
+			return nil, err
+		}
+		return &models.PreviewHandlerResponse{
+			Data: fileData,
+		}, nil
 	}
 
 	format, err := imgSvc.FormatFromExtension(file.Extension)
 	// Unsupported extensions directly return the raw data
 	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
-		return RawFileHandler(file)
+		fileData, err = RawFileHandler(file)
+		if err != nil {
+			return nil, err
+		}
+		return &models.PreviewHandlerResponse{
+			Data: fileData,
+		}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -60,7 +73,9 @@ func HandleImagePreview(
 		redisutils.UpdateFileAccessTimeToRedis(redisutils.GetFileName(cacheKey))
 	}
 
-	return resizedImage, nil
+	return &models.PreviewHandlerResponse{
+		Data: resizedImage,
+	}, nil
 }
 
 func RawFileHandler(file *files.FileInfo) ([]byte, error) {

@@ -12,10 +12,49 @@ type TaskQueryResponse struct {
 	Data       []*TaskData `json:"data"`
 }
 
+func (t *TaskQueryResponse) IsSuccess(taskId string) bool {
+	return t.StatusCode == "SUCCESS"
+}
+
+func (t *TaskQueryResponse) InProgress(taskId string) bool {
+	for _, task := range t.Data {
+		if task.ID == taskId {
+			return task.Status == "Waiting" || task.Status == "InProgress"
+		}
+	}
+	return false
+}
+
+func (t *TaskQueryResponse) Completed(taskId string) bool {
+	for _, task := range t.Data {
+		if task.ID == taskId {
+			return task.Status == "Completed"
+		}
+	}
+	return false
+}
+
+func (t *TaskQueryResponse) Status(taskId string) string {
+	for _, task := range t.Data {
+		if task.ID == taskId {
+			return task.Status
+		}
+	}
+	return ""
+}
+
 type TaskResponse struct {
 	StatusCode string    `json:"status_code"`
 	FailReason string    `json:"fail_reason"`
 	Data       *TaskData `json:"data"`
+}
+
+func (t *TaskResponse) IsSuccess() bool {
+	return t.StatusCode == "SUCCESS"
+}
+
+func (t *TaskResponse) FailMessage() string {
+	return t.FailReason
 }
 
 type TaskData struct {

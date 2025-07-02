@@ -1680,13 +1680,13 @@ func handleImagePreviewCloudDrive(
 
 	if (previewSize == preview.PreviewSizeBig && !resizePreview) ||
 		(previewSize == preview.PreviewSizeThumb && !enableThumbnails) {
-		return RawFileHandlerCloudDrive(src, w, r, file, bflName) // + preview
+		return RawFileHandlerCloudDrive(src, w, r, file, bflName)
 	}
 
 	format, err := imgSvc.FormatFromExtension(path.Ext(file.Name))
 	// Unsupported extensions directly return the raw data
 	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
-		return RawFileHandlerCloudDrive(src, w, r, file, bflName) // + preview
+		return RawFileHandlerCloudDrive(src, w, r, file, bflName)
 	}
 	if err != nil {
 		return common.ErrToStatus(err), err
@@ -1700,7 +1700,7 @@ func handleImagePreviewCloudDrive(
 		return common.ErrToStatus(err), err
 	}
 	if !ok {
-		resizedImage, err = createPreviewCloudDrive(w, r, src, imgSvc, fileCache, file, previewSize, bflName) // + preview
+		resizedImage, err = createPreviewCloudDrive(w, r, src, imgSvc, fileCache, file, previewSize, bflName)
 		if err != nil {
 			return common.ErrToStatus(err), err
 		}

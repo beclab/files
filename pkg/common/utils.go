@@ -153,7 +153,6 @@ func GetHost(bflName string) string {
 	}
 
 	modifiedTerminusName := strings.Replace(responseObj.Data.TerminusName, "@", ".", 1)
-	klog.Infoln(modifiedTerminusName)
 	return "https://files." + modifiedTerminusName
 }
 

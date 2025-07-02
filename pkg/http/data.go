@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"files/pkg/constant"
 	"files/pkg/drivers"
@@ -27,7 +28,7 @@ import (
 
 type commonFunc func(owner string) ([]byte, error)
 type fileHandlerFunc func(handler base.Execute, fileParam *models.FileParam) ([]byte, error)
-type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error)
+type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error)
 type rawHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (io.ReadCloser, error)
 type streamHandlerFunc func(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
@@ -63,6 +64,7 @@ func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHa
 
 		klog.Infof("srcType: %s, url: %s, param: %s, header: %+v", fileParam.FileType, r.URL.Path, fileParam.Json(), r.Header)
 		var handlerParam = &base.HandlerParam{
+			Ctx:            r.Context(),
 			Owner:          owner,
 			ResponseWriter: w,
 			Request:        r,
@@ -127,6 +129,7 @@ func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.Dr
 
 		klog.Infof("srcType: %s, url: %s, param: %s", fileParam.FileType, r.URL.Path, fileParam.Json())
 		var handlerParam = &base.HandlerParam{
+			Ctx:            r.Context(),
 			Owner:          owner,
 			ResponseWriter: w,
 			Request:        r,
@@ -213,12 +216,13 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 
 		klog.Infof("srcType: %s, url: %s, param: %s, query: %s", fileParam.FileType, r.URL.Path, fileParam.Json(), queryParam.Json())
 		var handlerParam = &base.HandlerParam{
+			Ctx:            r.Context(),
 			Owner:          owner,
 			ResponseWriter: w,
 			Request:        r,
 		}
 
-		res, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, queryParam)
+		fileData, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, queryParam)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -231,10 +235,11 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 		if queryParam.Inline == "true" {
 			w.Header().Set("Content-Disposition", "inline")
 		}
-		w.Header().Set("Content-Type", "image/jpeg")
+		// w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "private")
-		w.Header().Set("Content-Length", strconv.Itoa(len(res)))
-		w.Write(res)
+		// w.Header().Set("Content-Length", strconv.Itoa(len(res)))
+		// w.Write(res)
+		http.ServeContent(w, r, "", time.Now(), bytes.NewReader(fileData.Data))
 		return
 	})
 
@@ -267,6 +272,7 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 
 		klog.Infof("srcType: %s, url: %s, param: %s, header: %+v", fileParam.FileType, r.URL.Path, fileParam.Json(), r.Header)
 		var handlerParam = &base.HandlerParam{
+			Ctx:            r.Context(),
 			Owner:          owner,
 			ResponseWriter: w,
 			Request:        r,

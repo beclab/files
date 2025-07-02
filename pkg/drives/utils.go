@@ -15,10 +15,7 @@ import (
 	"files/pkg/preview"
 	"files/pkg/redisutils"
 	"fmt"
-	"github.com/mholt/archiver/v3"
-	"github.com/spf13/afero"
 	"io"
-	"k8s.io/klog/v2"
 	"math"
 	"math/rand"
 	"net/http"
@@ -28,6 +25,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mholt/archiver/v3"
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 )
 
 func PasteAddVersionSuffix(source string, fileParam *models.FileParam, isDir bool, fs afero.Fs, w http.ResponseWriter, r *http.Request) string {

@@ -58,7 +58,7 @@ func (s *SyncStorage) List(fileParam *models.FileParam) ([]byte, error) {
 	return utils.ToBytes(filesData), nil
 }
 
-func (s *SyncStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error) {
+func (s *SyncStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
 	klog.Infof("SYNC preview, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
 	var seahubUrl string
 	var previewSize string
@@ -81,7 +81,9 @@ func (s *SyncStorage) Preview(fileParam *models.FileParam, queryParam *models.Qu
 		return nil, err
 	}
 
-	return res, nil
+	return &models.PreviewHandlerResponse{
+		Data: res,
+	}, nil
 }
 
 func (s *SyncStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error) {

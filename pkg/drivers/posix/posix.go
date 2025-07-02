@@ -56,7 +56,7 @@ func (s *PosixStorage) List(fileParam *models.FileParam) ([]byte, error) {
 	return res, nil
 }
 
-func (s *PosixStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error) {
+func (s *PosixStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
 	var owner = s.Handler.Owner
 
 	klog.Infof("POSIX preview, owner: %s, param: %s, query: %s", owner, fileParam.Json(), queryParam.Json())

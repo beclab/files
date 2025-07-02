@@ -10,7 +10,7 @@ func listHandler(handler base.Execute, fileParam *models.FileParam) ([]byte, err
 	return handler.List(fileParam)
 }
 
-func previewHandlerEx(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error) {
+func previewHandlerEx(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
 	return handler.Preview(fileParam, queryParam)
 }
 

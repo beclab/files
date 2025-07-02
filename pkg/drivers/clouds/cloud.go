@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"files/pkg/constant"
 	"files/pkg/drivers/base"
+	"files/pkg/fileutils"
 	"files/pkg/models"
+	"files/pkg/parser"
+	"files/pkg/previewer"
 	"files/pkg/utils"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"k8s.io/klog/v2"
@@ -37,10 +41,10 @@ func (s *CloudStorage) List(fileParam *models.FileParam) ([]byte, error) {
 	return utils.ToBytes(fileData), nil
 }
 
-func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) ([]byte, error) {
+func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
 	var owner = s.Handler.Owner
 
-	klog.Infof("CLOUD preview, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Cloud preview, owner: %s, param: %s", owner, fileParam.Json())
 
 	var path = fileParam.Path
 	if strings.HasSuffix(path, "/") {
@@ -58,9 +62,73 @@ func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
 
-	// todo task manager refactor
+	var fileMeta *models.CloudResponse
+	if err := json.Unmarshal(res, &fileMeta); err != nil {
+		return nil, err
+	}
 
-	return res, nil
+	klog.Infof("Cloud preview, query: %s, file meta: %s", utils.ToJson(data), string(res))
+
+	if !fileMeta.IsSuccess() {
+		return nil, fmt.Errorf(fileMeta.FailMessage())
+	}
+
+	fileType := parser.MimeTypeByExtension(fileMeta.Data.Name)
+	if !strings.HasPrefix(fileType, "image") {
+		return nil, fmt.Errorf("can't create preview for %s type", fileType)
+	}
+
+	previewCacheKey := previewer.GeneratePreviewCacheKey(fileMeta.Data.Path, fileMeta.Modified(), queryParam.Size)
+
+	cachedData, ok, err := previewer.GetCache(previewCacheKey)
+	if err != nil {
+		return nil, err
+	}
+
+	klog.Infof("Cloud preview cached, file: %s, key: %s, exists: %v", fileMeta.Data.Path, previewCacheKey, ok)
+
+	if cachedData != nil {
+		return &models.PreviewHandlerResponse{
+			FileName:     fileMeta.Data.Name,
+			FileModified: fileMeta.Modified(),
+			Data:         cachedData,
+		}, nil
+	}
+
+	fileTargetPath := CreateFileDownloadFolder(s.Handler.Owner, fileMeta.Data.Path)
+
+	if !fileutils.FilePathExists(fileTargetPath) {
+		if err := fileutils.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
+			klog.Errorln(err)
+			return nil, err
+		}
+	}
+
+	var downloader = NewDownloader(s.Handler.Ctx, s.Handler.Owner, s.Service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
+	if err := downloader.download(); err != nil {
+		return nil, err
+	}
+
+	var imagePath = filepath.Join(fileTargetPath, fileMeta.Data.Name)
+
+	klog.Infof("Cloud preview, download success, file path: %s", imagePath)
+
+	imageData, err := previewer.OpenFile(s.Handler.Ctx, imagePath, queryParam.Size)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		if err := previewer.SetCache(previewCacheKey, imageData); err != nil {
+			klog.Errorf("Cloud preview, set cache error: %v, file: %s", err, fileMeta.Data.Path)
+		}
+	}()
+
+	return &models.PreviewHandlerResponse{
+		FileName:     fileMeta.Data.Name,
+		FileModified: fileMeta.Modified(),
+		Data:         imageData,
+	}, nil
 }
 
 func (s *CloudStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error) {

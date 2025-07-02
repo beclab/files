@@ -208,7 +208,7 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		resizeMode: ResizeModeFit,
 		quality:    QualityMedium,
 	}
-	klog.Infoln("format: ", format)
+	klog.Infoln("format:", format)
 	for _, option := range options {
 		option(&config)
 	}

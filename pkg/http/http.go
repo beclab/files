@@ -73,19 +73,15 @@ func NewHandler(
 
 	api.PathPrefix("/nodes").Handler(common(nodesGetHandler)).Methods("GET")
 	api.PathPrefix("/repos").Handler(common(reposGetHandler)).Methods("GET")
-	// ! demo
-	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET") // list
-	//api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST") // create folder
-	// api.PathPrefix("/resources").Handler(wrapWithParms(renameHandler, "/api/resources")).Methods("PATCH") // rename
 
 	// todo
 	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET")
 	api.PathPrefix("/stream").Handler(wrapWithStreamParm(streamHandler, "/api/stream/")).Methods("GET")
-	// api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandlerEx, "/api/preview/")).Methods("GET") // todo
+	api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandlerEx, "/api/preview/")).Methods("GET") // todo
 
 	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
 	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST") // create // recons done
-	//api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
+	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
 	api.PathPrefix("/resources").Handler(monkey(batchDeleteHandler(fileCache), "/api/resources")).Methods("DELETE") // recons done
 
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")                // edit txt // recons done
