@@ -17,7 +17,7 @@ func HandleImagePreview(
 ) (*models.PreviewHandlerResponse, error) {
 	var fileCache = diskcache.GetFileCache()
 	var imgSvc = img.GetImageService()
-	var size = queryParam.Size
+	var size = queryParam.PreviewSize
 	var fileData []byte
 
 	previewSize, err := ParsePreviewSize(size)
@@ -25,8 +25,8 @@ func HandleImagePreview(
 		return nil, err
 	}
 
-	var enableThumbnails = queryParam.EnableThumbnails
-	var resizePreview = queryParam.ResizePreview
+	var enableThumbnails = queryParam.PreviewEnableThumbnails
+	var resizePreview = queryParam.PreviewResizePreview
 
 	if (previewSize == PreviewSizeBig && !resizePreview) ||
 		(previewSize == PreviewSizeThumb && !enableThumbnails) {

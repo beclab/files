@@ -22,8 +22,10 @@ type CloudStorage struct {
 	Service base.CloudServiceInterface
 }
 
-func (s *CloudStorage) List(fileParam *models.FileParam) ([]byte, error) {
-	klog.Infof("CLOUD list, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	var fileParam = contextArgs.FileParam
+
+	klog.Infof("Cloud list, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam)
 	if err != nil {
@@ -78,7 +80,7 @@ func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 		return nil, fmt.Errorf("can't create preview for %s type", fileType)
 	}
 
-	previewCacheKey := previewer.GeneratePreviewCacheKey(fileMeta.Data.Path, fileMeta.Modified(), queryParam.Size)
+	previewCacheKey := previewer.GeneratePreviewCacheKey(fileMeta.Data.Path, fileMeta.Modified(), queryParam.PreviewSize)
 
 	cachedData, ok, err := previewer.GetCache(previewCacheKey)
 	if err != nil {
@@ -113,7 +115,7 @@ func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 
 	klog.Infof("Cloud preview, download success, file path: %s", imagePath)
 
-	imageData, err := previewer.OpenFile(s.Handler.Ctx, imagePath, queryParam.Size)
+	imageData, err := previewer.OpenFile(s.Handler.Ctx, imagePath, queryParam.PreviewSize)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +138,7 @@ func (s *CloudStorage) Raw(fileParam *models.FileParam, queryParam *models.Query
 }
 
 func (s *CloudStorage) Stream(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	klog.Infof("CLOUD stream, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+	klog.Infof("Cloud stream, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam)
 	if err != nil {
@@ -154,6 +156,10 @@ func (s *CloudStorage) Stream(fileParam *models.FileParam, stopChan chan struct{
 	go s.generateListingData(fileParam, fileData, stopChan, dataChan)
 
 	return nil
+}
+
+func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	return nil, nil
 }
 
 func (s *CloudStorage) generateListingData(fileParam *models.FileParam,

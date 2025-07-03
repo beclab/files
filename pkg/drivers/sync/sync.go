@@ -45,8 +45,9 @@ type File struct {
 	Type          string `json:"type"`
 }
 
-func (s *SyncStorage) List(fileParam *models.FileParam) ([]byte, error) {
+func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var owner = s.Handler.Owner
+	var fileParam = contextArgs.FileParam
 
 	klog.Infof("SYNC list, owner: %s, param: %s", owner, fileParam.Json())
 
@@ -63,7 +64,7 @@ func (s *SyncStorage) Preview(fileParam *models.FileParam, queryParam *models.Qu
 	var seahubUrl string
 	var previewSize string
 
-	var size = queryParam.Size
+	var size = queryParam.PreviewSize
 	if size != "big" {
 		size = "thumb"
 	}
@@ -133,6 +134,10 @@ func (s *SyncStorage) Stream(fileParam *models.FileParam, stopChan chan struct{}
 	go s.generateDirentsData(fileParam, filesData, stopChan, dataChan)
 
 	return nil
+}
+
+func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	return nil, nil
 }
 
 func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData *Files, stopChan <-chan struct{}, dataChan chan<- string) {

@@ -27,10 +27,11 @@ type PosixStorage struct {
 	Handler *base.HandlerParam
 }
 
-func (s *PosixStorage) List(fileParam *models.FileParam) ([]byte, error) {
+func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var owner = s.Handler.Owner
+	var fileParam = contextArgs.FileParam
 
-	klog.Infof("POSIX list, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Posix list, owner: %s, param: %s", owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
@@ -59,7 +60,7 @@ func (s *PosixStorage) List(fileParam *models.FileParam) ([]byte, error) {
 func (s *PosixStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
 	var owner = s.Handler.Owner
 
-	klog.Infof("POSIX preview, owner: %s, param: %s, query: %s", owner, fileParam.Json(), queryParam.Json())
+	klog.Infof("Posix preview, owner: %s, param: %s, query: %s", owner, fileParam.Json(), queryParam.Json())
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
@@ -77,7 +78,7 @@ func (s *PosixStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 func (s *PosixStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error) {
 	var owner = s.Handler.Owner
 
-	klog.Infof("POSIX raw, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Posix raw, owner: %s, param: %s", owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam, NoExpand, NoContent)
 	if err != nil {
@@ -98,7 +99,7 @@ func (s *PosixStorage) Raw(fileParam *models.FileParam, queryParam *models.Query
 func (s *PosixStorage) Stream(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
 	var owner = s.Handler.Owner
 
-	klog.Infof("POSIX stream, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Posix stream, owner: %s, param: %s", owner, fileParam.Json())
 
 	var resourceUri, err = fileParam.GetResourceUri()
 	if err != nil {
@@ -112,6 +113,10 @@ func (s *PosixStorage) Stream(fileParam *models.FileParam, stopChan chan struct{
 	go s.generateListingData(fs, fileParam, fileData.Listing, stopChan, dataChan)
 
 	return nil
+}
+
+func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	return nil, nil
 }
 
 func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FileParam, listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string) {

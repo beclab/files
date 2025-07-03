@@ -3,44 +3,31 @@ package models
 import (
 	"context"
 	"encoding/json"
-	"files/pkg/utils"
 	"net/http"
 )
 
 type QueryParam struct {
-	Ctx              context.Context `json:"-"`
-	Owner            string          `json:"owner"`
-	Stream           *int            `json:"stream"`
-	Size             string          `json:"size"`
-	Inline           string          `json:"inline"`
-	EnableThumbnails bool            `json:"enableThumbnails"`
-	ResizePreview    bool            `json:"resizePreview"`
-	Files            string          `json:"files"` // like x,y,z
+	Ctx                     context.Context `json:"-"`
+	Owner                   string          `json:"owner"`
+	PreviewSize             string          `json:"previewSize"`
+	PreviewEnableThumbnails bool            `json:"previewEnableThumbnails"`
+	PreviewResizePreview    bool            `json:"previewResizePreview"`
+	RawInline               string          `json:"rawInline"`
+	Files                   string          `json:"files"` // like x,y,z
+	FileMode                string          `json:"fileMode"`
 }
 
-func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) (*QueryParam, error) {
-	var queryParam = &QueryParam{
-		Ctx:              r.Context(),
-		Owner:            owner,
-		EnableThumbnails: enableThumbnails,
-		ResizePreview:    resizePreview,
+func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {
+	return &QueryParam{
+		Ctx:                     r.Context(),
+		Owner:                   owner,
+		PreviewSize:             r.URL.Query().Get("size"),
+		PreviewEnableThumbnails: enableThumbnails, // todo
+		PreviewResizePreview:    resizePreview,    // todo
+		RawInline:               r.URL.Query().Get("inline"),
+		Files:                   r.URL.Query().Get("files"),
+		FileMode:                r.URL.Query().Get("mode"),
 	}
-
-	var streamQuery = r.URL.Query().Get("stream")
-	if streamQuery != "" {
-		streamQueryInt, err := utils.ParseInt(streamQuery)
-		if err != nil {
-			return nil, err
-		}
-		queryParam.Stream = &streamQueryInt
-	}
-
-	queryParam.Size = r.URL.Query().Get("size")
-	queryParam.Inline = r.URL.Query().Get("inline")
-	queryParam.Files = r.URL.Query().Get("files")
-
-	return queryParam, nil
-
 }
 
 func (r *QueryParam) Json() string {

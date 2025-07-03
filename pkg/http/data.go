@@ -1,14 +1,13 @@
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 	"files/pkg/constant"
 	"files/pkg/drivers"
 	"files/pkg/drives"
 	"files/pkg/models"
 	"files/pkg/rpc"
-	"fmt"
+	"files/pkg/utils"
 	"io"
 	"net/http"
 	"net/url"
@@ -27,10 +26,9 @@ import (
 )
 
 type commonFunc func(owner string) ([]byte, error)
-type fileHandlerFunc func(handler base.Execute, fileParam *models.FileParam) ([]byte, error)
-type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error)
+type fileHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error)
 type rawHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (io.ReadCloser, error)
-type streamHandlerFunc func(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
+
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
 
 func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
@@ -48,12 +46,7 @@ func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHa
 
 		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
 
-		queryParam, err := models.CreateQueryParam(owner, r, false, false)
-		if err != nil {
-			klog.Errorf("query param invalid: %v, owner: %s", err, owner)
-			http.Error(w, "query param invalid found", http.StatusBadRequest)
-			return
-		}
+		queryParam := models.CreateQueryParam(owner, r, false, false)
 
 		fileParam, err := models.CreateFileParam(owner, path)
 		if err != nil {
@@ -81,7 +74,7 @@ func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHa
 
 		_ = reader
 
-		if queryParam.Inline == "true" {
+		if queryParam.RawInline == "true" {
 
 		} else {
 			// w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, safeFilename))
@@ -105,175 +98,22 @@ func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHa
 	return handler
 }
 
-func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var path = strings.TrimPrefix(r.URL.Path, prefix)
-		if path == "" {
-			http.Error(w, "path invalid", http.StatusBadRequest)
-			return
-		}
-		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
-		if owner == "" {
-			http.Error(w, "user not found", http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
-
-		fileParam, err := models.CreateFileParam(owner, path)
-		if err != nil {
-			klog.Errorf("file param error: %v, owner: %s", err, owner)
-			http.Error(w, fmt.Sprintf("file param error: %v", err), http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("srcType: %s, url: %s, param: %s", fileParam.FileType, r.URL.Path, fileParam.Json())
-		var handlerParam = &base.HandlerParam{
-			Ctx:            r.Context(),
-			Owner:          owner,
-			ResponseWriter: w,
-			Request:        r,
-		}
-
-		stopChan := make(chan struct{})
-		dataChan := make(chan string)
-
-		err = fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, stopChan, dataChan)
-		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"code":    1,
-				"message": err.Error(),
-			})
-			return
-		}
-
-		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
-			return
-		}
-
-		for {
-			select {
-			case event, ok := <-dataChan:
-				if !ok {
-					return
-				}
-				_, err := w.Write([]byte(event))
-				if err != nil {
-					klog.Error(err)
-					return
-				}
-				flusher.Flush()
-
-			case <-r.Context().Done():
-				close(stopChan)
-				return
-			}
-		}
-	})
-
-	return handler
-}
-
-func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var enableThumbnails = true
-		var resizePreview = true
-
-		var path = strings.TrimPrefix(r.URL.Path, prefix)
-
-		if path == "" {
-			http.Error(w, "path invalid", http.StatusBadRequest)
-			return
-		}
-
-		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
-		if owner == "" {
-			http.Error(w, "user not found", http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
-
-		queryParam, err := models.CreateQueryParam(owner, r, enableThumbnails, resizePreview)
-		if err != nil {
-			klog.Errorf("query param error: %v, owner: %s", err, owner)
-			http.Error(w, fmt.Sprintf("query param error: %v"), http.StatusBadRequest)
-			return
-		}
-
-		fileParam, err := models.CreateFileParam(owner, path)
-		if err != nil {
-			klog.Errorf("file param error: %v, owner: %s", err, owner)
-			http.Error(w, fmt.Sprintf("file param error: %v"), http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("srcType: %s, url: %s, param: %s, query: %s", fileParam.FileType, r.URL.Path, fileParam.Json(), queryParam.Json())
-		var handlerParam = &base.HandlerParam{
-			Ctx:            r.Context(),
-			Owner:          owner,
-			ResponseWriter: w,
-			Request:        r,
-		}
-
-		fileData, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, queryParam)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"code":    1,
-				"message": err.Error(),
-			})
-			return
-		}
-
-		if queryParam.Inline == "true" {
-			w.Header().Set("Content-Disposition", "inline")
-		}
-		// w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Cache-Control", "private")
-		// w.Header().Set("Content-Length", strconv.Itoa(len(res)))
-		// w.Write(res)
-		http.ServeContent(w, r, "", time.Now(), bytes.NewReader(fileData.Data))
-		return
-	})
-
-	return handler
-}
-
 func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.DriverHandler, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var path = strings.TrimPrefix(r.URL.Path, prefix)
 
-		if path == "" {
-			http.Error(w, "path invalid", http.StatusBadRequest)
-			return
-		}
-
-		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
-		if owner == "" {
-			http.Error(w, "user not found", http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
-
-		fileParam, err := models.CreateFileParam(owner, path)
+		contextArg, err := models.NewHttpContextArgs(r, prefix, false, false)
 		if err != nil {
-			klog.Errorf("file param invalid: %v, owner: %s", err, owner)
-			http.Error(w, "param invalid found", http.StatusBadRequest)
+			klog.Errorf("context args error: %v, path: %s", err, r.URL.Path)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		klog.Infof("srcType: %s, url: %s, param: %s, header: %+v", fileParam.FileType, r.URL.Path, fileParam.Json(), r.Header)
+		klog.Infof("Incoming Path: %s, user: %s, method: %s, fileType: %s, args: %s",
+			contextArg.RequestPath, contextArg.FileParam.Owner, r.Method, contextArg.FileParam.FileType, utils.ToJson(contextArg))
+
 		var handlerParam = &base.HandlerParam{
 			Ctx:            r.Context(),
-			Owner:          owner,
+			Owner:          contextArg.FileParam.Owner,
 			ResponseWriter: w,
 			Request:        r,
 			Data: &common.Data{
@@ -281,7 +121,7 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 			},
 		}
 
-		res, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam)
+		res, err := fn(driverHandler.NewFileHandler(contextArg.FileParam.FileType, handlerParam), contextArg)
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,

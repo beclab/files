@@ -74,10 +74,10 @@ func NewHandler(
 	api.PathPrefix("/nodes").Handler(common(nodesGetHandler)).Methods("GET")
 	api.PathPrefix("/repos").Handler(common(reposGetHandler)).Methods("GET")
 
-	// todo
-	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET")
-	api.PathPrefix("/stream").Handler(wrapWithStreamParm(streamHandler, "/api/stream/")).Methods("GET")
-	api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandlerEx, "/api/preview/")).Methods("GET") // todo
+	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET") // list files
+	// api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST")              // create folder
+	api.PathPrefix("/stream").Handler(wrapWithStreamParm(streamHandler, "/api/stream/")).Methods("GET")                // walk through files
+	api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandler, "/api/preview/")).Methods("GET") // preview image
 
 	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
 	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST")             // create // recons done
