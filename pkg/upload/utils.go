@@ -3,7 +3,8 @@ package upload
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"files/pkg/rpc"
+	"files/pkg/constant"
+	"files/pkg/global"
 	"k8s.io/klog/v2"
 	"net/http"
 	"os"
@@ -17,28 +18,13 @@ const (
 )
 
 func GetPVC(r *http.Request) (string, string, string, string, error) {
-	bflName := r.Header.Get("X-Bfl-User")
-	klog.Info("BFL_NAME: ", bflName)
-
-	userPvc, err := rpc.BflPVCs.GetUserPVCOrCache(bflName)
-	if err != nil {
-		klog.Info(err)
-		return bflName, "", "", "", err
-	} else {
-		klog.Info("user-space pvc: ", userPvc)
-	}
-
-	cachePvc, err := rpc.BflPVCs.GetCachePVCOrCache(bflName)
-	if err != nil {
-		klog.Info(err)
-		return bflName, "", "", "", err
-	} else {
-		klog.Info("appcache pvc: ", cachePvc)
-	}
+	var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+	var userPvc = global.GlobalData.GetPvcUser(owner)
+	var cachePvc = global.GlobalData.GetPvcCache(owner)
 
 	var uploadsDir = CachePathPrefix + "/" + cachePvc + "/files/.uploadstemp"
 
-	return bflName, userPvc, cachePvc, uploadsDir, nil
+	return owner, userPvc, cachePvc, uploadsDir, nil
 }
 
 func ExtractPart(s string) string {

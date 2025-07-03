@@ -1,8 +1,6 @@
-//go:generate go-enum --sql --marshal --names --file $GOFILE
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 	"files/pkg/constant"
 	"files/pkg/drivers"
@@ -11,29 +9,23 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"k8s.io/klog/v2"
 )
 
-type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error)
+type streamHandlerFunc func(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
 
-func previewHandler(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
-	return handler.Preview(fileParam, queryParam)
+func streamHandler(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+	return handler.Stream(fileParam, stopChan, dataChan)
 }
 
-func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
+func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var enableThumbnails = true
-		var resizePreview = true
-
 		var path = strings.TrimPrefix(r.URL.Path, prefix)
-
 		if path == "" {
 			http.Error(w, "path invalid", http.StatusBadRequest)
 			return
 		}
-
 		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
 		if owner == "" {
 			http.Error(w, "user not found", http.StatusBadRequest)
@@ -42,16 +34,14 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 
 		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
 
-		queryParam := models.CreateQueryParam(owner, r, enableThumbnails, resizePreview)
-
 		fileParam, err := models.CreateFileParam(owner, path)
 		if err != nil {
 			klog.Errorf("file param error: %v, owner: %s", err, owner)
-			http.Error(w, fmt.Sprintf("file param error: %v"), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("file param error: %v", err), http.StatusBadRequest)
 			return
 		}
 
-		klog.Infof("srcType: %s, url: %s, param: %s, query: %s", fileParam.FileType, r.URL.Path, fileParam.Json(), queryParam.Json())
+		klog.Infof("srcType: %s, url: %s, param: %s", fileParam.FileType, r.URL.Path, fileParam.Json())
 		var handlerParam = &base.HandlerParam{
 			Ctx:            r.Context(),
 			Owner:          owner,
@@ -59,15 +49,17 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 			Request:        r,
 		}
 
+		stopChan := make(chan struct{})
+		dataChan := make(chan string)
+
 		var handler = driverHandler.NewFileHandler(fileParam.FileType, handlerParam)
 		if handler == nil {
 			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
 			return
 		}
 
-		fileData, err := fn(handler, fileParam, queryParam)
+		err = fn(handler, fileParam, stopChan, dataChan)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
 				"message": err.Error(),
@@ -75,12 +67,34 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 			return
 		}
 
-		if queryParam.RawInline == "true" {
-			w.Header().Set("Content-Disposition", "inline")
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+			return
 		}
-		w.Header().Set("Cache-Control", "private")
-		http.ServeContent(w, r, "", time.Now(), bytes.NewReader(fileData.Data))
-		return
+
+		for {
+			select {
+			case event, ok := <-dataChan:
+				if !ok {
+					return
+				}
+				_, err := w.Write([]byte(event))
+				if err != nil {
+					klog.Error(err)
+					return
+				}
+				flusher.Flush()
+
+			case <-r.Context().Done():
+				close(stopChan)
+				return
+			}
+		}
 	})
 
 	return handler

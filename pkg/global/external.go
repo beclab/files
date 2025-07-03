@@ -7,6 +7,7 @@ import (
 	"files/pkg/utils"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/klog/v2"
@@ -68,13 +69,15 @@ func (m *Mount) watchMounted() {
 				klog.Errorf("watcher error: %v", err)
 			case e, ok := <-externalWatcher.Events:
 				if !ok {
-					continue
+					klog.Warning("watcher event channel closed")
+					return
 				}
 
 				if e.Has(fsnotify.Chmod) {
 					continue
 				}
 
+				time.Sleep(time.Second)
 				klog.Infof("mount watcher event: %s, op: %s", e.Name, e.Op.String())
 				m.getMounted()
 			}
@@ -99,9 +102,7 @@ func (m *Mount) getMounted() {
 	url := "http://" + host + "/system/mounted-path-incluster"
 
 	headers := make(http.Header)
-	headers.Set("Content-Type", "application/json")
 	headers.Set("X-Signature", "temp_signature")
-
 	res, err := utils.RequestWithContext(url, http.MethodGet, &headers, nil)
 	if err != nil {
 		klog.Errorf("get mounted error: %v", err)

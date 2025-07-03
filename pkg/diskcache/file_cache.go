@@ -6,13 +6,16 @@ import (
 	"encoding/hex"
 	"errors"
 	"files/pkg/fileutils"
-	"github.com/spf13/afero"
 	"io"
-	"k8s.io/klog/v2"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 )
+
+var fileCache *FileCache
 
 var CacheDir = os.Getenv("FILE_CACHE_DIR") // "/data/file_cache"
 
@@ -28,9 +31,14 @@ type FileCache struct {
 }
 
 func New(fs afero.Fs, root string) *FileCache {
-	return &FileCache{
+	fileCache = &FileCache{
 		fs: afero.NewBasePathFs(fs, root),
 	}
+	return fileCache
+}
+
+func GetFileCache() *FileCache {
+	return fileCache
 }
 
 func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {

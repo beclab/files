@@ -12,9 +12,9 @@ import (
 
 type FileParam struct {
 	Owner    string `json:"owner"`
-	FileType string `json:"file_type"` // drive data cache internal usb smb hdd sync cloud
-	Extend   string `json:"extend"`    // node repo key deviceId diskId ...
-	Path     string `json:"path"`      // path
+	FileType string `json:"file_type,omitempty"` // drive data cache internal usb smb hdd sync cloud
+	Extend   string `json:"extend,omitempty"`    // node repo key deviceId diskId ...
+	Path     string `json:"path,omitempty"`      // path
 }
 
 func CreateFileParam(owner string, path string) (*FileParam, error) {
@@ -76,9 +76,18 @@ func (p *FileParam) convert(url string) (err error) {
 		p.Extend = extend
 		p.Path = subPath
 
-	} else if fileType == constant.GoogleDrive || fileType == constant.DropBox || fileType == constant.AwsS3 {
+	} else if fileType == constant.AwsS3 || fileType == constant.DropBox {
 
 		p.FileType = fileType
+		p.Extend = extend
+		p.Path = subPath
+
+	} else if fileType == constant.GoogleDrive {
+
+		if subPath != "/" {
+			subPath = strings.Trim(subPath, "/")
+		}
+		p.FileType = constant.GoogleDrive
 		p.Extend = extend
 		p.Path = subPath
 
@@ -124,8 +133,21 @@ func (r *FileParam) GetResourceUri() (string, error) {
 		return filepath.Join(constant.EXTERNAL_PREFIX), nil
 	} else if r.FileType == "internal" || r.FileType == "smb" || r.FileType == "usb" || r.FileType == "hdd" {
 		return filepath.Join(constant.EXTERNAL_PREFIX), nil
+	} else if r.FileType == "sync" {
+		return filepath.Join(r.FileType, r.Extend), nil
+	} else if r.FileType == "google" || r.FileType == "dropbox" || r.FileType == "awss3" {
+		return filepath.Join("drive", r.FileType, r.Extend), nil
 	}
 
 	return "", fmt.Errorf("invalid file type: %s", r.FileType)
 
+}
+
+func (r *FileParam) IsFile() (string, bool) {
+	var p = strings.Split(r.Path, "/")
+	var fileName = p[len(p)-1]
+	if fileName != "" {
+		return fileName, true
+	}
+	return "", false
 }

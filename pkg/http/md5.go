@@ -7,10 +7,12 @@ import (
 	"files/pkg/common"
 	"files/pkg/drives"
 	"files/pkg/files"
+	"files/pkg/models"
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
 	"net/http"
+	"path/filepath"
 	"strings"
 )
 
@@ -68,31 +70,9 @@ func downloadAndComputeMD5(r *http.Request, url string) (string, error) {
 	return fmt.Sprintf("%x", md5Sum), nil
 }
 
-func md5Sync(w http.ResponseWriter, r *http.Request) (int, error) {
-	src := r.URL.Path
-	src = strings.Trim(src, "/")
-	if !strings.Contains(src, "/") {
-		err := errors.New("invalid path format: path must contain at least one '/'")
-		klog.Errorln("Error:", err)
-		return common.ErrToStatus(err), err
-	}
-
-	firstSlashIdx := strings.Index(src, "/")
-
-	repoID := src[:firstSlashIdx]
-
-	lastSlashIdx := strings.LastIndex(src, "/")
-
-	filename := src[lastSlashIdx+1:]
-
-	prefix := ""
-	if firstSlashIdx != lastSlashIdx {
-		prefix = src[firstSlashIdx+1 : lastSlashIdx+1]
-	}
-
-	klog.Infoln("repo-id:", repoID)
-	klog.Infoln("prefix:", prefix)
-	klog.Infoln("filename:", filename)
+func md5Sync(fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) (int, error) {
+	repoID := fileParam.Extend
+	prefix, filename := filepath.Split(fileParam.Path)
 
 	url := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + prefix + filename + "/" + "?dl=1"
 	klog.Infoln(url)
@@ -118,18 +98,23 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 }
 
 func md5Handler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
+	fileParam, _, err := UrlPrep(r, "")
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	if srcType == drives.SrcTypeSync {
-		return md5Sync(w, r)
+	if fileParam.FileType == drives.SrcTypeSync {
+		return md5Sync(fileParam, w, r)
 	}
 
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	urlPath := uri + fileParam.Path
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         files.DefaultFs,
-		Path:       r.URL.Path,
+		Path:       strings.TrimPrefix(urlPath, "/data"),
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: d.Server.TypeDetectionByHeader,
