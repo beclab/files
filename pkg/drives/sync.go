@@ -13,7 +13,6 @@ import (
 	"files/pkg/models"
 	"files/pkg/parser"
 	"files/pkg/pool"
-	"files/pkg/preview"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -29,7 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
 	"k8s.io/klog/v2"
@@ -37,120 +35,6 @@ import (
 
 type SyncResourceService struct {
 	BaseResourceService
-}
-
-func (rc *SyncResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	klog.Infof("Request headers: %v", r.Header)
-
-	streamStr := r.URL.Query().Get("stream")
-	stream := 0
-	var err error
-	if streamStr != "" {
-		stream, err = strconv.Atoi(streamStr)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-	}
-
-	src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
-	src, err = common.UnescapeURLIfEscaped(src)
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-	klog.Infof("r.URL.Path: %s, src Path: %s", r.URL.Path, src)
-
-	if src == "/" {
-		// this is for "/sync/" which is listing all repos of mine
-		getUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
-		klog.Infoln(getUrl)
-
-		_, respBody, err := syncCall(getUrl, "GET", nil, nil, r, nil, true)
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, err = w.Write(respBody)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return common.ErrToStatus(err), err
-		}
-		return 0, nil
-	}
-
-	if !strings.HasPrefix(r.URL.Path, "/"+SrcTypeSync) || strings.HasSuffix(src, "/") {
-		src = strings.Trim(src, "/") + "/"
-		repoID, prefix, _ := ParseSyncPath(src)
-
-		getUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace(prefix) + "&with_thumbnail=true"
-		klog.Infoln(getUrl)
-
-		request, err := http.NewRequest("GET", getUrl, nil)
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-
-		request.Header = r.Header.Clone()
-		RemoveAdditionalHeaders(&request.Header)
-
-		client := http.Client{}
-		response, err := client.Do(request)
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-		defer response.Body.Close()
-
-		if response.StatusCode != http.StatusOK {
-			return response.StatusCode, nil
-		}
-
-		// SSE
-		if stream == 1 {
-			var body []byte
-			respReader := SuitableResponseReader(response)
-			if respReader == nil {
-				return http.StatusBadRequest, nil
-			}
-			defer respReader.Close()
-
-			body, err = ioutil.ReadAll(respReader)
-			streamSyncDirents(w, r, body, repoID)
-			return 0, nil
-		}
-
-		// non-SSE
-		respReader := SuitableResponseReader(response)
-		if respReader == nil {
-			return http.StatusBadRequest, nil
-		}
-		defer respReader.Close()
-
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, err = io.Copy(w, respReader)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return common.ErrToStatus(err), err
-		}
-		return 0, nil
-	}
-
-	// file
-	repoID, prefix, filename := ParseSyncPath(src)
-	getUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file" + common.EscapeURLWithSpace(prefix) + common.EscapeURLWithSpace(filename) + "?dict=1"
-	klog.Infoln(getUrl)
-
-	_, respBody, err := syncCall(getUrl, "GET", nil, nil, r, nil, true)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, err = w.Write(respBody)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return common.ErrToStatus(err), err
-	}
-	return 0, nil
 }
 
 func (rc *SyncResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
@@ -181,52 +65,6 @@ func (rc *SyncResourceService) DeleteHandler(fileCache fileutils.FileCache) hand
 			return 0, nil
 		}
 		return ResourceSyncDelete(strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync), w, r, true)
-	}
-}
-
-func (rc *SyncResourceService) PostHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		repoID := fileParam.Extend
-		prefix, filename := filepath.Split(fileParam.Path)
-		if repoID != "" && prefix == "" && filename == "/" {
-			// this is for creating a repos, or else, prefix must not be "/"
-			postUrl := "http://127.0.0.1:80/seahub/api2/repos/?from=web"
-			klog.Infoln(postUrl)
-
-			body := &bytes.Buffer{}
-			writer := multipart.NewWriter(body)
-
-			_ = writer.WriteField("name", repoID)
-			_ = writer.WriteField("passwd", "")
-			klog.Infoln("name", repoID)
-
-			if err := writer.Close(); err != nil {
-				return common.ErrToStatus(err), err
-			}
-
-			header := r.Header.Clone()
-			header.Set("Content-Type", writer.FormDataContentType())
-			statusCode, postBody, err := syncCall(postUrl, "POST", body.Bytes(), nil, r, &header, true)
-			if err != nil {
-				return common.ErrToStatus(err), err
-			}
-
-			klog.Infoln("Status Code: ", statusCode)
-			if statusCode != http.StatusOK {
-				klog.Infoln(string(postBody))
-				return statusCode, fmt.Errorf("file update failed, status code: %d", statusCode)
-			}
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			_, err = w.Write(postBody)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return common.ErrToStatus(err), err
-			}
-			return 0, nil
-		}
-
-		err := SyncMkdirAllFileParam(fileParam, 0, true, r)
-		return common.ErrToStatus(err), err
 	}
 }
 
@@ -561,45 +399,6 @@ func (rs *SyncResourceService) RawHandler(fileParam *models.FileParam) handleFun
 		}
 
 		return response.StatusCode, nil
-	}
-}
-
-func (rs *SyncResourceService) PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		vars := mux.Vars(r)
-
-		previewSize, err := preview.ParsePreviewSize(vars["size"])
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-		previewSizeStr := ""
-		if previewSize == 0 {
-			previewSizeStr = "/128"
-		} else if previewSize == 1 {
-			previewSizeStr = "/1080"
-		} else {
-			return http.StatusBadRequest, err
-		}
-
-		path := "/" + vars["path"]
-		path = strings.TrimPrefix(path, "/"+SrcTypeSync)
-		if path == "" || strings.HasSuffix(path, "/") {
-			return http.StatusBadRequest, fmt.Errorf("empty source path")
-		}
-		repoID, prefix, filename := ParseSyncPath(path)
-		previewUrl := "http://127.0.0.1:80/seahub/thumbnail/" + repoID + previewSizeStr + common.EscapeAndJoin(prefix+filename, "/")
-		status, previewRespBody, err := syncCall(previewUrl, "GET", nil, nil, r, nil, true)
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-
-		w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Content-Length", strconv.Itoa(len(previewRespBody)))
-		w.Write(previewRespBody)
-		if status != http.StatusOK {
-			return status, nil
-		}
-		return 0, nil
 	}
 }
 
@@ -1336,141 +1135,6 @@ func walkSyncDirentsGenerator(body []byte, header *http.Header, r *http.Request,
 		}
 	}()
 	return ch
-}
-
-func generateDirentsData(body []byte, stopChan <-chan struct{}, dataChan chan<- string, r *http.Request, repoID string) {
-	defer close(dataChan)
-
-	var bodyJson DirentResponse
-	if err := json.Unmarshal(body, &bodyJson); err != nil {
-		klog.Error(err)
-		return
-	}
-
-	var A []Dirent
-	bodyJson.Lock()
-	A = append(A, bodyJson.DirentList...)
-	bodyJson.Unlock()
-
-	for len(A) > 0 {
-		klog.Infoln("len(A): ", len(A))
-		firstItem := A[0]
-		klog.Infoln("firstItem Path: ", firstItem.Path)
-		klog.Infoln("firstItem Name:", firstItem.Name)
-
-		if firstItem.Type == "dir" {
-			path := firstItem.Path
-			if path != "/" {
-				path += "/"
-			}
-			path = common.EscapeURLWithSpace(path)
-			firstUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + path + "&with_thumbnail=true"
-			klog.Infoln(firstUrl)
-
-			firstRequest, err := http.NewRequest("GET", firstUrl, nil)
-			if err != nil {
-				klog.Error(err)
-				return
-			}
-
-			firstRequest.Header = r.Header.Clone()
-			RemoveAdditionalHeaders(&firstRequest.Header)
-
-			client := http.Client{}
-			firstResponse, err := client.Do(firstRequest)
-			if err != nil {
-				return
-			}
-
-			if firstResponse.StatusCode != http.StatusOK {
-				klog.Infoln(firstResponse.StatusCode)
-				return
-			}
-
-			var firstRespBody []byte
-			var reader *gzip.Reader = nil
-			if firstResponse.Header.Get("Content-Encoding") == "gzip" {
-				reader, err = gzip.NewReader(firstResponse.Body)
-				if err != nil {
-					klog.Errorln("Error creating gzip reader:", err)
-					return
-				}
-
-				firstRespBody, err = ioutil.ReadAll(reader)
-				if err != nil {
-					klog.Errorln("Error reading gzipped response body:", err)
-					reader.Close()
-					return
-				}
-			} else {
-				firstRespBody, err = ioutil.ReadAll(firstResponse.Body)
-				if err != nil {
-					klog.Errorln("Error reading response body:", err)
-					firstResponse.Body.Close()
-					return
-				}
-			}
-
-			var firstBodyJson DirentResponse
-			if err := json.Unmarshal(firstRespBody, &firstBodyJson); err != nil {
-				klog.Error(err)
-				return
-			}
-
-			A = append(firstBodyJson.DirentList, A[1:]...)
-
-			if reader != nil {
-				reader.Close()
-			}
-			firstResponse.Body.Close()
-		} else {
-			dataChan <- formatSSEvent(firstItem)
-
-			A = A[1:]
-		}
-
-		select {
-		case <-stopChan:
-			return
-		default:
-		}
-	}
-}
-
-func streamSyncDirents(w http.ResponseWriter, r *http.Request, body []byte, repoID string) {
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	stopChan := make(chan struct{})
-	dataChan := make(chan string)
-
-	go generateDirentsData(body, stopChan, dataChan, r, repoID)
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
-		return
-	}
-
-	for {
-		select {
-		case event, ok := <-dataChan:
-			if !ok {
-				return
-			}
-			_, err := w.Write([]byte(event))
-			if err != nil {
-				klog.Error(err)
-				return
-			}
-			flusher.Flush()
-
-		case <-r.Context().Done():
-			close(stopChan)
-			return
-		}
-	}
 }
 
 func SyncMkdirAllFileParam(fileParam *models.FileParam, mode os.FileMode, isDir bool, r *http.Request) error {

@@ -2,6 +2,7 @@ package clouds
 
 import (
 	"encoding/json"
+	"errors"
 	"files/pkg/constant"
 	"files/pkg/drivers/base"
 	"files/pkg/fileutils"
@@ -159,6 +160,55 @@ func (s *CloudStorage) Stream(fileParam *models.FileParam, stopChan chan struct{
 }
 
 func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	var fileParam = contextArgs.FileParam
+	var owner = fileParam.Owner
+	klog.Infof("Cloud create, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+
+	var path = strings.TrimRight(fileParam.Path, "/")
+	var parts = strings.Split(path, "/")
+	var parentPath string
+	var folderName string
+	for i := 0; i < len(parts); i++ {
+		if i < len(parts)-1 {
+			parentPath += parts[i] + "/"
+		}
+		if i == len(parts)-1 {
+			folderName = parts[i]
+		}
+	}
+
+	if fileParam.FileType == constant.GoogleDrive {
+		parentPath = strings.Trim(parentPath, "/")
+	}
+
+	var p = &models.PostParam{
+		Drive:      fileParam.FileType,
+		Name:       fileParam.Extend,
+		ParentPath: parentPath,
+		FolderName: folderName,
+	}
+
+	klog.Infof("Cloud create, service request param: %s", utils.ToJson(p))
+
+	res, err := s.Service.CreateFolder(p)
+	if err != nil {
+		klog.Errorf("Cloud create, error: %v, owner: %s, path: %s", err, owner, fileParam.Path)
+		return nil, err
+	}
+
+	var resp *models.CloudResponse
+	if err := json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Cloud create, unmarshal error: %v, owner: %s, path: %s", err, owner, fileParam.Path)
+		return nil, err
+	}
+
+	if !resp.IsSuccess() {
+		klog.Errorf("Cloud create, resp failed: %s, owner: %s, path: %s", resp.FailMessage(), owner, fileParam.Path)
+		return nil, errors.New(resp.FailMessage())
+	}
+
+	klog.Infof("Cloud create, success, result: %s, owner: %s, path: %s", string(res), owner, fileParam.Path)
+
 	return nil, nil
 }
 

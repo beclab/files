@@ -20,11 +20,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
 	"k8s.io/klog/v2"
@@ -184,89 +182,6 @@ func GetCloudDriveFocusedMetaInfos(task *pool.Task, src string, w http.ResponseW
 		IsDir:    fileMetaDataResp.Data.IsDir,
 	}
 	return
-}
-
-func generateCloudDriveFilesData(storage *storage.CloudStorage, srcType string, fileResult *model.CloudListResponse, stopChan <-chan struct{}, dataChan chan<- string,
-	param *model.ListParam) {
-	defer close(dataChan)
-
-	var A []*model.CloudResponseData
-	fileResult.Lock()
-	A = append(A, fileResult.Data...)
-	fileResult.Unlock()
-
-	for len(A) > 0 {
-		klog.Infoln("len(A): ", len(A))
-		firstItem := A[0]
-		klog.Infoln("firstItem Path: ", firstItem.Path)
-		klog.Infoln("firstItem Name:", firstItem.Name)
-		firstItemPath := CloudDriveNormalizationPath(firstItem.Path, srcType, true, true)
-
-		if firstItem.IsDir {
-			firstParam := &model.ListParam{
-				Path:  firstItemPath,
-				Drive: param.Drive,
-				Name:  param.Name,
-			}
-
-			res, err := storage.List(firstParam)
-			if err != nil {
-				klog.Error(err)
-				return
-			}
-			files := res.(*model.CloudListResponse)
-
-			A = append(files.Data, A[1:]...)
-		} else {
-			dataChan <- formatSSEvent(firstItem)
-
-			A = A[1:]
-		}
-
-		select {
-		case <-stopChan:
-			return
-		default:
-		}
-	}
-}
-
-func streamCloudDriveFiles(storage *storage.CloudStorage, srcType string, filesResult *model.CloudListResponse, param *model.ListParam) {
-	var w = storage.ResponseWriter
-	var r = storage.Request
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	stopChan := make(chan struct{})
-	dataChan := make(chan string)
-
-	go generateCloudDriveFilesData(storage, srcType, filesResult, stopChan, dataChan, param)
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
-		return
-	}
-
-	for {
-		select {
-		case event, ok := <-dataChan:
-			if !ok {
-				return
-			}
-			_, err := w.Write([]byte(event))
-			if err != nil {
-				klog.Error(err)
-				return
-			}
-			flusher.Flush()
-
-		case <-r.Context().Done():
-			close(stopChan)
-			return
-		}
-	}
 }
 
 func CopyCloudDriveSingleFile(task *pool.Task, srcFileParam, dstFileParam *models.FileParam, w http.ResponseWriter, r *http.Request) error {
@@ -755,80 +670,9 @@ type CloudDriveResourceService struct {
 	BaseResourceService
 }
 
-func (rc *CloudDriveResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	streamStr := r.URL.Query().Get("stream")
-	stream := 0
-	var err error
-	if streamStr != "" {
-		stream, err = strconv.Atoi(streamStr)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-	}
-
-	metaStr := r.URL.Query().Get("meta")
-	meta := 0
-	if metaStr != "" {
-		meta, err = strconv.Atoi(metaStr)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-	}
-
-	src := r.URL.Path
-	klog.Infoln("src Path:", src)
-
-	srcDrive, srcName, srcPath := ParseCloudDrivePath(src)
-	klog.Infoln("srcDrive: ", srcDrive, ", srcName: ", srcName, ", src Path: ", srcPath)
-
-	var cloudStorage = &storage.CloudStorage{
-		Owner:   r.Header.Get("X-Bfl-User"),
-		Request: r,
-	}
-
-	var param = &model.ListParam{
-		Path:  srcPath,
-		Drive: srcDrive, // "my_drive",
-		Name:  srcName,  // "file_name",
-	}
-	klog.Infof("Cloud Drive List Params: %+v, stream: %d, meta: %d", param, stream, meta)
-	if stream == 1 {
-		var res any
-		res, err = cloudStorage.List(param)
-		listResult := res.(*model.CloudListResponse)
-		streamCloudDriveFiles(cloudStorage, srcDrive, listResult, param)
-		return common.RenderSuccess(w, r)
-	}
-	if meta == 1 {
-		res, err := cloudStorage.GetFileMetaData(param)
-		if err != nil {
-			klog.Errorf("GetFileMetaData error: %v", err)
-			return common.ErrToStatus(err), err
-		}
-
-		var fileMetadata = res.(*model.CloudResponse)
-		return common.RenderJSON(w, r, fileMetadata)
-	}
-
-	res, err := cloudStorage.List(param)
-	if err != nil {
-		klog.Errorln("Error calling drive/ls:", err)
-		return common.ErrToStatus(err), err
-	}
-	listRes := res.(*model.CloudListResponse)
-	return common.RenderJSON(w, r, listRes)
-}
-
 func (rc *CloudDriveResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		_, status, err := ResourceDeleteCloudDrive(fileCache, r.URL.Path, w, r, true)
-		return status, err
-	}
-}
-
-func (rc *CloudDriveResourceService) PostHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		_, status, err := ResourcePostCloudDriveFileParam(fileParam, w, r, true)
 		return status, err
 	}
 }
@@ -876,20 +720,6 @@ func (rs *CloudDriveResourceService) RawHandler(fileParam *models.FileParam) han
 			return http.StatusNotImplemented, fmt.Errorf("doesn't support directory download for cloud drive now")
 		}
 		return RawFileHandlerCloudDriveFileParam(fileParam, w, r, metaData, bflName)
-	}
-}
-
-func (rs *CloudDriveResourceService) PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		vars := mux.Vars(r)
-
-		previewSize, err := preview.ParsePreviewSize(vars["size"])
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-		path := "/" + vars["path"]
-
-		return PreviewGetCloudDrive(w, r, previewSize, path, imgSvc, fileCache, enableThumbnails, resizePreview)
 	}
 }
 
@@ -1661,80 +1491,6 @@ func RawFileHandlerCloudDrive(src string, w http.ResponseWriter, r *http.Request
 	http.ServeContent(w, r, file.Name, ParseTimeString(file.Modified), fd)
 
 	return 0, nil
-}
-
-func handleImagePreviewCloudDrive(
-	w http.ResponseWriter,
-	r *http.Request,
-	src string,
-	imgSvc preview.ImgService,
-	fileCache fileutils.FileCache,
-	file *model.CloudResponseData,
-	previewSize preview.PreviewSize,
-	enableThumbnails, resizePreview bool,
-) (int, error) {
-	bflName := r.Header.Get("X-Bfl-User")
-	if bflName == "" {
-		return common.ErrToStatus(os.ErrPermission), os.ErrPermission
-	}
-
-	if (previewSize == preview.PreviewSizeBig && !resizePreview) ||
-		(previewSize == preview.PreviewSizeThumb && !enableThumbnails) {
-		return RawFileHandlerCloudDrive(src, w, r, file, bflName)
-	}
-
-	format, err := imgSvc.FormatFromExtension(path.Ext(file.Name))
-	// Unsupported extensions directly return the raw data
-	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
-		return RawFileHandlerCloudDrive(src, w, r, file, bflName)
-	}
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	cacheKey := previewCacheKeyCloudDrive(file, previewSize)
-	klog.Infoln("cacheKey:", cacheKey)
-	klog.Infoln("f.RealPath:", file.Path)
-	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	if !ok {
-		resizedImage, err = createPreviewCloudDrive(w, r, src, imgSvc, fileCache, file, previewSize, bflName)
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-	}
-
-	err = redisutils.UpdateFileAccessTimeToRedis(redisutils.GetFileName(cacheKey))
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	w.Header().Set("Cache-Control", "private")
-	http.ServeContent(w, r, file.Name, ParseTimeString(file.Modified), bytes.NewReader(resizedImage))
-
-	return 0, nil
-}
-
-func PreviewGetCloudDrive(w http.ResponseWriter, r *http.Request, previewSize preview.PreviewSize, path string,
-	imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) (int, error) {
-	src := path
-
-	metaData, err := GetCloudDriveMetadata(src, w, r)
-	if err != nil {
-		klog.Error(err)
-		return common.ErrToStatus(err), err
-	}
-
-	setContentDispositionCloudDrive(w, r, metaData.Name) // + preview
-
-	fileType := parser.MimeTypeByExtension(metaData.Name)
-	if strings.HasPrefix(fileType, "image") {
-		return handleImagePreviewCloudDrive(w, r, src, imgSvc, fileCache, metaData, previewSize, enableThumbnails, resizePreview) // + preview
-	} else {
-		return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", fileType)
-	}
 }
 
 func delThumbsCloudDriveFileParam(ctx context.Context, fileCache fileutils.FileCache, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) error {

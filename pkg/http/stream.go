@@ -52,7 +52,13 @@ func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.Dr
 		stopChan := make(chan struct{})
 		dataChan := make(chan string)
 
-		err = fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, stopChan, dataChan)
+		var handler = driverHandler.NewFileHandler(fileParam.FileType, handlerParam)
+		if handler == nil {
+			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
+			return
+		}
+
+		err = fn(handler, fileParam, stopChan, dataChan)
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,

@@ -59,7 +59,13 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 			Request:        r,
 		}
 
-		fileData, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam, queryParam)
+		var handler = driverHandler.NewFileHandler(fileParam.FileType, handlerParam)
+		if handler == nil {
+			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
+			return
+		}
+
+		fileData, err := fn(handler, fileParam, queryParam)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{

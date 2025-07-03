@@ -1,19 +1,14 @@
 package drives
 
 import (
-	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/diskcache"
 	"files/pkg/files"
 	"files/pkg/fileutils"
-	"files/pkg/img"
 	"files/pkg/models"
 	"files/pkg/pool"
-	"files/pkg/preview"
-	"files/pkg/redisutils"
 	"fmt"
 	"io"
 	"math"
@@ -367,58 +362,6 @@ func RawFileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, file.ModTime, fd)
-	return 0, nil
-}
-
-func HandleImagePreview(
-	w http.ResponseWriter,
-	r *http.Request,
-	imgSvc preview.ImgService,
-	fileCache fileutils.FileCache,
-	file *files.FileInfo,
-	previewSize preview.PreviewSize,
-	enableThumbnails, resizePreview bool,
-) (int, error) {
-	if (previewSize == preview.PreviewSizeBig && !resizePreview) ||
-		(previewSize == preview.PreviewSizeThumb && !enableThumbnails) {
-		return RawFileHandler(w, r, file)
-	}
-
-	format, err := imgSvc.FormatFromExtension(file.Extension)
-	// Unsupported extensions directly return the raw data
-	if err == img.ErrUnsupportedFormat || format == img.FormatGif {
-		return RawFileHandler(w, r, file)
-	}
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	cacheKey := preview.PreviewCacheKey(file, previewSize)
-	klog.Infoln("cacheKey:", cacheKey)
-	klog.Infoln("f.RealPath:", file.RealPath())
-	resizedImage, ok, err := fileCache.Load(r.Context(), cacheKey)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	if !ok {
-		resizedImage, err = preview.CreatePreview(imgSvc, fileCache, file, previewSize, 1)
-		if err != nil {
-			klog.Infoln("first method failed!")
-			resizedImage, err = preview.CreatePreview(imgSvc, fileCache, file, previewSize, 2)
-			if err != nil {
-				klog.Infoln("second method failed!")
-				return RawFileHandler(w, r, file)
-			}
-		}
-	}
-
-	if diskcache.CacheDir != "" {
-		redisutils.UpdateFileAccessTimeToRedis(redisutils.GetFileName(cacheKey))
-	}
-
-	w.Header().Set("Cache-Control", "private")
-	http.ServeContent(w, r, file.Name, file.ModTime, bytes.NewReader(resizedImage))
-
 	return 0, nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"files/pkg/models"
 	"files/pkg/rpc"
 	"files/pkg/utils"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -25,7 +26,6 @@ import (
 	"files/pkg/settings"
 )
 
-type commonFunc func(owner string) ([]byte, error)
 type fileHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error)
 type rawHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (io.ReadCloser, error)
 
@@ -34,6 +34,7 @@ type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (in
 func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var path = strings.TrimPrefix(r.URL.Path, prefix)
+
 		if path == "" {
 			http.Error(w, "path invalid", http.StatusBadRequest)
 			return
@@ -63,7 +64,13 @@ func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHa
 			Request:        r,
 		}
 
-		reader, err := fn(driverHandler.NewFileHandler(fileParam.FileType, handlerParam), fileParam)
+		var handler = driverHandler.NewFileHandler(fileParam.FileType, handlerParam)
+		if handler == nil {
+			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
+			return
+		}
+
+		reader, err := fn(handler, fileParam)
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
@@ -121,7 +128,13 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 			},
 		}
 
-		res, err := fn(driverHandler.NewFileHandler(contextArg.FileParam.FileType, handlerParam), contextArg)
+		var handler = driverHandler.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
+		if handler == nil {
+			http.Error(w, fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType), http.StatusBadRequest)
+			return
+		}
+
+		res, err := fn(handler, contextArg)
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
@@ -131,36 +144,6 @@ func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.Driver
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(res)
-		return
-	})
-
-	return handler
-}
-
-func commonHandle(fn commonFunc) http.Handler {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var path = r.URL.Path
-		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
-		if owner == "" {
-			http.Error(w, "user not found", http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
-
-		res, err := fn(owner)
-		w.Header().Set("Content-Type", "application/json")
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"code":    1,
-				"message": err.Error(),
-			})
-			return
-		}
-
 		w.Write(res)
 		return
 	})

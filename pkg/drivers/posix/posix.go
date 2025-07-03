@@ -2,15 +2,20 @@ package posix
 
 import (
 	"encoding/json"
+	"errors"
 	"files/pkg/constant"
 	"files/pkg/drivers/base"
 	"files/pkg/files"
+	"files/pkg/fileutils"
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/preview"
 	"files/pkg/utils"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strconv"
 
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
@@ -116,6 +121,28 @@ func (s *PosixStorage) Stream(fileParam *models.FileParam, stopChan chan struct{
 }
 
 func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
+
+	resourceUri, err := contextArgs.FileParam.GetResourceUri()
+	if err != nil {
+		return nil, err
+	}
+
+	dirName := filepath.Join(resourceUri, contextArgs.FileParam.Path)
+	if fileutils.FilePathExists(dirName) {
+		return nil, errors.New("%s already exists")
+	}
+
+	mode, err := strconv.ParseUint(contextArgs.QueryParam.FileMode, 8, 32)
+	if err != nil {
+		mode = 0755
+	}
+
+	fileMode := os.FileMode(mode)
+
+	if err := fileutils.MkdirAllWithChown(nil, dirName, fileMode); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 

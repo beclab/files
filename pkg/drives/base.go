@@ -1,17 +1,13 @@
 package drives
 
 import (
-	"bytes"
 	"context"
 	"files/pkg/common"
-	"files/pkg/errors"
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/models"
 	"files/pkg/pool"
-	"files/pkg/preview"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
 	"k8s.io/klog/v2"
@@ -32,18 +27,13 @@ type RecordsStatusProcessor func(db *gorm.DB, processedPaths map[string]bool, sr
 
 type ResourceService interface {
 	// resource handlers
-	GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) // not used now
-	DeleteHandler(fileCache fileutils.FileCache) handleFunc                         // not used now
-	PostHandler(fileParam *models.FileParam) handleFunc
+	DeleteHandler(fileCache fileutils.FileCache) handleFunc // not used now
 	PutHandler(fileParam *models.FileParam) handleFunc
 	PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc
 	BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc
 
 	// raw handler
 	RawHandler(fileParam *models.FileParam) handleFunc
-
-	// preview handler
-	PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc
 
 	// paste funcs
 	PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
@@ -217,131 +207,6 @@ func GetMountedData(ctx context.Context) {
 
 type BaseResourceService struct{}
 
-func (rs *BaseResourceService) GetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	xBflUser := r.Header.Get("X-Bfl-User")
-	klog.Infoln("X-Bfl-User: ", xBflUser)
-	streamStr := r.URL.Query().Get("stream")
-	stream := 0
-	var err error = nil
-	if streamStr != "" {
-		stream, err = strconv.Atoi(streamStr)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-	}
-	var file *files.FileInfo
-	if MountedData != nil {
-		file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-			Fs:         files.DefaultFs,
-			Path:       r.URL.Path,
-			Modify:     true,
-			Expand:     true,
-			ReadHeader: d.Server.TypeDetectionByHeader,
-			Content:    true,
-		}, MountedData)
-	} else {
-		file, err = files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs,
-			Path:       r.URL.Path,
-			Modify:     true,
-			Expand:     true,
-			ReadHeader: d.Server.TypeDetectionByHeader,
-			Content:    true,
-		})
-	}
-	if err != nil {
-		if common.ErrToStatus(err) == http.StatusNotFound && r.URL.Path == "/External/" {
-			listing := &files.Listing{
-				Items:         []*files.FileInfo{},
-				NumDirs:       0,
-				NumFiles:      0,
-				NumTotalFiles: 0,
-				Size:          0,
-				FileSize:      0,
-			}
-			file = &files.FileInfo{
-				Path:         "/External/",
-				Name:         "External",
-				Size:         0,
-				FileSize:     0,
-				Extension:    "",
-				ModTime:      time.Now(),
-				Mode:         os.FileMode(2147484141),
-				IsDir:        true,
-				IsSymlink:    false,
-				Type:         "",
-				ExternalType: "others",
-				Subtitles:    []string{},
-				Checksums:    make(map[string]string),
-				Listing:      listing,
-				Fs:           nil,
-			}
-
-			return common.RenderJSON(w, r, file)
-		}
-		return common.ErrToStatus(err), err
-	}
-
-	if file.IsDir {
-		if files.CheckPath(file.Path, files.ExternalPrefix, "/") {
-			files.GetExternalExtraInfos(file, MountedData, 1)
-		}
-		file.Listing.Sorting = files.DefaultSorting
-		file.Listing.ApplySort()
-		if stream == 1 {
-			streamListingItems(w, r, file.Listing, d, MountedData)
-			return 0, nil
-		} else {
-			return common.RenderJSON(w, r, file)
-		}
-	}
-
-	if checksum := r.URL.Query().Get("checksum"); checksum != "" {
-		err := file.Checksum(checksum)
-		if err == errors.ErrInvalidOption {
-			return http.StatusBadRequest, nil
-		} else if err != nil {
-			return http.StatusInternalServerError, err
-		}
-
-		// do not waste bandwidth if we just want the checksum
-		file.Content = ""
-	}
-
-	if file.Type == "video" {
-		osSystemServer := "system-server.user-system-" + xBflUser
-
-		httpposturl := fmt.Sprintf("http://%s/legacy/v1alpha1/api.intent/v1/server/intent/send", osSystemServer)
-
-		klog.Infoln("HTTP JSON POST URL:", httpposturl)
-
-		var jsonData = []byte(`{
-			"action": "view",
-			"category": "video",
-			"data": {
-				"name": "` + file.Name + `",
-				"path": "` + file.Path + `",
-				"extention": "` + file.Extension + `"
-			}
-		}`)
-		request, error := http.NewRequest("POST", httpposturl, bytes.NewBuffer(jsonData))
-		request.Header.Set("Content-Type", "application/json; charset=UTF-8")
-
-		client := &http.Client{}
-		response, error := client.Do(request)
-		if error != nil {
-			panic(error)
-		}
-		defer response.Body.Close()
-
-		klog.Infoln("response Status:", response.Status)
-		klog.Infoln("response Headers:", response.Header)
-		body, _ := ioutil.ReadAll(response.Body)
-		klog.Infoln("response Body:", string(body))
-	}
-	return common.RenderJSON(w, r, file)
-}
-
 func (rs *BaseResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		if r.URL.Path == "/" {
@@ -356,32 +221,6 @@ func (rs *BaseResourceService) DeleteHandler(fileCache fileutils.FileCache) hand
 			return common.ErrToStatus(err), err
 		}
 		return 0, nil
-	}
-}
-
-func (rs *BaseResourceService) PostHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		modeParam := r.URL.Query().Get("mode")
-
-		mode, err := strconv.ParseUint(modeParam, 8, 32)
-		if err != nil || modeParam == "" {
-			mode = 0775
-		}
-
-		fileMode := os.FileMode(mode)
-
-		uri, err := fileParam.GetResourceUri()
-		if err != nil {
-			klog.Errorln(err)
-			return common.ErrToStatus(err), err
-		}
-		urlPath := uri + fileParam.Path
-		klog.Infoln("~~~Debug log: urlPath:", urlPath)
-		if err = fileutils.MkdirAllWithChown(nil, urlPath, fileMode); err != nil {
-			klog.Errorln(err)
-			return common.ErrToStatus(err), err
-		}
-		return http.StatusOK, nil
 	}
 }
 
@@ -553,38 +392,6 @@ func (rs *BaseResourceService) RawHandler(fileParam *models.FileParam) handleFun
 		}
 
 		return RawDirHandler(w, r, d, file)
-	}
-}
-
-func (rs *BaseResourceService) PreviewHandler(imgSvc preview.ImgService, fileCache fileutils.FileCache, enableThumbnails, resizePreview bool) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		vars := mux.Vars(r)
-
-		previewSize, err := preview.ParsePreviewSize(vars["size"])
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-		path := "/" + vars["path"]
-
-		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs,
-			Path:       path,
-			Modify:     true,
-			Expand:     true,
-			ReadHeader: d.Server.TypeDetectionByHeader,
-		})
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-
-		SetContentDisposition(w, r, file)
-
-		switch file.Type {
-		case "image":
-			return HandleImagePreview(w, r, imgSvc, fileCache, file, previewSize, enableThumbnails, resizePreview)
-		default:
-			return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", file.Type)
-		}
 	}
 }
 

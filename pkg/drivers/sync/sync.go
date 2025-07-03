@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"k8s.io/klog/v2"
@@ -49,7 +50,7 @@ func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) 
 	var owner = s.Handler.Owner
 	var fileParam = contextArgs.FileParam
 
-	klog.Infof("SYNC list, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Sync list, owner: %s, param: %s", owner, fileParam.Json())
 
 	filesData, err := s.getFiles(fileParam)
 	if err != nil {
@@ -60,7 +61,7 @@ func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) 
 }
 
 func (s *SyncStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
-	klog.Infof("SYNC preview, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+	klog.Infof("Sync preview, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
 	var seahubUrl string
 	var previewSize string
 
@@ -90,7 +91,7 @@ func (s *SyncStorage) Preview(fileParam *models.FileParam, queryParam *models.Qu
 func (s *SyncStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error) {
 	var owner = s.Handler.Owner
 
-	klog.Infof("SYNC raw, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Sync raw, owner: %s, param: %s", owner, fileParam.Json())
 	fileName, ok := fileParam.IsFile()
 	if !ok {
 		return nil, nil, fmt.Errorf("not a file")
@@ -137,6 +138,37 @@ func (s *SyncStorage) Stream(fileParam *models.FileParam, stopChan chan struct{}
 }
 
 func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	var owner = s.Handler.Owner
+	var fileParam = contextArgs.FileParam
+	klog.Infof("Sync create, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
+
+	p := strings.Trim(fileParam.Path, "/")
+	parts := strings.Split(p, "/")
+	subFolder := "/"
+	for _, part := range parts {
+		subFolder = filepath.Join(subFolder, part)
+		if !strings.HasPrefix(subFolder, "/") {
+			subFolder = "/" + subFolder
+		}
+
+		var url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder) + "&with_thumbnail=true"
+		_, err := s.Service.Get(url, http.MethodGet, nil)
+		if err == nil {
+			continue
+		}
+
+		url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder)
+		data := make(map[string]string)
+		data["operation"] = "mkdir"
+		res, err := s.Service.Get(url, http.MethodPost, []byte(utils.ToJson(data)))
+		if err != nil {
+			klog.Errorf("Sync create error: %v, path: %s", err, subFolder)
+			return nil, err
+		}
+
+		klog.Infof("Sync create success, result: %s, path: %s", string(res), subFolder)
+	}
+
 	return nil, nil
 }
 

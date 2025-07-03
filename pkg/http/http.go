@@ -73,14 +73,13 @@ func NewHandler(
 
 	api.PathPrefix("/nodes").Handler(common(nodesGetHandler)).Methods("GET")
 	api.PathPrefix("/repos").Handler(common(reposGetHandler)).Methods("GET")
+	api.PathPrefix("/repos").Handler(common(createRepoHandler)).Methods("POST")
 
-	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET") // list files
-	// api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST")              // create folder
+	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET")                 // list files
+	api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST")              // create
 	api.PathPrefix("/stream").Handler(wrapWithStreamParm(streamHandler, "/api/stream/")).Methods("GET")                // walk through files
 	api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandler, "/api/preview/")).Methods("GET") // preview image
 
-	// api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
-	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler, "/api/resources")).Methods("POST")             // create // recons done
 	api.PathPrefix("/resources").Handler(monkey(batchDeleteHandler(fileCache), "/api/resources")).Methods("DELETE") // recons done
 
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")                // edit txt // recons done
@@ -110,9 +109,6 @@ func NewHandler(
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryPutHandler, "/api/smb_history")).Methods("PUT")       // no need to recons
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryDeleteHandler, "/api/smb_history")).Methods("DELETE") // no need to recons
 	//api.PathPrefix("/smb_history").Handler(monkey(smbHistoryDeleteHandler, "/api/smb_history")).Methods("PATCH")	// recons delete this
-
-	// api.PathPrefix("/preview/{size}/{path:.*}").
-	// 	Handler(monkey(previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
 
 	files := r.PathPrefix("/files").Subrouter()
 	files.HandleFunc("/healthcheck", ginHandlerAdapter(rpc.RpcEngine))

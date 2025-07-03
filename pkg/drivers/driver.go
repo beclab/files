@@ -5,6 +5,8 @@ import (
 	"files/pkg/drivers/clouds"
 	"files/pkg/drivers/posix"
 	syncs "files/pkg/drivers/sync"
+
+	"k8s.io/klog/v2"
 )
 
 type DriverHandler struct{}
@@ -26,6 +28,7 @@ func (d *DriverHandler) NewFileHandler(fileType string, handlerParam *base.Handl
 			Service: clouds.NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
 		}
 	default:
-		panic("driver not found")
+		klog.Errorf("driver not found, fileType: %s", fileType)
+		return nil
 	}
 }

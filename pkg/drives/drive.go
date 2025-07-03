@@ -13,16 +13,17 @@ import (
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -455,105 +456,12 @@ func (rs *DriveResourceService) GetTaskFileInfo(fs afero.Fs, fileParam *models.F
 	return isDir, fileType, filename, nil
 }
 
-func generateListingData(listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string, d *common.Data, mountedData []files.DiskInfo) {
-	defer close(dataChan)
-
-	var A []*files.FileInfo
-	listing.Lock()
-	A = append(A, listing.Items...)
-	listing.Unlock()
-
-	for len(A) > 0 {
-		firstItem := A[0]
-
-		if firstItem.IsDir {
-			var file *files.FileInfo
-			var err error
-			if mountedData != nil {
-				file, err = files.NewFileInfoWithDiskInfo(files.FileOptions{
-					Fs:         files.DefaultFs,
-					Path:       firstItem.Path,
-					Modify:     true,
-					Expand:     true,
-					ReadHeader: d.Server.TypeDetectionByHeader,
-					Content:    true,
-				}, mountedData)
-			} else {
-				file, err = files.NewFileInfo(files.FileOptions{
-					Fs:         files.DefaultFs,
-					Path:       firstItem.Path,
-					Modify:     true,
-					Expand:     true,
-					ReadHeader: d.Server.TypeDetectionByHeader,
-					Content:    true,
-				})
-			}
-			if err != nil {
-				klog.Error(err)
-				return
-			}
-
-			var nestedItems []*files.FileInfo
-			if file.Listing != nil {
-				nestedItems = append(nestedItems, file.Listing.Items...)
-			}
-			A = append(nestedItems, A[1:]...)
-		} else {
-			dataChan <- formatSSEvent(firstItem)
-
-			A = A[1:]
-		}
-
-		select {
-		case <-stopChan:
-			return
-		default:
-		}
-	}
-}
-
 func formatSSEvent(data interface{}) string {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return ""
 	}
 	return fmt.Sprintf("data: %s\n\n", jsonData)
-}
-
-func streamListingItems(w http.ResponseWriter, r *http.Request, listing *files.Listing, d *common.Data, mountedData []files.DiskInfo) {
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	stopChan := make(chan struct{})
-	dataChan := make(chan string)
-
-	go generateListingData(listing, stopChan, dataChan, d, mountedData)
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
-		return
-	}
-
-	for {
-		select {
-		case event, ok := <-dataChan:
-			if !ok {
-				return
-			}
-			_, err := w.Write([]byte(event))
-			if err != nil {
-				klog.Error(err)
-				return
-			}
-			flusher.Flush()
-
-		case <-r.Context().Done():
-			close(stopChan)
-			return
-		}
-	}
 }
 
 func ResourceDriveGetInfo(path string, r *http.Request, d *common.Data) (*files.FileInfo, int, error) {
