@@ -212,7 +212,7 @@ user created with the credentials from options "username" and "password".`,
 		}
 
 		// step7: build driver handler
-		driverHandler := &drivers.DriverHandler{}
+		drivers.NewDriverHandler()
 
 		// stop8: init appdata
 		config := ctrl.GetConfigOrDie()
@@ -224,7 +224,7 @@ user created with the credentials from options "username" and "password".`,
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 		go cleanupHandler(listener, sigc)
 
-		handler, err := fbhttp.NewHandler(imgSvc, fileCache, driverHandler, server)
+		handler, err := fbhttp.NewHandler(imgSvc, fileCache, server)
 		checkErr(err)
 
 		defer listener.Close()

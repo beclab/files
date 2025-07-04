@@ -32,9 +32,6 @@ type ResourceService interface {
 	PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc
 	BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc
 
-	// raw handler
-	RawHandler(fileParam *models.FileParam) handleFunc
-
 	// paste funcs
 	PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
 	PasteDirFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
@@ -369,39 +366,6 @@ func (rs *BaseResourceService) BatchDeleteHandler(fileCache fileutils.FileCache,
 			return http.StatusInternalServerError, fmt.Errorf("delete %s failed", strings.Join(failDirents, "; "))
 		}
 		return common.RenderJSON(w, r, map[string]interface{}{"msg": "all dirents deleted"})
-	}
-}
-
-func (rs *BaseResourceService) RawHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		uri, err := fileParam.GetResourceUri()
-		if err != nil {
-			klog.Errorln(err)
-			return http.StatusBadRequest, err
-		}
-		urlPath := uri + fileParam.Path
-
-		file, err := files.NewFileInfo(files.FileOptions{
-			Fs:         files.DefaultFs,
-			Path:       strings.TrimPrefix(urlPath, "/data"),
-			Modify:     true,
-			Expand:     false,
-			ReadHeader: d.Server.TypeDetectionByHeader,
-		})
-		if err != nil {
-			return common.ErrToStatus(err), err
-		}
-
-		if files.IsNamedPipe(file.Mode) {
-			SetContentDisposition(w, r, file)
-			return 0, nil
-		}
-
-		if !file.IsDir {
-			return RawFileHandler(w, r, file)
-		}
-
-		return RawDirHandler(w, r, d, file)
 	}
 }
 

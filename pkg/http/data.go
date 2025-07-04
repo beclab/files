@@ -2,14 +2,8 @@ package http
 
 import (
 	"encoding/json"
-	"files/pkg/constant"
-	"files/pkg/drivers"
 	"files/pkg/drives"
-	"files/pkg/models"
 	"files/pkg/rpc"
-	"files/pkg/utils"
-	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,134 +16,10 @@ import (
 	"github.com/tomasen/realip"
 
 	"files/pkg/common"
-	"files/pkg/drivers/base"
 	"files/pkg/settings"
 )
 
-type fileHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error)
-type rawHandlerFunc func(handler base.Execute, fileParam *models.FileParam) (io.ReadCloser, error)
-
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
-
-func rawHandle(fn rawHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var path = strings.TrimPrefix(r.URL.Path, prefix)
-
-		if path == "" {
-			http.Error(w, "path invalid", http.StatusBadRequest)
-			return
-		}
-		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
-		if owner == "" {
-			http.Error(w, "user not found", http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
-
-		queryParam := models.CreateQueryParam(owner, r, false, false)
-
-		fileParam, err := models.CreateFileParam(owner, path)
-		if err != nil {
-			klog.Errorf("file param invalid: %v, owner: %s", err, owner)
-			http.Error(w, "file param invalid found", http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("srcType: %s, url: %s, param: %s, header: %+v", fileParam.FileType, r.URL.Path, fileParam.Json(), r.Header)
-		var handlerParam = &base.HandlerParam{
-			Ctx:            r.Context(),
-			Owner:          owner,
-			ResponseWriter: w,
-			Request:        r,
-		}
-
-		var handler = driverHandler.NewFileHandler(fileParam.FileType, handlerParam)
-		if handler == nil {
-			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
-			return
-		}
-
-		reader, err := fn(handler, fileParam)
-		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"code":    1,
-				"message": err.Error(),
-			})
-			return
-		}
-
-		_ = reader
-
-		if queryParam.RawInline == "true" {
-
-		} else {
-			// w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", filename, safeFilename))
-			// w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
-			// w.Header().Set("Content-Length", response.Header.Get("Content-Length"))
-
-			// _, err = io.Copy(w, reader)
-			// if err != nil {
-			// 	json.NewEncoder(w).Encode(map[string]interface{}{
-			// 		"code":    1,
-			// 		"message": err.Error(),
-			// 	})
-			// 	return
-			// }
-		}
-
-		return
-
-	})
-
-	return handler
-}
-
-func fileHandle(fn fileHandlerFunc, prefix string, driverHandler *drivers.DriverHandler, server *settings.Server) http.Handler {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		contextArg, err := models.NewHttpContextArgs(r, prefix, false, false)
-		if err != nil {
-			klog.Errorf("context args error: %v, path: %s", err, r.URL.Path)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("Incoming Path: %s, user: %s, method: %s, fileType: %s, args: %s",
-			contextArg.RequestPath, contextArg.FileParam.Owner, r.Method, contextArg.FileParam.FileType, utils.ToJson(contextArg))
-
-		var handlerParam = &base.HandlerParam{
-			Ctx:            r.Context(),
-			Owner:          contextArg.FileParam.Owner,
-			ResponseWriter: w,
-			Request:        r,
-			Data: &common.Data{
-				Server: server,
-			},
-		}
-
-		var handler = driverHandler.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
-		if handler == nil {
-			http.Error(w, fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType), http.StatusBadRequest)
-			return
-		}
-
-		res, err := fn(handler, contextArg)
-		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"code":    1,
-				"message": err.Error(),
-			})
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(res)
-		return
-	})
-
-	return handler
-}
 
 func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
