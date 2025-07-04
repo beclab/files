@@ -2,16 +2,18 @@ package base
 
 import (
 	"files/pkg/models"
-	"io"
 )
 
 type Execute interface {
 	List(contextArgs *models.HttpContextArgs) ([]byte, error)
-	Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error)
-	Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error)
-	Stream(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
+
+	Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error)
+
+	Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
 
 	Create(contextArgs *models.HttpContextArgs) ([]byte, error)
+
+	Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error)
 	// Rename(fileParam *models.FileParam) (int, error)
 
 }

@@ -164,7 +164,8 @@ func resourcePasteHandler(fileCache fileutils.FileCache) handleFunc {
 		_, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, srcFileParam, w, r)
 
 		taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-		task := pool.NewTask(taskID, strings.TrimPrefix(src, "/data"), strings.TrimPrefix(dst, "/data"), detailSrcType, detailDstType, action, drives.TaskCancellable(srcType, dstType, same), drives.IsThridPartyDrives(srcType), isDir, fileType, filename)
+		//task := pool.NewTask(taskID, strings.TrimPrefix(src, "/data"), strings.TrimPrefix(dst, "/data"), detailSrcType, detailDstType, action, drives.TaskCancellable(srcType, dstType, same), drives.IsThridPartyDrives(srcType), isDir, fileType, filename)
+		task := pool.NewTask(taskID, source, destination, strings.TrimPrefix(src, "/data"), strings.TrimPrefix(dst, "/data"), detailSrcType, detailDstType, action, drives.TaskCancellable(srcType, dstType, same), drives.IsThridPartyDrives(srcType), isDir, fileType, filename)
 		pool.TaskManager.Store(taskID, task)
 
 		pool.WorkerPool.Submit(func() {

@@ -4,69 +4,57 @@ package http
 import (
 	"bytes"
 	"encoding/json"
-	"files/pkg/constant"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"fmt"
 	"net/http"
-	"strings"
-	"time"
 
 	"k8s.io/klog/v2"
 )
 
-type previewHandlerFunc func(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error)
-
-func previewHandler(handler base.Execute, fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
-	return handler.Preview(fileParam, queryParam)
+// wrapperPreviewArgs
+var wrapperPreviewArgs = func(fn previewHandlerFunc, prefix string) http.Handler {
+	return previewHandle(fn, prefix)
 }
 
-func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
+type previewHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error)
+
+func previewHandler(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
+	return handler.Preview(contextArgs)
+}
+
+func previewHandle(fn previewHandlerFunc, prefix string) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var enableThumbnails = true
-		var resizePreview = true
 
-		var path = strings.TrimPrefix(r.URL.Path, prefix)
-
-		if path == "" {
-			http.Error(w, "path invalid", http.StatusBadRequest)
-			return
-		}
-
-		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
-		if owner == "" {
-			http.Error(w, "user not found", http.StatusBadRequest)
-			return
-		}
-
-		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
-
-		queryParam := models.CreateQueryParam(owner, r, enableThumbnails, resizePreview)
-
-		fileParam, err := models.CreateFileParam(owner, path)
+		contextArg, err := models.NewHttpContextArgs(r, prefix, true, true)
 		if err != nil {
-			klog.Errorf("file param error: %v, owner: %s", err, owner)
-			http.Error(w, fmt.Sprintf("file param error: %v"), http.StatusBadRequest)
+			klog.Errorf("context args error: %v, path: %s", err, r.URL.Path)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		klog.Infof("srcType: %s, url: %s, param: %s, query: %s", fileParam.FileType, r.URL.Path, fileParam.Json(), queryParam.Json())
+		klog.Infof("[Incoming] preview, user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, r.Method, utils.ToJson(contextArg))
+
 		var handlerParam = &base.HandlerParam{
 			Ctx:            r.Context(),
-			Owner:          owner,
+			Owner:          contextArg.FileParam.Owner,
 			ResponseWriter: w,
 			Request:        r,
 		}
 
-		var handler = driverHandler.NewFileHandler(fileParam.FileType, handlerParam)
+		var fileType = contextArg.FileParam.FileType
+		var handler = drivers.Adaptor.NewFileHandler(r.Context(), fileType, handlerParam)
+
 		if handler == nil {
-			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileType), http.StatusBadRequest)
 			return
 		}
 
-		fileData, err := fn(handler, fileParam, queryParam)
+		fileData, err := fn(handler, contextArg)
 		if err != nil {
+			klog.Errorf("preview error: %v, user: %s, url: %s", err, contextArg.FileParam.Owner, r.URL.Path)
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
@@ -75,11 +63,9 @@ func previewHandle(fn previewHandlerFunc, prefix string, driverHandler *drivers.
 			return
 		}
 
-		if queryParam.RawInline == "true" {
-			w.Header().Set("Content-Disposition", "inline")
-		}
-		w.Header().Set("Cache-Control", "private")
-		http.ServeContent(w, r, "", time.Now(), bytes.NewReader(fileData.Data))
+		w.Header().Set("Content-Disposition", "inline")
+		// w.Header().Set("Cache-Control", "private")
+		http.ServeContent(w, r, fileData.FileName, fileData.FileModified, bytes.NewReader(fileData.Data))
 		return
 	})
 

@@ -708,21 +708,6 @@ func (rc *CloudDriveResourceService) BatchDeleteHandler(fileCache fileutils.File
 	}
 }
 
-func (rs *CloudDriveResourceService) RawHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		bflName := r.Header.Get("X-Bfl-User")
-		metaData, err := GetCloudDriveMetadataFileParam(fileParam, w, r)
-		if err != nil {
-			klog.Error(err)
-			return common.ErrToStatus(err), err
-		}
-		if metaData.IsDir {
-			return http.StatusNotImplemented, fmt.Errorf("doesn't support directory download for cloud drive now")
-		}
-		return RawFileHandlerCloudDriveFileParam(fileParam, w, r, metaData, bflName)
-	}
-}
-
 func (rc *CloudDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
 	fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	select {
@@ -1403,50 +1388,6 @@ func createPreviewCloudDrive(w http.ResponseWriter, r *http.Request, src string,
 	}()
 
 	return buf.Bytes(), nil
-}
-
-func RawFileHandlerCloudDriveFileParam(fileParam *models.FileParam, w http.ResponseWriter, r *http.Request, file *model.CloudResponseData, bflName string) (int, error) {
-	var err error
-	diskSize := file.Size
-	_, err = CheckBufferDiskSpace(diskSize)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	bufferFilePath, err := GenerateBufferFolder(file.Path, bflName)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	bufferPath := filepath.Join(bufferFilePath, file.Name)
-	klog.Infoln("Buffer file path: ", bufferFilePath)
-	klog.Infoln("Buffer path: ", bufferPath)
-
-	defer func() {
-		klog.Infoln("Begin to remove buffer")
-		RemoveDiskBuffer(nil, bufferPath, SrcTypeCloud)
-	}()
-
-	err = MakeDiskBuffer(bufferPath, diskSize, true)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	err = CloudDriveFileToBufferFileParam(nil, fileParam, bufferFilePath, w, r, 0, 0)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	fd, err := os.Open(bufferPath)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	defer fd.Close()
-
-	setContentDispositionCloudDrive(w, r, file.Name)
-
-	w.Header().Set("Cache-Control", "private")
-	http.ServeContent(w, r, file.Name, ParseTimeString(file.Modified), fd)
-
-	return 0, nil
 }
 
 func RawFileHandlerCloudDrive(src string, w http.ResponseWriter, r *http.Request, file *model.CloudResponseData, bflName string) (int, error) {
