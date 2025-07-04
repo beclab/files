@@ -1,6 +1,7 @@
 package posix
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/constant"
@@ -12,7 +13,6 @@ import (
 	"files/pkg/preview"
 	"files/pkg/utils"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -29,14 +29,22 @@ var (
 )
 
 type PosixStorage struct {
-	Handler *base.HandlerParam
+	ctx     context.Context
+	handler *base.HandlerParam
+}
+
+func NewPosixStorage(ctx context.Context, handler *base.HandlerParam) *PosixStorage {
+	return &PosixStorage{
+		ctx:     ctx,
+		handler: handler,
+	}
 }
 
 func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	var owner = s.Handler.Owner
+	var owner = s.handler.Owner
 	var fileParam = contextArgs.FileParam
 
-	klog.Infof("Posix list, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Posix list, user: %s, args: %s", owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
@@ -62,10 +70,12 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	return res, nil
 }
 
-func (s *PosixStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
-	var owner = s.Handler.Owner
+func (s *PosixStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
+	var owner = s.handler.Owner
+	var fileParam = contextArgs.FileParam
+	var queryParam = contextArgs.QueryParam
 
-	klog.Infof("Posix preview, owner: %s, param: %s, query: %s", owner, fileParam.Json(), queryParam.Json())
+	klog.Infof("Posix preview, user: %s, args: %s", owner, utils.ToJson(contextArgs))
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
@@ -80,31 +90,39 @@ func (s *PosixStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 	}
 }
 
-func (s *PosixStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error) {
-	var owner = s.Handler.Owner
+func (s *PosixStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
+	var user = s.handler.Owner
+	var fileParam = contextArgs.FileParam
 
-	klog.Infof("Posix raw, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Posix raw, user: %s, args: %s", user, utils.ToJson(contextArgs))
 
 	fileData, err := s.getFiles(fileParam, NoExpand, NoContent)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if fileData.IsDir {
-		return nil, nil, fmt.Errorf("not supported currently")
+		return nil, fmt.Errorf("not supported currently")
 	}
+
+	klog.Infof("Posix raw, file: %s", utils.ToJson(fileData))
 
 	r, err := getRawFile(fileData)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return r, nil, nil
+
+	return &models.RawHandlerResponse{
+		FileName:     fileData.Name,
+		FileModified: fileData.ModTime,
+		Reader:       r,
+	}, nil
 }
 
-func (s *PosixStorage) Stream(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	var owner = s.Handler.Owner
+func (s *PosixStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+	var owner = s.handler.Owner
 
-	klog.Infof("Posix stream, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Posix tree, user: %s, args: %s", owner, fileParam.Json())
 
 	var resourceUri, err = fileParam.GetResourceUri()
 	if err != nil {

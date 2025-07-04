@@ -1,7 +1,6 @@
 package http
 
 import (
-	"files/pkg/drivers"
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"files/pkg/rpc"
@@ -18,7 +17,6 @@ import (
 func NewHandler(
 	imgSvc preview.ImgService,
 	fileCache fileutils.FileCache,
-	driverHandler *drivers.DriverHandler,
 	server *settings.Server,
 ) (http.Handler, error) {
 	server.Clean()
@@ -46,20 +44,9 @@ func NewHandler(
 		return handle(fn, prefix, server)
 	}
 
-	wrapWithStreamParm := func(fn streamHandlerFunc, prefix string) http.Handler {
-		return streamHandle(fn, prefix, driverHandler)
-	}
-
 	wrapWithParms := func(fn fileHandlerFunc, prefix string) http.Handler {
-		return fileHandle(fn, prefix, driverHandler, server)
+		return fileHandle(fn, prefix, server)
 	}
-
-	wrapWithPreviewParms := func(fn previewHandlerFunc, prefix string) http.Handler {
-		return previewHandle(fn, prefix, driverHandler)
-	}
-
-	_ = wrapWithParms
-	_ = wrapWithPreviewParms
 
 	r.HandleFunc("/health", healthHandler)
 
@@ -75,10 +62,13 @@ func NewHandler(
 	api.PathPrefix("/repos").Handler(common(reposGetHandler)).Methods("GET")
 	api.PathPrefix("/repos").Handler(common(createRepoHandler)).Methods("POST")
 
-	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET")                 // list files
-	api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST")              // create
-	api.PathPrefix("/stream").Handler(wrapWithStreamParm(streamHandler, "/api/stream/")).Methods("GET")                // walk through files
-	api.PathPrefix("/preview/{path:.*}").Handler(wrapWithPreviewParms(previewHandler, "/api/preview/")).Methods("GET") // preview image
+	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET")               // list files
+	api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST")            // create
+	api.PathPrefix("/tree").Handler(wrapWithTreeParm(treeHandler, "/api/tree/")).Methods("GET")                      // walk through files
+	api.PathPrefix("/preview/{path:.*}").Handler(wrapperPreviewArgs(previewHandler, "/api/preview/")).Methods("GET") // preview image
+	api.PathPrefix("/raw").Handler(wrapperRawArgs(rawHandler, "/api/raw")).Methods("GET")
+
+	// ~
 
 	api.PathPrefix("/resources").Handler(monkey(batchDeleteHandler(fileCache), "/api/resources")).Methods("DELETE") // recons done
 
@@ -100,7 +90,6 @@ func NewHandler(
 	api.PathPrefix("/share/share_link").Handler(monkey(shareLinkPostHandler, "/api/share/share_link")).Methods("POST")     // TODO: not used now, will be rewrite
 	api.PathPrefix("/share/share_link").Handler(monkey(shareLinkDeleteHandler, "/api/share/share_link")).Methods("DELETE") // TODO: not used now, will be rewrite
 
-	api.PathPrefix("/raw").Handler(monkey(rawHandler, "/api/raw")).Methods("GET")                         // recons done
 	api.PathPrefix("/md5").Handler(monkey(md5Handler, "/api/md5")).Methods("GET")                         // recons done
 	api.PathPrefix("/permission").Handler(monkey(permissionGetHandler, "/api/permission")).Methods("GET") // recons done
 	api.PathPrefix("/permission").Handler(monkey(permissionPutHandler, "/api/permission")).Methods("PUT") // recons done

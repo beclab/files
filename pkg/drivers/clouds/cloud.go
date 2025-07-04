@@ -1,6 +1,7 @@
 package clouds
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/constant"
@@ -11,7 +12,7 @@ import (
 	"files/pkg/previewer"
 	"files/pkg/utils"
 	"fmt"
-	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -19,14 +20,23 @@ import (
 )
 
 type CloudStorage struct {
-	Handler *base.HandlerParam
-	Service base.CloudServiceInterface
+	ctx     context.Context
+	handler *base.HandlerParam
+	service base.CloudServiceInterface
+}
+
+func NewCloudStorage(ctx context.Context, handlerParam *base.HandlerParam) *CloudStorage {
+	return &CloudStorage{
+		ctx:     ctx,
+		handler: handlerParam,
+		service: NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
+	}
 }
 
 func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
 
-	klog.Infof("Cloud list, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+	klog.Infof("Cloud list, owner: %s, param: %s", s.handler.Owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam)
 	if err != nil {
@@ -44,10 +54,12 @@ func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	return utils.ToBytes(fileData), nil
 }
 
-func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
-	var owner = s.Handler.Owner
+func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
+	var owner = s.handler.Owner
+	var fileParam = contextArgs.FileParam
+	var queryParam = contextArgs.QueryParam
 
-	klog.Infof("Cloud preview, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Cloud preview, user: %s, gsar: %s", owner, utils.ToJson(contextArgs))
 
 	var path = fileParam.Path
 	if strings.HasSuffix(path, "/") {
@@ -60,7 +72,7 @@ func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 		Path:  path,
 	}
 
-	res, err := s.Service.GetFileMetaData(data)
+	res, err := s.service.GetFileMetaData(data)
 	if err != nil {
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
@@ -93,12 +105,12 @@ func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 	if cachedData != nil {
 		return &models.PreviewHandlerResponse{
 			FileName:     fileMeta.Data.Name,
-			FileModified: fileMeta.Modified(),
+			FileModified: fileMeta.Data.Meta.ModifiedTime,
 			Data:         cachedData,
 		}, nil
 	}
 
-	fileTargetPath := CreateFileDownloadFolder(s.Handler.Owner, fileMeta.Data.Path)
+	fileTargetPath := CreateFileDownloadFolder(s.handler.Owner, fileMeta.Data.Path)
 
 	if !fileutils.FilePathExists(fileTargetPath) {
 		if err := fileutils.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
@@ -107,7 +119,7 @@ func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 		}
 	}
 
-	var downloader = NewDownloader(s.Handler.Ctx, s.Handler.Owner, s.Service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
+	var downloader = NewDownloader(s.handler.Ctx, s.handler.Owner, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
 	if err := downloader.download(); err != nil {
 		return nil, err
 	}
@@ -116,7 +128,7 @@ func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 
 	klog.Infof("Cloud preview, download success, file path: %s", imagePath)
 
-	imageData, err := previewer.OpenFile(s.Handler.Ctx, imagePath, queryParam.PreviewSize)
+	imageData, err := previewer.OpenFile(s.handler.Ctx, imagePath, queryParam.PreviewSize)
 	if err != nil {
 		return nil, err
 	}
@@ -129,17 +141,74 @@ func (s *CloudStorage) Preview(fileParam *models.FileParam, queryParam *models.Q
 
 	return &models.PreviewHandlerResponse{
 		FileName:     fileMeta.Data.Name,
-		FileModified: fileMeta.Modified(),
+		FileModified: fileMeta.Data.Meta.ModifiedTime,
 		Data:         imageData,
 	}, nil
 }
 
-func (s *CloudStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error) {
-	return nil, nil, nil
+func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
+	var fileParam = contextArgs.FileParam
+	var user = fileParam.Owner
+	var path = fileParam.Path
+
+	klog.Infof("Cloud raw, user: %s, path: %s, args: %s", user, path, utils.ToJson(contextArgs))
+
+	if strings.HasSuffix(path, "/") {
+		return nil, fmt.Errorf("not a file")
+	}
+
+	var data = &models.ListParam{
+		Drive: fileParam.FileType,
+		Name:  fileParam.Extend,
+		Path:  path,
+	}
+
+	res, err := s.service.GetFileMetaData(data)
+	if err != nil {
+		return nil, fmt.Errorf("service get file meta error: %v", err)
+	}
+
+	var fileMeta *models.CloudResponse
+	if err := json.Unmarshal(res, &fileMeta); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("Cloud raw, query: %s, file meta: %s", utils.ToJson(data), string(res))
+
+	if !fileMeta.IsSuccess() {
+		return nil, fmt.Errorf(fileMeta.FailMessage())
+	}
+
+	fileTargetPath := CreateFileDownloadFolder(user, fileMeta.Data.Path)
+
+	if !fileutils.FilePathExists(fileTargetPath) {
+		if err := fileutils.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
+			klog.Errorln(err)
+			return nil, err
+		}
+	}
+
+	var downloader = NewDownloader(s.handler.Ctx, s.handler.Owner, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
+	if err := downloader.download(); err != nil {
+		return nil, err
+	}
+
+	var downloadedFilePath = filepath.Join(fileTargetPath, fileMeta.Data.Name)
+
+	f, err := os.Open(downloadedFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.RawHandlerResponse{
+		Reader:       f,
+		FileName:     fileMeta.Data.Name,
+		FileModified: fileMeta.Data.Meta.ModifiedTime,
+	}, nil
 }
 
-func (s *CloudStorage) Stream(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	klog.Infof("Cloud stream, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+func (s *CloudStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+	klog.Infof("Cloud tree, owner: %s, param: %s", s.handler.Owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam)
 	if err != nil {
@@ -162,7 +231,7 @@ func (s *CloudStorage) Stream(fileParam *models.FileParam, stopChan chan struct{
 func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
-	klog.Infof("Cloud create, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+	klog.Infof("Cloud create, owner: %s, param: %s", s.handler.Owner, fileParam.Json())
 
 	var path = strings.TrimRight(fileParam.Path, "/")
 	var parts = strings.Split(path, "/")
@@ -190,7 +259,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Cloud create, service request param: %s", utils.ToJson(p))
 
-	res, err := s.Service.CreateFolder(p)
+	res, err := s.service.CreateFolder(p)
 	if err != nil {
 		klog.Errorf("Cloud create, error: %v, owner: %s, path: %s", err, owner, fileParam.Path)
 		return nil, err
@@ -220,10 +289,10 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 	streamFiles = append(streamFiles, files.Data...)
 
 	for len(streamFiles) > 0 {
-		klog.Infof("Cloud stream, files count: %d", len(streamFiles))
+		klog.Infof("Cloud tree, files count: %d", len(streamFiles))
 		firstItem := streamFiles[0]
-		klog.Infof("Cloud stream, firstItem Path: %s", firstItem.Path)
-		klog.Infof("Cloud stream, firstItem Name: %s", firstItem.Name)
+		klog.Infof("Cloud tree, firstItem Path: %s", firstItem.Path)
+		klog.Infof("Cloud tree, firstItem Name: %s", firstItem.Name)
 		var firstItemPath string
 		if fileParam.FileType == constant.GoogleDrive {
 			firstItemPath = firstItem.Meta.ID
@@ -267,7 +336,7 @@ func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListR
 		Path:  fileParam.Path,
 	}
 
-	res, err := s.Service.List(data)
+	res, err := s.service.List(data)
 	if err != nil {
 		return nil, fmt.Errorf("service list error: %v", err)
 	}
