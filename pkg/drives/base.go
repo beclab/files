@@ -268,6 +268,13 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileP
 		if err != nil {
 			return common.ErrToStatus(err), err
 		}
+
+		source := r.URL.Path
+		destination := filepath.Join(filepath.Dir(strings.TrimSuffix(source, "/")), dst)
+		if strings.HasSuffix(source, "/") {
+			destination += "/"
+		}
+
 		dst = filepath.Join(filepath.Dir(strings.TrimSuffix(src, "/")), dst)
 		if strings.HasSuffix(src, "/") {
 			dst += "/"
@@ -309,7 +316,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileP
 			isDir, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, fileParam, w, r)
 
 			taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-			task = pool.NewTask(taskID, src, dst, SrcTypeCache, SrcTypeCache, action, true, false, isDir, fileType, filename)
+			task = pool.NewTask(taskID, source, destination, src, dst, SrcTypeCache, SrcTypeCache, action, true, false, isDir, fileType, filename)
 			pool.TaskManager.Store(taskID, task)
 			pool.WorkerPool.Submit(func() {
 				klog.Infof("Task %s started", taskID)
@@ -350,6 +357,9 @@ func (rs *BaseResourceService) BatchDeleteHandler(fileCache fileutils.FileCache,
 			}
 
 			status, err := ResourceDriveDelete(fileCache, dirent, r.Context(), d)
+			if err != nil {
+				klog.Errorln(err)
+			}
 			if status != http.StatusOK || err != nil {
 				failDirents = append(failDirents, dirent)
 			}
