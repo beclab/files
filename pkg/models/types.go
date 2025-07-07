@@ -8,9 +8,10 @@ import (
 )
 
 type HttpContextArgs struct {
-	RequestPath string      `json:"urlPath"`
-	FileParam   *FileParam  `json:"fileParam"`
-	QueryParam  *QueryParam `json:"queryParam"`
+	RequestPath string             `json:"urlPath"`
+	FileParam   *FileParam         `json:"fileParam"`
+	QueryParam  *QueryParam        `json:"queryParam"`
+	DeleteParam *DeleteFileRequest `json:"-"`
 }
 
 func NewHttpContextArgs(r *http.Request, prefix string, enableThumbnails bool, resizePreview bool) (*HttpContextArgs, error) {

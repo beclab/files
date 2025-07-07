@@ -12,6 +12,7 @@ import (
 	"files/pkg/previewer"
 	"files/pkg/utils"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -277,6 +278,74 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	klog.Infof("Cloud create, success, result: %s, owner: %s, path: %s", string(res), owner, fileParam.Path)
+
+	return nil, nil
+}
+
+func (s *CloudStorage) Delete(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	var user = s.handler.Owner
+	var fileParam = contextArgs.FileParam
+	var deleteParam = contextArgs.DeleteParam
+
+	klog.Infof("Cloud delete, user: %s, param: %s", user, utils.ToJson(fileParam))
+
+	for _, dp := range deleteParam.Dirents {
+
+		var direntParam, err = models.CreateFileParam(user, dp)
+		if err != nil {
+			klog.Errorf("Cloud delete, user: %s, create delete param error: %v, path: %s", user, err, dp)
+			return nil, err
+		}
+
+		klog.Infof("Cloud delete, user: %s, dirent: %s", user, dp)
+		if direntParam.Path == "/" {
+			klog.Warningf("Cloud delete, user: %s, delete path %s invalid", user, direntParam.Path)
+			continue
+		}
+
+		dpd, err := url.PathUnescape(direntParam.Path)
+		if err != nil {
+			klog.Errorf("Cloud delete, path unescape error: %v, path: %s", direntParam.Path)
+			return nil, err
+		}
+
+		var p = dpd
+		if fileParam.FileType == constant.DropBox {
+			p = strings.TrimRight(p, "/")
+		} else if fileParam.FileType == constant.GoogleDrive {
+			p = strings.Trim(p, "/")
+		}
+
+		var data = &models.DeleteParam{
+			Drive: direntParam.FileType,
+			Name:  direntParam.Extend,
+			Path:  p,
+		}
+
+		res, err := s.service.Delete(data)
+		klog.Infof("Cloud delete, user: %s, service request result: %s", user, string(res))
+		if err != nil {
+			klog.Errorf("Cloud delete, delete files error: %v, user: %s", err, user)
+			return nil, err
+		}
+
+		var result *models.CloudResponse
+
+		if err := json.Unmarshal(res, &result); err != nil {
+			klog.Errorf("Cloud delete, unmarshal error: %v, data: %s, user: %s", err, string(res), user)
+			return nil, err
+		}
+
+		if !result.IsSuccess() {
+			var fm = result.FailMessage()
+			if strings.Contains(fm, "path_lookup/not_found") || strings.EqualFold(fm, "get file meta fail") || strings.Contains(fm, "File not found") {
+				continue
+			}
+			return nil, fmt.Errorf(result.FailMessage())
+		}
+
+		klog.Infof("Cloud delete, delete success, user: %s, file: %s, isDir: %v, path: %s", user, result.Data.Name, result.Data.IsDir, result.Data.Path)
+	}
 
 	return nil, nil
 }

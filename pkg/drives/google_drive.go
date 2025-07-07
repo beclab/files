@@ -748,24 +748,6 @@ func (rc *GoogleDriveResourceService) PatchHandler(fileCache fileutils.FileCache
 	}
 }
 
-func (rc *GoogleDriveResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		failDirents := []string{}
-		for _, fileParam := range fileParams {
-			_, status, err := ResourceDeleteGoogleFileParam(fileCache, fileParam, w, r, true)
-			if (status != http.StatusOK && status != 0) || err != nil {
-				klog.Errorf("delete %s failed with status %d and err %v", fileParam.Path, status, err)
-				failDirents = append(failDirents, fileParam.Path)
-				continue
-			}
-		}
-		if len(failDirents) > 0 {
-			return http.StatusInternalServerError, fmt.Errorf("delete %s failed", strings.Join(failDirents, "; "))
-		}
-		return common.RenderJSON(w, r, map[string]interface{}{"msg": "all dirents deleted"})
-	}
-}
-
 func (rc *GoogleDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
 	fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	select {

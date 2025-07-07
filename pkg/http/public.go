@@ -82,6 +82,8 @@ func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var repoName = contextQueryArgs.RepoName
 	var url = "http://127.0.0.1:80/seahub/api2/repos/?from=web"
 
+	klog.Infof("Repo create repo, user: %s, name: %s", owner, repoName)
+
 	if repoName == "" {
 		return nil, errors.New("repo name is empty")
 	}
@@ -102,7 +104,7 @@ func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 		return nil, err
 	}
 
-	klog.Infof("repo create new one success, name: %s, result: %s", repoName, string(res))
+	klog.Infof("Repo create success, user: %s, name: %s, result: %s", owner, repoName, string(res))
 
 	return nil, nil
 }

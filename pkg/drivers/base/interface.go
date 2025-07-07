@@ -13,6 +13,8 @@ type Execute interface {
 
 	Create(contextArgs *models.HttpContextArgs) ([]byte, error)
 
+	Delete(contextArgs *models.HttpContextArgs) ([]byte, error)
+
 	Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error)
 	// Rename(fileParam *models.FileParam) (int, error)
 

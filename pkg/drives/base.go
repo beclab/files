@@ -30,7 +30,6 @@ type ResourceService interface {
 	DeleteHandler(fileCache fileutils.FileCache) handleFunc // not used now
 	PutHandler(fileParam *models.FileParam) handleFunc
 	PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc
-	BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc
 
 	// paste funcs
 	PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
@@ -333,39 +332,6 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileP
 
 		err = common.PatchAction(nil, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 		return common.ErrToStatus(err), err
-	}
-}
-
-func (rs *BaseResourceService) BatchDeleteHandler(fileCache fileutils.FileCache, fileParams []*models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		failDirents := []string{}
-		for _, fileParam := range fileParams {
-			uri, err := fileParam.GetResourceUri()
-			if err != nil {
-				klog.Errorln(err)
-				failDirents = append(failDirents, fileParam.Path)
-			}
-
-			dirent := strings.TrimPrefix(uri+fileParam.Path, "/data")
-			klog.Infoln("~~~Debug log: dirent:", dirent)
-			if fileParam.Path == "/" {
-				failDirents = append(failDirents, dirent)
-				continue
-			}
-
-			status, err := ResourceDriveDelete(fileCache, dirent, r.Context(), d)
-			if err != nil {
-				klog.Errorln(err)
-			}
-			if status != http.StatusOK || err != nil {
-				failDirents = append(failDirents, dirent)
-			}
-		}
-
-		if len(failDirents) > 0 {
-			return http.StatusInternalServerError, fmt.Errorf("delete %s failed", strings.Join(failDirents, "; "))
-		}
-		return common.RenderJSON(w, r, map[string]interface{}{"msg": "all dirents deleted"})
 	}
 }
 

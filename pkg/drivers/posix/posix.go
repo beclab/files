@@ -164,6 +164,53 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	return nil, nil
 }
 
+func (s *PosixStorage) Delete(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	var user = s.handler.Owner
+	var err error
+
+	if contextArgs.DeleteParam == nil || contextArgs.DeleteParam.Dirents == nil || len(contextArgs.DeleteParam.Dirents) == 0 {
+		return nil, nil
+	}
+
+	for _, deletePath := range contextArgs.DeleteParam.Dirents {
+		var deleteParam *models.FileParam
+		var fileData *files.FileInfo
+
+		if deletePath == "/" {
+			klog.Warningf("Posix delete, user: %s, path: %s, path invalid", user, deletePath)
+			continue
+		}
+		deleteParam, err = models.CreateFileParam(user, deletePath)
+		if err != nil {
+			klog.Errorf("Posix delete, user: %s, delete path: %s, error: %s", user, deletePath, err)
+			break
+		}
+
+		klog.Infof("Posix delete, user: %s, file param: %s", user, utils.ToJson(deleteParam))
+
+		fileData, err = s.getFiles(deleteParam, Expand, NoContent)
+		if err != nil {
+			klog.Errorf("Posix delete, get file data error: %s, user: %s, path: %s", err, user, deletePath)
+			if fileData == nil {
+				err = fmt.Errorf("no such file or directory: %s", deletePath)
+				break
+			}
+			break
+		}
+
+		if err = fileData.Fs.RemoveAll(deleteParam.Path); err != nil {
+			klog.Errorf("Posix delete, remove path error: %v, user: %s, path: %s", err, user, deleteParam.Path)
+			break
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
+
 func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FileParam, listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string) {
 	defer close(dataChan)
 
