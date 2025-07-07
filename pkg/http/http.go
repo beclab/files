@@ -44,10 +44,6 @@ func NewHandler(
 		return handle(fn, prefix, server)
 	}
 
-	wrapWithParms := func(fn fileHandlerFunc, prefix string) http.Handler {
-		return fileHandle(fn, prefix, server)
-	}
-
 	r.HandleFunc("/health", healthHandler)
 
 	uploader := r.PathPrefix("/upload").Subrouter()
@@ -62,15 +58,16 @@ func NewHandler(
 	api.PathPrefix("/repos").Handler(common(reposGetHandler)).Methods("GET")
 	api.PathPrefix("/repos").Handler(common(createRepoHandler)).Methods("POST")
 
-	api.PathPrefix("/resources").Handler(wrapWithParms(listHandler, "/api/resources/")).Methods("GET")               // list files
-	api.PathPrefix("/resources").Handler(wrapWithParms(createHandler, "/api/resources/")).Methods("POST")            // create
+	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(listHandler, "/api/resources/")).Methods("GET")    // list files
+	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(createHandler, "/api/resources/")).Methods("POST") // create
+
+	api.PathPrefix("/resources").Handler(wrapperFilesDeleteArgs(deleteHandler, "/api/resources/")).Methods("DELETE") // delete files
+
 	api.PathPrefix("/tree").Handler(wrapWithTreeParm(treeHandler, "/api/tree/")).Methods("GET")                      // walk through files
 	api.PathPrefix("/preview/{path:.*}").Handler(wrapperPreviewArgs(previewHandler, "/api/preview/")).Methods("GET") // preview image
 	api.PathPrefix("/raw").Handler(wrapperRawArgs(rawHandler, "/api/raw")).Methods("GET")
 
 	// ~
-
-	api.PathPrefix("/resources").Handler(monkey(batchDeleteHandler(fileCache), "/api/resources")).Methods("DELETE") // recons done
 
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT")                // edit txt // recons done
 	api.PathPrefix("/resources").Handler(monkey(resourcePatchHandler(fileCache), "/api/resources")).Methods("PATCH") // todo rename // recons done
