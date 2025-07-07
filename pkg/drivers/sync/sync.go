@@ -1,24 +1,27 @@
 package sync
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/drivers/base"
 	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"k8s.io/klog/v2"
 )
 
 type SyncStorage struct {
-	Handler *base.HandlerParam
-	Service *Service
+	ctx     context.Context
+	handler *base.HandlerParam
+	service *Service
 }
 
 type Files struct {
@@ -46,8 +49,16 @@ type File struct {
 	Type          string `json:"type"`
 }
 
+func NewSyncStorage(ctx context.Context, handler *base.HandlerParam) *SyncStorage {
+	return &SyncStorage{
+		ctx:     ctx,
+		handler: handler,
+		service: NewService(handler),
+	}
+}
+
 func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	var owner = s.Handler.Owner
+	var owner = s.handler.Owner
 	var fileParam = contextArgs.FileParam
 
 	klog.Infof("Sync list, owner: %s, param: %s", owner, fileParam.Json())
@@ -60,10 +71,18 @@ func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) 
 	return utils.ToBytes(filesData), nil
 }
 
-func (s *SyncStorage) Preview(fileParam *models.FileParam, queryParam *models.QueryParam) (*models.PreviewHandlerResponse, error) {
-	klog.Infof("Sync preview, owner: %s, param: %s", s.Handler.Owner, fileParam.Json())
+func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
+	klog.Infof("Sync preview, user: %s, args: %s", s.handler.Owner, utils.ToJson(contextArgs))
+	var fileParam = contextArgs.FileParam
+	var queryParam = contextArgs.QueryParam
 	var seahubUrl string
 	var previewSize string
+
+	var parts = strings.Split(fileParam.Path, "/")
+	var fileName = parts[len(parts)-1]
+	if fileName == "" {
+		return nil, fmt.Errorf("invalid path")
+	}
 
 	var size = queryParam.PreviewSize
 	if size != "big" {
@@ -76,25 +95,28 @@ func (s *SyncStorage) Preview(fileParam *models.FileParam, queryParam *models.Qu
 	}
 	seahubUrl = "http://127.0.0.1:80/seahub/thumbnail/" + fileParam.Extend + previewSize + fileParam.Path
 
-	klog.Infof("SYNC preview, owner: %s, url: %s", s.Handler.Owner, seahubUrl)
+	klog.Infof("SYNC preview, user: %s, url: %s", s.handler.Owner, seahubUrl)
 
-	res, err := s.Service.Get(seahubUrl, http.MethodGet, nil)
+	res, err := s.service.Get(seahubUrl, http.MethodGet, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	return &models.PreviewHandlerResponse{
-		Data: res,
+		FileName:     fileName,
+		FileModified: time.Time{},
+		Data:         res,
 	}, nil
 }
 
-func (s *SyncStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryParam) (io.ReadCloser, map[string]string, error) {
-	var owner = s.Handler.Owner
+func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
+	var owner = s.handler.Owner
+	var fileParam = contextArgs.FileParam
 
-	klog.Infof("Sync raw, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Sync raw, user: %s, param: %s", owner, fileParam.Json())
 	fileName, ok := fileParam.IsFile()
 	if !ok {
-		return nil, nil, fmt.Errorf("not a file")
+		return nil, fmt.Errorf("not a file")
 	}
 	safeFilename := url.QueryEscape(fileName)
 	safeFilename = strings.ReplaceAll(safeFilename, "+", "%20")
@@ -102,30 +124,24 @@ func (s *SyncStorage) Raw(fileParam *models.FileParam, queryParam *models.QueryP
 	dlUrl := "http://127.0.0.1:80/seahub/lib/" + fileParam.Extend + "/file" + common.EscapeAndJoin(fileParam.Path, "/") + "/" + "?dl=1"
 	klog.Infof("redirect url: %s", dlUrl)
 
-	request, err := http.NewRequest("GET", dlUrl, nil)
+	res, err := s.service.Get(dlUrl, http.MethodGet, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	client := &http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return nil, nil, err
-	}
+	reader := bytes.NewReader(res)
 
-	var header = make(map[string]string)
-	header["contentType"] = response.Header.Get("Content-Type")
-	header["contentLength"] = response.Header.Get("Content-Length")
-	header["fileName"] = fileName
-	header["safeFileName"] = safeFilename
-
-	return response.Body, header, nil
+	return &models.RawHandlerResponse{
+		Reader:       reader,
+		FileName:     fileName,
+		FileModified: time.Time{},
+	}, nil
 }
 
-func (s *SyncStorage) Stream(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	var owner = s.Handler.Owner
+func (s *SyncStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+	var owner = s.handler.Owner
 
-	klog.Infof("SYNC stream, owner: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("SYNC tree, owner: %s, param: %s", owner, fileParam.Json())
 
 	filesData, err := s.getFiles(fileParam)
 	if err != nil {
@@ -138,7 +154,7 @@ func (s *SyncStorage) Stream(fileParam *models.FileParam, stopChan chan struct{}
 }
 
 func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	var owner = s.Handler.Owner
+	var owner = s.handler.Owner
 	var fileParam = contextArgs.FileParam
 	klog.Infof("Sync create, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
 
@@ -152,7 +168,7 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 		}
 
 		var url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder) + "&with_thumbnail=true"
-		_, err := s.Service.Get(url, http.MethodGet, nil)
+		_, err := s.service.Get(url, http.MethodGet, nil)
 		if err == nil {
 			continue
 		}
@@ -160,7 +176,7 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 		url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder)
 		data := make(map[string]string)
 		data["operation"] = "mkdir"
-		res, err := s.Service.Get(url, http.MethodPost, []byte(utils.ToJson(data)))
+		res, err := s.service.Get(url, http.MethodPost, []byte(utils.ToJson(data)))
 		if err != nil {
 			klog.Errorf("Sync create error: %v, path: %s", err, subFolder)
 			return nil, err
@@ -217,7 +233,7 @@ func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData
 func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 	getUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(fileParam.Path) + "&with_thumbnail=true"
 
-	res, err := s.Service.Get(getUrl, http.MethodGet, nil)
+	res, err := s.service.Get(getUrl, http.MethodGet, nil)
 	if err != nil {
 		return nil, err
 	}

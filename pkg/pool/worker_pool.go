@@ -20,8 +20,10 @@ var (
 
 type Task struct {
 	ID             string             `json:"id"`
-	Source         string             `json:"source"`
-	Dest           string             `json:"dest"`
+	Source         string             `json:"-"`
+	Dest           string             `json:"-"`
+	OriginSource   string             `json:"source"`
+	OriginDest     string             `json:"dest"`
 	SrcType        string             `json:"src_type"` // detailed, only for task_info
 	DstType        string             `json:"dst_type"` // detailed, only for task_info
 	Action         string             `json:"action"`
@@ -53,8 +55,8 @@ type Task struct {
 func SerializeTask(t *Task, logView bool) map[string]interface{} {
 	m := map[string]interface{}{
 		"id":               t.ID,
-		"source":           t.Source,
-		"dest":             t.Dest,
+		"source":           t.OriginSource,
+		"dest":             t.OriginDest,
 		"src_type":         t.SrcType,
 		"dst_type":         t.DstType,
 		"action":           t.Action,
@@ -87,15 +89,17 @@ type FormattedTask struct {
 
 func (ft FormattedTask) String() string {
 	return fmt.Sprintf("ID: %s, Source: %s, Dest: %s, SrcType: %s, DstType: %s, Action: %s, Cancellable: %v, IsDir: %v, FileType: %s, Filename: %s, DstFilename: %s, Status: %s, Progress: %d, TotalFileSize: %d, Transferred: %d, Log: %v, FailedReason: %s, RelationTaskID: %s, RelationNode: %s",
-		ft.ID, ft.Source, ft.Dest, ft.SrcType, ft.DstType, ft.Action, ft.Cancellable, ft.IsDir, ft.FileType, ft.Filename, ft.DstFilename, ft.Status, ft.Progress, ft.TotalFileSize, ft.Transferred, ft.Log, ft.FailedReason, ft.RelationTaskID, ft.RelationNode)
+		ft.ID, ft.OriginSource, ft.OriginDest, ft.SrcType, ft.DstType, ft.Action, ft.Cancellable, ft.IsDir, ft.FileType, ft.Filename, ft.DstFilename, ft.Status, ft.Progress, ft.TotalFileSize, ft.Transferred, ft.Log, ft.FailedReason, ft.RelationTaskID, ft.RelationNode)
 }
 
-func NewTask(id, source, dest, srcType, dstType, action string, cancellable, isBufferDir bool, isDir bool, fileType, filename string) *Task {
+func NewTask(id, originSource, originDest, source, dest, srcType, dstType, action string, cancellable, isBufferDir bool, isDir bool, fileType, filename string) *Task {
 	ctx, cancel := context.WithCancel(context.Background())
 	task := &Task{
 		ID:             id,
 		Source:         source,
 		Dest:           dest,
+		OriginSource:   originSource,
+		OriginDest:     originDest,
 		SrcType:        srcType,
 		DstType:        dstType,
 		Action:         action,

@@ -351,20 +351,6 @@ func RawDirHandler(w http.ResponseWriter, r *http.Request, d *common.Data, file 
 	return 0, nil
 }
 
-func RawFileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo) (int, error) {
-	fd, err := file.Fs.Open(file.Path)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	defer fd.Close()
-
-	SetContentDisposition(w, r, file)
-
-	w.Header().Set("Cache-Control", "private")
-	http.ServeContent(w, r, file.Name, file.ModTime, fd)
-	return 0, nil
-}
-
 func ParsePathType(path string, r *http.Request, isDst, rewritten bool) (string, error) {
 	if path == "" && !isDst {
 		path = r.URL.Path

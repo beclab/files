@@ -766,21 +766,6 @@ func (rc *GoogleDriveResourceService) BatchDeleteHandler(fileCache fileutils.Fil
 	}
 }
 
-func (rs *GoogleDriveResourceService) RawHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-		bflName := r.Header.Get("X-Bfl-User")
-		metaData, err := GetGoogleDriveMetadataFileParam(fileParam, w, r)
-		if err != nil {
-			klog.Error(err)
-			return common.ErrToStatus(err), err
-		}
-		if metaData.IsDir {
-			return http.StatusNotImplemented, fmt.Errorf("doesn't support directory download for google drive now")
-		}
-		return RawFileHandlerGoogleFileParam(fileParam, w, r, metaData, bflName)
-	}
-}
-
 func (rc *GoogleDriveResourceService) PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
 	fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
 	select {
@@ -1482,51 +1467,6 @@ func createPreviewGoogle(w http.ResponseWriter, r *http.Request, src string, img
 	}()
 
 	return buf.Bytes(), nil
-}
-
-func RawFileHandlerGoogleFileParam(fileParam *models.FileParam, w http.ResponseWriter, r *http.Request, file *model.GoogleDriveResponseData, bflName string) (int, error) {
-	var err error
-	diskSize := file.Size
-	_, err = CheckBufferDiskSpace(diskSize)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	bufferFilePath, err := GenerateBufferFolder(file.Path, bflName)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	bufferFileName := common.RemoveSlash(file.Name)
-	bufferPath := filepath.Join(bufferFilePath, bufferFileName)
-	klog.Infoln("Buffer file path: ", bufferFilePath)
-	klog.Infoln("Buffer path: ", bufferPath)
-
-	defer func() {
-		klog.Infoln("Begin to remove buffer")
-		RemoveDiskBuffer(nil, bufferPath, SrcTypeGoogle)
-	}()
-
-	err = MakeDiskBuffer(bufferPath, diskSize, true)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	_, err = GoogleFileToBufferFileParam(nil, fileParam, bufferFilePath, bufferFileName, w, r, 0, 0)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-
-	fd, err := os.Open(bufferPath)
-	if err != nil {
-		return common.ErrToStatus(err), err
-	}
-	defer fd.Close()
-
-	setContentDispositionGoogle(w, r, file.Name)
-
-	w.Header().Set("Cache-Control", "private")
-	http.ServeContent(w, r, file.Name, file.Modified, fd)
-
-	return 0, nil
 }
 
 func RawFileHandlerGoogle(src string, w http.ResponseWriter, r *http.Request, file *model.GoogleDriveResponseData, bflName string) (int, error) {

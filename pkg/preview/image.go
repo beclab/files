@@ -74,7 +74,9 @@ func HandleImagePreview(
 	}
 
 	return &models.PreviewHandlerResponse{
-		Data: resizedImage,
+		FileName:     file.Name,
+		FileModified: file.ModTime,
+		Data:         resizedImage,
 	}, nil
 }
 

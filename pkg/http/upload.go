@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	e "errors"
 	"files/pkg/common"
+	"files/pkg/constant"
 	"files/pkg/fileutils"
 	"files/pkg/models"
 	"files/pkg/upload"
@@ -75,7 +76,7 @@ func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (
 	}
 
 	uploadID := upload.MakeUid(path)
-	uploadLink := fmt.Sprintf("/upload/upload-link/%s", uploadID)
+	uploadLink := fmt.Sprintf("/upload/upload-link/%s/%s", constant.NodeName, uploadID)
 
 	w.Write([]byte(uploadLink))
 	return 0, nil

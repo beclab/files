@@ -13,13 +13,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-type streamHandlerFunc func(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
-
-func streamHandler(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	return handler.Stream(fileParam, stopChan, dataChan)
+var wrapWithTreeParm = func(fn treeHandlerFunc, prefix string) http.Handler {
+	return treeHandle(fn, prefix)
 }
 
-func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.DriverHandler) http.Handler {
+type treeHandlerFunc func(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
+
+func treeHandler(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+	return handler.Tree(fileParam, stopChan, dataChan)
+}
+
+func treeHandle(fn treeHandlerFunc, prefix string) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var path = strings.TrimPrefix(r.URL.Path, prefix)
 		if path == "" {
@@ -32,8 +36,6 @@ func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.Dr
 			return
 		}
 
-		klog.Infof("Incoming Path: %s, user: %s, method: %s", path, owner, r.Method)
-
 		fileParam, err := models.CreateFileParam(owner, path)
 		if err != nil {
 			klog.Errorf("file param error: %v, owner: %s", err, owner)
@@ -41,7 +43,8 @@ func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.Dr
 			return
 		}
 
-		klog.Infof("srcType: %s, url: %s, param: %s", fileParam.FileType, r.URL.Path, fileParam.Json())
+		klog.Infof("[Incoming] tree, user: %s, fsType: %s, method: %s, args: %s", owner, fileParam.FileType, r.Method, fileParam.Json())
+
 		var handlerParam = &base.HandlerParam{
 			Ctx:            r.Context(),
 			Owner:          owner,
@@ -52,7 +55,7 @@ func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.Dr
 		stopChan := make(chan struct{})
 		dataChan := make(chan string)
 
-		var handler = driverHandler.NewFileHandler(fileParam.FileType, handlerParam)
+		var handler = drivers.Adaptor.NewFileHandler(r.Context(), fileParam.FileType, handlerParam)
 		if handler == nil {
 			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
 			return
@@ -60,6 +63,7 @@ func streamHandle(fn streamHandlerFunc, prefix string, driverHandler *drivers.Dr
 
 		err = fn(handler, fileParam, stopChan, dataChan)
 		if err != nil {
+			klog.Errorf("tree error: %v, user: %s, url: %s", err, owner, r.URL.Path)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
 				"message": err.Error(),
