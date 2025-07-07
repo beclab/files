@@ -1,9 +1,12 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"files/pkg/drives"
 	"files/pkg/rpc"
+	"files/pkg/token"
+	"github.com/golang-jwt/jwt/v4"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -90,6 +93,37 @@ func cookieMiddleware(next http.Handler) http.Handler {
 		}
 		klog.Infof("BflCookieCache= %v", common.BflCookieCache)
 		next.ServeHTTP(w, r)
+	})
+}
+
+func publicAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("auth_token")
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		tokenStr := cookie.Value
+
+		data, err := token.ParseToken(tokenStr, secretKey)
+		if err != nil {
+			switch err.(type) {
+			case *jwt.ValidationError:
+				http.Error(w, "Forbidden", http.StatusForbidden)
+			default:
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			}
+			return
+		}
+
+		var payload userTokenData
+		if err := json.Unmarshal(data, &payload); err != nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), "userData", payload)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
