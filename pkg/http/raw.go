@@ -45,7 +45,7 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 		var rawInline = contextArg.QueryParam.RawInline
 		var fileType = contextArg.FileParam.FileType
 
-		var handler = drivers.Adaptor.NewFileHandler(r.Context(), fileType, handlerParam)
+		var handler = drivers.Adaptor.NewFileHandler(fileType, handlerParam)
 		if handler == nil {
 			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileType), http.StatusBadRequest)
 			return
@@ -63,6 +63,7 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 
 		if rawInline == "true" {
 			w.Header().Set("Content-Disposition", "inline")
+			w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 			http.ServeContent(w, r, file.FileName, file.FileModified, file.Reader)
 		} else {
 			disp := mime.FormatMediaType("attachment", map[string]string{

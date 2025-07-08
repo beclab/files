@@ -16,6 +16,7 @@ type QueryParam struct {
 	Files                   string          `json:"files"` // like x,y,z
 	FileMode                string          `json:"fileMode"`
 	RepoName                string          `json:"repoName"`
+	RepoId                  string          `json:"repoId"`
 }
 
 func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {
@@ -29,6 +30,7 @@ func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resi
 		Files:                   r.URL.Query().Get("files"),
 		FileMode:                r.URL.Query().Get("mode"),
 		RepoName:                r.URL.Query().Get("repoName"),
+		RepoId:                  r.URL.Query().Get("repoId"),
 	}
 }
 

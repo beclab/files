@@ -57,6 +57,7 @@ func NewHandler(
 	api.PathPrefix("/nodes").Handler(common(nodesGetHandler)).Methods("GET")
 	api.PathPrefix("/repos").Handler(common(reposGetHandler)).Methods("GET")
 	api.PathPrefix("/repos").Handler(common(createRepoHandler)).Methods("POST")
+	api.PathPrefix("/repos").Handler(common(deleteRepoHandler)).Methods("DELETE")
 
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(listHandler, "/api/resources/")).Methods("GET")    // list files
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(createHandler, "/api/resources/")).Methods("POST") // create

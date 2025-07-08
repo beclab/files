@@ -82,11 +82,11 @@ func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var repoName = contextQueryArgs.RepoName
 	var url = "http://127.0.0.1:80/seahub/api2/repos/?from=web"
 
-	klog.Infof("Repo create repo, user: %s, name: %s", owner, repoName)
-
 	if repoName == "" {
 		return nil, errors.New("repo name is empty")
 	}
+
+	klog.Infof("Repo create repo, user: %s, name: %s", owner, repoName)
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -105,6 +105,35 @@ func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	}
 
 	klog.Infof("Repo create success, user: %s, name: %s, result: %s", owner, repoName, string(res))
+
+	return nil, nil
+}
+
+/**
+ * delete repo
+ */
+func deleteRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+	var owner = contextQueryArgs.Owner
+	var repoId = contextQueryArgs.RepoId
+	if repoId == "" {
+		return nil, errors.New("repo id is empty")
+	}
+
+	klog.Infof("Repo delete repo, user: %s, id: %s", owner, repoId)
+
+	deleteUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoId + "/"
+
+	var header = &http.Header{
+		constant.REQUEST_HEADER_OWNER: []string{owner},
+	}
+
+	var res, err = utils.RequestWithContext(deleteUrl, http.MethodDelete, header, nil)
+	if err != nil {
+		klog.Errorf("delete repo error: %v, name: %s", err, repoId)
+		return nil, err
+	}
+
+	klog.Infof("Repo delete success, user: %s, repo id: %s, result: %s", owner, repoId, string(res))
 
 	return nil, nil
 }

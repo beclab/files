@@ -8,10 +8,8 @@ import (
 )
 
 type HttpContextArgs struct {
-	RequestPath string             `json:"urlPath"`
-	FileParam   *FileParam         `json:"fileParam"`
-	QueryParam  *QueryParam        `json:"queryParam"`
-	DeleteParam *DeleteFileRequest `json:"-"`
+	FileParam  *FileParam  `json:"fileParam"`
+	QueryParam *QueryParam `json:"queryParam"`
 }
 
 func NewHttpContextArgs(r *http.Request, prefix string, enableThumbnails bool, resizePreview bool) (*HttpContextArgs, error) {
@@ -34,8 +32,7 @@ func NewHttpContextArgs(r *http.Request, prefix string, enableThumbnails bool, r
 	var queryParam = CreateQueryParam(owner, r, enableThumbnails, resizePreview)
 
 	return &HttpContextArgs{
-		RequestPath: p,
-		FileParam:   fileParam,
-		QueryParam:  queryParam,
+		FileParam:  fileParam,
+		QueryParam: queryParam,
 	}, nil
 }

@@ -1,7 +1,6 @@
 package posix
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/constant"
@@ -29,32 +28,24 @@ var (
 )
 
 type PosixStorage struct {
-	ctx     context.Context
 	handler *base.HandlerParam
 }
 
-func NewPosixStorage(ctx context.Context, handler *base.HandlerParam) *PosixStorage {
+func NewPosixStorage(handler *base.HandlerParam) *PosixStorage {
 	return &PosixStorage{
-		ctx:     ctx,
 		handler: handler,
 	}
 }
 
 func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	var owner = s.handler.Owner
 	var fileParam = contextArgs.FileParam
+	var owner = fileParam.Owner
 
 	klog.Infof("Posix list, user: %s, args: %s", owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
 		return nil, err
-	}
-
-	if s.isExternal(fileParam.FileType, fileParam.Extend) {
-		for _, f := range fileData.Items {
-			f.ExternalType = global.GlobalMounted.CheckExternalType(f.Name)
-		}
 	}
 
 	if fileData.IsDir {
@@ -71,9 +62,9 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 }
 
 func (s *PosixStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
-	var owner = s.handler.Owner
 	var fileParam = contextArgs.FileParam
 	var queryParam = contextArgs.QueryParam
+	var owner = fileParam.Owner
 
 	klog.Infof("Posix preview, user: %s, args: %s", owner, utils.ToJson(contextArgs))
 
@@ -91,8 +82,9 @@ func (s *PosixStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 }
 
 func (s *PosixStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
-	var user = s.handler.Owner
+
 	var fileParam = contextArgs.FileParam
+	var user = fileParam.Owner
 
 	klog.Infof("Posix raw, user: %s, args: %s", user, utils.ToJson(contextArgs))
 
@@ -120,7 +112,7 @@ func (s *PosixStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 }
 
 func (s *PosixStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	var owner = s.handler.Owner
+	var owner = fileParam.Owner
 
 	klog.Infof("Posix tree, user: %s, args: %s", owner, fileParam.Json())
 
@@ -132,6 +124,9 @@ func (s *PosixStorage) Tree(fileParam *models.FileParam, stopChan chan struct{},
 	var fs = afero.NewBasePathFs(afero.NewOsFs(), resourceUri)
 
 	fileData, err := s.getFiles(fileParam, Expand, NoContent)
+	if err != nil {
+		return err
+	}
 
 	go s.generateListingData(fs, fileParam, fileData.Listing, stopChan, dataChan)
 
@@ -164,26 +159,30 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	return nil, nil
 }
 
-func (s *PosixStorage) Delete(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	var user = s.handler.Owner
-	var err error
+func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, error) {
+	var fileParam = fileDeleteArg.FileParam
+	var dirents = fileDeleteArg.Dirents
+	var user = fileParam.Owner
 
-	if contextArgs.DeleteParam == nil || contextArgs.DeleteParam.Dirents == nil || len(contextArgs.DeleteParam.Dirents) == 0 {
-		return nil, nil
+	var err error
+	var deleteFailedPaths []string
+
+	resourceUri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return nil, err
 	}
 
-	for _, deletePath := range contextArgs.DeleteParam.Dirents {
+	for _, dirent := range dirents {
 		var deleteParam *models.FileParam
 		var fileData *files.FileInfo
 
-		if deletePath == "/" {
-			klog.Warningf("Posix delete, user: %s, path: %s, path invalid", user, deletePath)
-			continue
-		}
+		var deletePath = resourceUri + dirent
+
 		deleteParam, err = models.CreateFileParam(user, deletePath)
 		if err != nil {
 			klog.Errorf("Posix delete, user: %s, delete path: %s, error: %s", user, deletePath, err)
-			break
+			deleteFailedPaths = append(deleteFailedPaths, dirent)
+			continue
 		}
 
 		klog.Infof("Posix delete, user: %s, file param: %s", user, utils.ToJson(deleteParam))
@@ -191,21 +190,18 @@ func (s *PosixStorage) Delete(contextArgs *models.HttpContextArgs) ([]byte, erro
 		fileData, err = s.getFiles(deleteParam, Expand, NoContent)
 		if err != nil {
 			klog.Errorf("Posix delete, get file data error: %s, user: %s, path: %s", err, user, deletePath)
-			if fileData == nil {
-				err = fmt.Errorf("no such file or directory: %s", deletePath)
-				break
-			}
-			break
+			deleteFailedPaths = append(deleteFailedPaths, dirent)
+			continue
 		}
 
 		if err = fileData.Fs.RemoveAll(deleteParam.Path); err != nil {
 			klog.Errorf("Posix delete, remove path error: %v, user: %s, path: %s", err, user, deleteParam.Path)
-			break
+			deleteFailedPaths = append(deleteFailedPaths, dirent)
 		}
 	}
 
-	if err != nil {
-		return nil, err
+	if len(deleteFailedPaths) > 0 {
+		return utils.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
 	}
 
 	return nil, nil
@@ -222,6 +218,7 @@ func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FilePa
 
 		if firstItem.IsDir {
 			var nestFileParam = &models.FileParam{
+				Owner:    fileParam.Owner,
 				FileType: fileParam.FileType,
 				Extend:   fileParam.Extend,
 				Path:     firstItem.Path,
@@ -275,6 +272,15 @@ func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content boo
 
 	if file == nil {
 		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
+	}
+
+	if s.isExternal(fileParam.FileType, fileParam.Extend) {
+		file.ExternalType = global.GlobalMounted.CheckExternalType(file.Path, file.IsDir)
+		if file.IsDir {
+			for _, f := range file.Items {
+				f.ExternalType = global.GlobalMounted.CheckExternalType(f.Path, f.IsDir)
+			}
+		}
 	}
 
 	return file, nil

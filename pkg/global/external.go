@@ -6,6 +6,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/utils"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -131,17 +132,30 @@ func (m *Mount) getMounted() {
 	klog.Infof("mounted device: %s", utils.ToJson(result.Data))
 }
 
-func (m *Mount) CheckExternalType(path string) string {
+func (m *Mount) CheckExternalType(path string, isDir bool) string {
 	if path == "" {
 		return "external"
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	o, ok := m.Mounted[path]
-	if !ok {
-		return "internal"
+	if isDir && !strings.HasSuffix(path, "/") {
+		path = path + "/"
 	}
 
-	return o.Type
+	var exists bool
+	var mountType string
+	for _, mount := range m.Mounted {
+		if strings.HasPrefix(path, "/"+mount.Path+"/") {
+			exists = true
+			mountType = mount.Type
+			break
+		}
+	}
+
+	if !exists {
+		mountType = "internal"
+	}
+
+	return mountType
 }
