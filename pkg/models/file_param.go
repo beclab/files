@@ -92,12 +92,11 @@ func (p *FileParam) convert(url string) (err error) {
 		p.Path = subPath
 
 	} else if fileType == constant.External {
-		var externalType = s[2]
 		if !global.GlobalNode.CheckNodeExists(extend) {
 			return fmt.Errorf("node %s not found", extend)
 		}
 
-		p.FileType = global.GlobalMounted.CheckExternalType(externalType)
+		p.FileType = constant.External
 		// don't check file type is exists
 		p.Extend = extend
 		p.Path = subPath

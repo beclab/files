@@ -19,7 +19,6 @@ import (
 
 type Download struct {
 	ctx            context.Context
-	owner          string
 	service        base.CloudServiceInterface
 	fileParam      *models.FileParam
 	fileName       string
@@ -27,11 +26,10 @@ type Download struct {
 	fileTargetPath string
 }
 
-func NewDownloader(ctx context.Context, owner string, service base.CloudServiceInterface, fileParam *models.FileParam, fileName string, fileSize int64, fileTargetPath string) *Download {
+func NewDownloader(ctx context.Context, service base.CloudServiceInterface, fileParam *models.FileParam, fileName string, fileSize int64, fileTargetPath string) *Download {
 
 	return &Download{
 		ctx:            ctx,
-		owner:          owner,
 		service:        service,
 		fileParam:      fileParam,
 		fileName:       fileName,
@@ -41,6 +39,7 @@ func NewDownloader(ctx context.Context, owner string, service base.CloudServiceI
 }
 
 func (d *Download) download() error {
+	var owner = d.fileParam.Owner
 	if err := d.checkCtx(); err != nil {
 		return err
 	}
@@ -58,7 +57,7 @@ func (d *Download) download() error {
 		LocalFileName: d.fileName,
 	}
 
-	klog.Infof("Cloud download, owner: %s, param: %s", d.owner, utils.ToJson(p))
+	klog.Infof("Cloud download, owner: %s, param: %s", owner, utils.ToJson(p))
 
 	type asyncResult struct {
 		data []byte
@@ -124,7 +123,7 @@ func (d *Download) download() error {
 			return fmt.Errorf("task not found")
 		}
 
-		klog.Infof("Cloud download task status, user: %s, file: %s, id: %s, status:%s", d.owner, d.fileName, task.Data.ID, taskResp.Status(task.Data.ID))
+		klog.Infof("Cloud download task status, user: %s, file: %s, id: %s, status:%s", owner, d.fileName, task.Data.ID, taskResp.Status(task.Data.ID))
 
 		if taskResp.Completed(task.Data.ID) {
 			return nil
@@ -139,8 +138,9 @@ func (d *Download) download() error {
 }
 
 func (d *Download) generateBufferFolder() (string, error) {
+	var owner = d.fileParam.Owner
 	var exists = false
-	var bufferFolder = path.Join("/", "data", "buffer", d.owner)
+	var bufferFolder = path.Join("/", "data", "buffer", owner)
 	if fileutils.FilePathExists(bufferFolder) {
 		exists = true
 	}

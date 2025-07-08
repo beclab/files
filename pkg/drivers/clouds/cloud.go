@@ -1,7 +1,6 @@
 package clouds
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/constant"
@@ -21,14 +20,12 @@ import (
 )
 
 type CloudStorage struct {
-	ctx     context.Context
 	handler *base.HandlerParam
 	service base.CloudServiceInterface
 }
 
-func NewCloudStorage(ctx context.Context, handlerParam *base.HandlerParam) *CloudStorage {
+func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
 	return &CloudStorage{
-		ctx:     ctx,
 		handler: handlerParam,
 		service: NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
 	}
@@ -36,8 +33,9 @@ func NewCloudStorage(ctx context.Context, handlerParam *base.HandlerParam) *Clou
 
 func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
+	var owner = fileParam.Owner
 
-	klog.Infof("Cloud list, owner: %s, param: %s", s.handler.Owner, fileParam.Json())
+	klog.Infof("Cloud list, user: %s, param: %s", owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam)
 	if err != nil {
@@ -56,9 +54,9 @@ func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 }
 
 func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
-	var owner = s.handler.Owner
 	var fileParam = contextArgs.FileParam
 	var queryParam = contextArgs.QueryParam
+	var owner = fileParam.Owner
 
 	klog.Infof("Cloud preview, user: %s, gsar: %s", owner, utils.ToJson(contextArgs))
 
@@ -111,7 +109,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		}, nil
 	}
 
-	fileTargetPath := CreateFileDownloadFolder(s.handler.Owner, fileMeta.Data.Path)
+	fileTargetPath := CreateFileDownloadFolder(owner, fileMeta.Data.Path)
 
 	if !fileutils.FilePathExists(fileTargetPath) {
 		if err := fileutils.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
@@ -120,7 +118,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		}
 	}
 
-	var downloader = NewDownloader(s.handler.Ctx, s.handler.Owner, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
+	var downloader = NewDownloader(s.handler.Ctx, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
 	if err := downloader.download(); err != nil {
 		return nil, err
 	}
@@ -189,7 +187,7 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 		}
 	}
 
-	var downloader = NewDownloader(s.handler.Ctx, s.handler.Owner, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
+	var downloader = NewDownloader(s.handler.Ctx, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
 	if err := downloader.download(); err != nil {
 		return nil, err
 	}
@@ -209,7 +207,8 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 }
 
 func (s *CloudStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	klog.Infof("Cloud tree, owner: %s, param: %s", s.handler.Owner, fileParam.Json())
+	var owner = fileParam.Owner
+	klog.Infof("Cloud tree, user: %s, param: %s", owner, fileParam.Json())
 
 	fileData, err := s.getFiles(fileParam)
 	if err != nil {
@@ -232,7 +231,8 @@ func (s *CloudStorage) Tree(fileParam *models.FileParam, stopChan chan struct{},
 func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
-	klog.Infof("Cloud create, owner: %s, param: %s", s.handler.Owner, fileParam.Json())
+
+	klog.Infof("Cloud create, user: %s, param: %s", owner, fileParam.Json())
 
 	var path = strings.TrimRight(fileParam.Path, "/")
 	var parts = strings.Split(path, "/")
@@ -262,13 +262,13 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	res, err := s.service.CreateFolder(p)
 	if err != nil {
-		klog.Errorf("Cloud create, error: %v, owner: %s, path: %s", err, owner, fileParam.Path)
+		klog.Errorf("Cloud create, error: %v, user: %s, path: %s", err, owner, fileParam.Path)
 		return nil, err
 	}
 
 	var resp *models.CloudResponse
 	if err := json.Unmarshal(res, &resp); err != nil {
-		klog.Errorf("Cloud create, unmarshal error: %v, owner: %s, path: %s", err, owner, fileParam.Path)
+		klog.Errorf("Cloud create, unmarshal error: %v, user: %s, path: %s", err, owner, fileParam.Path)
 		return nil, err
 	}
 
@@ -277,36 +277,35 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, errors.New(resp.FailMessage())
 	}
 
-	klog.Infof("Cloud create, success, result: %s, owner: %s, path: %s", string(res), owner, fileParam.Path)
+	klog.Infof("Cloud create, success, result: %s, user: %s, path: %s", string(res), owner, fileParam.Path)
 
 	return nil, nil
 }
 
-func (s *CloudStorage) Delete(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	var user = s.handler.Owner
-	var fileParam = contextArgs.FileParam
-	var deleteParam = contextArgs.DeleteParam
+func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, error) {
+	var fileParam = fileDeleteArg.FileParam
+	var user = fileParam.Owner
+	var dirents = fileDeleteArg.Dirents
+	var deleteFailedPaths []string
 
 	klog.Infof("Cloud delete, user: %s, param: %s", user, utils.ToJson(fileParam))
 
-	for _, dp := range deleteParam.Dirents {
+	for _, dp := range dirents {
 
 		var direntParam, err = models.CreateFileParam(user, dp)
 		if err != nil {
 			klog.Errorf("Cloud delete, user: %s, create delete param error: %v, path: %s", user, err, dp)
-			return nil, err
+			deleteFailedPaths = append(deleteFailedPaths, dp)
+			continue
 		}
 
 		klog.Infof("Cloud delete, user: %s, dirent: %s", user, dp)
-		if direntParam.Path == "/" {
-			klog.Warningf("Cloud delete, user: %s, delete path %s invalid", user, direntParam.Path)
-			continue
-		}
 
 		dpd, err := url.PathUnescape(direntParam.Path)
 		if err != nil {
 			klog.Errorf("Cloud delete, path unescape error: %v, path: %s", direntParam.Path)
-			return nil, err
+			deleteFailedPaths = append(deleteFailedPaths, dp)
+			continue
 		}
 
 		var p = dpd
@@ -326,25 +325,29 @@ func (s *CloudStorage) Delete(contextArgs *models.HttpContextArgs) ([]byte, erro
 		klog.Infof("Cloud delete, user: %s, service request result: %s", user, string(res))
 		if err != nil {
 			klog.Errorf("Cloud delete, delete files error: %v, user: %s", err, user)
-			return nil, err
+			deleteFailedPaths = append(deleteFailedPaths, dp)
+			continue
 		}
 
 		var result *models.CloudResponse
 
 		if err := json.Unmarshal(res, &result); err != nil {
 			klog.Errorf("Cloud delete, unmarshal error: %v, data: %s, user: %s", err, string(res), user)
-			return nil, err
+			deleteFailedPaths = append(deleteFailedPaths, dp)
+			continue
 		}
 
 		if !result.IsSuccess() {
-			var fm = result.FailMessage()
-			if strings.Contains(fm, "path_lookup/not_found") || strings.EqualFold(fm, "get file meta fail") || strings.Contains(fm, "File not found") {
-				continue
-			}
-			return nil, fmt.Errorf(result.FailMessage())
+			klog.Errorf("Cloud delete, failed message: %s", result.FailMessage())
+			deleteFailedPaths = append(deleteFailedPaths, dp)
+			continue
 		}
 
 		klog.Infof("Cloud delete, delete success, user: %s, file: %s, isDir: %v, path: %s", user, result.Data.Name, result.Data.IsDir, result.Data.Path)
+	}
+
+	if len(deleteFailedPaths) > 0 {
+		return utils.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
 	}
 
 	return nil, nil

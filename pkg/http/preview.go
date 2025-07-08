@@ -45,7 +45,7 @@ func previewHandle(fn previewHandlerFunc, prefix string) http.Handler {
 		}
 
 		var fileType = contextArg.FileParam.FileType
-		var handler = drivers.Adaptor.NewFileHandler(r.Context(), fileType, handlerParam)
+		var handler = drivers.Adaptor.NewFileHandler(fileType, handlerParam)
 
 		if handler == nil {
 			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileType), http.StatusBadRequest)

@@ -34,14 +34,20 @@ type SyncPathDetail struct {
 
 // SyncFile
 type SyncFile struct {
-	FileId       string    `json:"file_id"`
-	Path         string    `json:"path"`
-	ParentDir    string    `json:"parent_dir"`
-	FileName     string    `json:"filename"`
-	FilePerm     string    `json:"rw"`
-	LastModified int64     `json:"last_modified"`
-	RawPath      string    `json:"raw_path"`
-	Repo         *SyncRepo `json:"repo"`
+	FileId          string    `json:"file_id"`
+	Path            string    `json:"path"`
+	ParentDir       string    `json:"parent_dir"`
+	FileName        string    `json:"filename"`
+	FilePerm        string    `json:"rw"`
+	LastModified    int64     `json:"last_modified"`
+	FileExt         string    `json:"fileext"`
+	FileType        string    `json:"filetype"`
+	FileContent     string    `json:"file_content"`
+	CanDownloadFile bool      `json:"can_download_file"`
+	CanShareFile    bool      `json:"can_share_file"`
+	CanEditFile     bool      `json:"can_edit_file"`
+	RawPath         string    `json:"raw_path"`
+	Repo            *SyncRepo `json:"repo"`
 }
 
 type SyncRepo struct {

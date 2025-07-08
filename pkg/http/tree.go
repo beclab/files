@@ -55,7 +55,7 @@ func treeHandle(fn treeHandlerFunc, prefix string) http.Handler {
 		stopChan := make(chan struct{})
 		dataChan := make(chan string)
 
-		var handler = drivers.Adaptor.NewFileHandler(r.Context(), fileParam.FileType, handlerParam)
+		var handler = drivers.Adaptor.NewFileHandler(fileParam.FileType, handlerParam)
 		if handler == nil {
 			http.Error(w, fmt.Sprintf("handler not found, type: %s", fileParam.FileType), http.StatusBadRequest)
 			return

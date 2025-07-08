@@ -1,7 +1,6 @@
 package drivers
 
 import (
-	"context"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/clouds"
 	"files/pkg/drivers/posix"
@@ -18,17 +17,17 @@ func NewDriverHandler() {
 	Adaptor = &driverHandler{}
 }
 
-func (d *driverHandler) NewFileHandler(ctx context.Context, fileType string, handlerParam *base.HandlerParam) base.Execute {
+func (d *driverHandler) NewFileHandler(fileType string, handlerParam *base.HandlerParam) base.Execute {
 	switch fileType {
 
 	case "drive", "external", "internal", "hdd", "smb", "usb", "cache":
-		return posix.NewPosixStorage(ctx, handlerParam)
+		return posix.NewPosixStorage(handlerParam)
 
 	case "sync":
-		return sync.NewSyncStorage(ctx, handlerParam)
+		return sync.NewSyncStorage(handlerParam)
 
 	case "google", "awss3", "tencent", "dropbox":
-		return clouds.NewCloudStorage(ctx, handlerParam)
+		return clouds.NewCloudStorage(handlerParam)
 
 	default:
 		klog.Errorf("driver not found, fileType: %s", fileType)
