@@ -13,6 +13,7 @@ import (
 	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
+	"files/pkg/watchers"
 	"io"
 	"net"
 	"net/http"
@@ -38,6 +39,8 @@ import (
 	"files/pkg/img"
 	"files/pkg/settings"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -214,11 +217,18 @@ user created with the credentials from options "username" and "password".`,
 		// step7: build driver handler
 		drivers.NewDriverHandler()
 
-		// stop8: init appdata
+		// step8: init global
 		config := ctrl.GetConfigOrDie()
 		global.InitGlobalData(config)
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
+
+		// step9: watcher
+		var w = watchers.NewWatchers(context.Background(), config)
+		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
+		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
+
+		go w.Run(1)
 
 		sigc := make(chan os.Signal, 1)
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)

@@ -7,10 +7,18 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+var (
+	NodeGVR = schema.GroupVersionResource{
+		Group: "", Version: "v1", Resource: "nodes",
+	}
 )
 
 var (
@@ -91,4 +99,20 @@ func (g *Node) getGlobalNodes() error {
 	}
 
 	return nil
+}
+
+func (g *Node) Handlerevent() cache.ResourceEventHandler {
+	return cache.FilteringResourceEventHandler{
+		FilterFunc: func(obj interface{}) bool {
+			return true
+		},
+		Handler: cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				GlobalNode.getGlobalNodes()
+			},
+			DeleteFunc: func(obj interface{}) {
+				GlobalNode.getGlobalNodes()
+			},
+		},
+	}
 }
