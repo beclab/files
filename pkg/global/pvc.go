@@ -6,12 +6,14 @@ import (
 	"sync"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 )
 
 var (
@@ -40,7 +42,7 @@ func InitGlobalData(config *rest.Config) error {
 		CachePvcMap:  make(map[string]string),
 	}
 
-	if err := GlobalData.getGlobalData(GlobalData.k8sInterface, GlobalData.k8sClient); err != nil {
+	if err := GlobalData.getGlobalData(); err != nil {
 		return err
 	}
 
@@ -48,7 +50,7 @@ func InitGlobalData(config *rest.Config) error {
 		ticker := time.NewTicker(120 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			GlobalData.getGlobalData(GlobalData.k8sInterface, GlobalData.k8sClient)
+			GlobalData.getGlobalData()
 		}
 	}()
 
@@ -69,24 +71,24 @@ func (g *Data) GetPvcCache(user string) string {
 	return g.CachePvcMap[user]
 }
 
-func (g *Data) getGlobalData(k8sInterface dynamic.Interface, k8sClient *kubernetes.Clientset) error {
-	users := g.getUsers(k8sInterface)
+func (g *Data) getGlobalData() error {
+	users := g.getUsers()
 	if users == nil || len(users) == 0 {
 		return fmt.Errorf("user not exists")
 	}
 
 	for _, user := range users {
-		g.getPvc(user, k8sClient)
+		g.getPvc(user)
 	}
 	return nil
 }
 
-func (g *Data) getPvc(user string, client *kubernetes.Clientset) {
+func (g *Data) getPvc(user string) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	namespace := "user-space-" + user
-	bfl, err := client.AppsV1().StatefulSets(namespace).Get(ctx, "bfl", metav1.GetOptions{})
+	bfl, err := g.k8sClient.AppsV1().StatefulSets(namespace).Get(ctx, "bfl", metav1.GetOptions{})
 	if err != nil {
 		return
 	}
@@ -102,11 +104,11 @@ func (g *Data) getPvc(user string, client *kubernetes.Clientset) {
 	return
 }
 
-func (g *Data) getUsers(k8sInterface dynamic.Interface) (users []string) {
+func (g *Data) getUsers() (users []string) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	unstructuredUsers, err := k8sInterface.Resource(UsersGVR).List(ctx, metav1.ListOptions{})
+	unstructuredUsers, err := g.k8sInterface.Resource(UsersGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return
 	}
@@ -123,4 +125,27 @@ func (g *Data) getUsers(k8sInterface dynamic.Interface) (users []string) {
 	}
 
 	return
+}
+
+func (g *Data) HandlerEvent() cache.ResourceEventHandler {
+	return cache.FilteringResourceEventHandler{
+		FilterFunc: func(obj interface{}) bool {
+			var sts = obj.(*appsv1.StatefulSet)
+			if sts.Name != "bfl" {
+				return false
+			}
+			return true
+		},
+		Handler: cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				GlobalData.getGlobalData()
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				GlobalData.getGlobalData()
+			},
+			DeleteFunc: func(obj interface{}) {
+				GlobalData.getGlobalData()
+			},
+		},
+	}
 }
