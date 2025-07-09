@@ -18,6 +18,7 @@ type Execute interface {
 	Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error)
 	// Rename(fileParam *models.FileParam) (int, error)
 
+	Paste(pasteParam *models.PasteParam) error
 }
 
 type CloudServiceInterface interface {
