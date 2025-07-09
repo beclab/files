@@ -28,12 +28,12 @@ var (
 )
 
 type PosixStorage struct {
-	handler *base.HandlerParam
+	Handler *base.HandlerParam
 }
 
 func NewPosixStorage(handler *base.HandlerParam) *PosixStorage {
 	return &PosixStorage{
-		handler: handler,
+		Handler: handler,
 	}
 }
 

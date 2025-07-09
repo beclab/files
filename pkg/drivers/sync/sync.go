@@ -18,7 +18,7 @@ import (
 )
 
 type SyncStorage struct {
-	handler *base.HandlerParam
+	Handler *base.HandlerParam
 	service *Service
 }
 
@@ -49,7 +49,7 @@ type File struct {
 
 func NewSyncStorage(handler *base.HandlerParam) *SyncStorage {
 	return &SyncStorage{
-		handler: handler,
+		Handler: handler,
 		service: NewService(handler),
 	}
 }

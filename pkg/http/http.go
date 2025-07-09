@@ -61,6 +61,8 @@ func NewHandler(
 
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(listHandler, "/api/resources/")).Methods("GET")    // list files
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(createHandler, "/api/resources/")).Methods("POST") // create
+	// + paste
+	api.PathPrefix("/paste").Handler(wrapperPasteArgs("/api/paste/")).Methods("POST") // + paste
 
 	api.PathPrefix("/resources").Handler(wrapperFilesDeleteArgs(deleteHandler, "/api/resources/")).Methods("DELETE") // delete files
 
@@ -78,9 +80,9 @@ func NewHandler(
 	api.PathPrefix("/unmount").Handler(monkey(resourceUnmountHandler, "/api/unmount")).Methods("POST") // recons done
 	// Because /api/resources/AppData is proxied under current arch, new api must be of a different prefix,
 	// and try to access /api/resources/AppData in the handle func.
-	api.PathPrefix("/paste").Handler(monkey(resourcePasteHandler(fileCache), "/api/paste")).Methods("PATCH") // paste // recons done
-	api.PathPrefix("/task").Handler(monkey(resourceTaskGetHandler, "/api/task")).Methods("GET")              // no need to recons
-	api.PathPrefix("/task").Handler(monkey(resourceTaskDeleteHandler, "/api/task")).Methods("DELETE")        // no need to recons
+	// api.PathPrefix("/paste").Handler(monkey(resourcePasteHandler(fileCache), "/api/paste")).Methods("PATCH") // paste // recons done // +
+	api.PathPrefix("/task").Handler(monkey(resourceTaskGetHandler, "/api/task")).Methods("GET")       // no need to recons
+	api.PathPrefix("/task").Handler(monkey(resourceTaskDeleteHandler, "/api/task")).Methods("DELETE") // no need to recons
 
 	api.PathPrefix("/share/shareable").Handler(monkey(shareableGetHandler, "/api/share/shareable")).Methods("GET")         // TODO: not used now, will be rewrite
 	api.PathPrefix("/share/shareable").Handler(monkey(shareablePutHandler, "/api/share/shareable")).Methods("PUT")         // TODO: not used now, will be rewrite

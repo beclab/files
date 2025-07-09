@@ -2,6 +2,7 @@ package global
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
@@ -22,7 +23,8 @@ var (
 )
 
 var (
-	GlobalNode *Node
+	GlobalNode      *Node
+	CurrentNodeName string
 )
 
 type NodeInfo struct {
@@ -36,6 +38,8 @@ type Node struct {
 }
 
 func InitGlobalNodes(config *rest.Config) error {
+	CurrentNodeName = os.Getenv("NODE_NAME")
+
 	GlobalNode = &Node{
 		k8sClient: kubernetes.NewForConfigOrDie(config),
 		Nodes:     make(map[string]*v1.Node),
@@ -54,6 +58,11 @@ func InitGlobalNodes(config *rest.Config) error {
 	}()
 
 	return nil
+}
+
+func (g *Node) IsMasterNode(nodeName string) bool {
+	// todo check node annotation
+	return true
 }
 
 func (g *Node) CheckNodeExists(nodeName string) bool {

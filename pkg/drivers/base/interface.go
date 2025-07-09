@@ -20,6 +20,14 @@ type Execute interface {
 
 }
 
+type PasteExecute interface {
+	CopyToDrive(srcParam, dstParam *models.FileParam) error
+	CopyToExternal(srcParam, dstParam *models.FileParam) error
+	CopyToCache(srcParam, dstParam *models.FileParam) error
+	CopyToSync(srcParam, dstParam *models.FileParam) error
+	CopyToCloud(srcParam, dstParam *models.FileParam) error
+}
+
 type CloudServiceInterface interface {
 	Lister
 	MetadataGetter

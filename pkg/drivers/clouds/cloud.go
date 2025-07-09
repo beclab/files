@@ -20,13 +20,13 @@ import (
 )
 
 type CloudStorage struct {
-	handler *base.HandlerParam
+	Handler *base.HandlerParam
 	service base.CloudServiceInterface
 }
 
 func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
 	return &CloudStorage{
-		handler: handlerParam,
+		Handler: handlerParam,
 		service: NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
 	}
 }
@@ -118,7 +118,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		}
 	}
 
-	var downloader = NewDownloader(s.handler.Ctx, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
+	var downloader = NewDownloader(s.Handler.Ctx, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
 	if err := downloader.download(); err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 
 	klog.Infof("Cloud preview, download success, file path: %s", imagePath)
 
-	imageData, err := previewer.OpenFile(s.handler.Ctx, imagePath, queryParam.PreviewSize)
+	imageData, err := previewer.OpenFile(s.Handler.Ctx, imagePath, queryParam.PreviewSize)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 		}
 	}
 
-	var downloader = NewDownloader(s.handler.Ctx, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
+	var downloader = NewDownloader(s.Handler.Ctx, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
 	if err := downloader.download(); err != nil {
 		return nil, err
 	}
