@@ -57,6 +57,7 @@ func fileHandle(fn fileHandlerFunc, prefix string) http.Handler {
 
 		res, err := fn(handler, contextArg)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
 				"message": err.Error(),
@@ -115,6 +116,7 @@ func fileDeleteHandle(fn fileDeleteHandlerFunc, prefix string) http.Handler {
 			if res != nil {
 				json.Unmarshal(res, &deleteFailedPaths)
 			}
+			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
 				"data":    deleteFailedPaths,

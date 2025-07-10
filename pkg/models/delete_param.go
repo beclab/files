@@ -15,7 +15,9 @@ type FileDeleteArgs struct {
 }
 
 func NewFileDeleteArgs(r *http.Request, prefix string) (*FileDeleteArgs, error) {
-	var fileDeleteArgs *FileDeleteArgs
+	var fileDeleteArgs = &FileDeleteArgs{
+		FileParam: &FileParam{},
+	}
 	var err error
 
 	var p = r.URL.Path

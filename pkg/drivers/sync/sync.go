@@ -114,6 +114,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 
 	res, err := s.service.Get(seahubUrl, http.MethodGet, nil)
 	if err != nil {
+		klog.Errorf("Sync preview, get file failed, user: %s, url: %s, err: %s", owner, seahubUrl, err.Error())
 		return nil, err
 	}
 
@@ -139,7 +140,7 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 	var data []byte
 	var err error
 
-	if queryParam.RawInline == "true" {
+	if queryParam.RawMeta == "true" {
 		getUrl := "http://127.0.0.1:80/seahub/lib/" + fileParam.Extend + "/file" + common.EscapeURLWithSpace(fileParam.Path) + "?dict=1"
 
 		klog.Infof("Sync raw, user: %s, get meta url: %s", fileParam.Owner, getUrl)
@@ -164,12 +165,10 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 		}
 	}
 
-	reader := bytes.NewReader(data)
-
 	return &models.RawHandlerResponse{
-		Reader:       reader,
 		FileName:     fileName,
 		FileModified: time.Time{},
+		Reader:       bytes.NewReader(data),
 	}, nil
 }
 
@@ -195,27 +194,17 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 
 	klog.Infof("Sync create, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
 
-	dirDetail, _ := s.getDirDetail(fileParam)
-	if dirDetail != nil {
-		return nil, errors.New("the path already exists")
-	}
-
 	p := strings.Trim(fileParam.Path, "/")
 	parts := strings.Split(p, "/")
 	subFolder := "/"
+
 	for _, part := range parts {
 		subFolder = filepath.Join(subFolder, part)
 		if !strings.HasPrefix(subFolder, "/") {
 			subFolder = "/" + subFolder
 		}
 
-		var url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder) + "&with_thumbnail=true"
-		_, err := s.service.Get(url, http.MethodGet, nil)
-		if err == nil {
-			continue
-		}
-
-		url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder)
+		var url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder)
 		data := make(map[string]string)
 		data["operation"] = "mkdir"
 		res, err := s.service.Get(url, http.MethodPost, []byte(utils.ToJson(data)))
@@ -236,20 +225,15 @@ func (s *SyncStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, erro
 	var owner = fileParam.Owner
 	var deleteFailedPaths []string
 
-	klog.Infof("Sync delete, user: %s, param: %s, delete paths: %v", owner, fileParam.Json(), dirents)
-
-	var commonPrefix = commonPathPrefix(dirents)
-	if !strings.HasPrefix(commonPrefix, fmt.Sprintf("/%s/%s", fileParam.FileType, fileParam.Extend)) {
-		return nil, fmt.Errorf("Sync delete, user: %s, path: %s, common path invalid", owner, commonPrefix)
-	}
+	klog.Infof("Sync delete, user: %s, param: %s, dirents: %v", owner, fileParam.Json(), dirents)
 
 	for _, dirent := range dirents {
 		var data = make(map[string]interface{})
 		data["repo_id"] = fileParam.Extend
-		data["parent_dir"] = strings.TrimPrefix(commonPrefix, "/sync/"+fileParam.Extend)
-		data["dirents"] = dirent
+		data["parent_dir"] = fileParam.Path
+		data["dirents"] = []string{strings.Trim(dirent, "/")}
 
-		klog.Infof("Sync delete, delete dirent, param: %s", utils.ToJson(data))
+		klog.Infof("Sync delete, delete dirent, param: %s", []byte(utils.ToJson(data)))
 
 		deleteUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/batch-delete-item/"
 		res, err := s.service.Get(deleteUrl, http.MethodDelete, []byte(utils.ToJson(data)))
@@ -342,23 +326,4 @@ func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 	}
 
 	return data, nil
-}
-
-func (s *SyncStorage) getDirDetail(fileParam *models.FileParam) (*models.SyncPathDetail, error) {
-	var user = fileParam.Owner
-	getUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/detail/?path=" + common.EscapeURLWithSpace(fileParam.Path)
-
-	klog.Infof("Sync get dir detail, user: %s, get url: %s", user, getUrl)
-
-	detail, err := s.service.Get(getUrl, http.MethodGet, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var d *models.SyncPathDetail
-	if err := json.Unmarshal(detail, &d); err != nil {
-		return nil, err
-	}
-
-	return d, nil
 }

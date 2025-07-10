@@ -43,6 +43,7 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 		}
 
 		var rawInline = contextArg.QueryParam.RawInline
+		var rawMeta = contextArg.QueryParam.RawMeta
 		var fileType = contextArg.FileParam.FileType
 
 		var handler = drivers.Adaptor.NewFileHandler(fileType, handlerParam)
@@ -54,6 +55,7 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 		file, err := fn(handler, contextArg)
 		if err != nil {
 			klog.Errorf("raw error: %v, user: %s, url: %s", err, contextArg.FileParam.Owner, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
 				"message": err.Error(),
@@ -62,8 +64,17 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 		}
 
 		if rawInline == "true" {
-			w.Header().Set("Content-Disposition", "inline")
-			w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+			if rawMeta == "true" {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				http.ServeContent(w, r, file.FileName, file.FileModified, file.Reader)
+				return
+			}
+			disp := mime.FormatMediaType("inline", map[string]string{
+				"filename": file.FileName,
+			})
+
+			w.Header().Set("Cache-Control", "private")
+			w.Header().Set("Content-Disposition", disp)
 			http.ServeContent(w, r, file.FileName, file.FileModified, file.Reader)
 		} else {
 			disp := mime.FormatMediaType("attachment", map[string]string{

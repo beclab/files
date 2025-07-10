@@ -64,6 +64,7 @@ func treeHandle(fn treeHandlerFunc, prefix string) http.Handler {
 		err = fn(handler, fileParam, stopChan, dataChan)
 		if err != nil {
 			klog.Errorf("tree error: %v, user: %s, url: %s", err, owner, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
 				"message": err.Error(),
