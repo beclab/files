@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 type QueryParam struct {
@@ -13,10 +14,12 @@ type QueryParam struct {
 	PreviewEnableThumbnails bool            `json:"previewEnableThumbnails"`
 	PreviewResizePreview    bool            `json:"previewResizePreview"`
 	RawInline               string          `json:"rawInline"`
-	Files                   string          `json:"files"` // like x,y,z
+	RawMeta                 string          `json:"rawMeta"` // return json
+	Files                   string          `json:"files"`   // like x,y,z
 	FileMode                string          `json:"fileMode"`
 	RepoName                string          `json:"repoName"`
 	RepoId                  string          `json:"repoId"`
+	Destination             string          `json:"destination"`
 }
 
 func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {
@@ -26,11 +29,13 @@ func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resi
 		PreviewSize:             r.URL.Query().Get("size"),
 		PreviewEnableThumbnails: enableThumbnails, // todo
 		PreviewResizePreview:    resizePreview,    // todo
-		RawInline:               r.URL.Query().Get("inline"),
-		Files:                   r.URL.Query().Get("files"),
-		FileMode:                r.URL.Query().Get("mode"),
-		RepoName:                r.URL.Query().Get("repoName"),
-		RepoId:                  r.URL.Query().Get("repoId"),
+		RawInline:               strings.TrimSpace(r.URL.Query().Get("inline")),
+		RawMeta:                 strings.TrimSpace(r.URL.Query().Get("meta")),
+		Files:                   strings.TrimSpace(r.URL.Query().Get("files")),
+		FileMode:                strings.TrimSpace(r.URL.Query().Get("mode")),
+		RepoName:                strings.TrimSpace(r.URL.Query().Get("repoName")),
+		RepoId:                  strings.TrimSpace(r.URL.Query().Get("repoId")),
+		Destination:             strings.TrimSpace(r.URL.Query().Get("destination")),
 	}
 }
 
