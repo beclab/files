@@ -58,13 +58,14 @@ func (m *Mount) watchMounted() {
 		klog.Errorln("watcher add error:", err)
 		panic(err)
 	}
-	klog.Infof("watcher initialized at %s", path)
+	klog.Infof("watcher initialized at: %s", path)
 
 	go func() {
 		for {
 			select {
 			case err, ok := <-externalWatcher.Errors:
 				if !ok {
+					klog.Errorf("watcher error channel closed")
 					return
 				}
 				klog.Errorf("watcher error: %v", err)
@@ -74,6 +75,7 @@ func (m *Mount) watchMounted() {
 					return
 				}
 
+				klog.Infof("watcher event: %s, op: %s", e.Name, e.Op.String())
 				if e.Has(fsnotify.Chmod) {
 					continue
 				}
@@ -117,7 +119,7 @@ func (m *Mount) getMounted() {
 	}
 
 	if result.Code != 200 {
-		klog.Errorf("get mounted invalid, message: %s", result.Message)
+		klog.Errorf("get mounted invalid, message: %s", *result.Message)
 		return
 	}
 

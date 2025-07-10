@@ -35,7 +35,9 @@ func HandleImagePreview(
 			return nil, err
 		}
 		return &models.PreviewHandlerResponse{
-			Data: fileData,
+			FileName:     file.Name,
+			FileModified: file.ModTime,
+			Data:         fileData,
 		}, nil
 	}
 
@@ -47,7 +49,9 @@ func HandleImagePreview(
 			return nil, err
 		}
 		return &models.PreviewHandlerResponse{
-			Data: fileData,
+			FileName:     file.Name,
+			FileModified: file.ModTime,
+			Data:         fileData,
 		}, nil
 	}
 	if err != nil {

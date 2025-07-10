@@ -284,26 +284,42 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, error) {
 	var fileParam = fileDeleteArg.FileParam
+	var fileType = fileParam.FileType
 	var user = fileParam.Owner
 	var dirents = fileDeleteArg.Dirents
 	var deleteFailedPaths []string
 
 	klog.Infof("Cloud delete, user: %s, param: %s", user, utils.ToJson(fileParam))
 
-	for _, dp := range dirents {
+	var invalidPaths []string
 
-		var direntParam, err = models.CreateFileParam(user, dp)
-		if err != nil {
-			klog.Errorf("Cloud delete, user: %s, create delete param error: %v, path: %s", user, err, dp)
-			deleteFailedPaths = append(deleteFailedPaths, dp)
-			continue
+	for _, dirent := range dirents {
+		dirent = strings.TrimSpace(dirent)
+		if dirent == "" || dirent == "/" || !strings.HasPrefix(dirent, "/") {
+			invalidPaths = append(invalidPaths, dirent)
+			break
+		}
+	}
+
+	if len(invalidPaths) > 0 {
+		return utils.ToBytes(invalidPaths), fmt.Errorf("invalid path")
+	}
+
+	for _, dp := range dirents {
+		var direntPath string
+		dp = strings.TrimSpace(dp)
+
+		if fileType == constant.GoogleDrive {
+			direntPath = dp
+		} else {
+			direntPath = fileParam.Path + strings.TrimLeft(dp, "/")
 		}
 
 		klog.Infof("Cloud delete, user: %s, dirent: %s", user, dp)
 
-		dpd, err := url.PathUnescape(direntParam.Path)
+		dpd, err := url.PathUnescape(direntPath)
 		if err != nil {
-			klog.Errorf("Cloud delete, path unescape error: %v, path: %s", direntParam.Path)
+			klog.Errorf("Cloud delete, path unescape error: %v, path: %s", err, direntPath)
 			deleteFailedPaths = append(deleteFailedPaths, dp)
 			continue
 		}
@@ -316,8 +332,8 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 		}
 
 		var data = &models.DeleteParam{
-			Drive: direntParam.FileType,
-			Name:  direntParam.Extend,
+			Drive: fileParam.FileType,
+			Name:  fileParam.Extend,
 			Path:  p,
 		}
 

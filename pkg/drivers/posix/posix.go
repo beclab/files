@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
@@ -72,6 +73,8 @@ func (s *PosixStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	if err != nil {
 		return nil, err
 	}
+
+	klog.Infof("Posix preview, user: %s, fileType: %s, ext: %s, name: %s", owner, fileData.Type, fileData.Extension, fileData.Name)
 
 	switch fileData.Type {
 	case "image":
@@ -167,35 +170,35 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	var err error
 	var deleteFailedPaths []string
 
-	resourceUri, err := fileParam.GetResourceUri()
+	if dirents == nil || len(dirents) == 0 {
+		return nil, fmt.Errorf("dirents is empty")
+	}
+
+	fileData, err := s.getFiles(fileParam, NoExpand, NoContent)
 	if err != nil {
-		return nil, err
+		klog.Errorf("Posix delete, get file data error: %s, user: %s, path: %s", err, user, fileParam.Path)
+		return nil, fmt.Errorf("%s: no such file or directory", fileParam.Path)
+	}
+
+	var invalidPaths []string
+
+	for _, dirent := range dirents {
+		dirent = strings.TrimSpace(dirent)
+		if dirent == "" || dirent == "/" || !strings.HasPrefix(dirent, "/") {
+			invalidPaths = append(invalidPaths, dirent)
+			break
+		}
+	}
+
+	if len(invalidPaths) > 0 {
+		return utils.ToBytes(invalidPaths), fmt.Errorf("invalid path")
 	}
 
 	for _, dirent := range dirents {
-		var deleteParam *models.FileParam
-		var fileData *files.FileInfo
-
-		var deletePath = resourceUri + dirent
-
-		deleteParam, err = models.CreateFileParam(user, deletePath)
-		if err != nil {
-			klog.Errorf("Posix delete, user: %s, delete path: %s, error: %s", user, deletePath, err)
-			deleteFailedPaths = append(deleteFailedPaths, dirent)
-			continue
-		}
-
-		klog.Infof("Posix delete, user: %s, file param: %s", user, utils.ToJson(deleteParam))
-
-		fileData, err = s.getFiles(deleteParam, Expand, NoContent)
-		if err != nil {
-			klog.Errorf("Posix delete, get file data error: %s, user: %s, path: %s", err, user, deletePath)
-			deleteFailedPaths = append(deleteFailedPaths, dirent)
-			continue
-		}
-
-		if err = fileData.Fs.RemoveAll(deleteParam.Path); err != nil {
-			klog.Errorf("Posix delete, remove path error: %v, user: %s, path: %s", err, user, deleteParam.Path)
+		dirent = strings.TrimSpace(dirent)
+		direntPath := fileData.Path + dirent
+		if err = fileData.Fs.RemoveAll(direntPath); err != nil {
+			klog.Errorf("Posix delete, remove path error: %v, user: %s, path: %s", err, user, direntPath)
 			deleteFailedPaths = append(deleteFailedPaths, dirent)
 		}
 	}
@@ -275,6 +278,7 @@ func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content boo
 	}
 
 	if s.isExternal(fileParam.FileType, fileParam.Extend) {
+		klog.Infof("getFiles fileType: %s, extend: %s", fileParam.FileType, fileParam.Extend)
 		file.ExternalType = global.GlobalMounted.CheckExternalType(file.Path, file.IsDir)
 		if file.IsDir {
 			for _, f := range file.Items {

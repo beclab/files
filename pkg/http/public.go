@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"files/pkg/common"
 	"files/pkg/constant"
 	"files/pkg/global"
 	"files/pkg/models"
@@ -136,6 +137,51 @@ func deleteRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	klog.Infof("Repo delete success, user: %s, repo id: %s, result: %s", owner, repoId, string(res))
 
 	return nil, nil
+}
+
+/**
+ * rename repo
+ */
+func renameRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+	var user = contextQueryArgs.Owner
+	var repoId = contextQueryArgs.RepoId
+	var repoName = contextQueryArgs.Destination
+
+	if repoId == "" {
+		return nil, errors.New("repo id is empty")
+	}
+
+	if repoName == "" {
+		return nil, errors.New("repo name is empty")
+	}
+
+	repoName, err := common.UnescapeURLIfEscaped(repoName)
+	if err != nil {
+		return nil, err
+	}
+
+	klog.Infof("Repo rename repo, user: %s, id: %s, name: %s", user, repoId, repoName)
+
+	renameUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoId + "/?op=rename"
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("repo_name", repoName)
+
+	header := &http.Header{
+		constant.REQUEST_HEADER_OWNER: []string{user},
+		"Content-Type":                []string{writer.FormDataContentType()},
+	}
+
+	res, err := utils.RequestWithContext(renameUrl, http.MethodPost, header, body.Bytes())
+	if err != nil {
+		klog.Errorf("rename repo error: %v, id: %s, name: %s", err, repoId, repoName)
+		return nil, err
+	}
+
+	klog.Infof("Repo rename success, user: %s, repo id: %s, repo name: %s, result: %s", user, repoId, repoName, string(res))
+
+	return nil, nil
+
 }
 
 /**

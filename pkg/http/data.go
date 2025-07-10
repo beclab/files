@@ -40,7 +40,8 @@ func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler 
 		}
 
 		if status != 0 {
-			if status == http.StatusInternalServerError {
+			if status >= http.StatusBadRequest {
+				// if status == http.StatusInternalServerError {
 				txt := http.StatusText(status)
 				if err != nil {
 					txt = err.Error()
