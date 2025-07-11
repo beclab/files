@@ -343,6 +343,7 @@ func (rs *SyncResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFil
 			Extend:   srcFileParam.Extend,
 			Path:     strings.TrimPrefix(fsrc, strings.TrimPrefix(srcUri, "/data")),
 		}
+		klog.Infof("~~~Debug log: dstUri=%s, fdst=%s", dstUri, fdst)
 		fdstFileParam := &models.FileParam{
 			Owner:    dstFileParam.Owner,
 			FileType: dstFileParam.FileType,
@@ -932,6 +933,7 @@ func walkSyncDirentsGenerator(body []byte, header *http.Header, r *http.Request,
 }
 
 func SyncMkdirAllFileParam(fileParam *models.FileParam, mode os.FileMode, isDir bool, r *http.Request) error {
+	klog.Errorf("~~~Debug log: dstFileParam=%v", fileParam)
 	repoID := fileParam.Extend
 	var prefix string
 	if isDir {
@@ -943,9 +945,10 @@ func SyncMkdirAllFileParam(fileParam *models.FileParam, mode os.FileMode, isDir 
 	client := &http.Client{}
 
 	// Split the prefix by '/' and generate the URLs
-	prefixParts := strings.Split(prefix, "/")
+	prefixParts := strings.Split(strings.Trim(prefix, "/"), "/")
 	for i := 0; i < len(prefixParts); i++ {
 		curPrefix := strings.Join(prefixParts[:i+1], "/")
+		klog.Infof("~~~Debug log: curPrefix=%s", curPrefix)
 		curInfoURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace("/"+curPrefix) + "&with_thumbnail=true"
 		getRequest, err := http.NewRequest("GET", curInfoURL, nil)
 		if err != nil {
@@ -963,7 +966,7 @@ func SyncMkdirAllFileParam(fileParam *models.FileParam, mode os.FileMode, isDir 
 		if getResponse.StatusCode == 200 {
 			continue
 		} else {
-			klog.Infoln(getResponse.Status)
+			klog.Infoln("~~~Debug log:", getResponse.Status)
 		}
 
 		type CreateDirRequest struct {
@@ -972,6 +975,7 @@ func SyncMkdirAllFileParam(fileParam *models.FileParam, mode os.FileMode, isDir 
 
 		curCreateURL := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoID + "/dir/?p=" + common.EscapeURLWithSpace("/"+curPrefix)
 
+		klog.Infof("~~~Debug log: curCreateURL=%s", curCreateURL)
 		createDirReq := CreateDirRequest{
 			Operation: "mkdir",
 		}
@@ -1261,6 +1265,7 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath, dst string, dstFileParam 
 
 	repoID := dstFileParam.Extend
 	prefix, filename := filepath.Split(dstFileParam.Path)
+	prefix = strings.TrimPrefix(prefix, "/")
 
 	extension := path.Ext(filename)
 	mimeType := "application/octet-stream"
@@ -1737,9 +1742,9 @@ func PasteSyncPatch(task *pool.Task, action string, srcFileParam, dstFileParam *
 	}
 
 	// It seems that we can't mkdir althrough when using sync-bacth-copy/move-item, so we must use false for isDir here.
-	if err := SyncMkdirAllFileParam(dstFileParam, 0, false, r); err != nil {
-		return err
-	}
+	//if err := SyncMkdirAllFileParam(dstFileParam, 0, false, r); err != nil {
+	//	return err
+	//}
 
 	//src = strings.Trim(src, "/")
 	//if !strings.Contains(src, "/") {
