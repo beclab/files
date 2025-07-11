@@ -194,27 +194,17 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 
 	klog.Infof("Sync create, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
 
-	dirDetail, _ := s.getDirDetail(fileParam)
-	if dirDetail != nil {
-		return nil, errors.New("the path already exists")
-	}
-
 	p := strings.Trim(fileParam.Path, "/")
 	parts := strings.Split(p, "/")
 	subFolder := "/"
+
 	for _, part := range parts {
 		subFolder = filepath.Join(subFolder, part)
 		if !strings.HasPrefix(subFolder, "/") {
 			subFolder = "/" + subFolder
 		}
 
-		var url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder) + "&with_thumbnail=true"
-		_, err := s.service.Get(url, http.MethodGet, nil)
-		if err == nil {
-			continue
-		}
-
-		url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder)
+		var url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder)
 		data := make(map[string]string)
 		data["operation"] = "mkdir"
 		res, err := s.service.Get(url, http.MethodPost, []byte(utils.ToJson(data)))
@@ -336,23 +326,4 @@ func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 	}
 
 	return data, nil
-}
-
-func (s *SyncStorage) getDirDetail(fileParam *models.FileParam) (*models.SyncPathDetail, error) {
-	var user = fileParam.Owner
-	getUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/detail/?path=" + common.EscapeURLWithSpace(fileParam.Path)
-
-	klog.Infof("Sync get dir detail, user: %s, get url: %s", user, getUrl)
-
-	detail, err := s.service.Get(getUrl, http.MethodGet, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var d *models.SyncPathDetail
-	if err := json.Unmarshal(detail, &d); err != nil {
-		return nil, err
-	}
-
-	return d, nil
 }

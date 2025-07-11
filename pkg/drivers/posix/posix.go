@@ -182,6 +182,8 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 
 	var invalidPaths []string
 
+	var errmsg = make(map[string]string)
+
 	for _, dirent := range dirents {
 		dirent = strings.TrimSpace(dirent)
 		if dirent == "" || dirent == "/" || !strings.HasPrefix(dirent, "/") {
@@ -196,15 +198,21 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 
 	for _, dirent := range dirents {
 		dirent = strings.TrimSpace(dirent)
-		direntPath := fileData.Path + dirent
+		direntPath := fileData.Path + strings.TrimLeft(dirent, "/")
+		klog.Infof("Posix delete, remove dirent path: %s", direntPath)
 		if err = fileData.Fs.RemoveAll(direntPath); err != nil {
 			klog.Errorf("Posix delete, remove path error: %v, user: %s, path: %s", err, user, direntPath)
-			deleteFailedPaths = append(deleteFailedPaths, dirent)
+			e := extractErrMsg(err)
+			_, ok := errmsg[e]
+			if !ok {
+				errmsg[e] = e
+				deleteFailedPaths = append(deleteFailedPaths, e)
+			}
 		}
 	}
 
 	if len(deleteFailedPaths) > 0 {
-		return utils.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
+		return nil, fmt.Errorf("%s", strings.Join(deleteFailedPaths, ";"))
 	}
 
 	return nil, nil
@@ -280,7 +288,7 @@ func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content boo
 	if s.isExternal(fileParam.FileType, fileParam.Extend) {
 		klog.Infof("getFiles fileType: %s, extend: %s", fileParam.FileType, fileParam.Extend)
 		file.ExternalType = global.GlobalMounted.CheckExternalType(file.Path, file.IsDir)
-		if file.IsDir {
+		if file.IsDir && file.Listing != nil {
 			for _, f := range file.Items {
 				f.ExternalType = global.GlobalMounted.CheckExternalType(f.Path, f.IsDir)
 			}

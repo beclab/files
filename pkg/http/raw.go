@@ -55,6 +55,7 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 		file, err := fn(handler, contextArg)
 		if err != nil {
 			klog.Errorf("raw error: %v, user: %s, url: %s", err, contextArg.FileParam.Owner, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    1,
 				"message": err.Error(),
