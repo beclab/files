@@ -337,11 +337,12 @@ func (rs *SyncResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFil
 		fsrc := filepath.Join(src, item.Name)
 		fdst := filepath.Join(fdstBase, item.Name)
 
+		klog.Infof("~~~Debug log: srcUri=%s, fsrc=%s", srcUri, fsrc)
 		fsrcFileParam := &models.FileParam{
 			Owner:    srcFileParam.Owner,
 			FileType: srcFileParam.FileType,
 			Extend:   srcFileParam.Extend,
-			Path:     strings.TrimPrefix(fsrc, strings.TrimPrefix(srcUri, "/data")),
+			Path:     strings.TrimPrefix("/sync"+fsrc, strings.TrimPrefix(srcUri, "/data")),
 		}
 		klog.Infof("~~~Debug log: dstUri=%s, fdst=%s", dstUri, fdst)
 		fdstFileParam := &models.FileParam{
@@ -1127,9 +1128,10 @@ func SyncFileToBuffer(task *pool.Task, src, bufferFilePath string, srcFileParam 
 	//}
 
 	repoID := srcFileParam.Extend
-	prefix, filename := filepath.Split(srcFileParam.Path)
+	prefix, filename := filepath.Split(strings.Trim(srcFileParam.Path, "/"))
 
-	dlUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + common.EscapeURLWithSpace(prefix+filename) + "/" + "?dl=1"
+	dlUrl := "http://127.0.0.1:80/seahub/lib/" + repoID + "/file/" + prefix + "/" + filename + "/" + "?dl=1"
+	klog.Infof("~~~Debug log: dlURL=%s", dlUrl)
 
 	request, err := http.NewRequestWithContext(task.Ctx, "GET", dlUrl, nil)
 	if err != nil {
@@ -1209,7 +1211,7 @@ func SyncFileToBuffer(task *pool.Task, src, bufferFilePath string, srcFileParam 
 			}
 
 			if lastProgress != progress {
-				task.Log = append(task.Log, fmt.Sprintf("downloaded from seafile %d/%d with progress %d", totalRead, diskSize, progress))
+				task.Log = append(task.Log, "["+time.Now().Format("2006-01-02 15:04:05")+"]"+fmt.Sprintf("downloaded from seafile %d/%d with progress %d", totalRead, diskSize, progress))
 				lastProgress = progress
 			}
 			task.Progress = mappedProgress
@@ -1321,7 +1323,7 @@ func SyncBufferToFile(task *pool.Task, bufferFilePath, dst string, dstFileParam 
 	}
 	fileSize := fileInfo.Size()
 
-	chunkSize := int64(5 * 1024 * 1024) // 5 MB
+	chunkSize := int64(8 * 1024 * 1024) // 8MB
 	totalChunks := (fileSize + chunkSize - 1) / chunkSize
 	identifier := generateUniqueIdentifier(common.EscapeAndJoin(filename, "/"))
 

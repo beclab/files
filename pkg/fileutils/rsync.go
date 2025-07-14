@@ -406,7 +406,7 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 	if firstErr != nil {
 		if task.Status != "failed" {
 			errMsg := parseRsyncError(firstErr, task)
-			task.Log = append(task.Log, errMsg)
+			task.Log = append(task.Log, "["+time.Now().Format("2006-01-02 15:04:05")+"]"+errMsg)
 			task.FailedReason = errMsg
 			pool.FailTask(task.ID)
 		}

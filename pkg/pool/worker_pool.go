@@ -179,7 +179,7 @@ func (t *Task) UpdateProgress() {
 					return
 				}
 				if log != "" {
-					t.Log = append(t.Log, log)
+					t.Log = append(t.Log, "["+time.Now().Format("2006-01-02 15:04:05")+"]"+log)
 					klog.Infof("[%s] Log collected: %s (total: %d)", t.ID, log, len(t.Log))
 				}
 			case <-t.Ctx.Done():
@@ -235,7 +235,7 @@ func (t *Task) UpdateProgress() {
 				break
 			}
 			klog.Errorf("[%s Error] %v", t.ID, err)
-			t.Log = append(t.Log, fmt.Sprintf("ERROR: %v", err))
+			t.Log = append(t.Log, "["+time.Now().Format("2006-01-02 15:04:05")+"]"+fmt.Sprintf("ERROR: %v", err))
 			t.FailedReason = err.Error()
 
 		case progress, ok := <-t.ProgressChan:
@@ -296,12 +296,12 @@ func (t *Task) UpdateProgress() {
 
 func (t *Task) Logging(entry string) {
 	klog.Infof("TASK LOGGING [%s] %s", t.ID, entry)
-	t.Log = append(t.Log, entry)
+	t.Log = append(t.Log, "["+time.Now().Format("2006-01-02 15:04:05")+"]"+entry)
 }
 
 func (t *Task) LoggingError(entry string) {
 	klog.Infof("TASK LOGGING ERROR [%s] %s", t.ID, entry)
-	t.Log = append(t.Log, "[ERROR] "+entry)
+	t.Log = append(t.Log, "["+time.Now().Format("2006-01-02 15:04:05")+"]"+"[ERROR] "+entry)
 	t.FailedReason = entry
 }
 
