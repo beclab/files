@@ -6,6 +6,7 @@ import (
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/base"
+	"files/pkg/drivers/sync/seahub"
 	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
@@ -301,9 +302,7 @@ func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData
 }
 
 func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
-	getUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(fileParam.Path) + "&with_thumbnail=true"
-
-	res, err := s.service.Get(getUrl, http.MethodGet, nil)
+	res, err := seahub.HandleGetRepoDir(s.service.Request.Header.Clone(), fileParam)
 	if err != nil {
 		return nil, err
 	}

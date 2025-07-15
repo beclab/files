@@ -6,6 +6,7 @@ import (
 	"errors"
 	"files/pkg/common"
 	"files/pkg/constant"
+	"files/pkg/drivers/sync/seahub"
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/utils"
@@ -64,8 +65,7 @@ func reposGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var header = &http.Header{
 		constant.REQUEST_HEADER_OWNER: []string{owner},
 	}
-	var url = "http://127.0.0.1:80/seahub/api/v2.1/repos/?type=mine"
-	var repos, err = utils.RequestWithContext(url, http.MethodGet, header, nil)
+	repos, err := seahub.HandleReposGet(header, []string{"mine"})
 	if err != nil {
 		klog.Errorf("get repos error: %v", err)
 		return nil, err

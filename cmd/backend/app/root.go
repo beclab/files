@@ -7,6 +7,7 @@ import (
 	"files/pkg/background_task"
 	"files/pkg/crontab"
 	"files/pkg/drivers"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/global"
@@ -84,6 +85,7 @@ func addServerFlags(flags *pflag.FlagSet) {
 	flags.Bool("disable-preview-resize", false, "disable resize of image previews")
 	flags.Bool("disable-exec", false, "disables Command Runner feature")
 	flags.Bool("disable-type-detection-by-header", false, "disables type detection by reading file headers")
+	flags.String("rpc-path", "", "RPC pipe path (Prefer environment variables FB_RPC_PATH)")
 }
 
 var rootCmd = &cobra.Command{
@@ -223,7 +225,10 @@ user created with the credentials from options "username" and "password".`,
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
 
-		// step9: watcher
+		// step9: init seahub (for test now)
+		seaserv.InitSeaRPC()
+
+		// step10: watcher
 		var w = watchers.NewWatchers(context.Background(), config)
 		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
@@ -317,6 +322,10 @@ func getRunParams(flags *pflag.FlagSet) *settings.Server {
 	_, disableExec := getParamB(flags, "disable-exec")
 	server.EnableExec = !disableExec
 
+	if val, set := getParamB(flags, "rpc-path"); set {
+		server.RPCPath = val
+	}
+
 	return server
 }
 
@@ -390,7 +399,20 @@ func initConfig() {
 			panic(err)
 		}
 		cfgFile = "No config file used"
+		v.AutomaticEnv() // forced
 	} else {
 		cfgFile = "Using config file: " + v.ConfigFileUsed()
+	}
+
+	klog.Infof("=== ENVIRONMENT VARIABLES ===")
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "FB_") {
+			klog.Infof("[ENV] %s", e)
+		}
+	}
+
+	klog.Infof("=== VIPER SETTINGS ===")
+	for _, key := range v.AllKeys() {
+		klog.Infof("[VIPER] %s = %v", key, v.Get(key))
 	}
 }
