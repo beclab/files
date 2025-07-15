@@ -131,6 +131,7 @@ func initGlobal(owner string) {
 		},
 	}
 
+	global.CurrentNodeName = "olares"
 	global.GlobalNode = &global.Node{
 		Nodes: map[string]*v1.Node{
 			"olares": &v1.Node{},
@@ -399,4 +400,226 @@ func TestExternal(t *testing.T) {
 	resUri, err = param.GetResourceUri()
 	assert.Equal(t, err, nil)
 	assert.Equal(t, resUri+param.Path, "/data/External/VendorCo-0/folder/pic.jpg")
+}
+
+// + get file param from uri
+func TestAllFileParamFromUri(t *testing.T) {
+	TestHomeFrontUri(t)
+	TestDataFrontUri(t)
+	TestCacheFrontUri(t)
+	TestSyncFrontUri(t)
+	TestCloudFrontUri(t)
+	TestExternalFrontUri(t)
+}
+
+func TestHomeFrontUri(t *testing.T) {
+	owner = "user1"
+	initGlobal(owner)
+
+	var err error
+	var uri string
+	var fp *FileParam
+
+	uri = "/data/user-pvc-user1/Home/Documents/10.gif"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: owner, FileType: "drive", Extend: "Home", Path: "/Documents/10.gif"})
+}
+
+func TestDataFrontUri(t *testing.T) {
+	owner = "user1"
+	initGlobal(owner)
+	var err error
+	var uri string
+	var fp = new(FileParam)
+
+	uri = "/data/user-pvc-user1/Data/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: owner, FileType: "drive", Extend: "Data", Path: "/"})
+
+	uri = "/data/user-pvc-user1/Data/hello/new_folder/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: owner, FileType: "drive", Extend: "Data", Path: "/hello/new_folder/"})
+
+	uri = "/data/user-pvc-user1/Data/hello/Pictures/1.jpg"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: owner, FileType: "drive", Extend: "Data", Path: "/hello/Pictures/1.jpg"})
+}
+
+func TestCacheFrontUri(t *testing.T) {
+	owner = "user1"
+	initGlobal(owner)
+	var err error
+	var uri string
+	var fp = new(FileParam)
+
+	uri = "/appcache/cache-pvc-user1/tailscale/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: owner, FileType: "cache", Extend: "olares", Path: "/tailscale/"})
+
+	uri = "/appcache/cache-pvc-user1/tailscale/sub/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: owner, FileType: "cache", Extend: "olares", Path: "/tailscale/sub/"})
+
+	uri = "/appcache/cache-pvc-user1/tailscale/sub/1.txt"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: owner, FileType: "cache", Extend: "olares", Path: "/tailscale/sub/1.txt"})
+
+}
+
+func TestExternalFrontUri(t *testing.T) {
+	owner = "user1"
+	initGlobal(owner)
+	var err error
+	var uri string
+	var fp = new(FileParam)
+
+	// ~ internal
+	uri = "/data/External/s3/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "external", Extend: "olares", Path: "/s3/"})
+
+	// ~ hdd
+	uri = "/data/External/hdd0/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "external", Extend: "olares", Path: "/hdd0/"})
+
+	uri = "/data/External/hdd0/folder1/s1/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "external", Extend: "olares", Path: "/hdd0/folder1/s1/"})
+
+	uri = "/data/External/hdd0/folder2/1.jpg"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "external", Extend: "olares", Path: "/hdd0/folder2/1.jpg"})
+
+	// ~ usb
+	uri = "/data/External/VendorCo-0/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "external", Extend: "olares", Path: "/VendorCo-0/"})
+
+	uri = "/data/External/VendorCo-0/test/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "external", Extend: "olares", Path: "/VendorCo-0/test/"})
+
+	uri = "/data/External/VendorCo-0/hello/w.bmp"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "external", Extend: "olares", Path: "/VendorCo-0/hello/w.bmp"})
+}
+
+func TestSyncFrontUri(t *testing.T) {
+	owner = "user1"
+	initGlobal(owner)
+	var err error
+	var uri string
+	var fp = new(FileParam)
+
+	uri = "/sync/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "sync", Extend: "", Path: "/"})
+
+	uri = "/sync/93e5145f-5dd8-4051-98bd-30720ddd820b/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "sync", Extend: "93e5145f-5dd8-4051-98bd-30720ddd820b", Path: "/"})
+
+	uri = "/sync/93e5145f-5dd8-4051-98bd-30720ddd820b/folder/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "sync", Extend: "93e5145f-5dd8-4051-98bd-30720ddd820b", Path: "/folder/"})
+
+	uri = "/sync/93e5145f-5dd8-4051-98bd-30720ddd820b/folder/1.jpg"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "sync", Extend: "93e5145f-5dd8-4051-98bd-30720ddd820b", Path: "/folder/1.jpg"})
+}
+
+func TestCloudFrontUri(t *testing.T) {
+	owner = "user1"
+	initGlobal(owner)
+	var err error
+	var uri string
+	var fp = new(FileParam)
+
+	// google
+	uri = "/google/account@gmail.com/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "google", Extend: "account@gmail.com", Path: "/"})
+
+	uri = "/google/account@gmail.com/AAA/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "google", Extend: "account@gmail.com", Path: "/AAA/"})
+
+	uri = "/google/account@gmail.com/BBB"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "google", Extend: "account@gmail.com", Path: "/BBB"})
+
+	// dropbox
+	uri = "/dropbox/2222222222222/folder/subfolder/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "dropbox", Extend: "2222222222222", Path: "/folder/subfolder/"})
+
+	uri = "/dropbox/2222222222222/folder/subfolder/pic.jpg"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "dropbox", Extend: "2222222222222", Path: "/folder/subfolder/pic.jpg"})
+
+	// aws
+	uri = "/awss3/AKIDxxxxxxxxx/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "awss3", Extend: "AKIDxxxxxxxxx", Path: "/"})
+
+	uri = "/awss3/AKIDxxxxxxxxx/folder/subfolder/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "awss3", Extend: "AKIDxxxxxxxxx", Path: "/folder/subfolder/"})
+
+	uri = "/awss3/AKIDxxxxxxxxx/folder/subfolder/pic.jpg"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{FileType: "awss3", Extend: "AKIDxxxxxxxxx", Path: "/folder/subfolder/pic.jpg"})
 }
