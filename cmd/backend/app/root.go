@@ -10,6 +10,7 @@ import (
 	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/global"
+	"files/pkg/goseahub/models"
 	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
@@ -223,7 +224,10 @@ user created with the credentials from options "username" and "password".`,
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
 
-		// step9: watcher
+		// step9: init goseahub
+		models.InitGoSeahubModels()
+
+		// step10: watcher
 		var w = watchers.NewWatchers(context.Background(), config)
 		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())

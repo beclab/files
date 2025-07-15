@@ -2,6 +2,7 @@ package http
 
 import (
 	"files/pkg/fileutils"
+	"files/pkg/goseahub"
 	"files/pkg/preview"
 	"files/pkg/rpc"
 	"net/http"
@@ -100,6 +101,12 @@ func NewHandler(
 
 	files := r.PathPrefix("/files").Subrouter()
 	files.HandleFunc("/healthcheck", ginHandlerAdapter(rpc.RpcEngine))
+
+	subrouter := api.PathPrefix("/goseahub").Subrouter()
+	subrouter.Use(goseahub.AuthMiddleware)
+	subrouter.Path("/users").Handler(monkey(goseahub.SeahubUsersGetHandler, "/api/goseahub/users")).Methods("GET")
+	subrouter.Path("/repos").Handler(monkey(goseahub.ReposGetHandler, "/api/goseahub/repos")).Methods("GET")
+	//api.PathPrefix("/goseahub/users").Handler(monkey(goseahub.SeahubUsersGetHandler, "/api/goseahub/users")).Methods("GET")
 
 	return stripPrefix(server.BaseURL, r), nil
 }

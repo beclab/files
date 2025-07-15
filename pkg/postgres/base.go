@@ -13,46 +13,105 @@ var PGPORT = os.Getenv("PGPORT")
 var PGUSER = os.Getenv("PGUSER")
 var PGPASSWORD = os.Getenv("PGPASSWORD")
 var PGDB1 = os.Getenv("PGDB1")
+var SEAFILEPGUSER = os.Getenv("SEAFILEPGUSER")
+var SEAFILEPGPASSWORD = os.Getenv("SEAFILEPGPASSWORD")
+var SEAFILEPGDB1 = os.Getenv("SEAFILEPGDB1")
+var SEAFILEPGDB2 = os.Getenv("SEAFILEPGDB2")
+var SEAFILEPGDB3 = os.Getenv("SEAFILEPGDB3")
 
 var DBServer *gorm.DB = nil
+var CCNetDBServer *gorm.DB = nil
+var SeafileDBServer *gorm.DB = nil
+var SeahubDBServer *gorm.DB = nil
 
 func InitPostgres() {
 	var err error
 
-	if PGHOST == "" || PGPORT == "" || PGUSER == "" || PGPASSWORD == "" || PGDB1 == "" {
+	if PGHOST == "" || PGPORT == "" || PGUSER == "" || PGPASSWORD == "" || PGDB1 == "" ||
+		SEAFILEPGUSER == "" || SEAFILEPGPASSWORD == "" || SEAFILEPGDB1 == "" || SEAFILEPGDB2 == "" || SEAFILEPGDB3 == "" {
 		klog.Infoln("Postgres Database required environment variables are not set. Won't link to database.")
 		return
 	}
 
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDB1)
+	dbs := []string{PGDB1, SEAFILEPGDB1, SEAFILEPGDB2, SEAFILEPGDB3}
 
-	DBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		klog.Errorf("Error connecting to PostgreSQL: %v\n", err)
-		return
+	for _, dbName := range dbs {
+		var dsn string
+		if dbName == PGDB1 {
+			dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+				PGHOST, PGPORT, PGUSER, PGPASSWORD, dbName)
+		} else {
+			dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+				PGHOST, PGPORT, SEAFILEPGUSER, SEAFILEPGPASSWORD, dbName)
+		}
+
+		var dbConn *gorm.DB
+		switch dbName {
+		case PGDB1:
+			DBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			dbConn = DBServer
+		case SEAFILEPGDB1:
+			CCNetDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			dbConn = CCNetDBServer
+		case SEAFILEPGDB2:
+			SeafileDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			dbConn = SeafileDBServer
+		case SEAFILEPGDB3:
+			SeahubDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			dbConn = SeahubDBServer
+		}
+
+		if err != nil {
+			klog.Errorf("[%s] Connection error: %v", dbName, err)
+			continue
+		}
+
+		sqlDB, err := dbConn.DB()
+		if err != nil {
+			klog.Errorf("[%s] Get DB instance error: %v", dbName, err)
+			continue
+		}
+
+		if err = sqlDB.Ping(); err != nil {
+			klog.Errorf("[%s] Ping error: %v", dbName, err)
+			continue
+		}
+
+		if dbName == PGDB1 {
+			createPathInfoTable()
+			createShareLinkTable()
+		}
+
+		// for test
+		var tables []string
+		if err := dbConn.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'").Scan(&tables).Error; err != nil {
+			klog.Errorf("[%s] Query tables error: %v", dbName, err)
+			continue
+		}
+
+		klog.Infof("[%s] Tables (%d):", dbName, len(tables))
+		for _, table := range tables {
+			klog.Infof("- %s", table)
+		}
 	}
 
-	db, err := DBServer.DB()
-	if err != nil {
-		klog.Errorf("Error connecting to PostgreSQL: %v\n", err)
+	// for test
+	var emailuserResults []map[string]interface{}
+	if err = CCNetDBServer.Raw("SELECT * FROM emailuser").Scan(&emailuserResults).Error; err == nil {
+		for _, row := range emailuserResults {
+			klog.Infof("emailuser Row data: %v", row)
+		}
 	}
-	if err = db.Ping(); err != nil {
-		klog.Errorf("Error pinging PostgreSQL: %v\n", err)
-		return
+
+	// for test
+	var profileResults []map[string]interface{}
+	if err = SeahubDBServer.Raw("SELECT * FROM profile_profile").Scan(&profileResults).Error; err == nil {
+		for _, row := range profileResults {
+			klog.Infof("profile_profile Row data: %v", row)
+		}
 	}
 
 	klog.Infoln("Successfully connected to PostgreSQL!")
-
-	createPathInfoTable()
-	createShareLinkTable()
-
-	// test demo
-	var count int
-	DBServer.Raw("SELECT COUNT(*) FROM path_infos").Scan(&count)
-	klog.Infof("Count: %d of path_infos\n", count)
-	DBServer.Raw("SELECT COUNT(*) FROM share_links").Scan(&count)
-	klog.Infof("Count: %d of share_links\n", count)
 }
 
 func ClearTable(db *gorm.DB, model interface{}) error {
