@@ -142,6 +142,70 @@ func (r *FileParam) GetResourceUri() (string, error) {
 
 }
 
+func (r *FileParam) GetFileParam(uri string) error {
+	var u = strings.TrimLeft(uri, "/")
+
+	var s = strings.Split(u, "/")
+	if len(s) < 2 {
+		return errors.New("url invalid")
+	}
+
+	if s[0] == constant.AwsS3 || s[0] == constant.DropBox || s[0] == constant.GoogleDrive {
+		r.Owner = ""
+		r.FileType = s[0]
+		r.Extend = s[1]
+		r.Path = r.joinPath(2, s)
+		return nil
+
+	}
+
+	if s[0] == constant.Sync {
+		r.Owner = ""
+		r.FileType = s[0]
+		r.Extend = s[1]
+		r.Path = r.joinPath(2, s)
+		return nil
+
+	}
+
+	if strings.HasPrefix(uri, constant.ROOT_PREFIX+"/") {
+		var p = strings.TrimPrefix(uri, constant.ROOT_PREFIX+"/")
+		s = strings.Split(p, "/")
+		pvcUser, err := global.GlobalData.GetPvcUserName(s[0])
+		if err == nil {
+			r.Owner = pvcUser
+			r.FileType = constant.Drive
+			r.Extend = s[1]
+			r.Path = r.joinPath(2, s)
+			return nil
+		}
+	}
+
+	if strings.HasPrefix(uri, constant.CACHE_PREFIX+"/") {
+		var p = strings.TrimPrefix(uri, constant.CACHE_PREFIX+"/")
+		s = strings.Split(p, "/")
+		pvcCache, err := global.GlobalData.GetPvcCacheName(s[0])
+		if err == nil {
+			r.Owner = pvcCache
+			r.FileType = constant.Cache
+			r.Extend = global.CurrentNodeName
+			r.Path = r.joinPath(1, s)
+			return nil
+		}
+	}
+
+	if strings.HasPrefix(uri, constant.EXTERNAL_PREFIX+"/") {
+		var p = strings.TrimPrefix(uri, constant.EXTERNAL_PREFIX+"/")
+		s = strings.Split(p, "/")
+		r.Owner = ""
+		r.FileType = constant.External
+		r.Extend = global.CurrentNodeName
+		r.Path = r.joinPath(0, s)
+		return nil
+	}
+	return nil
+}
+
 func (r *FileParam) IsFile() (string, bool) {
 	var p = strings.Split(r.Path, "/")
 	var fileName = p[len(p)-1]
@@ -149,4 +213,15 @@ func (r *FileParam) IsFile() (string, bool) {
 		return fileName, true
 	}
 	return "", false
+}
+
+func (r *FileParam) joinPath(pos int, s []string) string {
+	var str string
+	for i := pos; i < len(s); i++ {
+		str = str + "/" + s[i]
+	}
+	if str == "" {
+		str = "/"
+	}
+	return str
 }

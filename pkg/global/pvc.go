@@ -64,11 +64,56 @@ func (g *Data) GetPvcUser(user string) string {
 	return g.UserPvcMap[user]
 }
 
+func (g *Data) GetPvcUserName(pvcUser string) (string, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	var user string
+	for k, v := range g.UserPvcMap {
+		if v == pvcUser {
+			user = k
+			break
+		}
+	}
+
+	if user == "" {
+		return "", fmt.Errorf("userspace pvc not found, name: %s", pvcUser)
+	}
+
+	return user, nil
+}
+
+func (g *Data) GetPvcCacheName(pvcCache string) (string, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	var user string
+	for k, v := range g.CachePvcMap {
+		if v == pvcCache {
+			user = k
+			break
+		}
+	}
+
+	if user == "" {
+		return "", fmt.Errorf("appcache pvc not found, name: %s", pvcCache)
+	}
+
+	return user, nil
+}
+
 func (g *Data) GetPvcCache(user string) string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
 	return g.CachePvcMap[user]
+}
+
+func (g *Data) GetPvcCaches() map[string]string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return g.CachePvcMap
 }
 
 func (g *Data) getGlobalData() error {
