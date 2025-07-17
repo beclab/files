@@ -95,7 +95,7 @@ func loadServerConfig() {
 	loadCcnetConfig(ccnetPath)
 
 	// 加载seafile配置
-	seafilePath := getConfigPath("seafile.conf")
+	seafilePath := getSeafileConfigPath("seafile.conf")
 	loadSeafileConfig(seafilePath)
 }
 
@@ -104,6 +104,13 @@ func getConfigPath(filename string) string {
 		return filepath.Join(SEAFILE_CENTRAL_CONF_DIR, filename)
 	}
 	return filepath.Join(CCNET_CONF_PATH, filename)
+}
+
+func getSeafileConfigPath(filename string) string {
+	if SEAFILE_CONF_DIR != "" {
+		return filepath.Join(SEAFILE_CONF_DIR, filename)
+	}
+	return filepath.Join(SEAFILE_CENTRAL_CONF_DIR, filename)
 }
 
 func loadCcnetConfig(path string) {
