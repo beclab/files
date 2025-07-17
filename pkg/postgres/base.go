@@ -30,12 +30,6 @@ func InitPostgres() {
 		return
 	}
 
-	dbMap := map[string]*gorm.DB{
-		PGDB1: DBServer,
-		PGDB2: CCNetDBServer,
-		PGDB3: SeafileDBServer,
-		PGDB4: SeahubDBServer,
-	}
 	dbs := []string{PGDB1, PGDB2, PGDB3, PGDB4}
 
 	for _, dbName := range dbs {
@@ -43,8 +37,22 @@ func InitPostgres() {
 		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 			PGHOST, PGPORT, PGUSER, PGPASSWORD, dbName)
 
-		dbConn := dbMap[dbName]
-		dbConn, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		var dbConn *gorm.DB
+		switch dbName {
+		case PGDB1:
+			DBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{}) // 修改点2：直接赋值全局变量
+			dbConn = DBServer
+		case PGDB2:
+			CCNetDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{}) // 修改点3：同理
+			dbConn = CCNetDBServer
+		case PGDB3:
+			SeafileDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			dbConn = SeafileDBServer
+		case PGDB4:
+			SeahubDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+			dbConn = SeahubDBServer
+		}
+
 		if err != nil {
 			klog.Errorf("[%s] Connection error: %v", dbName, err)
 			continue
