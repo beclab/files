@@ -36,6 +36,7 @@ var (
 
 	// RPC客户端
 	SeafservThreadedRpc *SeafileRpcClient
+	CcnetThreadedRpc    *SeafileRpcClient
 )
 
 // 初始化配置
@@ -85,6 +86,7 @@ func initRpcClient() {
 		pipePath = SEAFILE_CONF_DIR
 	}
 	SeafservThreadedRpc = goseafile.NewSeafServerClient(filepath.Join(pipePath, "seafile.sock"))
+	CcnetThreadedRpc = SeafservThreadedRpc
 }
 
 func loadServerConfig() {

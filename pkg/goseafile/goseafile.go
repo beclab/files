@@ -118,3 +118,13 @@ func (c *SeafServerThreadedRpcClient) GetEmailusers(source string, start int, li
 	return c.createRPCMethod("get_emailusers", "objlist", []string{"string", "int", "int", "string"})(
 		source, start, limit, status)
 }
+
+func (c *SeafServerThreadedRpcClient) CountEmailusers(source string) (interface{}, error) {
+	return c.createRPCMethod("count_emailusers", "int64", []string{"string"})(
+		source)
+}
+
+func (c *SeafServerThreadedRpcClient) CountInactiveEmailusers(source string) (interface{}, error) {
+	return c.createRPCMethod("count_inactive_emailusers", "int64", []string{"string"})(
+		source)
+}

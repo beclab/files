@@ -59,3 +59,44 @@ func (s *SeafileAPI) CreateRepo(name, desc, username string, password string, en
 
 // 全局实例
 var GlobalSeafileAPI = NewSeafileAPI(SeafservThreadedRpc)
+
+type CcnetAPI struct {
+	rpcClient *SeafileRpcClient
+}
+
+func NewCcnetAPI(rpcClient *SeafileRpcClient) *CcnetAPI {
+	return &CcnetAPI{
+		rpcClient: rpcClient,
+	}
+}
+
+func (s *CcnetAPI) GetEmailusers(source string, start, limit int, isActive *bool) ([]map[string]string, error) {
+	var status string
+	if isActive != nil {
+		if *isActive {
+			status = "active"
+		} else {
+			status = "inactive"
+		}
+	}
+	ret, err := s.rpcClient.GetEmailusers(source, start, limit, status)
+	return ret.([]map[string]string), err
+}
+
+func (s *CcnetAPI) CountEmailusers(source string) (int, error) {
+	ret, err := s.rpcClient.CountEmailusers(source)
+	if err != nil {
+		return 0, fmt.Errorf("count email users failed: %v", err)
+	}
+	return ret.(int), err
+}
+
+func (s *CcnetAPI) CountInactiveEmailusers(source string) (int, error) {
+	ret, err := s.rpcClient.CountInactiveEmailusers(source)
+	if err != nil {
+		return 0, fmt.Errorf("count inactive email users failed: %v", err)
+	}
+	return ret.(int), err
+}
+
+var GlobalCcnetAPI = NewCcnetAPI(SeafservThreadedRpc)
