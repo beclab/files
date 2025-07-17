@@ -13,46 +13,107 @@ var PGPORT = os.Getenv("PGPORT")
 var PGUSER = os.Getenv("PGUSER")
 var PGPASSWORD = os.Getenv("PGPASSWORD")
 var PGDB1 = os.Getenv("PGDB1")
+var PGDB2 = os.Getenv("PGDB2")
+var PGDB3 = os.Getenv("PGDB3")
+var PGDB4 = os.Getenv("PGDB4")
 
 var DBServer *gorm.DB = nil
+var CCNetDBServer *gorm.DB = nil
+var SeafileDBServer *gorm.DB = nil
+var SeahubDBServer *gorm.DB = nil
 
 func InitPostgres() {
 	var err error
 
-	if PGHOST == "" || PGPORT == "" || PGUSER == "" || PGPASSWORD == "" || PGDB1 == "" {
+	if PGHOST == "" || PGPORT == "" || PGUSER == "" || PGPASSWORD == "" || PGDB1 == "" || PGDB2 == "" || PGDB3 == "" || PGDB4 == "" {
 		klog.Infoln("Postgres Database required environment variables are not set. Won't link to database.")
 		return
 	}
 
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDB1)
+	dbMap := map[string]*gorm.DB{
+		PGDB1: DBServer,
+		PGDB2: CCNetDBServer,
+		PGDB3: SeafileDBServer,
+		PGDB4: SeahubDBServer,
+	}
+	dbs := []string{PGDB1, PGDB2, PGDB3, PGDB4}
 
-	DBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		klog.Errorf("Error connecting to PostgreSQL: %v\n", err)
-		return
+	for _, dbName := range dbs {
+		// 1. 创建独立连接
+		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+			PGHOST, PGPORT, PGUSER, PGPASSWORD, dbName)
+
+		dbConn := dbMap[dbName]
+		dbConn, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err != nil {
+			klog.Errorf("[%s] Connection error: %v", dbName, err)
+			continue
+		}
+
+		// 2. 获取底层SQL连接
+		sqlDB, err := dbConn.DB()
+		if err != nil {
+			klog.Errorf("[%s] Get DB instance error: %v", dbName, err)
+			continue
+		}
+
+		// 3. 测试连接
+		if err = sqlDB.Ping(); err != nil {
+			klog.Errorf("[%s] Ping error: %v", dbName, err)
+			continue
+		}
+
+		if dbName == PGDB1 {
+			createPathInfoTable()
+			createShareLinkTable()
+		}
+
+		// 4. 查询表信息
+		var tables []string
+		if err := dbConn.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'").Scan(&tables).Error; err != nil {
+			klog.Errorf("[%s] Query tables error: %v", dbName, err)
+			continue
+		}
+
+		// 5. 输出结果
+		klog.Infof("[%s] Tables (%d):", dbName, len(tables))
+		for _, table := range tables {
+			klog.Infof("- %s", table)
+		}
+
+		// 6. 关闭连接
+		//sqlDB.Close()
 	}
 
-	db, err := DBServer.DB()
-	if err != nil {
-		klog.Errorf("Error connecting to PostgreSQL: %v\n", err)
-	}
-	if err = db.Ping(); err != nil {
-		klog.Errorf("Error pinging PostgreSQL: %v\n", err)
-		return
-	}
+	//dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+	//	PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDB1)
+	//
+	//DBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	//if err != nil {
+	//	klog.Errorf("Error connecting to PostgreSQL: %v\n", err)
+	//	return
+	//}
+	//
+	//db, err := DBServer.DB()
+	//if err != nil {
+	//	klog.Errorf("Error connecting to PostgreSQL: %v\n", err)
+	//}
+	//if err = db.Ping(); err != nil {
+	//	klog.Errorf("Error pinging PostgreSQL: %v\n", err)
+	//	return
+	//}
 
 	klog.Infoln("Successfully connected to PostgreSQL!")
 
-	createPathInfoTable()
-	createShareLinkTable()
+	//createPathInfoTable()
+	//createShareLinkTable()
 
 	// test demo
-	var count int
-	DBServer.Raw("SELECT COUNT(*) FROM path_infos").Scan(&count)
-	klog.Infof("Count: %d of path_infos\n", count)
-	DBServer.Raw("SELECT COUNT(*) FROM share_links").Scan(&count)
-	klog.Infof("Count: %d of share_links\n", count)
+	//var count int
+	//DBServer.Raw("SELECT COUNT(*) FROM path_infos").Scan(&count)
+	//klog.Infof("Count: %d of path_infos\n", count)
+	//DBServer.Raw("SELECT COUNT(*) FROM share_links").Scan(&count)
+	//klog.Infof("Count: %d of share_links\n", count)
 }
 
 func ClearTable(db *gorm.DB, model interface{}) error {
