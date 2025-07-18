@@ -188,10 +188,16 @@ func SearpcFuncDeco(methodName string, retType string, paramTypes []string) func
 				//return nil, &SearpcError{"Invalid client type"}
 			}
 			klog.Infof("~~~Debug log: npclient: %+v", npclient)
-			client, ok := args[0].(*SearpcClient)
+
+			client, ok := args[0].(SearpcClientInterface)
 			if !ok {
+				klog.Infof("~~~Debug log: client does not implement SearpcClientInterface")
 				return nil, &SearpcError{"Invalid client type"}
 			}
+			//client, ok := args[0].(*SearpcClient)
+			//if !ok {
+			//	return nil, &SearpcError{"Invalid client type"}
+			//}
 
 			retStr, err := client.CallRemoteFuncSync(string(fcallBytes))
 			if err != nil {
