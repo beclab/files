@@ -13,9 +13,11 @@ var PGPORT = os.Getenv("PGPORT")
 var PGUSER = os.Getenv("PGUSER")
 var PGPASSWORD = os.Getenv("PGPASSWORD")
 var PGDB1 = os.Getenv("PGDB1")
-var PGDB2 = os.Getenv("PGDB2")
-var PGDB3 = os.Getenv("PGDB3")
-var PGDB4 = os.Getenv("PGDB4")
+var SEAFILEPGUSER = os.Getenv("SEAFILEPGUSER")
+var SEAFILEPGPASSWORD = os.Getenv("SEAFILEPGPASSWORD")
+var SEAFILEPGDB1 = os.Getenv("SEAFILEPGDB1")
+var SEAFILEPGDB2 = os.Getenv("SEAFILEPGDB2")
+var SEAFILEPGDB3 = os.Getenv("SEAFILEPGDB3")
 
 var DBServer *gorm.DB = nil
 var CCNetDBServer *gorm.DB = nil
@@ -25,30 +27,37 @@ var SeahubDBServer *gorm.DB = nil
 func InitPostgres() {
 	var err error
 
-	if PGHOST == "" || PGPORT == "" || PGUSER == "" || PGPASSWORD == "" || PGDB1 == "" || PGDB2 == "" || PGDB3 == "" || PGDB4 == "" {
+	if PGHOST == "" || PGPORT == "" || PGUSER == "" || PGPASSWORD == "" || PGDB1 == "" ||
+		SEAFILEPGUSER == "" || SEAFILEPGPASSWORD == "" || SEAFILEPGDB1 == "" || SEAFILEPGDB2 == "" || SEAFILEPGDB3 == "" {
 		klog.Infoln("Postgres Database required environment variables are not set. Won't link to database.")
 		return
 	}
 
-	dbs := []string{PGDB1, PGDB2, PGDB3, PGDB4}
+	dbs := []string{PGDB1, SEAFILEPGDB1, SEAFILEPGDB2, SEAFILEPGDB3}
 
 	for _, dbName := range dbs {
 		// 1. 创建独立连接
-		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-			PGHOST, PGPORT, PGUSER, PGPASSWORD, dbName)
+		var dsn string
+		if dbName == "PGDB1" {
+			dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+				PGHOST, PGPORT, PGUSER, PGPASSWORD, dbName)
+		} else {
+			dsn = fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=disable",
+				PGHOST, PGPORT, SEAFILEPGUSER, SEAFILEPGPASSWORD, dbName)
+		}
 
 		var dbConn *gorm.DB
 		switch dbName {
 		case PGDB1:
 			DBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{}) // 修改点2：直接赋值全局变量
 			dbConn = DBServer
-		case PGDB2:
+		case SEAFILEPGDB1:
 			CCNetDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{}) // 修改点3：同理
 			dbConn = CCNetDBServer
-		case PGDB3:
+		case SEAFILEPGDB2:
 			SeafileDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 			dbConn = SeafileDBServer
-		case PGDB4:
+		case SEAFILEPGDB3:
 			SeahubDBServer, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 			dbConn = SeahubDBServer
 		}
