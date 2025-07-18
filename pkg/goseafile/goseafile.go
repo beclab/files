@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"files/pkg/gosearpc"
 	"fmt"
+	"k8s.io/klog/v2"
 	"strconv"
 )
 
@@ -29,12 +30,16 @@ func (c *SeafServerThreadedRpcClient) createRPCMethod(
 	retType string,
 	paramTypes []string,
 ) func(...interface{}) (interface{}, error) {
-	// 获取方法装饰器（假设 searpcFunc 返回函数签名：func(func(SearpcClient) (string, error)) func(SearpcClient) (interface{}, error)）
+	klog.Infof("~~~Debug log: Creating RPC method %s with return type %s and %d parameters", methodName, retType, len(paramTypes))
+
 	decorator := searpcFunc(retType, paramTypes)
 
 	return func(args ...interface{}) (interface{}, error) {
+		klog.Infof("~~~Debug log: Starting RPC call to %s with %d arguments", methodName, len(args))
+
 		// 参数校验
 		if len(args) != len(paramTypes) {
+			klog.Infof("~~~Debug log: Parameter mismatch for %s - expected %d, got %d", methodName, len(paramTypes), len(args))
 			return nil, fmt.Errorf(
 				"参数数量不匹配: 方法 %s 需要 %d 个参数，实际收到 %d 个",
 				methodName,
@@ -43,30 +48,42 @@ func (c *SeafServerThreadedRpcClient) createRPCMethod(
 			)
 		}
 
+		// 记录参数详情
+		for i, arg := range args {
+			klog.Infof("~~~Debug log: Parameter %d (type %T): %+v", i, arg, arg)
+		}
+
 		// 构造完整参数列表
 		callArgs := append([]interface{}{methodName}, args...)
+		klog.Infof("~~~Debug log: Full argument list for %s: %+v", methodName, callArgs)
 
 		// 序列化参数
 		data, err := json.Marshal(callArgs)
 		if err != nil {
+			klog.Infof("~~~Debug log: Failed to marshal arguments for %s: %v", methodName, err)
 			return nil, fmt.Errorf("参数序列化失败: %v", err)
 		}
+		klog.Infof("~~~Debug log: Serialized arguments for %s: %s", methodName, string(data))
 
-		// 应用装饰器并绑定客户端实例
 		var result interface{}
 		var rpcErr error
 
-		// 装饰器应该返回 func(SearpcClient) (interface{}, error)
 		decoratedFunc := decorator(func(sc SearpcClient, _ ...interface{}) (string, error) {
-			// 确保 data 已在外部定义并序列化
-			return sc.CallRemoteFuncSync(string(data))
+			klog.Infof("~~~Debug log: Calling remote function %s via named pipe", methodName)
+			resp, err := sc.CallRemoteFuncSync(string(data))
+			klog.Infof("~~~Debug log: Remote call response for %s: %s, error: %v", methodName, resp, err)
+			return resp, err
 		})
 
 		// 执行调用
 		result, rpcErr = decoratedFunc(c.NamedPipeClient)
 		if rpcErr != nil {
+			klog.Infof("~~~Debug log: RPC call failed for %s: %v", methodName, rpcErr)
 			return nil, fmt.Errorf("RPC调用失败: %v", rpcErr)
 		}
+
+		// 记录原始响应
+		klog.Infof("~~~Debug log: Raw response for %s: %+v (type: %T)", methodName, result, result)
 
 		// 安全类型转换
 		switch retType {
@@ -74,17 +91,23 @@ func (c *SeafServerThreadedRpcClient) createRPCMethod(
 			if s, ok := result.(string); ok {
 				val, err := strconv.Atoi(s)
 				if err != nil {
+					klog.Infof("~~~Debug log: Failed to convert int result for %s: %v", methodName, err)
 					return nil, fmt.Errorf("类型转换失败: %v", err)
 				}
+				klog.Infof("~~~Debug log: Successfully converted int result for %s: %d", methodName, val)
 				return val, nil
 			}
+			klog.Infof("~~~Debug log: Type mismatch for int result in %s - expected string, got %T", methodName, result)
 			return nil, fmt.Errorf("返回类型错误: 期望string，实际得到%T", result)
 		case "string":
 			if s, ok := result.(string); ok {
+				klog.Infof("~~~Debug log: String result for %s: %s", methodName, s)
 				return s, nil
 			}
+			klog.Infof("~~~Debug log: Type mismatch for string result in %s - expected string, got %T", methodName, result)
 			return nil, fmt.Errorf("返回类型错误: 期望string，实际得到%T", result)
 		default:
+			klog.Infof("~~~Debug log: Returning raw result for %s (type: %T): %+v", methodName, result, result)
 			return result, nil
 		}
 	}

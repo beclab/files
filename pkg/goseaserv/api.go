@@ -3,6 +3,7 @@ package goseaserv
 import (
 	"errors"
 	"fmt"
+	"k8s.io/klog/v2"
 )
 
 // 常量定义
@@ -65,6 +66,11 @@ type CcnetAPI struct {
 }
 
 func NewCcnetAPI(rpcClient *SeafileRpcClient) *CcnetAPI {
+	if rpcClient == nil {
+		klog.Errorf("rpc client cannot be nil")
+		return nil
+	}
+
 	return &CcnetAPI{
 		rpcClient: rpcClient,
 	}
