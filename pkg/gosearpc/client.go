@@ -182,13 +182,13 @@ func SearpcFuncDeco(methodName string, retType string, paramTypes []string) func
 
 			// 通过接口调用
 			klog.Infof("~~~Debug log: npCLient: %+v", args[0])
-			npclient, ok := args[0].(NamedPipeClient)
+			npclient, ok := args[0].(*NamedPipeClient)
 			if !ok {
 				klog.Infof("~~~Debug log: client is not NamedPipeClient")
 				//return nil, &SearpcError{"Invalid client type"}
 			}
 			klog.Infof("~~~Debug log: npclient: %+v", npclient)
-			client, ok := args[0].(SearpcClient)
+			client, ok := args[0].(*SearpcClient)
 			if !ok {
 				return nil, &SearpcError{"Invalid client type"}
 			}
