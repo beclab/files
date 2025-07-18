@@ -38,7 +38,7 @@ func InitPostgres() {
 	for _, dbName := range dbs {
 		// 1. 创建独立连接
 		var dsn string
-		if dbName == "PGDB1" {
+		if dbName == PGDB1 {
 			dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 				PGHOST, PGPORT, PGUSER, PGPASSWORD, dbName)
 		} else {
