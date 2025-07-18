@@ -72,8 +72,8 @@ func NewDummyRpcClient() *DummyRpcClient {
 	}
 }
 
-func (c *DummyRpcClient) CallRemoteFuncSync(fcallStr string) string {
-	return c.transport.Send(SVCNAME, fcallStr)
+func (c *DummyRpcClient) CallRemoteFuncSync(fcallStr string) (string, error) {
+	return c.transport.Send(SVCNAME, fcallStr), nil
 }
 
 // NamedPipeClientForTest 实现

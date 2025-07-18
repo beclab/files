@@ -70,9 +70,14 @@ func loadEnvConfig() {
 	loadPath := func(key string, check bool) (string, error) {
 		klog.Infof("~~~Debug log: Loading environment variable %s (required: %v)", key, check)
 		value := os.Getenv(key)
-		if value == "" && check {
-			klog.Errorf("~~~Debug log: Missing required environment variable %s", key)
-			return "", fmt.Errorf("environment variable %s is undefined", key)
+		if value == "" {
+			if check {
+				klog.Errorf("~~~Debug log: Missing required environment variable %s", key)
+				return "", fmt.Errorf("environment variable %s is undefined", key)
+			} else {
+				klog.Infof("~~~Debug log: Missing optional environment variable %s", key)
+				return "", nil
+			}
 		}
 		if debug && value != "" {
 			klog.Infof("~~~Debug log: Environment variable %s resolved to: %s", key, value)
