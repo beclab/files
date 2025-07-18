@@ -237,7 +237,8 @@ func (s *NamedPipeServer) handleConnection(conn net.Conn) {
 
 		// 调用服务函数（此处需要实现searpc_server.call_function）
 		// resp := searpc_server.call_function(reqData["service"], reqData["request"])
-		resp := "{}" // 占位符，需后续实现
+		//resp := "{}" // 占位符，需后续实现
+		resp := GlobalSearpcServer.CallFunction(reqData["service"], reqData["request"])
 
 		// 打包响应
 		respHeader := make([]byte, 4)
