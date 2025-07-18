@@ -102,8 +102,8 @@ func NewHandler(
 	files := r.PathPrefix("/files").Subrouter()
 	files.HandleFunc("/healthcheck", ginHandlerAdapter(rpc.RpcEngine))
 
-	seahub := r.PathPrefix("/seahub2").Subrouter()
-	seahub.PathPrefix("/users").Handler(monkey(goseahub.SeahubUsersGetHandler, "/seahub2/users")).Methods("GET")
+	//seahub := r.PathPrefix("/goseahub").Subrouter()
+	api.PathPrefix("/goseahub/users").Handler(monkey(goseahub.SeahubUsersGetHandler, "/api/goseahub/users")).Methods("GET")
 
 	return stripPrefix(server.BaseURL, r), nil
 }
