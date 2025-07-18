@@ -85,32 +85,72 @@ func (c *SeafServerThreadedRpcClient) createRPCMethod(
 		// 记录原始响应
 		klog.Infof("~~~Debug log: Raw response for %s: %+v (type: %T)", methodName, result, result)
 
-		// 安全类型转换
+		// 增强类型转换处理
 		switch retType {
+		case "void": // 新增 void 类型处理
+			klog.Infof("~~~Debug log: Void result for %s (no return value expected)", methodName)
+			return nil, nil // 显式返回 nil
 		case "int":
-			if s, ok := result.(string); ok {
-				val, err := strconv.Atoi(s)
-				if err != nil {
-					klog.Infof("~~~Debug log: Failed to convert int result for %s: %v", methodName, err)
-					return nil, fmt.Errorf("类型转换失败: %v", err)
-				}
-				klog.Infof("~~~Debug log: Successfully converted int result for %s: %d", methodName, val)
-				return val, nil
-			}
-			klog.Infof("~~~Debug log: Type mismatch for int result in %s - expected string, got %T", methodName, result)
-			return nil, fmt.Errorf("返回类型错误: 期望string，实际得到%T", result)
+			return handleIntConversion(result, methodName)
 		case "string":
-			if s, ok := result.(string); ok {
-				klog.Infof("~~~Debug log: String result for %s: %s", methodName, s)
-				return s, nil
-			}
-			klog.Infof("~~~Debug log: Type mismatch for string result in %s - expected string, got %T", methodName, result)
-			return nil, fmt.Errorf("返回类型错误: 期望string，实际得到%T", result)
+			return handleStringConversion(result, methodName)
+		case "objlist":
+			return handleObjListConversion(result, methodName)
+		case "object":
+			return handleObjectConversion(result, methodName)
+		case "json":
+			return handleJsonConversion(result, methodName)
 		default:
-			klog.Infof("~~~Debug log: Returning raw result for %s (type: %T): %+v", methodName, result, result)
+			klog.Infof("~~~Debug log: Returning raw result for %s (type: %T): %+v",
+				methodName, result, result)
 			return result, nil
 		}
 	}
+}
+
+// 新增类型转换处理函数
+func handleIntConversion(result interface{}, methodName string) (int, error) {
+	if s, ok := result.(string); ok {
+		val, err := strconv.Atoi(s)
+		if err != nil {
+			klog.Infof("~~~Debug log: Failed to convert int result for %s: %v", methodName, err)
+			return 0, fmt.Errorf("类型转换失败: %v", err)
+		}
+		klog.Infof("~~~Debug log: Successfully converted int result for %s: %d", methodName, val)
+		return val, nil
+	}
+	return 0, fmt.Errorf("返回类型错误: 期望string，实际得到%T", result)
+}
+
+func handleStringConversion(result interface{}, methodName string) (string, error) {
+	if s, ok := result.(string); ok {
+		klog.Infof("~~~Debug log: String result for %s: %s", methodName, s)
+		return s, nil
+	}
+	return "", fmt.Errorf("返回类型错误: 期望string，实际得到%T", result)
+}
+
+func handleObjListConversion(result interface{}, methodName string) ([]*gosearpc.SearpcObj, error) {
+	if list, ok := result.([]*gosearpc.SearpcObj); ok {
+		klog.Infof("~~~Debug log: Successfully parsed objlist for %s, count: %d",
+			methodName, len(list))
+		return list, nil
+	}
+	return nil, fmt.Errorf("返回类型错误: 期望[]*_SearpcObj，实际得到%T", result)
+}
+
+func handleObjectConversion(result interface{}, methodName string) (*gosearpc.SearpcObj, error) {
+	if obj, ok := result.(*gosearpc.SearpcObj); ok {
+		klog.Infof("~~~Debug log: Successfully parsed object for %s: %+v", methodName, obj)
+		return obj, nil
+	}
+	return nil, fmt.Errorf("返回类型错误: 期望*_SearpcObj，实际得到%T", result)
+}
+
+func handleJsonConversion(result interface{}, methodName string) (interface{}, error) {
+	// 根据实际需要实现JSON解析逻辑
+	klog.Infof("~~~Debug log: JSON result for %s: %+v", methodName, result)
+	return result, nil
 }
 
 // 仓库操作接口（保持与Python完全一致的命名）

@@ -60,37 +60,37 @@ func _fret_string(retStr string) (string, error) {
 	return "", &SearpcError{"Invalid response format"}
 }
 
-// _SearpcObj 对象封装
-type _SearpcObj struct {
-	props *_SearpcObj
+// SearpcObj 对象封装
+type SearpcObj struct {
+	props *SearpcObj
 	data  map[string]interface{}
 }
 
-func NewSearpcObj(dict map[string]interface{}) *_SearpcObj {
+func NewSearpcObj(dict map[string]interface{}) *SearpcObj {
 	newData := make(map[string]interface{})
 	for k, v := range dict {
 		newKey := strings.ReplaceAll(k, "-", "_")
 		newData[newKey] = v
 	}
-	return &_SearpcObj{
-		props: &_SearpcObj{data: newData},
+	return &SearpcObj{
+		props: &SearpcObj{data: newData},
 		data:  newData,
 	}
 }
 
-func (o *_SearpcObj) Get(key string) interface{} {
+func (o *SearpcObj) Get(key string) interface{} {
 	if val, ok := o.data[key]; ok {
 		return val
 	}
 	return nil
 }
 
-func (o *_SearpcObj) MarshalJSON() ([]byte, error) {
+func (o *SearpcObj) MarshalJSON() ([]byte, error) {
 	return json.Marshal(o.data)
 }
 
 // _fret_obj 解析对象
-func _fret_obj(retStr string) (*_SearpcObj, error) {
+func _fret_obj(retStr string) (*SearpcObj, error) {
 	var dicts map[string]interface{}
 	if err := json.Unmarshal([]byte(retStr), &dicts); err != nil {
 		return nil, &SearpcError{"Invalid response format"}
@@ -108,7 +108,7 @@ func _fret_obj(retStr string) (*_SearpcObj, error) {
 }
 
 // _fret_objlist 解析对象列表
-func _fret_objlist(retStr string) ([]*_SearpcObj, error) {
+func _fret_objlist(retStr string) ([]*SearpcObj, error) {
 	var dicts map[string]interface{}
 	if err := json.Unmarshal([]byte(retStr), &dicts); err != nil {
 		return nil, &SearpcError{"Invalid response format"}
@@ -119,7 +119,7 @@ func _fret_objlist(retStr string) ([]*_SearpcObj, error) {
 		return nil, &SearpcError{dicts["err_msg"].(string)}
 	}
 
-	var list []*_SearpcObj
+	var list []*SearpcObj
 	if retList, ok := dicts["ret"].([]interface{}); ok {
 		for _, item := range retList {
 			if dict, ok := item.(map[string]interface{}); ok {
