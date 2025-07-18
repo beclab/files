@@ -90,6 +90,14 @@ func (s *CcnetAPI) GetEmailusers(source string, start, limit int, isActive *bool
 }
 
 func (s *CcnetAPI) CountEmailusers(source string) (int, error) {
+	if s.rpcClient == nil {
+		klog.Errorf("rpc client cannot be nil")
+		s.rpcClient = SeafservThreadedRpc
+	}
+	if s.rpcClient == nil {
+		klog.Errorf("rpc client cannot be nil")
+		return 0, fmt.Errorf("rpc client is nil")
+	}
 	ret, err := s.rpcClient.CountEmailusers(source)
 	if err != nil {
 		return 0, fmt.Errorf("count email users failed: %v", err)
@@ -98,6 +106,14 @@ func (s *CcnetAPI) CountEmailusers(source string) (int, error) {
 }
 
 func (s *CcnetAPI) CountInactiveEmailusers(source string) (int, error) {
+	if s.rpcClient == nil {
+		klog.Errorf("rpc client cannot be nil")
+		s.rpcClient = SeafservThreadedRpc
+	}
+	if s.rpcClient == nil {
+		klog.Errorf("rpc client cannot be nil")
+		return 0, fmt.Errorf("rpc client is nil")
+	}
 	ret, err := s.rpcClient.CountInactiveEmailusers(source)
 	if err != nil {
 		return 0, fmt.Errorf("count inactive email users failed: %v", err)
