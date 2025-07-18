@@ -42,7 +42,7 @@ func InitPostgres() {
 			dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 				PGHOST, PGPORT, PGUSER, PGPASSWORD, dbName)
 		} else {
-			dsn = fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=disable",
+			dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 				PGHOST, PGPORT, SEAFILEPGUSER, SEAFILEPGPASSWORD, dbName)
 		}
 
