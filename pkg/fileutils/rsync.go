@@ -7,7 +7,6 @@ import (
 	"files/pkg/pool"
 	"fmt"
 	"io"
-	"k8s.io/klog/v2"
 	"math"
 	"os"
 	"os/exec"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"k8s.io/klog/v2"
 )
 
 const (
