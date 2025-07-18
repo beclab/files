@@ -2,9 +2,8 @@ package gosearpc
 
 import (
 	"encoding/json"
+	"files/pkg/goseaserv"
 	"k8s.io/klog/v2"
-	"reflect"
-	"runtime"
 	"strings"
 )
 
@@ -151,7 +150,7 @@ func _fret_json(retStr string) (interface{}, error) {
 type SearpcFunc func(...interface{}) (interface{}, error)
 
 // SearpcFuncDeco 创建装饰器函数
-func SearpcFuncDeco(retType string, paramTypes []string) func(func(SearpcClient, ...interface{}) (string, error)) SearpcFunc {
+func SearpcFuncDeco(methodName string, retType string, paramTypes []string) func(func(SearpcClient, ...interface{}) (string, error)) SearpcFunc {
 	return func(f func(SearpcClient, ...interface{}) (string, error)) SearpcFunc {
 		var fret func(string) (interface{}, error)
 
@@ -173,14 +172,9 @@ func SearpcFuncDeco(retType string, paramTypes []string) func(func(SearpcClient,
 		}
 
 		return func(args ...interface{}) (interface{}, error) {
-			// 获取函数名（需要反射支持，此处简化处理）
-			funcName := runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
-			// 去除包路径前缀（示例："main.MyFunc" -> "MyFunc"）
-			if idx := strings.LastIndex(funcName, "."); idx > 0 {
-				funcName = funcName[idx+1:]
-			}
+			funcName := methodName
 			callArgs := append([]interface{}{funcName}, args...)
-			klog.Infof("~~~Debug log: callArgs: %v", callArgs)
+			klog.Infof("~~~Debug log: callArgs: %+v", callArgs)
 
 			fcallBytes, err := json.Marshal(callArgs)
 			if err != nil {
@@ -188,13 +182,15 @@ func SearpcFuncDeco(retType string, paramTypes []string) func(func(SearpcClient,
 			}
 
 			// 通过接口调用
-			klog.Infof("~~~Debug log: 底层类型:", reflect.TypeOf(args[0]).Kind())
+			klog.Infof("~~~Debug log: SeafservThreadedRpc: %+v", goseaserv.SeafservThreadedRpc)
+			klog.Infof("~~~Debug log: SeafservThreadedRpc.NamedPipeClient: %+v", goseaserv.SeafservThreadedRpc.NamedPipeClient)
+			klog.Infof("~~~Debug log: npCLient: %+v", args[0])
 			npclient, ok := args[0].(NamedPipeClient)
 			if !ok {
 				klog.Infof("~~~Debug log: client is not NamedPipeClient")
 				//return nil, &SearpcError{"Invalid client type"}
 			}
-			klog.Infof("~~~Debug log: npclient: %v", npclient)
+			klog.Infof("~~~Debug log: npclient: %+v", npclient)
 			client, ok := args[0].(SearpcClient)
 			if !ok {
 				return nil, &SearpcError{"Invalid client type"}

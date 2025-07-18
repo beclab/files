@@ -32,7 +32,7 @@ func (c *SeafServerThreadedRpcClient) createRPCMethod(
 ) func(...interface{}) (interface{}, error) {
 	klog.Infof("~~~Debug log: Creating RPC method %s with return type %s and %d parameters", methodName, retType, len(paramTypes))
 
-	decorator := searpcFunc(retType, paramTypes)
+	decorator := searpcFunc(methodName, retType, paramTypes)
 
 	return func(args ...interface{}) (interface{}, error) {
 		klog.Infof("~~~Debug log: Starting RPC call to %s with %d arguments", methodName, len(args))
