@@ -22,6 +22,7 @@ import (
 type CloudStorage struct {
 	handler *base.HandlerParam
 	service base.CloudServiceInterface
+	paste   *models.PasteParam
 }
 
 func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {

@@ -60,6 +60,11 @@ func InitGlobalNodes(config *rest.Config) error {
 	return nil
 }
 
+func (g *Node) IsMasterNode(nodeName string) bool {
+	// todo check node annotation
+	return true
+}
+
 func (g *Node) CheckNodeExists(nodeName string) bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()

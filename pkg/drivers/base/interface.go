@@ -2,6 +2,7 @@ package base
 
 import (
 	"files/pkg/models"
+	"files/pkg/workers"
 )
 
 type Execute interface {
@@ -18,6 +19,7 @@ type Execute interface {
 	Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error)
 	// Rename(fileParam *models.FileParam) (int, error)
 
+	Paste(pasteParam *models.PasteParam) (*workers.Task, error)
 }
 
 type CloudServiceInterface interface {
