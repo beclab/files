@@ -3,8 +3,9 @@ package drivers
 import (
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/clouds"
-	"files/pkg/drivers/posix"
-	"files/pkg/drivers/sync"
+	"files/pkg/drivers/posix/cache"
+	"files/pkg/drivers/posix/external"
+	"files/pkg/drivers/posix/posix"
 
 	"k8s.io/klog/v2"
 )
@@ -20,11 +21,14 @@ func NewDriverHandler() {
 func (d *driverHandler) NewFileHandler(fileType string, handlerParam *base.HandlerParam) base.Execute {
 	switch fileType {
 
-	case "drive", "external", "internal", "hdd", "smb", "usb", "cache":
+	case "drive":
 		return posix.NewPosixStorage(handlerParam)
 
-	case "sync":
-		return sync.NewSyncStorage(handlerParam)
+	case "cache":
+		return cache.NewCacheStorage(handlerParam)
+
+	case "external", "internal", "hdd", "smb", "usb":
+		return external.NewExternalStorage(handlerParam)
 
 	case "google", "awss3", "tencent", "dropbox":
 		return clouds.NewCloudStorage(handlerParam)

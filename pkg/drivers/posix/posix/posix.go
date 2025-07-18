@@ -30,6 +30,7 @@ var (
 
 type PosixStorage struct {
 	handler *base.HandlerParam
+	paste   *models.PasteParam
 }
 
 func NewPosixStorage(handler *base.HandlerParam) *PosixStorage {

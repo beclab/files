@@ -51,7 +51,7 @@ func RequestWithContext(u string, method string, header *http.Header, requestPar
 			newRequest.Header = *header
 		}
 
-		if header.Get("Content-Type") == "" {
+		if newRequest.Header.Get("Content-Type") == "" {
 			newRequest.Header.Set("Content-Type", "application/json")
 		}
 		newRequest.Header.Del("Traceparent")
