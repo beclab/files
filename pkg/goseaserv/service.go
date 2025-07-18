@@ -57,6 +57,9 @@ func init() {
 	klog.Infof("~~~Debug log: initializing APIs")
 	GlobalSeafileAPI = NewSeafileAPI(SeafservThreadedRpc)
 	GlobalCcnetAPI = NewCcnetAPI(SeafservThreadedRpc)
+
+	klog.Infof("~~~Debug log: SeafservThreadedRpc: %+v", SeafservThreadedRpc)
+	klog.Infof("~~~Debug log: SeafservThreadedRpc.NamedPipeClient: %+v", SeafservThreadedRpc.NamedPipeClient)
 }
 
 func loadEnvConfig() {

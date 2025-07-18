@@ -2,7 +2,6 @@ package gosearpc
 
 import (
 	"encoding/json"
-	"files/pkg/goseaserv"
 	"k8s.io/klog/v2"
 	"strings"
 )
@@ -182,8 +181,6 @@ func SearpcFuncDeco(methodName string, retType string, paramTypes []string) func
 			}
 
 			// 通过接口调用
-			klog.Infof("~~~Debug log: SeafservThreadedRpc: %+v", goseaserv.SeafservThreadedRpc)
-			klog.Infof("~~~Debug log: SeafservThreadedRpc.NamedPipeClient: %+v", goseaserv.SeafservThreadedRpc.NamedPipeClient)
 			klog.Infof("~~~Debug log: npCLient: %+v", args[0])
 			npclient, ok := args[0].(NamedPipeClient)
 			if !ok {
