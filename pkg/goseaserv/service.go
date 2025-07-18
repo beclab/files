@@ -145,7 +145,7 @@ func loadServerConfig() {
 	klog.Infof("~~~Debug log: Successfully loaded ccnet configuration")
 
 	// 加载seafile配置
-	seafilePath := getConfigPath("seafile.conf")
+	seafilePath := getSeafileConfigPath("seafile.conf")
 	klog.Infof("~~~Debug log: Loading seafile configuration from: %s", seafilePath)
 	loadSeafileConfig(seafilePath)
 	klog.Infof("~~~Debug log: Successfully loaded seafile configuration")
@@ -160,12 +160,12 @@ func getConfigPath(filename string) string {
 	return filepath.Join(CCNET_CONF_PATH, filename)
 }
 
-//func getSeafileConfigPath(filename string) string {
-//	if SEAFILE_CONF_DIR != "" {
-//		return filepath.Join(SEAFILE_CONF_DIR, filename)
-//	}
-//	return filepath.Join(SEAFILE_CENTRAL_CONF_DIR, filename)
-//}
+func getSeafileConfigPath(filename string) string {
+	if SEAFILE_CONF_DIR != "" {
+		return filepath.Join(SEAFILE_CONF_DIR, filename)
+	}
+	return filepath.Join(SEAFILE_CENTRAL_CONF_DIR, filename)
+}
 
 func loadCcnetConfig(path string) {
 	cfg, err := ini.Load(path)
