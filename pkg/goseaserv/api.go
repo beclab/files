@@ -35,6 +35,11 @@ type Dirent struct {
 
 // 构造函数
 func NewSeafileAPI(rpcClient *SeafileRpcClient) *SeafileAPI {
+	klog.Infof("~~~Debug log: Initializing GlobalSeafileAPI...")
+	if rpcClient == nil {
+		klog.Errorf("rpc client cannot be nil")
+		return nil
+	}
 	return &SeafileAPI{
 		rpcClient: rpcClient,
 	}
@@ -66,6 +71,7 @@ type CcnetAPI struct {
 }
 
 func NewCcnetAPI(rpcClient *SeafileRpcClient) *CcnetAPI {
+	klog.Infof("~~~Debug log: Initializing GlobalCcnetAPI...")
 	if rpcClient == nil {
 		klog.Errorf("rpc client cannot be nil")
 		return nil
