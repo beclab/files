@@ -64,7 +64,7 @@ func (s *SeafileAPI) CreateRepo(name, desc, username string, password string, en
 }
 
 // 全局实例
-var GlobalSeafileAPI = NewSeafileAPI(SeafservThreadedRpc)
+var GlobalSeafileAPI *SeafileAPI // = NewSeafileAPI(SeafservThreadedRpc)
 
 type CcnetAPI struct {
 	rpcClient *SeafileRpcClient
@@ -127,4 +127,4 @@ func (s *CcnetAPI) CountInactiveEmailusers(source string) (int, error) {
 	return ret.(int), err
 }
 
-var GlobalCcnetAPI = NewCcnetAPI(SeafservThreadedRpc)
+var GlobalCcnetAPI *CcnetAPI //= NewCcnetAPI(SeafservThreadedRpc)

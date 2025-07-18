@@ -53,6 +53,10 @@ func init() {
 	// 加载配置文件
 	klog.Infof("~~~Debug log: loading Server Config")
 	loadServerConfig()
+
+	klog.Infof("~~~Debug log: initializing APIs")
+	GlobalSeafileAPI = NewSeafileAPI(SeafservThreadedRpc)
+	GlobalCcnetAPI = NewCcnetAPI(SeafservThreadedRpc)
 }
 
 func loadEnvConfig() {

@@ -42,6 +42,10 @@ func email2nickname(email string) string {
 }
 
 func ListAllUsers() (map[string]map[string]interface{}, error) {
+	if goseaserv.GlobalCcnetAPI == nil {
+		klog.Errorf("~~~Debug log: GlobalCcnetAPI is nil")
+		goseaserv.GlobalCcnetAPI = goseaserv.NewCcnetAPI(goseaserv.SeafservThreadedRpc)
+	}
 	// 计算总用户数
 	emailUserCount, err := goseaserv.GlobalCcnetAPI.CountEmailusers("DB")
 	if err != nil {
