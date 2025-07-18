@@ -1,6 +1,7 @@
 package goseaserv
 
 import (
+	"encoding/json"
 	"files/pkg/goseafile"
 	"files/pkg/gosearpc"
 	"fmt"
@@ -234,7 +235,32 @@ func GetEmailusers(source string, start, limit int, isActive *bool) ([]map[strin
 		}
 	}
 	ret, err := SeafservThreadedRpc.GetEmailusers(source, start, limit, status)
-	return ret.([]map[string]string), err
+	if err != nil {
+		return nil, err
+	}
+	if objList, ok := ret.([]*gosearpc.SearpcObj); ok {
+		// 转换结构体切片到map切片
+		users := make([]map[string]string, len(objList))
+		for i, obj := range objList {
+			userByte, err := obj.MarshalJSON()
+			if err != nil {
+				return nil, err
+			}
+			// 创建临时map接收解析结果
+			var userMap map[string]string
+
+			// 反序列化JSON到map
+			if err := json.Unmarshal(userByte, &userMap); err != nil {
+				return nil, fmt.Errorf("JSON解析失败: %v", err)
+			}
+
+			users[i] = userMap // 赋值给目标变量
+		}
+		return users, nil
+	} else {
+		return nil, fmt.Errorf("类型断言失败: 期望[]*SearpcObj，实际得到%T", ret)
+	}
+	//return ret.([]map[string]string), err
 }
 
 //func main() {
