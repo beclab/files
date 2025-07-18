@@ -3,6 +3,8 @@ package gosearpc
 import (
 	"encoding/json"
 	"k8s.io/klog/v2"
+	"reflect"
+	"runtime"
 	"strings"
 )
 
@@ -172,8 +174,13 @@ func SearpcFuncDeco(retType string, paramTypes []string) func(func(SearpcClient,
 
 		return func(args ...interface{}) (interface{}, error) {
 			// 获取函数名（需要反射支持，此处简化处理）
-			funcName := "unknown"
+			funcName := runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+			// 去除包路径前缀（示例："main.MyFunc" -> "MyFunc"）
+			if idx := strings.LastIndex(funcName, "."); idx > 0 {
+				funcName = funcName[idx+1:]
+			}
 			callArgs := append([]interface{}{funcName}, args...)
+			klog.Infof("~~~Debug log: callArgs: %v", callArgs)
 
 			fcallBytes, err := json.Marshal(callArgs)
 			if err != nil {
@@ -181,6 +188,13 @@ func SearpcFuncDeco(retType string, paramTypes []string) func(func(SearpcClient,
 			}
 
 			// 通过接口调用
+			klog.Infof("~~~Debug log: 底层类型:", reflect.TypeOf(args[0]).Kind())
+			npclient, ok := args[0].(NamedPipeClient)
+			if !ok {
+				klog.Infof("~~~Debug log: client is not NamedPipeClient")
+				//return nil, &SearpcError{"Invalid client type"}
+			}
+			klog.Infof("~~~Debug log: npclient: %v", npclient)
 			client, ok := args[0].(SearpcClient)
 			if !ok {
 				return nil, &SearpcError{"Invalid client type"}
