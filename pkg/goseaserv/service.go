@@ -5,6 +5,7 @@ import (
 	"files/pkg/gosearpc"
 	"fmt"
 	"github.com/go-ini/ini"
+	"k8s.io/klog/v2"
 	"log"
 	"os"
 	"path/filepath"
@@ -42,61 +43,102 @@ var (
 // 初始化配置
 func init() {
 	// 加载环境变量
+	klog.Infof("~~~Debug log: loading Env Config")
 	loadEnvConfig()
 
 	// 初始化RPC客户端
+	klog.Infof("~~~Debug log: initializing rpc client")
 	initRpcClient()
 
 	// 加载配置文件
+	klog.Infof("~~~Debug log: loading Server Config")
 	loadServerConfig()
 }
 
 func loadEnvConfig() {
+	klog.Infof("~~~Debug log: Starting environment configuration loading")
 	debug := os.Getenv(DebugEnv) != ""
+	klog.Infof("~~~Debug log: Debug mode enabled: %v", debug)
 
 	loadPath := func(key string, check bool) (string, error) {
+		klog.Infof("~~~Debug log: Loading environment variable %s (required: %v)", key, check)
 		value := os.Getenv(key)
 		if value == "" && check {
+			klog.Errorf("~~~Debug log: Missing required environment variable %s", key)
 			return "", fmt.Errorf("environment variable %s is undefined", key)
 		}
 		if debug && value != "" {
-			log.Printf("Loading %s from %s", key, value)
+			klog.Infof("~~~Debug log: Environment variable %s resolved to: %s", key, value)
 		}
-		return filepath.Clean(os.ExpandEnv(value)), nil
+		cleaned := filepath.Clean(os.ExpandEnv(value))
+		klog.Infof("~~~Debug log: Cleaned path for %s: %s", key, cleaned)
+		return cleaned, nil
 	}
 
 	var err error
+	klog.Infof("~~~Debug log: Loading CCNET_CONF_DIR...")
 	CCNET_CONF_PATH, err = loadPath("CCNET_CONF_DIR", true)
 	if err != nil {
-		log.Fatal(err)
+		klog.Fatalf("~~~Debug log: Failed to load CCNET_CONF_DIR: %v", err)
 	}
+	klog.Infof("~~~Debug log: Successfully loaded CCNET_CONF_DIR: %s", CCNET_CONF_PATH)
 
+	klog.Infof("~~~Debug log: Loading SEAFILE_CONF_DIR...")
 	SEAFILE_CONF_DIR, err = loadPath("SEAFILE_CONF_DIR", true)
 	if err != nil {
-		log.Fatal(err)
+		klog.Fatalf("~~~Debug log: Failed to load SEAFILE_CONF_DIR: %v", err)
+	}
+	klog.Infof("~~~Debug log: Successfully loaded SEAFILE_CONF_DIR: %s", SEAFILE_CONF_DIR)
+
+	klog.Infof("~~~Debug log: Loading optional SEAFILE_CENTRAL_CONF_DIR...")
+	if centralConf, err := loadPath("SEAFILE_CENTRAL_CONF_DIR", false); err == nil {
+		SEAFILE_CENTRAL_CONF_DIR = centralConf
+		klog.Infof("~~~Debug log: Loaded optional SEAFILE_CENTRAL_CONF_DIR: %s", centralConf)
 	}
 
-	SEAFILE_CENTRAL_CONF_DIR, _ = loadPath("SEAFILE_CENTRAL_CONF_DIR", false)
-	SEAFILE_RPC_PIPE_PATH, _ = loadPath("SEAFILE_RPC_PIPE_PATH", false)
+	klog.Infof("~~~Debug log: Loading optional SEAFILE_RPC_PIPE_PATH...")
+	if rpcPath, err := loadPath("SEAFILE_RPC_PIPE_PATH", false); err == nil {
+		SEAFILE_RPC_PIPE_PATH = rpcPath
+		klog.Infof("~~~Debug log: Loaded optional SEAFILE_RPC_PIPE_PATH: %s", rpcPath)
+	}
 }
 
 func initRpcClient() {
+	klog.Infof("~~~Debug log: Initializing RPC client...")
 	pipePath := SEAFILE_RPC_PIPE_PATH
 	if pipePath == "" {
+		klog.Infof("~~~Debug log: Using default RPC pipe path from SEAFILE_CONF_DIR: %s", SEAFILE_CONF_DIR)
 		pipePath = SEAFILE_CONF_DIR
+	} else {
+		klog.Infof("~~~Debug log: Using custom RPC pipe path: %s", pipePath)
 	}
-	SeafservThreadedRpc = goseafile.NewSeafServerClient(filepath.Join(pipePath, "seafile.sock"))
+
+	socketPath := filepath.Join(pipePath, "seafile.sock")
+	klog.Infof("~~~Debug log: Creating RPC client with socket path: %s", socketPath)
+	SeafservThreadedRpc = goseafile.NewSeafServerClient(socketPath)
+	klog.Infof("~~~Debug log: Successfully created SeafservThreadedRpc client")
+
+	klog.Infof("~~~Debug log: Assigning CcnetThreadedRpc to SeafservThreadedRpc instance")
 	CcnetThreadedRpc = SeafservThreadedRpc
+	klog.Infof("~~~Debug log: RPC client initialization completed")
 }
 
 func loadServerConfig() {
+	klog.Infof("~~~Debug log: Starting server configuration loading")
+
 	// 加载ccnet配置
 	ccnetPath := getConfigPath("ccnet.conf")
+	klog.Infof("~~~Debug log: Loading ccnet configuration from: %s", ccnetPath)
 	loadCcnetConfig(ccnetPath)
+	klog.Infof("~~~Debug log: Successfully loaded ccnet configuration")
 
 	// 加载seafile配置
 	seafilePath := getSeafileConfigPath("seafile.conf")
+	klog.Infof("~~~Debug log: Loading seafile configuration from: %s", seafilePath)
 	loadSeafileConfig(seafilePath)
+	klog.Infof("~~~Debug log: Successfully loaded seafile configuration")
+
+	klog.Infof("~~~Debug log: Server configuration loading completed")
 }
 
 func getConfigPath(filename string) string {
