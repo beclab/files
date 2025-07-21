@@ -623,3 +623,45 @@ func TestCloudFrontUri(t *testing.T) {
 	assert.Equal(t, err, nil)
 	assert.Equal(t, fp, &FileParam{FileType: "awss3", Extend: "AKIDxxxxxxxxx", Path: "/folder/subfolder/pic.jpg"})
 }
+
+func TestIsFile(t *testing.T) {
+	var f *FileParam
+	var fileName string
+	var isFile bool
+
+	f = &FileParam{
+		Path: "///a/afs/df/1.jpg....//",
+	}
+	fileName, isFile = f.IsFile()
+	assert.Equal(t, fileName, "")
+	assert.Equal(t, isFile, false)
+
+	f = &FileParam{
+		Path: "",
+	}
+	fileName, isFile = f.IsFile()
+	assert.Equal(t, fileName, "")
+	assert.Equal(t, isFile, false)
+
+	f = &FileParam{
+		Path: "/",
+	}
+	fileName, isFile = f.IsFile()
+	assert.Equal(t, fileName, "")
+	assert.Equal(t, isFile, false)
+
+	f = &FileParam{
+		Path: "/dir1/dir2/",
+	}
+	fileName, isFile = f.IsFile()
+	assert.Equal(t, fileName, "")
+	assert.Equal(t, isFile, false)
+
+	f = &FileParam{
+		Path: "/dir1/1.jpg",
+	}
+	fileName, isFile = f.IsFile()
+	assert.Equal(t, fileName, "1.jpg")
+	assert.Equal(t, isFile, true)
+
+}
