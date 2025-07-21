@@ -5,16 +5,18 @@ import (
 	"files/pkg/constant"
 	"files/pkg/global"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"files/pkg/workers"
 
 	"k8s.io/klog/v2"
 )
 
 func (s *SyncStorage) Paste(pasteParam *models.PasteParam) (*workers.Task, error) {
-
 	s.paste = pasteParam
 
 	var dstType = s.paste.Dst.FileType
+
+	klog.Infof("Sync - Paste, dst: %s, param: %s", dstType, utils.ToJson(pasteParam))
 
 	if dstType == constant.Drive {
 		return s.copyToDrive()

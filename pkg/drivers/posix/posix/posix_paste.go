@@ -5,16 +5,18 @@ import (
 	"files/pkg/constant"
 	"files/pkg/global"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"files/pkg/workers"
 
 	"k8s.io/klog/v2"
 )
 
 func (s *PosixStorage) Paste(pasteParam *models.PasteParam) (*workers.Task, error) {
-
 	s.paste = pasteParam
 
 	var dstType = pasteParam.Dst.FileType
+
+	klog.Infof("Posix - Paste, dst: %s, param: %s", dstType, utils.ToJson(pasteParam))
 
 	if dstType == constant.Drive || dstType == constant.External || dstType == constant.Cache {
 		// todo check disk space

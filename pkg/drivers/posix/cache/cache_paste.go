@@ -5,6 +5,7 @@ import (
 	"files/pkg/constant"
 	"files/pkg/global"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"files/pkg/workers"
 
 	"k8s.io/klog/v2"
@@ -14,6 +15,8 @@ func (s *CacheStorage) Paste(pasteParam *models.PasteParam) (*workers.Task, erro
 	s.paste = pasteParam
 
 	var dstType = pasteParam.Dst.FileType
+
+	klog.Infof("Cache - Paste, dst: %s, param: %s", dstType, utils.ToJson(pasteParam))
 
 	if dstType == constant.Drive {
 		return s.copyToDrive()
