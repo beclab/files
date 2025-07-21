@@ -9,6 +9,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/klog/v2"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -28,7 +29,8 @@ var (
 )
 
 type NodeInfo struct {
-	Name string `json:"name"`
+	Name   string `json:"name"`
+	Master bool   `json:"master"`
 }
 
 type Node struct {
@@ -74,8 +76,12 @@ func (g *Node) GetNodes() []NodeInfo {
 
 	var nodes []NodeInfo
 	for _, n := range g.Nodes {
+		l := n.Labels
+		_, isMaster := l["node-role.kubernetes.io/control-plane"]
+
 		var node = NodeInfo{
-			Name: n.Name,
+			Name:   n.Name,
+			Master: isMaster,
 		}
 		nodes = append(nodes, node)
 	}
@@ -95,6 +101,7 @@ func (g *Node) getGlobalNodes() error {
 
 	nodes, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
+		klog.Errorf("list nodes error: %v", err)
 		return err
 	}
 
