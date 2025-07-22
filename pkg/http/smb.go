@@ -7,6 +7,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drives"
 	"files/pkg/files"
+	"files/pkg/global"
 	"files/pkg/redisutils"
 	"fmt"
 	"github.com/go-redis/redis"
@@ -65,6 +66,7 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	drives.GetMountedData(r.Context())
+	global.GlobalMounted.Updated()
 	return common.RenderJSON(w, r, respJson)
 }
 
@@ -101,6 +103,7 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Da
 	}
 
 	drives.GetMountedData(r.Context())
+	global.GlobalMounted.Updated()
 	return common.RenderJSON(w, r, respJson)
 }
 
