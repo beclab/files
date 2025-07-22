@@ -1,7 +1,6 @@
 package goseaserv
 
 import (
-	"errors"
 	"files/pkg/gosearpc"
 	"fmt"
 	"k8s.io/klog/v2"
@@ -12,22 +11,74 @@ const (
 	REPO_STATUS_READ_ONLY = 1
 )
 
+func ReturnInt(ret interface{}) (int, error) {
+	retInt, ok := ret.(int)
+	if !ok {
+		klog.Errorf("~~~Debug log: Type assertion failed - expected: int, actual: %T", ret)
+		return -1, fmt.Errorf("type assertion failed - expected: int, actual:%T", ret)
+	}
+	klog.Infof("~~~Debug log: Successfully converted to int - %d", retInt)
+	return retInt, nil
+}
+
+func ReturnString(ret interface{}) (string, error) {
+	retString, ok := ret.(string)
+	if !ok {
+		klog.Errorf("~~~Debug log: Type assertion failed - expected: int, actual: %T", ret)
+		return "", fmt.Errorf("type assertion failed - expected: int, actual:%T", ret)
+	}
+	klog.Infof("~~~Debug log: Successfully converted to int - %s", retString)
+	return retString, nil
+}
+
+func ReturnObject(ret interface{}) (map[string]string, error) {
+	obj, ok := ret.(*gosearpc.SearpcObj)
+	if !ok {
+		klog.Errorf("~~~Debug log: Type assertion failed - expected: *gosearpc.SearpcObj, actual: %T", ret)
+		return nil, fmt.Errorf("type assertion failed - expected: *gosearpc.SearpcObj, actual:%T", ret)
+	}
+
+	if obj == nil {
+		klog.Infof("~~~Debug log: Successfully converted to nil - %v", ret)
+		return nil, nil
+	} else {
+		klog.Infof("~~~Debug log: Successfully converted to *gosearpc.SearpcObj - %v", obj)
+	}
+	retObject, err := obj.MapString()
+	if err != nil {
+		klog.Errorf("~~~Debug log: Parse object failed - error: %v", err)
+		return nil, err
+	}
+
+	klog.Infof("~~~Debug log: Conversion completed - retObject: %v", retObject)
+	return retObject, nil
+}
+
+func ReturnObjList(ret interface{}) ([]map[string]string, error) {
+	objList, ok := ret.([]*gosearpc.SearpcObj)
+	if !ok {
+		klog.Errorf("~~~Debug log: Type assertion failed - expected: []*gosearpc.SearpcObj, actual: %T", ret)
+		return nil, fmt.Errorf("type assertion failed - expected: []*gosearpc.SearpcObj, actual:%T", ret)
+	}
+	if objList == nil {
+		klog.Infof("~~~Debug log: Successfully converted to nil - %v", objList)
+		return nil, nil
+	} else {
+		klog.Infof("~~~Debug log: Successfully converted to []*gosearpc.SearpcObj - length: %d", len(objList))
+	}
+
+	retObjList, err := gosearpc.ObjListMapString(objList)
+	if err != nil {
+		klog.Errorf("~~~Debug log: Parse object list failed - error: %v", err)
+		return nil, err
+	}
+
+	klog.Infof("~~~Debug log: Conversion completed - total objs: %d", len(retObjList))
+	return retObjList, nil
+}
+
 type SeafileAPI struct {
 	rpcClient *SeafileRpcClient
-}
-
-type Repo struct {
-	ID        string `json:"repo_id"`
-	Name      string `json:"repo_name"`
-	Desc      string `json:"repo_desc"`
-	Encrypted bool   `json:"encrypted"`
-}
-
-type Dirent struct {
-	Type         string `json:"type"`
-	Name         string `json:"name"`
-	Size         int64  `json:"size"`
-	LastModified int64  `json:"last_modified"`
 }
 
 func NewSeafileAPI(rpcClient *SeafileRpcClient) *SeafileAPI {
@@ -41,21 +92,20 @@ func NewSeafileAPI(rpcClient *SeafileRpcClient) *SeafileAPI {
 	}
 }
 
-func (s *SeafileAPI) CreateRepo(name, desc, username string, password string, encVersion int) (*Repo, error) {
-	result, err := s.rpcClient.SeafileCreateRepo(name, desc, username, password, encVersion)
+func (s *SeafileAPI) CreateRepo(name, desc, username string, password *string, encVersion int) (string, error) {
+	ret, err := s.rpcClient.SeafileCreateRepo(name, desc, username, password, encVersion)
 	if err != nil {
-		return nil, fmt.Errorf("create repo failed: %v", err)
+		return "", fmt.Errorf("create repo failed: %v", err)
 	}
+	return ReturnString(ret)
+}
 
-	repoData, ok := result.(map[string]interface{})
-	if !ok {
-		return nil, errors.New("invalid repo data format")
+func (s *SeafileAPI) RemoveRepo(repoId string) (int, error) {
+	ret, err := s.rpcClient.SeafileDestroyRepo(repoId)
+	if err != nil {
+		return -1, fmt.Errorf("remove repo failed: %v", err)
 	}
-
-	return &Repo{
-		ID:   repoData["repo_id"].(string),
-		Name: repoData["repo_name"].(string),
-	}, nil
+	return ReturnInt(ret)
 }
 
 func (s *SeafileAPI) GetOwnedRepoList(username string, retCorrupted bool, start int, limit int) ([]map[string]string, error) {
@@ -72,21 +122,93 @@ func (s *SeafileAPI) GetOwnedRepoList(username string, retCorrupted bool, start 
 		return nil, err
 	}
 	klog.Infof("~~~Debug log: RPC call succeeded - username: %s, response type: %T", username, ret)
+	return ReturnObjList(ret)
+}
 
-	objList, ok := ret.([]*gosearpc.SearpcObj)
-	if !ok {
-		klog.Errorf("~~~Debug log: Type assertion failed - expected: []*gosearpc.SearpcObj, actual: %T", ret)
-		return nil, fmt.Errorf("type assertion failed - expected: []*gosearpc.SearpcObj, actual:%T", ret)
-	}
-	klog.Infof("~~~Debug log: Successfully converted to []*gosearpc.SearpcObj - length: %d", len(objList))
-
-	repos, err := gosearpc.ObjListMapString(objList)
+func (s *SeafileAPI) DeleteRepoTokensByEmail(email string) (int, error) {
+	ret, err := s.rpcClient.DeleteRepoTokensByEmail(email)
 	if err != nil {
-		klog.Errorf("~~~Debug log: Parse object list failed - error: %v", err)
+		klog.Errorf("~~~Debug log: RPC call failed - email: %s, error: %v", email, err)
+		return -1, err
 	}
+	klog.Infof("~~~Debug log: RPC call succeeded - email: %s, response type: %T", email, ret)
+	return ReturnInt(ret)
+}
 
-	klog.Infof("~~~Debug log: Conversion completed - total users: %d", len(repos))
-	return repos, err
+func (s *SeafileAPI) GetSystemDefaultRepoId() (string, error) {
+	ret, err := s.rpcClient.GetSystemDefaultRepoId()
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return "", err
+	}
+	klog.Infof("~~~Debug log: RPC call succeeded - response type: %T", ret)
+	return ReturnString(ret)
+}
+
+func (s *SeafileAPI) GetDirIdByPath(repoId, path string) (string, error) {
+	ret, err := s.rpcClient.SeafileGetDirIdByPath(repoId, path)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return "", err
+	}
+	return ReturnString(ret)
+}
+
+func (s *SeafileAPI) ListDirByDirId(repoId, dirId string, offset, limit int) ([]map[string]string, error) {
+	ret, err := s.rpcClient.SeafileListDir(repoId, dirId, offset, limit)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) ListDirByPath(repoId, path string, offset, limit int) ([]map[string]string, error) {
+	dirIdInterface, err := s.rpcClient.SeafileGetDirIdByPath(repoId, path)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	dirId, err := ReturnString(dirIdInterface)
+	if err != nil {
+		return nil, err
+	}
+	if dirId == "" {
+		return nil, nil
+	}
+	ret, err := s.rpcClient.SeafileListDir(repoId, dirId, offset, limit)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) CopyFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, username string, needProgress, synchronous int) (map[string]string, error) {
+	ret, err := s.rpcClient.SeafileCopyFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, username, needProgress, synchronous)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObject(ret)
+}
+
+func (s *SeafileAPI) RemoveShare(repoId, fromUsername, toUsername string) (int, error) {
+	ret, err := s.rpcClient.SeafileRemoveShare(repoId, fromUsername, toUsername)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) GetShareInRepoList(username string, start, limit int) ([]map[string]string, error) {
+	ret, err := s.rpcClient.SeafileListShareRepos(username, "to_email", start, limit)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObjList(ret)
 }
 
 var GlobalSeafileAPI *SeafileAPI // = NewSeafileAPI(SeafservThreadedRpc)
@@ -105,6 +227,37 @@ func NewCcnetAPI(rpcClient *SeafileRpcClient) *CcnetAPI {
 	return &CcnetAPI{
 		rpcClient: rpcClient,
 	}
+}
+
+func (s *CcnetAPI) AddEmailuser(email string, passwd string, isStaff int, isActive int) (int, error) {
+	ret, err := s.rpcClient.AddEmailuser(email, passwd, isStaff, isActive)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	klog.Infof("~~~Debug log: RPC call succeeded - response type: %T", ret)
+	return ReturnInt(ret)
+}
+
+func (s *CcnetAPI) RemoveEmailuser(source, email string) (int, error) {
+	ret, err := s.rpcClient.RemoveEmailuser(source, email)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *CcnetAPI) GetEmailuser(email string) (map[string]string, error) {
+	klog.Infof("~~~Debug log: GetEmailuser called - email: %s", email)
+
+	ret, err := s.rpcClient.GetEmailuser(email)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - email: %s, error: %v", email, err)
+		return nil, err
+	}
+	klog.Infof("~~~Debug log: RPC call succeeded - email: %s, response type: %T", email, ret)
+	return ReturnObject(ret)
 }
 
 func (s *CcnetAPI) GetEmailusers(source string, start, limit int, isActive *bool) ([]map[string]string, error) {
@@ -132,53 +285,42 @@ func (s *CcnetAPI) GetEmailusers(source string, start, limit int, isActive *bool
 		return nil, err
 	}
 	klog.Infof("~~~Debug log: RPC call succeeded - source: %s, response type: %T", source, ret)
-
-	objList, ok := ret.([]*gosearpc.SearpcObj)
-	if !ok {
-		klog.Errorf("~~~Debug log: Type assertion failed - expected: []*gosearpc.SearpcObj, actual: %T", ret)
-		return nil, fmt.Errorf("type assertion failed - expected: []*gosearpc.SearpcObj, actual:%T", ret)
-	}
-	klog.Infof("~~~Debug log: Successfully converted to []*gosearpc.SearpcObj - length: %d", len(objList))
-
-	users, err := gosearpc.ObjListMapString(objList)
-	if err != nil {
-		klog.Errorf("~~~Debug log: Parse object list failed - error: %v", err)
-	}
-
-	klog.Infof("~~~Debug log: Conversion completed - total users: %d", len(users))
-	return users, err
+	return ReturnObjList(ret)
 }
 
 func (s *CcnetAPI) CountEmailusers(source string) (int, error) {
-	if s.rpcClient == nil {
-		klog.Errorf("rpc client cannot be nil")
-		s.rpcClient = SeafservThreadedRpc
-	}
-	if s.rpcClient == nil {
-		klog.Errorf("rpc client cannot be nil")
-		return 0, fmt.Errorf("rpc client is nil")
-	}
 	ret, err := s.rpcClient.CountEmailusers(source)
 	if err != nil {
 		return 0, fmt.Errorf("count email users failed: %v", err)
 	}
-	return ret.(int), err
+	return ReturnInt(ret)
 }
 
 func (s *CcnetAPI) CountInactiveEmailusers(source string) (int, error) {
-	if s.rpcClient == nil {
-		klog.Errorf("rpc client cannot be nil")
-		s.rpcClient = SeafservThreadedRpc
-	}
-	if s.rpcClient == nil {
-		klog.Errorf("rpc client cannot be nil")
-		return 0, fmt.Errorf("rpc client is nil")
-	}
 	ret, err := s.rpcClient.CountInactiveEmailusers(source)
 	if err != nil {
 		return 0, fmt.Errorf("count inactive email users failed: %v", err)
 	}
-	return ret.(int), err
+	return ReturnInt(ret)
+}
+
+func (s *CcnetAPI) UpdateEmailuser(source string, userId int, password string, isStaff int, isActive int) (int, error) {
+	ret, err := s.rpcClient.UpdateEmailuser(source, userId, password, isStaff, isActive)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	klog.Infof("~~~Debug log: RPC call succeeded - response type: %T", ret)
+	return ReturnInt(ret)
+}
+
+func (s *CcnetAPI) RemoveGroupUser(username string) (int, error) {
+	ret, err := s.rpcClient.RemoveGroupUser(username)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
 }
 
 var GlobalCcnetAPI *CcnetAPI //= NewCcnetAPI(SeafservThreadedRpc)

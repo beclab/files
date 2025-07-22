@@ -111,6 +111,18 @@ func InitPostgres() {
 		}
 	}
 
+	var tableSchema []map[string]interface{}
+	if err = SeahubDBServer.Raw(`
+		SELECT column_name, data_type, is_nullable, column_default 
+		FROM information_schema.columns 
+		WHERE table_name = 'profile_profile'
+	`).Scan(&tableSchema).Error; err == nil {
+		klog.Infof("Table structure for profile_profile:")
+		for _, col := range tableSchema {
+			klog.Infof("%v", col)
+		}
+	}
+
 	klog.Infoln("Successfully connected to PostgreSQL!")
 }
 

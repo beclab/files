@@ -231,8 +231,27 @@ func CreateRPCMethod(
 			)
 		}
 
-		callArgs := append([]interface{}{methodName}, args...)
-		klog.Infof("~~~Debug log: Full argument list for %s: %+v", methodName, callArgs)
+		callArgs := make([]interface{}, 0, len(args)+1)
+		callArgs = append(callArgs, methodName)
+
+		for i, arg := range args {
+			if paramTypes[i] != "string" {
+				callArgs = append(callArgs, arg)
+				continue
+			}
+
+			if ptr, ok := arg.(*string); ok {
+				if ptr == nil {
+					callArgs = append(callArgs, nil)
+				} else {
+					callArgs = append(callArgs, *ptr)
+				}
+			} else if s, ok := arg.(string); ok {
+				callArgs = append(callArgs, s)
+			} else {
+				return nil, fmt.Errorf("parameter %d expected string, got %T", i, arg)
+			}
+		}
 
 		data, err := json.Marshal(callArgs)
 		if err != nil {

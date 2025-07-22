@@ -1,7 +1,6 @@
 package goseahub
 
 import (
-	"files/pkg/goseahub/models"
 	"files/pkg/goseaserv"
 	"k8s.io/klog/v2"
 	"log"
@@ -35,28 +34,28 @@ func ListAllUsers() (map[string]map[string]interface{}, error) {
 	data := make(map[string]map[string]interface{})
 
 	for _, user := range users {
-		profile, err := models.GlobalProfileManager.GetProfileByUser(user["email"])
-		if err != nil {
-			klog.Errorf("get profile by user failed: %v", err.Error())
-			profile = nil
-		}
+		//profile, err := models.GlobalProfileManager.GetProfileByUser(user["email"])
+		//if err != nil {
+		//	klog.Errorf("get profile by user failed: %v", err.Error())
+		//	profile = nil
+		//}
 
 		info := make(map[string]interface{})
 		userEmail := user["email"]
 		info["email"] = userEmail
-		info["name"] = models.Email2Nickname(models.Email2ContactEmail(userEmail))
-		info["contact_email"] = models.Email2ContactEmail(userEmail)
+		info["name"] = Email2Nickname(Email2ContactEmail(userEmail))
+		info["contact_email"] = Email2ContactEmail(userEmail)
 
-		if profile != nil {
-			info["login_id"] = profile.LoginID
-		} else {
-			info["login_id"] = ""
-		}
+		//if profile != nil {
+		//	info["login_id"] = profile.LoginID
+		//} else {
+		//	info["login_id"] = ""
+		//}
 
 		info["is_staff"] = user["is_staff"]
 		info["is_active"] = user["is_active"]
 
-		data[info["contact_email"].(string)] = info
+		data[info["email"].(string)] = info
 	}
 
 	// just for test

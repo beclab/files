@@ -2,12 +2,29 @@ package goseahub
 
 import (
 	"files/pkg/common"
-	"files/pkg/goseahub/models"
 	"files/pkg/goseaserv"
 	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"
+	"sync"
 )
+
+var (
+	defaultRepoID string
+	once          sync.Once
+)
+
+func getSystemDefaultRepoID() string {
+	once.Do(func() {
+		repoID, err := goseaserv.GlobalSeafileAPI.GetSystemDefaultRepoId()
+		if err != nil {
+			klog.Infof("Error getting default repo ID: %v", err)
+			return
+		}
+		defaultRepoID = repoID
+	})
+	return defaultRepoID
+}
 
 func ReposGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	filterBy := map[string]bool{
@@ -31,9 +48,12 @@ func ReposGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (in
 		}
 	}
 
-	ctx := r.Context()
-	user := ctx.Value("user").(*models.Profile)
-	email := user.User
+	//ctx := r.Context()
+	//user := ctx.Value("user").(*models.Profile)
+	//email := user.User
+
+	bflName := r.Header.Get("X-Bfl-User")
+	email := bflName + "@auth.local"
 
 	contactCache := make(map[string]string)
 	nicknameCache := make(map[string]string)
@@ -156,8 +176,8 @@ func processRepos(repos []map[string]string, repoType, email string, starredRepo
 			"repo_id":             repo["repo_id"],
 			"repo_name":           repo["repo_name"],
 			"owner_email":         email,
-			"owner_name":          models.Email2Nickname(models.Email2ContactEmail(email)),
-			"owner_contact_email": models.Email2ContactEmail(email),
+			"owner_name":          Email2Nickname(Email2ContactEmail(email)),
+			"owner_contact_email": Email2ContactEmail(email),
 			//"last_modified":          utils.TimestampToISO(repo.LastModify),
 			//"modifier_email":         repo.LastModifier,
 			//"modifier_name":          nicknameCache[repo.LastModifier],

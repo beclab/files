@@ -10,7 +10,7 @@ import (
 	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/global"
-	"files/pkg/goseahub/models"
+	"files/pkg/goseahub"
 	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
@@ -224,8 +224,8 @@ user created with the credentials from options "username" and "password".`,
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
 
-		// step9: init goseahub
-		models.InitGoSeahubModels()
+		// step9: init seahub (for test now)
+		goseahub.MigrateSeahubEmailToRedis()
 
 		// step10: watcher
 		var w = watchers.NewWatchers(context.Background(), config)

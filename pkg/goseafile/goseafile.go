@@ -19,14 +19,19 @@ func NewSeafServerClient(pipePath string) *SeafServerThreadedRpcClient {
 	}
 }
 
-func (c *SeafServerThreadedRpcClient) SeafileCreateRepo(name, desc, ownerEmail, passwd string, encVersion int) (interface{}, error) {
+func (c *SeafServerThreadedRpcClient) SeafileCreateRepo(name, desc, ownerEmail string, passwd *string, encVersion int) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_create_repo", "string", []string{"string", "string", "string", "string", "int"})(
 		name, desc, ownerEmail, passwd, encVersion)
 }
 
-func (c *SeafServerThreadedRpcClient) SeafileCreateEncRepo(repoID, name, desc, ownerEmail, magic, key, salt string, encVersion int) (interface{}, error) {
+func (c *SeafServerThreadedRpcClient) GetOwnedRepoList(username string, retCorrupted int, start int, limit int) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_list_owned_repos", "objlist", []string{"string", "int", "int", "int"})(
+		username, retCorrupted, start, limit)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileCreateEncRepo(repoId, name, desc, ownerEmail, magic, key, salt string, encVersion int) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_create_enc_repo", "string", []string{"string", "string", "string", "string", "string", "string", "string", "int"})(
-		repoID, name, desc, ownerEmail, magic, key, salt, encVersion)
+		repoId, name, desc, ownerEmail, magic, key, salt, encVersion)
 }
 
 func (c *SeafServerThreadedRpcClient) SeafileGetReposByIdPrefix(idPrefix string, start, limit int) (interface{}, error) {
@@ -34,12 +39,60 @@ func (c *SeafServerThreadedRpcClient) SeafileGetReposByIdPrefix(idPrefix string,
 		idPrefix, start, limit)
 }
 
-func (c *SeafServerThreadedRpcClient) SeafileGetRepo(repoID string) (interface{}, error) {
-	return CreateRPCMethod(c, "seafile_get_repo", "object", []string{"string"})(repoID)
+func (c *SeafServerThreadedRpcClient) SeafileGetRepo(repoId string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_repo", "object", []string{"string"})(repoId)
 }
 
-func (c *SeafServerThreadedRpcClient) SeafileDestroyRepo(repoID string) (interface{}, error) {
-	return CreateRPCMethod(c, "seafile_destroy_repo", "int", []string{"string"})(repoID)
+func (c *SeafServerThreadedRpcClient) SeafileDestroyRepo(repoId string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_destroy_repo", "int", []string{"string"})(repoId)
+}
+
+func (c *SeafServerThreadedRpcClient) DeleteRepoTokensByEmail(email string) (interface{}, error) {
+	return CreateRPCMethod(c, "delete_repo_tokens_by_email", "int", []string{"string"})(email)
+}
+
+func (c *SeafServerThreadedRpcClient) GetSystemDefaultRepoId() (interface{}, error) {
+	return CreateRPCMethod(c, "get_system_default_repo_id", "string", []string{})()
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileGetDirIdByPath(repoId, path string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_dir_id_by_path", "string", []string{"string", "string"})(
+		repoId, path)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileListDir(repoId, dirId string, offset, limit int) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_list_dir", "objlist", []string{"string", "string", "int", "int"})(
+		repoId, dirId, offset, limit)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileCopyFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, user string,
+	needProgress, synchronous int) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_copy_file", "object", []string{"string", "string", "string", "string", "string", "string", "string", "int", "int"})(
+		srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, user, needProgress, synchronous)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileRemoveShare(repoId, fromEmail, toEmail string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_remove_share", "int", []string{"string", "string", "string"})(
+		repoId, fromEmail, toEmail)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileListShareRepos(email, queryCol string, start, limit int) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_list_share_repos", "objlist", []string{"string", "string", "int", "int"})(
+		email, queryCol, start, limit)
+}
+
+func (c *SeafServerThreadedRpcClient) AddEmailuser(email string, passwd string, isStaff int, isActive int) (interface{}, error) {
+	return CreateRPCMethod(c, "add_emailuser", "int", []string{"string", "string", "int", "int"})(
+		email, passwd, isStaff, isActive)
+}
+
+func (c *SeafServerThreadedRpcClient) RemoveEmailuser(source, email string) (interface{}, error) {
+	return CreateRPCMethod(c, "remove_emailuser", "int", []string{"string", "string"})(
+		source, email)
+}
+
+func (c *SeafServerThreadedRpcClient) GetEmailuser(email string) (interface{}, error) {
+	return CreateRPCMethod(c, "get_emailuser", "object", []string{"string"})(email)
 }
 
 func (c *SeafServerThreadedRpcClient) GetEmailusers(source string, start int, limit int, status string) (interface{}, error) {
@@ -57,7 +110,11 @@ func (c *SeafServerThreadedRpcClient) CountInactiveEmailusers(source string) (in
 		source)
 }
 
-func (c *SeafServerThreadedRpcClient) GetOwnedRepoList(username string, retCorrupted int, start int, limit int) (interface{}, error) {
-	return CreateRPCMethod(c, "seafile_list_owned_repos", "objlist", []string{"string", "int", "int", "int"})(
-		username, retCorrupted, start, limit)
+func (c *SeafServerThreadedRpcClient) UpdateEmailuser(source string, userId int, password string, isStaff int, isActive int) (interface{}, error) {
+	return CreateRPCMethod(c, "update_emailuser", "int", []string{"string", "int", "string", "int", "int"})(
+		source, userId, password, isStaff, isActive)
+}
+
+func (c *SeafServerThreadedRpcClient) RemoveGroupUser(username string) (interface{}, error) {
+	return CreateRPCMethod(c, "remove_group_user", "int", []string{"string"})(username)
 }
