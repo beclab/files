@@ -42,3 +42,11 @@ const (
 	Text  = "text"
 	Image = "image"
 )
+
+const (
+	Pending   = "pending"
+	Running   = "running"
+	Failed    = "failed"
+	Cancelled = "cancelled"
+	Completed = "completed"
+)

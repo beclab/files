@@ -1,9 +1,9 @@
 package commands
 
-func (c *command) UploadToSync() error {
+func (c *Command) UploadToSync() error {
 	return nil
 }
 
-func (c *command) UploadToCloud() error {
+func (c *Command) UploadToCloud() error {
 	return nil
 }

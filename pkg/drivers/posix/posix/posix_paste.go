@@ -5,13 +5,13 @@ import (
 	"files/pkg/constant"
 	"files/pkg/global"
 	"files/pkg/models"
+	"files/pkg/tasks"
 	"files/pkg/utils"
-	"files/pkg/workers"
 
 	"k8s.io/klog/v2"
 )
 
-func (s *PosixStorage) Paste(pasteParam *models.PasteParam) (*workers.Task, error) {
+func (s *PosixStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error) {
 	s.paste = pasteParam
 
 	var dstType = pasteParam.Dst.FileType
@@ -41,7 +41,8 @@ func (s *PosixStorage) Paste(pasteParam *models.PasteParam) (*workers.Task, erro
 	return nil, errors.New("")
 }
 
-func (s *PosixStorage) copyToDrive() (task *workers.Task, err error) {
+func (s *PosixStorage) copyToDrive() (task *tasks.Task, err error) {
+	klog.Info("Paste - Paste, copytodrive")
 
 	var currentNodeName = global.CurrentNodeName
 	var isCurrentNodeMaster = global.GlobalNode.IsMasterNode(currentNodeName)
@@ -52,14 +53,16 @@ func (s *PosixStorage) copyToDrive() (task *workers.Task, err error) {
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.Rsync, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
+	if err = task.Run(); err != nil {
+		klog.Errorf("Posix - Paste, copytodrive run task error: %v", err)
 		return
 	}
+
 	return
 }
 
-func (s *PosixStorage) copyToExternal() (task *workers.Task, err error) {
+func (s *PosixStorage) copyToExternal() (task *tasks.Task, err error) {
 
 	var dstNode = s.paste.Dst.Extend
 
@@ -70,14 +73,15 @@ func (s *PosixStorage) copyToExternal() (task *workers.Task, err error) {
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.Rsync, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
+
 	return
 }
 
-func (s *PosixStorage) copyToCache() (task *workers.Task, err error) {
+func (s *PosixStorage) copyToCache() (task *tasks.Task, err error) {
 
 	var dstNode = s.paste.Dst.Extend
 
@@ -88,14 +92,15 @@ func (s *PosixStorage) copyToCache() (task *workers.Task, err error) {
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.Rsync, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
+
 	return
 }
 
-func (s *PosixStorage) copyToSync() (task *workers.Task, err error) {
+func (s *PosixStorage) copyToSync() (task *tasks.Task, err error) {
 
 	var currentNodeName = global.CurrentNodeName
 	var isCurrentNodeMaster = global.GlobalNode.IsMasterNode(currentNodeName)
@@ -106,15 +111,16 @@ func (s *PosixStorage) copyToSync() (task *workers.Task, err error) {
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.UploadToSync, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.UploadToSync, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
+
 	return
 
 }
 
-func (s *PosixStorage) copyToCloud() (task *workers.Task, err error) {
+func (s *PosixStorage) copyToCloud() (task *tasks.Task, err error) {
 
 	var currentNodeName = global.CurrentNodeName
 	var isCurrentNodeMaster = global.GlobalNode.IsMasterNode(currentNodeName)
@@ -124,9 +130,10 @@ func (s *PosixStorage) copyToCloud() (task *workers.Task, err error) {
 		err = errors.New("copyPosixToCloud: not master node")
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.UploadToCloud, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.UploadToCloud, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
+
 	return
 }

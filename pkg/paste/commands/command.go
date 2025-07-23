@@ -1,10 +1,12 @@
 package commands
 
-import "files/pkg/models"
+import (
+	"context"
+	"files/pkg/models"
+)
 
 type CommandInterface interface {
-	Rsync() error
-	Move() error
+	Rsync() error // include rsync and mv
 
 	UploadToSync() error
 	UploadToCloud() error
@@ -17,15 +19,19 @@ type CommandInterface interface {
 	CloudCopy() error
 }
 
-type command struct {
+type Command struct {
+	ctx    context.Context
 	owner  string
 	action string
 	src    *models.FileParam
 	dst    *models.FileParam
+	Exec   func() error
+	Update func(progress int)
 }
 
-func NewCommand(param *models.PasteParam) CommandInterface {
-	return &command{
+func NewCommand(ctx context.Context, param *models.PasteParam) *Command {
+	return &Command{
+		ctx:    ctx,
 		owner:  param.Owner,
 		action: param.Action,
 		src:    param.Src,

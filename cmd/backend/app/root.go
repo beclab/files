@@ -13,6 +13,7 @@ import (
 	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
+	"files/pkg/tasks"
 	"files/pkg/watchers"
 	"io"
 	"net"
@@ -229,6 +230,9 @@ user created with the credentials from options "username" and "password".`,
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
 
 		go w.Run(1)
+
+		// step10: task manager
+		tasks.NewTaskManager()
 
 		sigc := make(chan os.Signal, 1)
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)

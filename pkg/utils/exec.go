@@ -2,12 +2,12 @@ package utils
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -18,7 +18,7 @@ type Command struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	cmd     *exec.Cmd
-	Ch      chan []byte
+	Ch      chan string
 }
 
 type CommandOptions struct {
@@ -34,7 +34,7 @@ func NewCommand(ctx context.Context, opts CommandOptions) *Command {
 		options: opts,
 		ctx:     cmdCtx,
 		cancel:  cancel,
-		Ch:      make(chan []byte, 50),
+		Ch:      make(chan string, 50),
 	}
 }
 
@@ -67,6 +67,7 @@ func (c *Command) Run() error {
 	}
 
 	defer func() error {
+		klog.Infof("[command] run exec defer")
 		close(c.Ch)
 		if errWait := c.cmd.Wait(); errWait != nil {
 			return errors.Wrapf(errWait, fmt.Sprintf("wait error for command: %s, exec error %v", c.cmd.String(), err))
@@ -79,9 +80,9 @@ func (c *Command) Run() error {
 	for {
 		select {
 		case <-c.ctx.Done():
-			if c.cmd.Process != nil {
-				_ = c.cmd.Process.Kill()
-			}
+			// if c.cmd.Process != nil {
+			// 	_ = c.cmd.Process.Kill()
+			// }
 			return c.ctx.Err()
 		default:
 			var n int
@@ -90,20 +91,26 @@ func (c *Command) Run() error {
 
 			if err != nil {
 				if err == io.EOF {
-					break
+					return nil
 				}
 				return err
 			}
 
 			if n <= 0 {
-				break
+				return nil
 			}
 
-			if n > 0 {
-				chunk := buffer[:n]
-				chunk = bytes.TrimSpace(chunk)
-				c.Ch <- chunk
+			chunk := string(buffer[:n])
+			chunk = strings.TrimSpace(chunk)
+
+			if c.options.Print {
+				klog.Infof("[Cmd] run output: %s", chunk)
 			}
+
+			if strings.Contains(chunk, "error") || strings.Contains(chunk, "failed:") {
+				return errors.New(chunk)
+			}
+			c.Ch <- chunk
 		}
 	}
 }

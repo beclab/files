@@ -1,8 +1,8 @@
 package commands
 
-func (c *command) SyncCopy() error {
+func (c *Command) SyncCopy() error {
 	return nil
 }
-func (c *command) CloudCopy() error {
+func (c *Command) CloudCopy() error {
 	return nil
 }

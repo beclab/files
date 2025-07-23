@@ -68,8 +68,9 @@ func NewHandler(
 	api.PathPrefix("/tree").Handler(wrapWithTreeParm(treeHandler, "/api/tree/")).Methods("GET")                      // walk through files
 	api.PathPrefix("/preview/{path:.*}").Handler(wrapperPreviewArgs(previewHandler, "/api/preview/")).Methods("GET") // preview image
 	api.PathPrefix("/raw").Handler(wrapperRawArgs(rawHandler, "/api/raw")).Methods("GET")
-	// ! paste
+	// + paste+task todo
 	api.PathPrefix("/paste").Handler(wrapperPasteArgs("/api/paste")).Methods("PATCH") // paste // recons done
+	api.PathPrefix("/task").Handler(wrapperTaskArgs("/api/task")).Methods("GET")      // no need to recons
 
 	// ~
 

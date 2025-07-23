@@ -5,6 +5,7 @@ import (
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"net/http"
 )
 
@@ -34,7 +35,8 @@ func pasteHandle(prefix string) http.Handler {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(task.Id))
+		var data = map[string]string{"task_id": task.Id()}
+		w.Write([]byte(utils.ToJson(data)))
 		return
 
 	})

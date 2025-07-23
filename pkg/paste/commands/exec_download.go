@@ -1,13 +1,13 @@
 package commands
 
-func (c *command) DownloadFromFiles() error {
+func (c *Command) DownloadFromFiles() error {
 	return nil
 }
 
-func (c *command) DownloadFromSync() error {
+func (c *Command) DownloadFromSync() error {
 	return nil
 }
 
-func (c *command) DownloadFromCloud() error {
+func (c *Command) DownloadFromCloud() error {
 	return nil
 }

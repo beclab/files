@@ -5,13 +5,13 @@ import (
 	"files/pkg/constant"
 	"files/pkg/global"
 	"files/pkg/models"
+	"files/pkg/tasks"
 	"files/pkg/utils"
-	"files/pkg/workers"
 
 	"k8s.io/klog/v2"
 )
 
-func (s *CacheStorage) Paste(pasteParam *models.PasteParam) (*workers.Task, error) {
+func (s *CacheStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error) {
 	s.paste = pasteParam
 
 	var dstType = pasteParam.Dst.FileType
@@ -39,7 +39,7 @@ func (s *CacheStorage) Paste(pasteParam *models.PasteParam) (*workers.Task, erro
 
 }
 
-func (s *CacheStorage) copyToDrive() (task *workers.Task, err error) {
+func (s *CacheStorage) copyToDrive() (task *tasks.Task, err error) {
 
 	var srcNode = s.paste.Src.Extend
 
@@ -50,14 +50,14 @@ func (s *CacheStorage) copyToDrive() (task *workers.Task, err error) {
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.Rsync, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
 	return
 }
 
-func (s *CacheStorage) copyToExternal() (task *workers.Task, err error) {
+func (s *CacheStorage) copyToExternal() (task *tasks.Task, err error) {
 
 	var srcNode = s.paste.Src.Extend
 	var dstNode = s.paste.Dst.Extend
@@ -70,22 +70,22 @@ func (s *CacheStorage) copyToExternal() (task *workers.Task, err error) {
 	}
 
 	if srcNode == dstNode {
-		task, err = workers.SubmitTask(workers.NewTaskId(), workers.Rsync, s.paste)
-		if err != nil {
+		task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
+		if err = task.Run(); err != nil {
 			return
 		}
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.DownloadFromFiles, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.DownloadFromFiles, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
 
 	return
 }
 
-func (s *CacheStorage) copyToCache() (task *workers.Task, err error) {
+func (s *CacheStorage) copyToCache() (task *tasks.Task, err error) {
 
 	var srcNode = s.paste.Src.Extend
 	var dstNode = s.paste.Dst.Extend
@@ -97,22 +97,22 @@ func (s *CacheStorage) copyToCache() (task *workers.Task, err error) {
 	}
 
 	if srcNode == dstNode {
-		task, err = workers.SubmitTask(workers.NewTaskId(), workers.Rsync, s.paste)
-		if err != nil {
+		task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
+		if err = task.Run(); err != nil {
 			return
 		}
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.DownloadFromFiles, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.DownloadFromFiles, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
 
 	return
 }
 
-func (s *CacheStorage) copyToSync() (task *workers.Task, err error) {
+func (s *CacheStorage) copyToSync() (task *tasks.Task, err error) {
 
 	var srcNode = s.paste.Src.Extend
 
@@ -123,15 +123,15 @@ func (s *CacheStorage) copyToSync() (task *workers.Task, err error) {
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.UploadToSync, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.UploadToSync, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
 
 	return
 }
 
-func (s *CacheStorage) copyToCloud() (task *workers.Task, err error) {
+func (s *CacheStorage) copyToCloud() (task *tasks.Task, err error) {
 
 	var srcNode = s.paste.Src.Extend
 
@@ -142,8 +142,8 @@ func (s *CacheStorage) copyToCloud() (task *workers.Task, err error) {
 		return
 	}
 
-	task, err = workers.SubmitTask(workers.NewTaskId(), workers.UploadToCloud, s.paste)
-	if err != nil {
+	task = tasks.TaskManager.CreateTask(tasks.UploadToCloud, s.paste)
+	if err = task.Run(); err != nil {
 		return
 	}
 	return
