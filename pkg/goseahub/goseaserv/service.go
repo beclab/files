@@ -1,8 +1,8 @@
 package goseaserv
 
 import (
-	"files/pkg/goseafile"
-	"files/pkg/gosearpc"
+	"files/pkg/goseahub/goseafile"
+	"files/pkg/goseahub/gosearpc"
 	"fmt"
 	"github.com/go-ini/ini"
 	"k8s.io/klog/v2"

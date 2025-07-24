@@ -2,7 +2,7 @@ package goseahub
 
 import (
 	"files/pkg/common"
-	"files/pkg/goseaserv"
+	"files/pkg/goseahub/goseaserv"
 	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"

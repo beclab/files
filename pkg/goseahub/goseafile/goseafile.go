@@ -1,7 +1,7 @@
 package goseafile
 
 import (
-	"files/pkg/gosearpc"
+	"files/pkg/goseahub/gosearpc"
 )
 
 type NamedPipeClient = gosearpc.NamedPipeClient

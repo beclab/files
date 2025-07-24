@@ -1,7 +1,7 @@
 package goseaserv
 
 import (
-	"files/pkg/gosearpc"
+	"files/pkg/goseahub/gosearpc"
 	"fmt"
 	"k8s.io/klog/v2"
 )

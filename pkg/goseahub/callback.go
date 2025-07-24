@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/goseaserv"
+	"files/pkg/goseahub/goseaserv"
 	"k8s.io/klog/v2"
 	"log"
 	"net/http"
 	"strings"
 )
 
-func createDefaultLibrary(request *http.Request, newUsername string) (string, error) {
+func createDefaultLibrary(newUsername string) (string, error) {
 	username := newUsername
 	if username == "" {
 		return "", errors.New("username is empty")
@@ -90,7 +90,7 @@ func CallbackCreateHandler(w http.ResponseWriter, r *http.Request, d *common.Dat
 			virtualID := newUserEmail
 			klog.Infof("Try to create default library for %s with virtual_id %s", newUserEmail, virtualID)
 
-			repoID, err := createDefaultLibrary(r, virtualID) // TODO
+			repoID, err := createDefaultLibrary(virtualID)
 			if err != nil {
 				klog.Infof("Create default library for %s failed: %v", newUserEmail, err)
 			} else {
