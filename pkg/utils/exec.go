@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -16,7 +17,6 @@ import (
 type Command struct {
 	options CommandOptions
 	ctx     context.Context
-	cancel  context.CancelFunc
 	cmd     *exec.Cmd
 	Ch      chan string
 }
@@ -29,17 +29,11 @@ type CommandOptions struct {
 }
 
 func NewCommand(ctx context.Context, opts CommandOptions) *Command {
-	var cmdCtx, cancel = context.WithCancel(ctx)
 	return &Command{
 		options: opts,
-		ctx:     cmdCtx,
-		cancel:  cancel,
+		ctx:     ctx,
 		Ch:      make(chan string, 50),
 	}
-}
-
-func (c *Command) Cancel() {
-	c.cancel()
 }
 
 func (c *Command) GetCmd() *exec.Cmd {
@@ -50,6 +44,7 @@ func (c *Command) Run() error {
 	var err error
 	c.cmd = exec.CommandContext(c.ctx, c.options.Name, c.options.Args...)
 	c.cmd.Env = append(os.Environ(), c.cmd.Env...)
+	c.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	for k, v := range c.options.Envs {
 		c.cmd.Env = append(c.cmd.Env, fmt.Sprintf("%s=%s", k, v))
@@ -68,7 +63,6 @@ func (c *Command) Run() error {
 
 	defer func() error {
 		klog.Infof("[command] run exec defer")
-		close(c.Ch)
 		if errWait := c.cmd.Wait(); errWait != nil {
 			return errors.Wrapf(errWait, fmt.Sprintf("wait error for command: %s, exec error %v", c.cmd.String(), err))
 		}
@@ -80,9 +74,6 @@ func (c *Command) Run() error {
 	for {
 		select {
 		case <-c.ctx.Done():
-			// if c.cmd.Process != nil {
-			// 	_ = c.cmd.Process.Kill()
-			// }
 			return c.ctx.Err()
 		default:
 			var n int
@@ -110,6 +101,7 @@ func (c *Command) Run() error {
 			if strings.Contains(chunk, "error") || strings.Contains(chunk, "failed:") {
 				return errors.New(chunk)
 			}
+
 			c.Ch <- chunk
 		}
 	}

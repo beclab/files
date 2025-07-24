@@ -11,12 +11,14 @@ import (
 )
 
 type Task struct {
-	taskType TaskType
-	id       string
-	param    *models.PasteParam
-	state    string
-	message  string
-	progress int
+	taskType  TaskType
+	id        string
+	param     *models.PasteParam
+	state     string
+	message   string
+	progress  int
+	transfer  int64
+	totalSize int64
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -40,21 +42,23 @@ func (t *Task) Run() error {
 		var err error
 
 		defer func() {
-			klog.Infof("Task Id: %s done, status: %s", t.id, t.state)
+			klog.Infof("Task Id: %s done, status: %s, progress: %d, size: %d, transfer: %d", t.id, t.state, t.progress, t.totalSize, t.transfer)
 		}()
 
 		klog.Infof("Task Id: %s", t.id)
 		t.state = constant.Running
-		t.command.Update = t.updateProgress
+		t.command.UpdateProgress = t.updateProgress
+		t.command.UpdateTotalSize = t.updateTotalSize
 
 		if err = t.command.Exec(); err != nil {
 			klog.Errorf("Task Failed: %v", err)
 			t.state = constant.Failed
-			t.state = err.Error()
+			t.message = err.Error()
 			return
 		}
 
 		t.state = constant.Completed
+		t.progress = 100
 
 		return
 	})
@@ -66,6 +70,11 @@ func (t *Task) Run() error {
 	return nil
 }
 
-func (t *Task) updateProgress(progress int) {
+func (t *Task) updateProgress(progress int, transfer int64) {
 	t.progress = progress
+	t.transfer = transfer
+}
+
+func (t *Task) updateTotalSize(totalSize int64) {
+	t.totalSize = totalSize
 }

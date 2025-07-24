@@ -11,6 +11,8 @@ type TaskInfo struct {
 	Src           string `json:"source"`
 	SrcFileType   string `json:"src_type"`
 	Progress      int    `json:"progress"`
-	Status        string `json:"status"`
+	Transferred   int64  `json:"transferred"`
 	TotalFileSize int64  `json:"total_file_size"`
+	Status        string `json:"status"`
+	ErrorMessage  string `json:"failed_reason"`
 }

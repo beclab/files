@@ -2,6 +2,10 @@ package constant
 
 import "os"
 
+var (
+	FreeLimit float64 = 85.00
+)
+
 const (
 	ROOT_PREFIX     = "/data"
 	CACHE_PREFIX    = "/appcache"

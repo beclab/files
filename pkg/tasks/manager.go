@@ -2,6 +2,8 @@ package tasks
 
 import (
 	"context"
+	"files/pkg/constant"
+	"files/pkg/fileutils"
 	"files/pkg/models"
 	"files/pkg/paste/commands"
 	"fmt"
@@ -53,6 +55,7 @@ func (t *taskManager) CreateTask(taskType TaskType, param *models.PasteParam) *T
 		taskType: taskType,
 		id:       t.generateTaskId(),
 		param:    param,
+		state:    constant.Pending,
 		ctx:      ctx,
 		cancel:   cancel,
 		manager:  t,
@@ -60,10 +63,50 @@ func (t *taskManager) CreateTask(taskType TaskType, param *models.PasteParam) *T
 	}
 }
 
-func (t *taskManager) generateTaskId() string {
-	var n = time.Now()
-	var id = n.UnixNano()
-	return fmt.Sprintf("task%d", id)
+func (t *taskManager) CancelTask(taskId string) {
+	val, ok := t.task.Load(taskId)
+	if !ok {
+		return
+	}
+
+	task := val.(*Task)
+	task.cancel()
+}
+
+func (t *taskManager) GetTask(taskId string) *TaskInfo {
+	val, ok := t.task.Load(taskId)
+	if !ok {
+		return nil
+	}
+
+	task := val.(*Task)
+
+	var src = task.param.Src
+	var dst = task.param.Dst
+
+	var srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
+	var dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
+	var dstFileName = fileutils.GetPathName(dst.Path)
+	var srcFileName = fileutils.GetPathName(src.Path)
+
+	var res = &TaskInfo{
+		Id:            task.id,
+		Action:        task.param.Action,
+		IsDir:         true,
+		FileName:      srcFileName,
+		Dst:           dstUri,
+		DstPath:       dstFileName,
+		DstFileType:   dst.FileType,
+		Src:           srcUri,
+		SrcFileType:   src.FileType,
+		Progress:      task.progress,
+		Transferred:   task.transfer,
+		TotalFileSize: task.totalSize,
+		Status:        task.state,
+		ErrorMessage:  task.message,
+	}
+
+	return res
 }
 
 func (t *taskManager) buildCommand(ctx context.Context, taskType TaskType, param *models.PasteParam) *commands.Command {
@@ -96,34 +139,8 @@ func (t *taskManager) buildCommand(ctx context.Context, taskType TaskType, param
 	return command
 }
 
-func (t *taskManager) GetTask(taskId string) *TaskInfo {
-	val, ok := t.task.Load(taskId)
-	if !ok {
-		return nil
-	}
-
-	task := val.(*Task)
-
-	var src = task.param.Src
-	var dst = task.param.Dst
-
-	var srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
-	var dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
-
-	var res = &TaskInfo{
-		Id:            task.id,
-		Action:        task.param.Action,
-		IsDir:         true,
-		FileName:      src.GetName(),
-		Dst:           dstUri,
-		DstPath:       dst.Path,
-		DstFileType:   dst.FileType,
-		Src:           srcUri,
-		SrcFileType:   src.FileType,
-		Status:        task.state,
-		Progress:      task.progress,
-		TotalFileSize: 0,
-	}
-
-	return res
+func (t *taskManager) generateTaskId() string {
+	var n = time.Now()
+	var id = n.UnixNano()
+	return fmt.Sprintf("task%d", id)
 }

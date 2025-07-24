@@ -1,8 +1,13 @@
 package fileutils
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	e "errors"
+	"files/pkg/files"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,9 +15,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 )
+
+type PathMeta struct {
+	Name  string `json:"name"`
+	Path  string `json:"path"`
+	Ext   string `json:"ext"`
+	Size  int64  `json:"size"`
+	Nums  int64  `json:"nums"`
+	IsDir bool   `json:"isDir"`
+}
 
 // MoveFile moves file from src to dst.
 // By default the rename filesystem system call is used. If src and dst point to different volumes
@@ -431,4 +446,196 @@ func FilePathExists(name string) bool {
 		return false
 	}
 	return true
+}
+
+func GetSpaceSize(filePath string) (uint64, float64, error) {
+	usage, err := disk.Usage(filePath)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return usage.Free, usage.UsedPercent, nil
+
+}
+
+func GetFileInfo(filePath string) (*PathMeta, error) {
+	var meta = new(PathMeta)
+	var afs = afero.NewOsFs()
+
+	obj, err := files.NewFileInfo(files.FileOptions{
+		Fs:      afs,
+		Path:    filePath,
+		Expand:  false,
+		Content: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if !obj.IsDir {
+		meta.Name = obj.Name
+		meta.Path = obj.Path
+		meta.IsDir = false
+		meta.Ext = obj.Extension
+		meta.Size = obj.Size
+		meta.Nums = 1
+
+		return meta, nil
+	}
+
+	var fileCount int64
+	var totalSize int64
+	if err := afero.Walk(afs, filePath, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			fileCount++
+			totalSize = totalSize + info.Size()
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	var tmp = strings.TrimSuffix(filePath, "/")
+	var pos = strings.LastIndex(tmp, "/")
+	var name = strings.Trim(tmp[pos:], "/")
+
+	meta.IsDir = true
+	meta.Name = name
+	meta.Path = filePath
+	meta.Ext = ""
+	meta.Nums = fileCount
+	meta.Size = totalSize
+
+	return meta, nil
+}
+
+func CollectDupNames(p string, prefixName string, ext string, isDir bool) ([]string, error) {
+	// p = strings.Split(p,"/")[:len(x)-2]
+	var result []string
+	var afs = afero.NewOsFs()
+	entries, err := afero.ReadDir(afs, p)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() != isDir {
+			continue
+		}
+
+		infoName := entry.Name()
+		if isDir {
+			if strings.Contains(infoName, prefixName) {
+				result = append(result, infoName)
+			}
+		} else {
+			infoName = strings.TrimSuffix(infoName, ext)
+			if strings.Contains(infoName, prefixName) {
+				result = append(result, infoName)
+			}
+		}
+	}
+
+	return result, nil
+}
+
+func GenerateDupCommonName(existsName []string, prefixName string) string {
+	var filePrefixName = prefixName
+
+	var count = 0
+	var matchedCount int
+
+	var searchName = prefixName
+
+	for {
+		var find bool
+		for _, name := range existsName {
+			if strings.TrimSpace(name) == searchName {
+				find = true
+				break
+			}
+		}
+
+		if find {
+			count++
+			searchName = fmt.Sprintf("%s(%d)", prefixName, count)
+			continue
+		} else {
+			matchedCount = count
+			break
+		}
+
+	}
+
+	var newFileName = fmt.Sprintf("%s(%d)", filePrefixName, matchedCount)
+
+	return newFileName
+}
+
+func UpdatePathName(oldPath string, newName string, isDir bool) string {
+	if isDir {
+		var tmp = strings.TrimSuffix(oldPath, "/")
+		var pos = strings.LastIndex(tmp, "/")
+		var p = tmp[:pos] + "/" + newName + "/"
+		return p
+	}
+
+	var pos = strings.LastIndex(oldPath, "/")
+	var p = oldPath[:pos] + "/" + newName
+	return p
+}
+
+func GetPathName(p string) string {
+	if strings.HasSuffix(p, "/") {
+		var tmp = strings.TrimSuffix(p, "/")
+		var pos = strings.LastIndex(tmp, "/")
+		tmp = p[pos:]
+		tmp = strings.Trim(tmp, "/")
+		return tmp
+	} else {
+		var pos = strings.LastIndex(p, "/")
+		var tmp = p[pos:]
+		return tmp
+	}
+}
+
+func WriteTempFile(dstPath string) error {
+	dir := FindExistingDir(dstPath)
+	if dir == "" {
+		return fmt.Errorf("no writable directory found in path hierarchy of %q", dstPath)
+	}
+
+	timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
+	randomBytes := make([]byte, 8)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return fmt.Errorf("failed to generate random bytes: %v", err)
+	}
+	randomStr := base64.URLEncoding.EncodeToString(randomBytes)[:8]
+	filename := fmt.Sprintf("temp_%s_%s.testwriting", timestamp, randomStr)
+	filePath := filepath.Join(dir, filename)
+
+	defer func() {
+		_ = os.Remove(filePath)
+		klog.Infof("Cleaned up temporary file %s", filePath)
+	}()
+
+	klog.Infof("Creating temporary file %s", filePath)
+
+	if err := os.WriteFile(filePath, []byte{0}, 0o644); err != nil {
+		var pathErr *fs.PathError
+		if e.As(err, &pathErr) {
+			if pathErr.Err == syscall.EACCES || pathErr.Err == syscall.EPERM {
+				return fmt.Errorf("permission denied: failed to create file: %v", err)
+			} else if pathErr.Err == syscall.EROFS {
+				return fmt.Errorf("read-only file system: failed to create file: %v", err)
+			}
+		}
+		return fmt.Errorf("failed to create file: %v", err)
+	}
+
+	return nil
 }

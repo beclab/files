@@ -11,6 +11,7 @@ type TaskParam struct {
 	TaskId  string `json:"taskId"`
 	Status  string `json:"status"`
 	LogView string `json:"logView"`
+	Delete  string `json:"delete"`
 }
 
 func NewTaskParam(r *http.Request) (*TaskParam, error) {
@@ -24,6 +25,7 @@ func NewTaskParam(r *http.Request) (*TaskParam, error) {
 		TaskId:  r.URL.Query().Get("task_id"),
 		Status:  r.URL.Query().Get("status"),
 		LogView: r.URL.Query().Get("log_view"),
+		Delete:  r.URL.Query().Get("delete"),
 	}
 
 	return taskParam, nil

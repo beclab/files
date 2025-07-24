@@ -7,19 +7,19 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var (
 	completeMsgs = []string{"sent", "received", "total size is", "speedup is"}
 )
 
-func ExecRsync(ctx context.Context, name string, args []string, callbackup func(p int)) (string, error) {
+func ExecRsync(ctx context.Context, name string, args []string, callbackup func(p int, t int64)) (string, error) {
 	var opts = utils.CommandOptions{
 		Name:  name,
 		Args:  args,
 		Print: true,
 	}
+
 	c := utils.NewCommand(ctx, opts)
 
 	var errMsg string
@@ -29,9 +29,9 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 		defer close(errChan)
 		for {
 			select {
-			case <-ctx.Done():
-				errChan <- ctx.Err()
-				return
+			// case <-ctx.Done():
+			// 	errChan <- ctx.Err()
+			// 	return
 			case result, ok := <-c.Ch:
 				if !ok {
 					return
@@ -45,13 +45,12 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 					return
 				}
 
-				if progress, err := formatProgress(result); err == nil {
-					callbackup(progress)
+				if progress, trans, err := formatProgress(result); err == nil {
+					callbackup(progress, trans)
 					continue
 				}
 
 				if formatFinished(result) {
-					callbackup(100)
 					return
 				}
 			}
@@ -98,7 +97,7 @@ func formatFinished(l string) bool {
 	return true
 }
 
-func formatProgress(l string) (int, error) {
+func formatProgress(l string) (int, int64, error) {
 	// 441,505,944  87%    7.82MB/s    0:00:07
 	// sent 479,087,779 bytes  received 184 bytes  8,189,537.83 bytes/sec
 	var lines = strings.Split(l, "\n")
@@ -106,23 +105,21 @@ func formatProgress(l string) (int, error) {
 		if !strings.Contains(line, "% ") {
 			continue
 		}
-
+		var transfer int64
 		var s = strings.Fields(line)
 		if len(s) == 4 {
+			var tr = strings.ReplaceAll(s[0], ",", "")
+			transfer, _ = utils.ParseInt64(tr)
 			if strings.HasSuffix(s[1], "%") {
 				var ps = strings.TrimSuffix(s[1], "%")
 				var p, err = strconv.Atoi(ps)
 				if err == nil {
-					if p == 100 {
-						p = 99
-						time.Sleep(3 * time.Second)
-					}
-					return p, nil
+					return p, transfer, nil
 				}
-				return 0, err
+				return 0, 0, err
 			}
 		}
 	}
 
-	return 0, fmt.Errorf("not the progress")
+	return 0, 0, fmt.Errorf("not the progress")
 }

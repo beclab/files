@@ -20,13 +20,14 @@ type CommandInterface interface {
 }
 
 type Command struct {
-	ctx    context.Context
-	owner  string
-	action string
-	src    *models.FileParam
-	dst    *models.FileParam
-	Exec   func() error
-	Update func(progress int)
+	ctx             context.Context
+	owner           string
+	action          string
+	src             *models.FileParam
+	dst             *models.FileParam
+	Exec            func() error
+	UpdateTotalSize func(totalSize int64)
+	UpdateProgress  func(progress int, transfer int64)
 }
 
 func NewCommand(ctx context.Context, param *models.PasteParam) *Command {

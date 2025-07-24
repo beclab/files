@@ -10,3 +10,11 @@ func ParseInt(s string) (int, error) {
 	return r, nil
 
 }
+
+func ParseInt64(s string) (int64, error) {
+	r, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return r, err
+	}
+	return r, nil
+}
