@@ -52,6 +52,7 @@ func repoHasBeenSharedOut(repoId string) (bool, error) {
 func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	vars := mux.Vars(r)
 	repoId := vars["repo_id"]
+	klog.Infof("~~~Debug log: repoId: %s", repoId)
 
 	bflName := r.Header.Get("X-Bfl-User")
 	username := bflName + "@auth.local"

@@ -105,7 +105,7 @@ func NewHandler(
 	seahubRouter := api.PathPrefix("/goseahub").Subrouter()
 	//subrouter.Use(goseahub.AuthMiddleware)
 	seahubRouter.Path("/users").Handler(monkey(goseahub.SeahubUsersGetHandler, "/api/goseahub/users")).Methods("GET")
-	seahubRouter.Path("/repos/{repoPath:.*}").Handler(monkey(goseahub.RepoGetHandler, "/api/goseahub/repos")).Methods("GET")
+	seahubRouter.Path("/repos/{repo_id:.*}").Handler(monkey(goseahub.RepoGetHandler, "/api/goseahub/repos")).Methods("GET")
 	seahubRouter.Path("/repos").Handler(monkey(goseahub.ReposGetHandler, "/api/goseahub/repos")).Methods("GET")
 	//api.PathPrefix("/goseahub/users").Handler(monkey(goseahub.SeahubUsersGetHandler, "/api/goseahub/users")).Methods("GET")
 
