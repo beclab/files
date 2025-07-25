@@ -48,44 +48,28 @@ func ReposGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (in
 		}
 	}
 
-	//ctx := r.Context()
-	//user := ctx.Value("user").(*models.Profile)
-	//email := user.User
-
 	bflName := r.Header.Get("X-Bfl-User")
-	email := bflName + "@auth.local"
+	username := bflName + "@auth.local"
+	oldUsername := goseaserv.Email2ContactEmail(bflName + "@seafile.com") // temp comptible
 
-	contactCache := make(map[string]string)
+	usernameCache := make(map[string]string)
 	nicknameCache := make(map[string]string)
-
-	//orgID := int64(-1)
-	//if org, ok := ctx.Value("org").(*models.Organization); ok {
-	//	orgID = org.OrgID
-	//}
-
-	//starredRepos, err := models.GetStarredRepos(email)
-	//if err != nil {
-	//	utils.LogError(err)
-	//}
-	//starredRepoIDs := make(map[string]bool)
-	//for _, repo := range starredRepos {
-	//	starredRepoIDs[repo.RepoID] = true
-	//}
 
 	repoInfoList := make([]map[string]interface{}, 0)
 
 	if filterBy["mine"] {
-		//var ownedRepos []*models.Repo
-		//if orgID != -1 {
-		//	ownedRepos, err = services.GetOrgOwnedRepos(orgID, email)
-		//} else {
-		ownedRepos, err := goseaserv.GlobalSeafileAPI.GetOwnedRepoList(email, false, -1, -1)
-		//}
+		ownedRepos, err := goseaserv.GlobalSeafileAPI.GetOwnedRepoList(username, false, -1, -1)
 		if err != nil {
 			klog.Errorln(err)
 		} else {
-			//processRepos(ownedRepos, "mine", email, starredRepoIDs, &repoInfoList, contactCache, nicknameCache)
-			processRepos(ownedRepos, "mine", email, nil, &repoInfoList, contactCache, nicknameCache)
+			processRepos(ownedRepos, "mine", username, nil, &repoInfoList, usernameCache, nicknameCache)
+		}
+		
+		oldOwnedRepos, err := goseaserv.GlobalSeafileAPI.GetOwnedRepoList(oldUsername, false, -1, -1)
+		if err != nil {
+			klog.Errorln(err)
+		} else {
+			processRepos(oldOwnedRepos, "mine", oldUsername, nil, &repoInfoList, usernameCache, nicknameCache)
 		}
 	}
 
