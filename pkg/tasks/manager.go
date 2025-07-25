@@ -71,6 +71,7 @@ func (t *taskManager) CancelTask(taskId string) {
 
 	task := val.(*Task)
 	task.cancel()
+	task.canceled = true
 }
 
 func (t *taskManager) GetTask(taskId string) *TaskInfo {

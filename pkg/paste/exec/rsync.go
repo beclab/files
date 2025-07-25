@@ -15,9 +15,10 @@ var (
 
 func ExecRsync(ctx context.Context, name string, args []string, callbackup func(p int, t int64)) (string, error) {
 	var opts = utils.CommandOptions{
-		Name:  name,
-		Args:  args,
-		Print: true,
+		Name:   name,
+		Args:   args,
+		Print:  true,
+		Reaper: true,
 	}
 
 	c := utils.NewCommand(ctx, opts)
@@ -29,9 +30,6 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 		defer close(errChan)
 		for {
 			select {
-			// case <-ctx.Done():
-			// 	errChan <- ctx.Err()
-			// 	return
 			case result, ok := <-c.Ch:
 				if !ok {
 					return

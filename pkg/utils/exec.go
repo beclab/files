@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"syscall"
 
@@ -22,10 +23,11 @@ type Command struct {
 }
 
 type CommandOptions struct {
-	Name  string
-	Args  []string
-	Envs  map[string]string
-	Print bool
+	Name   string
+	Args   []string
+	Envs   map[string]string
+	Print  bool
+	Reaper bool
 }
 
 func NewCommand(ctx context.Context, opts CommandOptions) *Command {
@@ -41,8 +43,7 @@ func (c *Command) GetCmd() *exec.Cmd {
 }
 
 func (c *Command) Run() error {
-	var err error
-	c.cmd = exec.CommandContext(c.ctx, c.options.Name, c.options.Args...)
+	c.cmd = exec.Command(c.options.Name, c.options.Args...)
 	c.cmd.Env = append(os.Environ(), c.cmd.Env...)
 	c.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
@@ -61,48 +62,110 @@ func (c *Command) Run() error {
 		return errors.Wrap(err, "cmd start error")
 	}
 
-	defer func() error {
-		klog.Infof("[command] run exec defer")
-		if errWait := c.cmd.Wait(); errWait != nil {
-			return errors.Wrapf(errWait, fmt.Sprintf("wait error for command: %s, exec error %v", c.cmd.String(), err))
+	pgid, err := syscall.Getpgid(c.cmd.Process.Pid)
+	if err != nil {
+		pgid = c.cmd.Process.Pid
+	}
+
+	sigc := make(chan os.Signal, 1)
+	waitDone := make(chan struct{})
+	reaperDone := make(chan struct{})
+
+	signal.Notify(sigc, syscall.SIGCHLD)
+	go func() {
+		defer func() {
+			signal.Stop(sigc)
+			close(reaperDone)
+		}()
+
+		var ws syscall.WaitStatus
+
+		for {
+			select {
+			case <-sigc:
+				if !c.options.Reaper {
+					continue
+				}
+				for {
+					pid, err := syscall.Wait4(-pgid, &ws, syscall.WNOHANG, nil)
+					if pid <= 0 || err != nil {
+						break
+					}
+				}
+			case <-waitDone:
+				if c.options.Reaper {
+					for {
+						pid, err := syscall.Wait4(-pgid, &ws, 0, nil)
+						if pid <= 0 || err != nil {
+							break
+						}
+					}
+				}
+				return
+			}
 		}
-		return err
 	}()
 
-	reader := bufio.NewReader(stdout)
-
-	for {
+	var gErr error
+	go func() {
 		select {
 		case <-c.ctx.Done():
-			return c.ctx.Err()
-		default:
+			gErr = c.ctx.Err()
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		case <-waitDone:
+		}
+	}()
+
+	go func() {
+		defer close(c.Ch)
+		var reader = bufio.NewReader(stdout)
+		for {
 			var n int
 			buffer := make([]byte, 4096)
 			n, err = reader.Read(buffer)
-
 			if err != nil {
-				if err == io.EOF {
-					return nil
+				if err == io.EOF || errors.Is(err, os.ErrClosed) {
+					return
 				}
-				return err
+				gErr = err
+				return
 			}
 
 			if n <= 0 {
-				return nil
+				return
 			}
 
-			chunk := string(buffer[:n])
-			chunk = strings.TrimSpace(chunk)
-
-			if c.options.Print {
-				klog.Infof("[Cmd] run output: %s", chunk)
+			if n > 0 {
+				content := string(buffer[:n])
+				if strings.Contains(content, "error") || strings.Contains(content, "failed:") {
+					gErr = errors.Errorf(content)
+					return
+				} else {
+					c.Ch <- content
+				}
 			}
 
-			if strings.Contains(chunk, "error") || strings.Contains(chunk, "failed:") {
-				return errors.New(chunk)
-			}
-
-			c.Ch <- chunk
 		}
+	}()
+
+	err = c.cmd.Wait()
+
+	close(waitDone)
+	<-reaperDone
+
+	if err != nil {
+		if errors.Is(err, syscall.ECHILD) {
+			err = nil
+		}
+		if gErr != nil {
+			return gErr
+		}
+		return err
 	}
+
+	if gErr != nil {
+		return gErr
+	}
+
+	return nil
 }

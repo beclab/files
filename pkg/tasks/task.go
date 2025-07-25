@@ -20,8 +20,9 @@ type Task struct {
 	transfer  int64
 	totalSize int64
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx      context.Context
+	cancel   context.CancelFunc
+	canceled bool
 
 	command *commands.Command
 
@@ -39,6 +40,10 @@ func (t *Task) Run() error {
 	}
 
 	_, ok := t.manager.pool.TrySubmit(func() {
+		if t.canceled {
+			t.state = constant.Cancelled
+			return
+		}
 		var err error
 
 		defer func() {
@@ -52,7 +57,11 @@ func (t *Task) Run() error {
 
 		if err = t.command.Exec(); err != nil {
 			klog.Errorf("Task Failed: %v", err)
-			t.state = constant.Failed
+			if err.Error() == "context canceled" {
+				t.state = constant.Cancelled
+			} else {
+				t.state = constant.Failed
+			}
 			t.message = err.Error()
 			return
 		}
