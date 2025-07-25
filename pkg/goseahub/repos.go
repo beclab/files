@@ -32,8 +32,8 @@ func getSystemDefaultRepoId() string {
 
 func ReposGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	filterBy := map[string]bool{
-		"mine": false,
-		//"shared": false,
+		"mine":   false,
+		"shared": false,
 	}
 
 	query := r.URL.Query()
@@ -122,9 +122,14 @@ func processRepos(repos []map[string]string, username string,
 
 	for _, repo := range repos {
 		klog.Infof("~~~Debug log: repo = %v", repo)
-		//if repo["is_virtual"]  {
-		//	continue
-		//}
+		isVirtual, err := strconv.ParseBool(repo["is_virtual"])
+		if err != nil {
+			klog.Errorf("Error parsing is_virtual flag: %v", err)
+			isVirtual = false
+		}
+		if isVirtual {
+			continue
+		}
 
 		repoInfo := map[string]interface{}{
 			"type":                   "mine",
@@ -141,9 +146,8 @@ func processRepos(repos []map[string]string, username string,
 			"encrypted":              repo["encrypted"],
 			"permission":             "rw",
 			"status":                 NormalizeRepoStatusCode(repo["status"]),
-			//"status":     repo["status"],
-			"salt":       getSalt(repo),
-			"is_virtual": repo["is_virtual"],
+			"salt":                   getSalt(repo),
+			"is_virtual":             isVirtual,
 		}
 
 		*repoInfoList = append(*repoInfoList, repoInfo)
