@@ -47,6 +47,10 @@ func (c *SeafServerThreadedRpcClient) SeafileDestroyRepo(repoId string) (interfa
 	return CreateRPCMethod(c, "seafile_destroy_repo", "int", []string{"string"})(repoId)
 }
 
+func (c *SeafServerThreadedRpcClient) SeafileGetRepoOwner(repoId string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_repo_owner", "string", []string{"string"})(repoId)
+}
+
 func (c *SeafServerThreadedRpcClient) DeleteRepoTokensByEmail(email string) (interface{}, error) {
 	return CreateRPCMethod(c, "delete_repo_tokens_by_email", "int", []string{"string"})(email)
 }
@@ -79,6 +83,32 @@ func (c *SeafServerThreadedRpcClient) SeafileRemoveShare(repoId, fromEmail, toEm
 func (c *SeafServerThreadedRpcClient) SeafileListShareRepos(email, queryCol string, start, limit int) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_list_share_repos", "objlist", []string{"string", "string", "int", "int"})(
 		email, queryCol, start, limit)
+}
+
+func (c *SeafServerThreadedRpcClient) IsInnerPubRepo(repoId string) (interface{}, error) {
+	return CreateRPCMethod(c, "is_inner_pub_repo", "int", []string{"string"})(repoId)
+}
+
+func (c *SeafServerThreadedRpcClient) CheckQuota(repoId string, delta int64) (interface{}, error) {
+	return CreateRPCMethod(c, "check_quota", "int", []string{"string", "int64"})(repoId, delta)
+}
+
+func (c *SeafServerThreadedRpcClient) CheckPermissionByPath(repoId, path, user string) (interface{}, error) {
+	return CreateRPCMethod(c, "check_permission_by_path", "string", []string{"string", "string", "string"})(
+		repoId, path, user)
+}
+
+func (c *SeafServerThreadedRpcClient) RepoHasBeenShared(repoId string, includingGroups int) (interface{}, error) {
+	return CreateRPCMethod(c, "repo_has_been_shared", "int", []string{"string", "int"})(
+		repoId, includingGroups)
+}
+
+func (c *SeafServerThreadedRpcClient) GetRepoStatus(repoId string) (interface{}, error) {
+	return CreateRPCMethod(c, "get_repo_status", "int", []string{"string"})(repoId)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileIsPasswdSet(repoId, user string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_is_passwd_set", "int", []string{"string", "string"})(repoId, user)
 }
 
 func (c *SeafServerThreadedRpcClient) PublishEvent(channel, content string) (interface{}, error) {

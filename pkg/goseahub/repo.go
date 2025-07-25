@@ -6,25 +6,47 @@ import (
 	"github.com/gorilla/mux"
 	"k8s.io/klog/v2"
 	"net/http"
+	"strconv"
 )
 
-type RepoInfoResponse struct {
-	RepoID       string `json:"repo_id"`
-	RepoName     string `json:"repo_name"`
-	OwnerEmail   string `json:"owner_email"`
-	OwnerName    string `json:"owner_name"`
-	OwnerContact string `json:"owner_contact_email"`
-	Size         int64  `json:"size"`
-	Encrypted    bool   `json:"encrypted"`
-	FileCount    int    `json:"file_count"`
-	Permission   string `json:"permission"`
-	NoQuota      bool   `json:"no_quota"`
-	IsAdmin      bool   `json:"is_admin"`
-	IsVirtual    bool   `json:"is_virtual"`
-	SharedOut    bool   `json:"has_been_shared_out"`
-	NeedDecrypt  bool   `json:"lib_need_decrypt"`
-	LastModified string `json:"last_modified"`
-	Status       string `json:"status"`
+var (
+	PERMISSION_PREVIEW       = "preview"    // preview only on the web, can not be downloaded
+	PERMISSION_PREVIEW_EDIT  = "cloud-edit" // preview only with edit on the web
+	PERMISSION_READ          = "r"
+	PERMISSION_READ_WRITE    = "rw"
+	PERMISSION_ADMIN         = "admin"
+	CUSTOM_PERMISSION_PREFIX = "custom"
+)
+
+func CheckFolderPermission(username, repoId, path string) (string, error) {
+	repoStatus, err := goseaserv.GlobalSeafileAPI.GetRepoStatus(repoId)
+	if err != nil {
+		return "", err
+	}
+	if repoStatus == 1 {
+		return PERMISSION_READ, nil
+	}
+	result, err := goseaserv.GlobalSeafileAPI.CheckPermissionByPath(repoId, path, username)
+	if err != nil {
+		return "", err
+	}
+	klog.Infof("%s!!", result)
+	return result, nil
+}
+
+func repoHasBeenSharedOut(repoId string) (bool, error) {
+	shared, err := goseaserv.GlobalSeafileAPI.RepoHasBeenShared(repoId, true)
+	if err != nil {
+		return false, err
+	}
+	inner, err := goseaserv.GlobalSeafileAPI.IsInnerPubRepo(repoId)
+	if err != nil {
+		return false, err
+	}
+	if shared || inner {
+		return true, nil
+	}
+	return false, nil
 }
 
 func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
@@ -35,79 +57,79 @@ func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int
 	username := bflName + "@auth.local"
 	oldUsername := goseaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
 
-	klog.Infof("~~~Debug log: %s, %s, %s", repoId, oldUsername, username)
+	repo, err := goseaserv.GlobalSeafileAPI.GetRepo(repoId)
+	if err != nil {
+		return http.StatusNotFound, err
+	}
 
-	return 0, nil
+	permission, err := CheckFolderPermission(username, repoId, "/")
+	if err != nil || permission == "" {
+		permission, err = CheckFolderPermission(oldUsername, repoId, "/") // temp compatible
+		if err != nil || permission == "" {
+			return http.StatusForbidden, err
+		}
+		// return http.StatusForbidden, err
+	}
 
-	//repo, err := goseaserv.GlobalSeafileAPI.GetRepo(repoID)
-	//if err != nil {
-	//	http.Error(w, "Library not found", http.StatusNotFound)
-	//	return
-	//}
-	//
-	//// 4. 权限检查
-	//permission, err := seafileapi.CheckFolderPermission(r.Context(), repoID, "/")
-	//if err != nil || permission == "" {
-	//	http.Error(w, "Permission denied", http.StatusForbidden)
-	//	return
-	//}
-	//
-	//// 5. 处理加密状态
-	//libNeedDecrypt := false
-	//if repo.Encrypted && !seafileapi.IsPasswordSet(repoID, username) {
-	//	libNeedDecrypt = true
-	//}
-	//
-	//// 6. 获取所有者信息
-	//repoOwner, err := getRepoOwner(r.Context(), repoID)
-	//if err != nil {
-	//	http.Error(w, "Failed to get repo owner", http.StatusInternalServerError)
-	//	return
-	//}
-	//
-	//// 7. 检查共享状态
-	//hasSharedOut, err := repoHasBeenSharedOut(r.Context(), repoID)
-	//if err != nil {
-	//	utils.LogError(err)
-	//	hasSharedOut = false
-	//}
-	//
-	//// 8. 组装响应数据
-	//response := RepoInfoResponse{
-	//	RepoID:       repo.ID,
-	//	RepoName:     repo.Name,
-	//	OwnerEmail:   repoOwner,
-	//	OwnerName:    utils.EmailToNickname(utils.EmailToContactEmail(repoOwner)),
-	//	OwnerContact: utils.EmailToContactEmail(repoOwner),
-	//	Size:         repo.Size,
-	//	Encrypted:    repo.Encrypted,
-	//	FileCount:    repo.FileCount,
-	//	Permission:   permission,
-	//	NoQuota:      seafileapi.CheckQuota(repoID) < 0,
-	//	IsAdmin:      isRepoAdmin(username, repoID),
-	//	IsVirtual:    repo.IsVirtual,
-	//	SharedOut:    hasSharedOut,
-	//	NeedDecrypt:  libNeedDecrypt,
-	//	LastModified: utils.TimestampToISO(repo.LastModify),
-	//	Status:       utils.NormalizeRepoStatusCode(repo.Status),
-	//}
-	//
-	//// 9. 返回JSON响应
-	//w.Header().Set("Content-Type", "application/json")
-	//json.NewEncoder(w).Encode(response)
+	libNeedDecrypt := false
+	encrypted, err := strconv.ParseBool(repo["encrypted"])
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	passwordSet, err := goseaserv.GlobalSeafileAPI.IsPasswordSet(repoId, username)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	oldPasswordSet, err := goseaserv.GlobalSeafileAPI.IsPasswordSet(repoId, oldUsername) // temp compatible
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	passwordSet = passwordSet || oldPasswordSet
+
+	if encrypted && passwordSet {
+		libNeedDecrypt = true
+	}
+
+	repoOwner, err := goseaserv.GlobalSeafileAPI.GetRepoOwner(repoId)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	hasSharedOut, err := repoHasBeenSharedOut(repoId)
+	if err != nil {
+		klog.Error(err)
+		hasSharedOut = false
+	}
+
+	quota, err := goseaserv.GlobalSeafileAPI.CheckQuota(repoId, 0)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	isVirtual, err := strconv.ParseBool(repo["is_virtual"])
+	if err != nil {
+		klog.Errorf("Error parsing is_virtual flag: %v", err)
+		isVirtual = false
+	}
+
+	response := map[string]interface{}{
+		"repo_id":       repo["id"],
+		"repo_name":     repo["name"],
+		"owner_email":   repoOwner,
+		"owner_name":    goseaserv.Email2Nickname(goseaserv.Email2ContactEmail(repoOwner)),
+		"owner_contact": goseaserv.Email2ContactEmail(repoOwner),
+		"size:":         repo["size"],
+		"encrypted":     encrypted,
+		"file_count":    repo["file_count"],
+		"permission":    permission,
+		"no_quota":      quota < 0,
+		"is_admin":      bflName == goseaserv.Email2Nickname(goseaserv.Email2ContactEmail(repoOwner)),
+		"is_virtual":    isVirtual,
+		"shared_out":    hasSharedOut,
+		"need_decrypt":  libNeedDecrypt,
+		"last_modified": TimestampToISO(repo["last_modify"]),
+		"status":        NormalizeRepoStatusCode(repo["status"]),
+	}
+
+	return common.RenderJSON(w, r, response)
 }
-
-//func getRepoOwner(ctx context.Context, repoID string) (string, error) {
-//	// 实现获取仓库所有者的逻辑
-//	return "owner@example.com", nil
-//}
-//
-//func repoHasBeenSharedOut(ctx context.Context, repoID string) (bool, error) {
-//	// 实现检查仓库是否被共享的逻辑
-//	return true, nil
-//}
-//
-//func isRepoAdmin(username, repoID string) bool {
-//	// 实现管理员检查逻辑
-//	return false
-//}

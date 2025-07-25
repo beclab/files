@@ -11,6 +11,15 @@ const (
 	REPO_STATUS_READ_ONLY = 1
 )
 
+func ReturnBool(ret interface{}) (bool, error) {
+	// Return non-zero if True, otherwise 0.
+	retInt, err := ReturnInt(ret)
+	if err != nil {
+		return false, err
+	}
+	return retInt != 0, nil
+}
+
 func ReturnInt(ret interface{}) (int, error) {
 	retInt, ok := ret.(int)
 	if !ok {
@@ -100,12 +109,28 @@ func (s *SeafileAPI) CreateRepo(name, desc, username string, password *string, e
 	return ReturnString(ret)
 }
 
+func (s *SeafileAPI) GetRepo(repoId string) (map[string]string, error) {
+	ret, err := s.rpcClient.SeafileGetRepo(repoId)
+	if err != nil {
+		return nil, fmt.Errorf("get repo failed: %v", err)
+	}
+	return ReturnObject(ret)
+}
+
 func (s *SeafileAPI) RemoveRepo(repoId string) (int, error) {
 	ret, err := s.rpcClient.SeafileDestroyRepo(repoId)
 	if err != nil {
 		return -1, fmt.Errorf("remove repo failed: %v", err)
 	}
 	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) GetRepoOwner(repoId string) (string, error) {
+	ret, err := s.rpcClient.SeafileGetRepoOwner(repoId)
+	if err != nil {
+		return "", fmt.Errorf("get repo owner failed: %v", err)
+	}
+	return ReturnString(ret)
 }
 
 func (s *SeafileAPI) GetOwnedRepoList(username string, retCorrupted bool, start int, limit int) ([]map[string]string, error) {
@@ -209,6 +234,64 @@ func (s *SeafileAPI) GetShareInRepoList(username string, start, limit int) ([]ma
 		return nil, err
 	}
 	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) IsInnerPubRepo(repoId string) (bool, error) {
+	ret, err := s.rpcClient.IsInnerPubRepo(repoId)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return false, err
+	}
+	return ReturnBool(ret)
+}
+
+func (s *SeafileAPI) CheckQuota(repoId string, delta int64) (int, error) {
+	ret, err := s.rpcClient.CheckQuota(repoId, delta)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) CheckPermissionByPath(repoId, path, user string) (string, error) {
+	ret, err := s.rpcClient.CheckPermissionByPath(repoId, path, user)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return "", err
+	}
+	return ReturnString(ret)
+}
+
+func (s *SeafileAPI) RepoHasBeenShared(repoId string, includingGroups bool) (bool, error) {
+	var iGint int = 0
+	if includingGroups {
+		iGint = 1
+	}
+	ret, err := s.rpcClient.RepoHasBeenShared(repoId, iGint)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return false, err
+	}
+	return ReturnBool(ret)
+}
+
+func (s *SeafileAPI) GetRepoStatus(repoId string) (int, error) {
+	ret, err := s.rpcClient.GetRepoStatus(repoId)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) IsPasswordSet(repoId, username string) (bool, error) {
+	ret, err := s.rpcClient.SeafileIsPasswdSet(repoId, username)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return false, err
+	}
+	return ReturnBool(ret)
 }
 
 func (s *SeafileAPI) PublishEvent(channel, content string) (int, error) {
