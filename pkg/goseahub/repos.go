@@ -2,7 +2,6 @@ package goseahub
 
 import (
 	"files/pkg/common"
-	"files/pkg/goseahub/goseafile"
 	"files/pkg/goseahub/goseaserv"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -177,8 +176,8 @@ func processRepos(repos []map[string]string, repoType, email string, starredRepo
 			"repo_id":             repo["repo_id"],
 			"repo_name":           repo["repo_name"],
 			"owner_email":         email,
-			"owner_name":          goseafile.Email2Nickname(goseafile.Email2ContactEmail(email)),
-			"owner_contact_email": goseafile.Email2ContactEmail(email),
+			"owner_name":          goseaserv.Email2Nickname(goseaserv.Email2ContactEmail(email)),
+			"owner_contact_email": goseaserv.Email2ContactEmail(email),
 			//"last_modified":          utils.TimestampToISO(repo.LastModify),
 			//"modifier_email":         repo.LastModifier,
 			//"modifier_name":          nicknameCache[repo.LastModifier],

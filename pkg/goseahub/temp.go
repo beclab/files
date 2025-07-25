@@ -3,7 +3,7 @@ package goseahub
 import (
 	"errors"
 	"files/pkg/common"
-	"files/pkg/goseahub/goseafile"
+	"files/pkg/goseahub/goseaserv"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
 	"k8s.io/klog/v2"
@@ -11,7 +11,7 @@ import (
 )
 
 func SeahubUsersGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	responseData, err := goseafile.ListAllUsers()
+	responseData, err := goseaserv.ListAllUsers()
 	if err != nil {
 		klog.Errorf("ListAllUsers failed: %v", err)
 		return http.StatusInternalServerError, err

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/goseahub/goseafile"
 	"files/pkg/goseahub/goseaserv"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -100,7 +99,7 @@ func CallbackCreateHandler(w http.ResponseWriter, r *http.Request, d *common.Dat
 }
 
 func createUser(username string) (bool, error) {
-	allUsers, err := goseafile.ListAllUsers()
+	allUsers, err := goseaserv.ListAllUsers()
 	if err != nil {
 		klog.Errorf("Error listing users: %v", err)
 		return false, err
@@ -115,7 +114,7 @@ func createUser(username string) (bool, error) {
 
 	klog.Infof("Username %s not exist in memory cache. Will do this procedure!", username)
 
-	resultCode := goseafile.SaveUser(username, "abcd123456", true, true)
+	resultCode := goseaserv.SaveUser(username, "abcd123456", true, true)
 	if resultCode != 0 {
 		klog.Infof("Error creating user: %s", username)
 		return false, errors.New("error creating user")
@@ -146,7 +145,7 @@ func CallbackDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Dat
 }
 
 func removeUser(username string) error {
-	allUsers, err := goseafile.ListAllUsers()
+	allUsers, err := goseaserv.ListAllUsers()
 	if err != nil {
 		klog.Errorf("Error listing users: %v", err)
 		return err
@@ -159,7 +158,7 @@ func removeUser(username string) error {
 	}
 	klog.Infof("User %v with username %s existed!", existedUser, username)
 
-	err = goseafile.DeleteUser(username)
+	err = goseaserv.DeleteUser(username)
 	if err != nil {
 		klog.Errorf("Error deleting user: %v", err)
 		return err

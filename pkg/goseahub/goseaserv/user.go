@@ -1,8 +1,7 @@
-package goseafile
+package goseaserv
 
 import (
 	"errors"
-	"files/pkg/goseahub/goseaserv"
 	"files/pkg/redisutils"
 	"fmt"
 	"k8s.io/klog/v2"
@@ -15,7 +14,7 @@ var UNUSABLE_PASSWORD = "!" // This will never be a valid hash
 func SaveUser(username, password string, isStaff, isActive bool) int {
 	var resultCode int
 
-	emailuser, err := goseaserv.GlobalCcnetAPI.GetEmailuser(username)
+	emailuser, err := GlobalCcnetAPI.GetEmailuser(username)
 	if err != nil {
 		return -1
 	}
@@ -31,7 +30,7 @@ func SaveUser(username, password string, isStaff, isActive bool) int {
 		}
 
 		if !isActive {
-			if _, err := goseaserv.GlobalSeafileAPI.DeleteRepoTokensByEmail(username); err != nil {
+			if _, err := GlobalSeafileAPI.DeleteRepoTokensByEmail(username); err != nil {
 				klog.Infof("Error clearing token for user %s: %v", username, err)
 			}
 		}
@@ -41,7 +40,7 @@ func SaveUser(username, password string, isStaff, isActive bool) int {
 			klog.Errorf("Error converting email user id %s: %v", emailuser["id"], err)
 			return -1
 		}
-		resultCode, err = goseaserv.GlobalCcnetAPI.UpdateEmailuser(
+		resultCode, err = GlobalCcnetAPI.UpdateEmailuser(
 			actualSource,
 			userId,
 			password,
@@ -53,7 +52,7 @@ func SaveUser(username, password string, isStaff, isActive bool) int {
 			return -1
 		}
 	} else {
-		resultCode, err = goseaserv.GlobalCcnetAPI.AddEmailuser(
+		resultCode, err = GlobalCcnetAPI.AddEmailuser(
 			username,
 			password,
 			boolToInt(isStaff),
@@ -71,7 +70,7 @@ func SaveUser(username, password string, isStaff, isActive bool) int {
 func DeleteUser(username string) error {
 	var resultCode int
 
-	emailuser, err := goseaserv.GlobalCcnetAPI.GetEmailuser(username)
+	emailuser, err := GlobalCcnetAPI.GetEmailuser(username)
 	if err != nil {
 		return err
 	}
@@ -81,37 +80,37 @@ func DeleteUser(username string) error {
 		actualSource = "DB"
 	}
 
-	ownedRepos, err := goseaserv.GlobalSeafileAPI.GetOwnedRepoList(username, false, -1, -1)
+	ownedRepos, err := GlobalSeafileAPI.GetOwnedRepoList(username, false, -1, -1)
 
 	for _, repo := range ownedRepos {
-		resultCode, err = goseaserv.GlobalSeafileAPI.RemoveRepo(repo["id"])
+		resultCode, err = GlobalSeafileAPI.RemoveRepo(repo["id"])
 		if err != nil || resultCode != 0 {
 			return errors.New(fmt.Sprintf("Error removing repo owned by user %s", username))
 		}
 	}
 
-	repos, err := goseaserv.GlobalSeafileAPI.GetShareInRepoList(username, -1, -1)
+	repos, err := GlobalSeafileAPI.GetShareInRepoList(username, -1, -1)
 	if err != nil {
 		return err
 	}
 	for _, repo := range repos {
-		resultCode, err = goseaserv.GlobalSeafileAPI.RemoveShare(repo["repo_id"], repo["user"], username)
+		resultCode, err = GlobalSeafileAPI.RemoveShare(repo["repo_id"], repo["user"], username)
 		if err != nil || resultCode != 0 {
 			return errors.New(fmt.Sprintf("Error removing share in repo for user %s", username))
 		}
 	}
 
-	resultCode, err = goseaserv.GlobalSeafileAPI.DeleteRepoTokensByEmail(username)
+	resultCode, err = GlobalSeafileAPI.DeleteRepoTokensByEmail(username)
 	if err != nil || resultCode != 0 {
 		return errors.New(fmt.Sprintf("Error clearing token for user %s", username))
 	}
 
-	resultCode, err = goseaserv.GlobalCcnetAPI.RemoveGroupUser(username)
+	resultCode, err = GlobalCcnetAPI.RemoveGroupUser(username)
 	if err != nil || resultCode != 0 {
 		return errors.New(fmt.Sprintf("Error clearing group user for user %s", username))
 	}
 
-	resultCode, err = goseaserv.GlobalCcnetAPI.RemoveEmailuser(actualSource, username)
+	resultCode, err = GlobalCcnetAPI.RemoveEmailuser(actualSource, username)
 	if err != nil || resultCode != 0 {
 		return errors.New(fmt.Sprintf("Error clearing email user for user %s", username))
 	}
@@ -148,19 +147,19 @@ func Email2Nickname(value string) string {
 }
 
 func ListAllUsers() (map[string]map[string]interface{}, error) {
-	emailUserCount, err := goseaserv.GlobalCcnetAPI.CountEmailusers("DB")
+	emailUserCount, err := GlobalCcnetAPI.CountEmailusers("DB")
 	if err != nil {
 		klog.Errorf("count email users failed: %v", err.Error())
 		return nil, err
 	}
-	inactiveEmailUserCount, err := goseaserv.GlobalCcnetAPI.CountInactiveEmailusers("DB")
+	inactiveEmailUserCount, err := GlobalCcnetAPI.CountInactiveEmailusers("DB")
 	if err != nil {
 		klog.Errorf("count inactive email users failed: %v", err.Error())
 		return nil, err
 	}
 	totalCount := emailUserCount + inactiveEmailUserCount
 
-	users, err := goseaserv.GlobalCcnetAPI.GetEmailusers("DB", 0, totalCount, nil)
+	users, err := GlobalCcnetAPI.GetEmailusers("DB", 0, totalCount, nil)
 
 	for key, value := range users {
 		klog.Infof("~~~Debug log: Key: %v, Value: %v (Type: %T)\n", key, value, value)
