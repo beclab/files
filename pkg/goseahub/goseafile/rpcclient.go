@@ -81,6 +81,10 @@ func (c *SeafServerThreadedRpcClient) SeafileListShareRepos(email, queryCol stri
 		email, queryCol, start, limit)
 }
 
+func (c *SeafServerThreadedRpcClient) PublishEvent(channel, content string) (interface{}, error) {
+	return CreateRPCMethod(c, "publish_event", "int", []string{"string", "string"})(channel, content)
+}
+
 func (c *SeafServerThreadedRpcClient) AddEmailuser(email string, passwd string, isStaff int, isActive int) (interface{}, error) {
 	return CreateRPCMethod(c, "add_emailuser", "int", []string{"string", "string", "int", "int"})(
 		email, passwd, isStaff, isActive)

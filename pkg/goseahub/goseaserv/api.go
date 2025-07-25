@@ -211,6 +211,15 @@ func (s *SeafileAPI) GetShareInRepoList(username string, start, limit int) ([]ma
 	return ReturnObjList(ret)
 }
 
+func (s *SeafileAPI) PublishEvent(channel, content string) (int, error) {
+	ret, err := s.rpcClient.PublishEvent(channel, content)
+	if err != nil {
+		klog.Errorf("~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
 var GlobalSeafileAPI *SeafileAPI // = NewSeafileAPI(SeafservThreadedRpc)
 
 type CcnetAPI struct {

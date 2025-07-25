@@ -3,10 +3,14 @@ package goseahub
 import (
 	"files/pkg/common"
 	"files/pkg/goseahub/goseaserv"
+	"fmt"
 	"k8s.io/klog/v2"
+	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
+	"time"
 )
 
 var (
@@ -28,10 +32,8 @@ func getSystemDefaultRepoId() string {
 
 func ReposGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	filterBy := map[string]bool{
-		"mine":   false,
-		"shared": false,
-		"group":  false,
-		"public": false,
+		"mine": false,
+		//"shared": false,
 	}
 
 	query := r.URL.Query()
@@ -62,124 +64,145 @@ func ReposGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (in
 		if err != nil {
 			klog.Errorln(err)
 		} else {
-			processRepos(ownedRepos, "mine", username, nil, &repoInfoList, usernameCache, nicknameCache)
+			processRepos(ownedRepos, username, &repoInfoList, usernameCache, nicknameCache)
 		}
 
 		oldOwnedRepos, err := goseaserv.GlobalSeafileAPI.GetOwnedRepoList(oldUsername, false, -1, -1)
 		if err != nil {
 			klog.Errorln(err)
 		} else {
-			processRepos(oldOwnedRepos, "mine", oldUsername, nil, &repoInfoList, usernameCache, nicknameCache)
+			processRepos(oldOwnedRepos, oldUsername, &repoInfoList, usernameCache, nicknameCache)
 		}
 	}
 
-	//if filterBy["shared"] {
-	//	var sharedRepos []*models.SharedRepo
-	//	if orgID != -1 {
-	//		sharedRepos, err = services.GetOrgSharedRepos(orgID, email)
-	//	} else {
-	//		sharedRepos, err = services.GetSharedRepos(email)
-	//	}
-	//	if err != nil {
-	//		utils.LogError(err)
-	//	} else {
-	//		processSharedRepos(sharedRepos, email, starredRepoIDs, &repoInfoList, contactCache, nicknameCache)
-	//	}
-	//}
+	if filterBy["shared"] {
+		sharedRepos, err := goseaserv.GlobalSeafileAPI.GetShareInRepoList(username, -1, -1)
+		if err != nil {
+			klog.Errorln(err)
+		} else {
+			processSharedRepos(sharedRepos, username, &repoInfoList, usernameCache, nicknameCache)
+		}
 
-	//if filterBy["group"] {
-	//	var groupRepos []*models.GroupRepo
-	//	if orgID != -1 {
-	//		groupRepos, err = services.GetOrgGroupRepos(email, orgID)
-	//	} else {
-	//		groupRepos, err = services.GetGroupRepos(email)
-	//	}
-	//	if err != nil {
-	//		utils.LogError(err)
-	//	} else {
-	//		processGroupRepos(groupRepos, email, starredRepoIDs, &repoInfoList, contactCache, nicknameCache)
-	//	}
-	//}
+		oldSharedRepos, err := goseaserv.GlobalSeafileAPI.GetShareInRepoList(oldUsername, -1, -1)
+		if err != nil {
+			klog.Errorln(err)
+		} else {
+			processSharedRepos(oldSharedRepos, oldUsername, &repoInfoList, usernameCache, nicknameCache)
+		}
+	}
 
-	//if filterBy["public"] && user.Permissions.CanViewOrg {
-	//	publicRepos, err := services.ListInnerPubRepos(r)
-	//	if err != nil {
-	//		utils.LogError(err)
-	//	} else {
-	//		processPublicRepos(publicRepos, email, starredRepoIDs, &repoInfoList, contactCache, nicknameCache)
-	//	}
-	//}
+	timestamp := time.Now().UTC().Format("2006-01-02 15:04:05")
+	eventMsg := fmt.Sprintf("user-login\t%s\t%s\t%d", username, timestamp, -1)
+	if resultCode, err := goseaserv.GlobalSeafileAPI.PublishEvent("seahub.stats", eventMsg); err != nil || resultCode != 0 {
+		klog.Errorf("Publish event failed, code: %d, err: %v", resultCode, err)
+	}
 
-	//timestamp := time.Now().UTC().Format("2006-01-02 15:04:05")
-	//eventMsg := fmt.Sprintf("user-login\t%s\t%s\t%d", email, timestamp, orgID)
-	//if err := services.PublishEvent("seahub.stats", eventMsg); err != nil {
-	//	utils.LogError(err)
-	//}
-
-	//w.Header().Set("Content-Type", "application/json")
-	//json.NewEncoder(w).Encode(map[string]interface{}{
-	//	"repos": repoInfoList,
-	//})
 	return common.RenderJSON(w, r, repoInfoList)
 }
 
-func processRepos(repos []map[string]string, repoType, email string, starredRepoIDs map[string]bool,
-	repoInfoList *[]map[string]interface{}, contactCache, nicknameCache map[string]string) {
+func processRepos(repos []map[string]string, username string,
+	repoInfoList *[]map[string]interface{}, usernameCache, nicknameCache map[string]string) {
 
-	//monitoredRepoIDs := make(map[string]bool)
-	//monitoredRepos, err := models.GetMonitoredRepos(email, repos)
-	//if err != nil {
-	//	utils.LogError(err)
-	//} else {
-	//	for _, repo := range monitoredRepos {
-	//		monitoredRepoIDs[repo.RepoID] = true
-	//	}
-	//}
-	//
-	//modifiers := make(map[string]bool)
-	//for _, repo := range repos {
-	//	modifiers[repo.LastModifier] = true
-	//}
-	//for e := range modifiers {
-	//	if _, exists := contactCache[e]; !exists {
-	//		contactCache[e] = utils.Email2ContactEmail(e)
-	//	}
-	//	if _, exists := nicknameCache[e]; !exists {
-	//		nicknameCache[e] = utils.Email2Nickname(utils.Email2ContactEmail(e))
-	//	}
-	//}
+	modifiers := make(map[string]bool)
+	for _, repo := range repos {
+		modifiers[repo["last_modifier"]] = true
+	}
+	for e := range modifiers {
+		if _, exists := usernameCache[e]; !exists {
+			usernameCache[e] = goseaserv.Email2ContactEmail(e)
+		}
+		if _, exists := nicknameCache[e]; !exists {
+			nicknameCache[e] = goseaserv.Email2Nickname(goseaserv.Email2ContactEmail(e))
+		}
+	}
+
+	sort.Slice(repos, func(i, j int) bool {
+		return repos[i]["last_modify"] > repos[j]["last_modify"]
+	})
 
 	for _, repo := range repos {
 		klog.Infof("~~~Debug log: repo = %v", repo)
-		//if repo.IsVirtual {
+		//if repo["is_virtual"]  {
 		//	continue
 		//}
 
 		repoInfo := map[string]interface{}{
-			"type":                repoType,
-			"repo_id":             repo["repo_id"],
-			"repo_name":           repo["repo_name"],
-			"owner_email":         email,
-			"owner_name":          goseaserv.Email2Nickname(goseaserv.Email2ContactEmail(email)),
-			"owner_contact_email": goseaserv.Email2ContactEmail(email),
-			//"last_modified":          utils.TimestampToISO(repo.LastModify),
-			//"modifier_email":         repo.LastModifier,
-			//"modifier_name":          nicknameCache[repo.LastModifier],
-			//"modifier_contact_email": contactCache[repo.LastModifier],
-			"size":       repo["size"],
-			"encrypted":  repo["encrypted"],
-			"permission": "rw",
-			//"starred":                starredRepoIDs[repo["ID"]],
-			//"monitored":              monitoredRepoIDs[repo.ID],
-			//"status":                 utils.NormalizeRepoStatus(repo.Status),
-			"status": repo["status"],
-			"salt":   getSalt(repo),
+			"type":                   "mine",
+			"repo_id":                repo["repo_id"],
+			"repo_name":              repo["repo_name"],
+			"owner_email":            username,
+			"owner_name":             goseaserv.Email2Nickname(goseaserv.Email2ContactEmail(username)),
+			"owner_contact_email":    goseaserv.Email2ContactEmail(username),
+			"last_modified":          TimestampToISO(repo["last_modify"]),
+			"modifier_email":         repo["last_modifier"],
+			"modifier_name":          nicknameCache["last_modifier"],
+			"modifier_contact_email": usernameCache["last_modifier"],
+			"size":                   repo["size"],
+			"encrypted":              repo["encrypted"],
+			"permission":             "rw",
+			"status":                 NormalizeRepoStatusCode(repo["status"]),
+			//"status":     repo["status"],
+			"salt":       getSalt(repo),
+			"is_virtual": repo["is_virtual"],
 		}
 
-		//if utils.IsProVersion() && utils.EnableStorageClasses() {
-		//	repoInfo["storage_name"] = repo.StorageName
-		//	repoInfo["storage_id"] = repo.StorageID
-		//}
+		*repoInfoList = append(*repoInfoList, repoInfo)
+	}
+}
+
+func processSharedRepos(sharedRepos []map[string]string, username string,
+	repoInfoList *[]map[string]interface{}, usernameCache, nicknameCache map[string]string) {
+
+	owners := make(map[string]bool)
+	modifiers := make(map[string]bool)
+	for _, repo := range sharedRepos {
+		owners[repo["user"]] = true
+		modifiers[repo["last_modifier"]] = true
+	}
+
+	for user := range owners {
+		if _, exists := usernameCache[user]; !exists {
+			usernameCache[user] = goseaserv.Email2ContactEmail(user)
+		}
+		if _, exists := nicknameCache[user]; !exists {
+			nicknameCache[user] = goseaserv.Email2Nickname(usernameCache[user])
+		}
+	}
+	for user := range modifiers {
+		if _, exists := usernameCache[user]; !exists {
+			usernameCache[user] = goseaserv.Email2ContactEmail(user)
+		}
+		if _, exists := nicknameCache[user]; !exists {
+			nicknameCache[user] = goseaserv.Email2Nickname(usernameCache[user])
+		}
+	}
+
+	sort.Slice(sharedRepos, func(i, j int) bool {
+		return sharedRepos[i]["last_modify"] > sharedRepos[j]["last_modify"]
+	})
+
+	for _, repo := range sharedRepos {
+		ownerUsername := repo["user"]
+		ownerName := nicknameCache[ownerUsername]
+		ownerContact := usernameCache[ownerUsername]
+
+		repoInfo := map[string]interface{}{
+			"type":                   "shared",
+			"repo_id":                repo["repo_id"],
+			"repo_name":              repo["repo_name"],
+			"last_modified":          TimestampToISO(repo["last_modify"]),
+			"modifier_email":         repo["last_modifier"],
+			"modifier_name":          nicknameCache[repo["last_modifier"]],
+			"modifier_contact_email": usernameCache[repo["last_modifier"]],
+			"owner_email":            ownerUsername,
+			"owner_name":             ownerName,
+			"owner_contact_email":    ownerContact,
+			"size":                   repo["size"],
+			"encrypted":              repo["encrypted"],
+			"permission":             repo["permission"],
+			"status":                 NormalizeRepoStatusCode(repo["status"]),
+			"salt":                   getSalt(repo),
+		}
 
 		*repoInfoList = append(*repoInfoList, repoInfo)
 	}
@@ -193,6 +216,50 @@ func getSalt(repo map[string]string) string {
 	}
 	if envVersion >= 3 {
 		return repo["salt"]
+	}
+	return ""
+}
+
+func TimestampToISO(timestamp interface{}) string {
+	var tsSec, tsNsec int64
+
+	switch v := timestamp.(type) {
+	case int:
+		tsSec = int64(v)
+	case int64:
+		tsSec = v
+	case float64:
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			klog.Errorf("Invalid float timestamp: %v", v)
+			return fmt.Sprintf("%v", timestamp)
+		}
+		tsSec = int64(v)
+		tsNsec = int64((v - float64(tsSec)) * 1e9)
+	case string:
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			tsSec = i
+		} else {
+			klog.Errorf("String timestamp parse failed: %v", err)
+			return v
+		}
+	default:
+		klog.Errorf("Unsupported timestamp type: %T", timestamp)
+		return fmt.Sprintf("%v", timestamp)
+	}
+
+	t := time.Unix(tsSec, tsNsec).UTC()
+
+	return t.Format("2006-01-02T15:04:05.000Z07:00")
+}
+
+var REPO_STATUS_NORMAL = "normal"
+var REPO_STATUS_READ_ONLY = "read-only"
+
+func NormalizeRepoStatusCode(status string) string {
+	if status == "0" {
+		return REPO_STATUS_NORMAL
+	} else if status == "1" {
+		return REPO_STATUS_READ_ONLY
 	}
 	return ""
 }
