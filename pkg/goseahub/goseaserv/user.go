@@ -125,6 +125,21 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// temp compatible
+func GetOldUsername(key string) string {
+	usernameMap, err := redisutils.RedisClient.HGetAll("old_seahub_email_map").Result()
+	if err != nil {
+		klog.Error(err)
+		return key
+	}
+	if len(usernameMap) > 0 {
+		if val, exists := usernameMap[key]; exists {
+			return val
+		}
+	}
+	return key
+}
+
 func Email2ContactEmail(value string) string {
 	emailMap, err := redisutils.RedisClient.HGetAll("old_seahub_email_map").Result()
 	if err != nil {

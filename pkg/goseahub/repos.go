@@ -50,7 +50,7 @@ func ReposGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (in
 
 	bflName := r.Header.Get("X-Bfl-User")
 	username := bflName + "@auth.local"
-	oldUsername := goseaserv.Email2ContactEmail(bflName + "@seafile.com") // temp comptible
+	oldUsername := goseaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
 
 	usernameCache := make(map[string]string)
 	nicknameCache := make(map[string]string)
@@ -64,7 +64,7 @@ func ReposGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (in
 		} else {
 			processRepos(ownedRepos, "mine", username, nil, &repoInfoList, usernameCache, nicknameCache)
 		}
-		
+
 		oldOwnedRepos, err := goseaserv.GlobalSeafileAPI.GetOwnedRepoList(oldUsername, false, -1, -1)
 		if err != nil {
 			klog.Errorln(err)
