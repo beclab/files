@@ -3,15 +3,15 @@ package goseahub
 import (
 	"errors"
 	"files/pkg/common"
+	"files/pkg/goseahub/goseafile"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
 	"k8s.io/klog/v2"
 	"net/http"
-	"strings"
 )
 
 func SeahubUsersGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	responseData, err := ListAllUsers()
+	responseData, err := goseafile.ListAllUsers()
 	if err != nil {
 		klog.Errorf("ListAllUsers failed: %v", err)
 		return http.StatusInternalServerError, err
@@ -60,25 +60,4 @@ func MigrateSeahubEmailToRedis() error {
 	klog.Info("=============================================")
 
 	return nil
-}
-
-func Email2ContactEmail(value string) string {
-	emailMap, err := redisutils.RedisClient.HGetAll("old_seahub_email_map").Result()
-	if err != nil {
-		klog.Error(err)
-	} else {
-		for k, v := range emailMap {
-			if v == value {
-				return k
-			}
-		}
-	}
-	return value
-}
-
-func Email2Nickname(value string) string {
-	var nickname string
-	parts := strings.Split(value, "@")
-	nickname = parts[0]
-	return nickname
 }

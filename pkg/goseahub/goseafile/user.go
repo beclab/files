@@ -1,11 +1,11 @@
-package goseahub
+package goseafile
 
 import (
 	"errors"
 	"files/pkg/goseahub/goseaserv"
+	"files/pkg/redisutils"
 	"fmt"
 	"k8s.io/klog/v2"
-	"log"
 	"strconv"
 	"strings"
 )
@@ -126,6 +126,27 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+func Email2ContactEmail(value string) string {
+	emailMap, err := redisutils.RedisClient.HGetAll("old_seahub_email_map").Result()
+	if err != nil {
+		klog.Error(err)
+	} else {
+		for k, v := range emailMap {
+			if v == value {
+				return k
+			}
+		}
+	}
+	return value
+}
+
+func Email2Nickname(value string) string {
+	var nickname string
+	parts := strings.Split(value, "@")
+	nickname = parts[0]
+	return nickname
+}
+
 func ListAllUsers() (map[string]map[string]interface{}, error) {
 	emailUserCount, err := goseaserv.GlobalCcnetAPI.CountEmailusers("DB")
 	if err != nil {
@@ -149,15 +170,16 @@ func ListAllUsers() (map[string]map[string]interface{}, error) {
 
 	for _, user := range users {
 		info := make(map[string]interface{})
-		userEmail := user["email"]
-		info["email"] = userEmail
-		info["name"] = Email2Nickname(Email2ContactEmail(userEmail))
-		info["contact_email"] = Email2ContactEmail(userEmail)
+		username := user["email"]
+		info["username"] = username
+		info["email"] = username
+		info["name"] = Email2Nickname(Email2ContactEmail(username))
+		info["contact_email"] = Email2ContactEmail(username)
 
 		info["is_staff"] = user["is_staff"]
 		info["is_active"] = user["is_active"]
 
-		data[info["email"].(string)] = info
+		data[info["username"].(string)] = info
 	}
 
 	// just for test
@@ -165,7 +187,7 @@ func ListAllUsers() (map[string]map[string]interface{}, error) {
 	total["total"] = totalCount
 	data["total"] = total
 
-	log.Println("User data:", dataToString(data))
+	klog.Infoln("User data:", dataToString(data))
 
 	return data, nil
 }

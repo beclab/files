@@ -2,6 +2,7 @@ package goseahub
 
 import (
 	"files/pkg/common"
+	"files/pkg/goseahub/goseafile"
 	"files/pkg/goseahub/goseaserv"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -14,7 +15,7 @@ var (
 	once          sync.Once
 )
 
-func getSystemDefaultRepoID() string {
+func getSystemDefaultRepoId() string {
 	once.Do(func() {
 		repoID, err := goseaserv.GlobalSeafileAPI.GetSystemDefaultRepoId()
 		if err != nil {
@@ -176,8 +177,8 @@ func processRepos(repos []map[string]string, repoType, email string, starredRepo
 			"repo_id":             repo["repo_id"],
 			"repo_name":           repo["repo_name"],
 			"owner_email":         email,
-			"owner_name":          Email2Nickname(Email2ContactEmail(email)),
-			"owner_contact_email": Email2ContactEmail(email),
+			"owner_name":          goseafile.Email2Nickname(goseafile.Email2ContactEmail(email)),
+			"owner_contact_email": goseafile.Email2ContactEmail(email),
 			//"last_modified":          utils.TimestampToISO(repo.LastModify),
 			//"modifier_email":         repo.LastModifier,
 			//"modifier_name":          nicknameCache[repo.LastModifier],

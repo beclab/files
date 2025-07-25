@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/goseahub/goseafile"
 	"files/pkg/goseahub/goseaserv"
 	"k8s.io/klog/v2"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -29,13 +29,13 @@ func createDefaultLibrary(newUsername string) (string, error) {
 	}
 	klog.Infof("Create Default Library: create repo success, repo_id=%s", defaultRepo)
 
-	sysRepoID := getSystemDefaultRepoID()
-	klog.Infof("Create Default Library: create repo success, sys_repo_id=%s", sysRepoID)
-	if sysRepoID == "" {
+	sysRepoId := getSystemDefaultRepoId()
+	klog.Infof("Create Default Library: create repo success, sys_repo_id=%s", sysRepoId)
+	if sysRepoId == "" {
 		return defaultRepo, nil
 	}
 
-	dirents, err := goseaserv.GlobalSeafileAPI.ListDirByPath(sysRepoID, "/", -1, -1)
+	dirents, err := goseaserv.GlobalSeafileAPI.ListDirByPath(sysRepoId, "/", -1, -1)
 	if err != nil {
 		klog.Infof("List dir failed: %v", err)
 		return defaultRepo, err
@@ -49,7 +49,7 @@ func createDefaultLibrary(newUsername string) (string, error) {
 			return defaultRepo, err
 		}
 		_, err = goseaserv.GlobalSeafileAPI.CopyFile(
-			sysRepoID, "/", string(objNameBytes),
+			sysRepoId, "/", string(objNameBytes),
 			defaultRepo, "/", string(objNameBytes),
 			username, 0, 0,
 		)
@@ -67,34 +67,31 @@ func CallbackCreateHandler(w http.ResponseWriter, r *http.Request, d *common.Dat
 		klog.Infof("Error parsing request body: %v", err)
 		return http.StatusBadRequest, err
 	}
-	log.Printf("Received data: %v", data)
+	klog.Infof("Received data: %v", data)
 
-	name, ok := data["name"].(string)
+	bflName, ok := data["name"].(string)
 	if !ok {
 		klog.Infoln("Name field is missing or not a string")
 		return http.StatusBadRequest, nil
 	}
 
-	newUserUsername := strings.TrimSpace(name)
-	if newUserUsername != "" {
-		newUserEmail := newUserUsername + "@auth.local"
-		klog.Infof("Try to create user for %s", newUserEmail)
+	bflName = strings.TrimSpace(bflName)
+	if bflName != "" {
+		newUsername := bflName + "@auth.local"
+		klog.Infof("Try to create user for %s", newUsername)
 
-		isNew, err := createUser(newUserEmail)
+		isNew, err := createUser(newUsername)
 		if err != nil {
 			klog.Infof("Error creating user: %v", err)
 			return http.StatusInternalServerError, err
 		}
 
 		if isNew {
-			virtualID := newUserEmail
-			klog.Infof("Try to create default library for %s with virtual_id %s", newUserEmail, virtualID)
-
-			repoID, err := createDefaultLibrary(virtualID)
+			repoId, err := createDefaultLibrary(newUsername)
 			if err != nil {
-				klog.Infof("Create default library for %s failed: %v", newUserEmail, err)
+				klog.Infof("Create default library for %s failed: %v", newUsername, err)
 			} else {
-				klog.Infof("Create default library %s for %s successfully!", repoID, newUserEmail)
+				klog.Infof("Create default library %s for %s successfully!", repoId, newUsername)
 			}
 		}
 	}
@@ -102,29 +99,29 @@ func CallbackCreateHandler(w http.ResponseWriter, r *http.Request, d *common.Dat
 	return 0, nil
 }
 
-func createUser(email string) (bool, error) {
-	allUsers, err := ListAllUsers()
+func createUser(username string) (bool, error) {
+	allUsers, err := goseafile.ListAllUsers()
 	if err != nil {
 		klog.Errorf("Error listing users: %v", err)
 		return false, err
 	}
 
-	if existedUser, ok := allUsers[email]; ok {
-		if existedEmail, ok := existedUser["email"]; ok && existedEmail != "" {
-			klog.Infof("Contact Email %s with Virtual Email %s already exist. Ignore this procedure!", email, existedEmail)
+	if existedUser, ok := allUsers[username]; ok {
+		if existedUsername, ok := existedUser["username"]; ok && existedUsername != "" {
+			klog.Infof("Username %s already exist. Ignore this procedure!", username)
 			return false, nil
 		}
 	}
 
-	klog.Infof("Email %s not exist in memory cache. Will do this procedure!", email)
+	klog.Infof("Username %s not exist in memory cache. Will do this procedure!", username)
 
-	resultCode := SaveUser(email, "abcd123456", true, true)
+	resultCode := goseafile.SaveUser(username, "abcd123456", true, true)
 	if resultCode != 0 {
-		klog.Infof("Error creating user: %v", email)
+		klog.Infof("Error creating user: %s", username)
 		return false, errors.New("error creating user")
 	}
 
-	klog.Infof("User %s created successfully", email)
+	klog.Infof("User %s created successfully", username)
 	return true, nil
 }
 
@@ -135,42 +132,38 @@ func CallbackDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Dat
 	}
 	defer r.Body.Close()
 
-	username, exists := requestData["name"]
+	bflName, exists := requestData["name"]
 	if !exists {
 		return http.StatusBadRequest, errors.New("Missing name field")
 	}
-	email := username + "@auth.local"
+	username := bflName + "@auth.local"
 
-	err := removeUser(email)
+	err := removeUser(username)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 	return 0, nil
 }
 
-func removeUser(email string) error {
-	allUsers, err := ListAllUsers()
+func removeUser(username string) error {
+	allUsers, err := goseafile.ListAllUsers()
 	if err != nil {
 		klog.Errorf("Error listing users: %v", err)
 		return err
 	}
 
-	existedUser, exists := allUsers[email]
+	existedUser, exists := allUsers[username]
 	if !exists {
-		klog.Infof("Contact Email %s not existed. Ignore procedure.", email)
+		klog.Infof("Username %s not existed. Ignore procedure.", username)
 		return nil
 	}
-	klog.Infof("User %v with Contact Email %s existed!", existedUser, email)
+	klog.Infof("User %v with username %s existed!", existedUser, username)
 
-	virtualID := email // existedUser["email"]
-	klog.Infof("Contact Email %s with Virtual Email %s exists. Proceeding...", email, virtualID)
-
-	klog.Infof("Deleting user %s with virtual_id %s...", email, virtualID)
-	err = DeleteUser(virtualID)
+	err = goseafile.DeleteUser(username)
 	if err != nil {
 		klog.Errorf("Error deleting user: %v", err)
 		return err
 	}
-	klog.Infof("Successfully deleted user %s with virtual_id %s", email, virtualID)
+	klog.Infof("Successfully deleted user %s", username)
 	return nil
 }
