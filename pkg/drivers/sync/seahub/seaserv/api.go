@@ -30,13 +30,23 @@ func ReturnInt(ret interface{}) (int, error) {
 	return retInt, nil
 }
 
+func ReturnInt64(ret interface{}) (int64, error) {
+	retInt, ok := ret.(int)
+	if !ok {
+		klog.Errorf("~~~Debug log: Type assertion failed - expected: int, actual: %T", ret)
+		return -1, fmt.Errorf("type assertion failed - expected: int, actual:%T", ret)
+	}
+	klog.Infof("~~~Debug log: Successfully converted to int - %d", retInt)
+	return int64(retInt), nil
+}
+
 func ReturnString(ret interface{}) (string, error) {
 	retString, ok := ret.(string)
 	if !ok {
-		klog.Errorf("~~~Debug log: Type assertion failed - expected: int, actual: %T", ret)
-		return "", fmt.Errorf("type assertion failed - expected: int, actual:%T", ret)
+		klog.Errorf("~~~Debug log: Type assertion failed - expected: string, actual: %T", ret)
+		return "", fmt.Errorf("type assertion failed - expected: string, actual:%T", ret)
 	}
-	klog.Infof("~~~Debug log: Successfully converted to int - %s", retString)
+	klog.Infof("~~~Debug log: Successfully converted to string - %s", retString)
 	return retString, nil
 }
 
@@ -101,6 +111,25 @@ func NewSeafileAPI(rpcClient *SeafileRpcClient) *SeafileAPI {
 	}
 }
 
+func (s *SeafileAPI) GetFileServerAccessToken(repoId, objId, op, username string, useOnetime bool) (string, error) {
+	/*
+		op: the operation, can be 'view', 'download', 'download-dir', 'downloadblks',
+		'upload', 'update', 'upload-blks-api', 'upload-blks-aj',
+		'update-blks-api', 'update-blks-aj'
+
+		Return: the access token in string
+	*/
+	onetime := 0
+	if useOnetime {
+		onetime = 1
+	}
+	ret, err := s.rpcClient.SeafileWebGetAccessToken(repoId, objId, op, username, onetime)
+	if err != nil {
+		return "", err
+	}
+	return ReturnString(ret)
+}
+
 func (s *SeafileAPI) CreateRepo(name, desc, username string, password *string, encVersion int) (string, error) {
 	ret, err := s.rpcClient.SeafileCreateRepo(name, desc, username, password, encVersion)
 	if err != nil {
@@ -123,6 +152,29 @@ func (s *SeafileAPI) RemoveRepo(repoId string) (int, error) {
 		return -1, fmt.Errorf("remove repo failed: %v", err)
 	}
 	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) EditRepo(repoId, name, description, username string) (int, error) {
+	ret, err := s.rpcClient.SeafileEditRepo(repoId, name, description, username)
+	if err != nil {
+		return -1, fmt.Errorf("edit repo failed: %v", err)
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) IsRepoOwner(username, repoId string) (bool, error) {
+	ret, err := s.rpcClient.SeafileIsRepoOwner(username, repoId)
+	if err != nil {
+		return false, fmt.Errorf("check repo owner failed: %v", err)
+	}
+	retInt, err := ReturnInt(ret)
+	if err != nil {
+		return false, fmt.Errorf("check repo owner failed: %v", err)
+	}
+	if retInt == 1 {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (s *SeafileAPI) GetRepoOwner(repoId string) (string, error) {
@@ -148,6 +200,14 @@ func (s *SeafileAPI) GetOwnedRepoList(username string, retCorrupted bool, start 
 	}
 	klog.Infof("~~~Debug log: RPC call succeeded - username: %s, response type: %T", username, ret)
 	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) GenerateRepoToken(repoId, username string) (string, error) {
+	ret, err := s.rpcClient.SeafileGanarateRepoToken(repoId, username)
+	if err != nil {
+		return "", fmt.Errorf("generate repo token failed: %v", err)
+	}
+	return ReturnString(ret)
 }
 
 func (s *SeafileAPI) DeleteRepoTokensByEmail(email string) (int, error) {
@@ -177,6 +237,24 @@ func (s *SeafileAPI) GetDirIdByPath(repoId, path string) (string, error) {
 		return "", err
 	}
 	return ReturnString(ret)
+}
+
+func (s *SeafileAPI) GetCommitList(repoId string, offset, limit int) ([]map[string]string, error) {
+	ret, err := s.rpcClient.SeafileGetCommitList(repoId, offset, limit)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) GetCommit(repoId string, repoVersion int, cmtId string) (map[string]string, error) {
+	ret, err := s.rpcClient.SeafileGetCommit(repoId, repoVersion, cmtId)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObject(ret)
 }
 
 func (s *SeafileAPI) ListDirWithPerm(repoId, dirPath, dirId, user string, offset, limit int) ([]map[string]string, error) {
@@ -218,6 +296,72 @@ func (s *SeafileAPI) ListDirByPath(repoId, path string, offset, limit int) ([]ma
 	return ReturnObjList(ret)
 }
 
+func (s *SeafileAPI) ListDirByCommitAndPath(repoId, commitId, path string, offset, limit int) ([]map[string]string, error) {
+	dirIdInterface, err := s.rpcClient.SeafileGetDirIdByCommitAndPath(repoId, commitId, path)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	dirId, err := ReturnString(dirIdInterface)
+	if err != nil {
+		return nil, err
+	}
+	if dirId == "" {
+		return nil, nil
+	}
+	ret, err := s.rpcClient.SeafileListDir(repoId, dirId, offset, limit)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) GetFileSize(storeId string, version int, fileId string) (int64, error) {
+	ret, err := s.rpcClient.SeafileGetFileSize(storeId, version, fileId)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return 0, err
+	}
+	return ReturnInt64(ret)
+}
+
+func (s *SeafileAPI) GetFileIdByPath(repoId, path string) (string, error) {
+	ret, err := s.rpcClient.SeafileGetFileIdByPath(repoId, path)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return "", err
+	}
+	return ReturnString(ret)
+}
+
+func (s *SeafileAPI) GetDirIdByCommitAndPath(repoId, commitId, path string) (string, error) {
+	ret, err := s.rpcClient.SeafileGetDirIdByCommitAndPath(repoId, commitId, path)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return "", err
+	}
+	return ReturnString(ret)
+}
+
+func (s *SeafileAPI) GetDirentByPath(repoId, path string) (map[string]string, error) {
+	ret, err := s.rpcClient.SeafileGetDirentByPath(repoId, path)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObject(ret)
+}
+
+func (s *SeafileAPI) DelFile(repoId, parentDir, filename, username string) (int, error) {
+	ret, err := s.rpcClient.SeafileDelFile(repoId, parentDir, filename, username)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
 func (s *SeafileAPI) CopyFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, username string, needProgress, synchronous int) (map[string]string, error) {
 	ret, err := s.rpcClient.SeafileCopyFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, username, needProgress, synchronous)
 	if err != nil {
@@ -225,6 +369,43 @@ func (s *SeafileAPI) CopyFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dst
 		return nil, err
 	}
 	return ReturnObject(ret)
+}
+
+func (s *SeafileAPI) RenameFile(repoId, parentDir, oldname, newname, username string) (int, error) {
+	ret, err := s.rpcClient.SeafileRenameFile(repoId, parentDir, oldname, newname, username)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) PostDir(repoId, parentDir, dirname, username string) (int, error) {
+	ret, err := s.rpcClient.SeafilePostDir(repoId, parentDir, dirname, username)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) IsValidFilename(repoId, filename string) (int, error) {
+	// Return: 0 on invalid; 1 on valid.
+	ret, err := s.rpcClient.SeafileIsValidFilename(repoId, filename)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return 0, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) GetUploadTmpFileOffset(repoId, filePath string) (int, error) {
+	ret, err := s.rpcClient.SeafileGetUploadTmpFileOffset(repoId, filePath)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return -1, err
+	}
+	return ReturnInt(ret)
 }
 
 func (s *SeafileAPI) RemoveShare(repoId, fromUsername, toUsername string) (int, error) {

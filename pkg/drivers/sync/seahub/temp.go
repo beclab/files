@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
-	"files/pkg/drives"
 	"files/pkg/redisutils"
 	"fmt"
 	"k8s.io/klog/v2"
@@ -24,6 +23,12 @@ func SeahubUsersGetHandler(w http.ResponseWriter, r *http.Request, d *common.Dat
 	return common.RenderJSON(w, r, responseData)
 }
 
+func RemoveAdditionalHeaders(header *http.Header) {
+	header.Del("Traceparent")
+	header.Del("Tracestate")
+	return
+}
+
 // temp func, just for temp compatible before repo CRUD func finished
 func MigrateSeahubUserToRedis(header http.Header) error {
 	if MIGRATED {
@@ -35,7 +40,7 @@ func MigrateSeahubUserToRedis(header http.Header) error {
 		return err
 	}
 	req.Header = header.Clone()
-	drives.RemoveAdditionalHeaders(&req.Header)
+	RemoveAdditionalHeaders(&req.Header)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,

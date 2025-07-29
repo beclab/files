@@ -244,7 +244,7 @@ func generateParentDirs(parentDir string, withParents bool) []string {
 
 const (
 	THUMBNAIL_ROOT         = "/thumbnails"
-	ENABLE_VIDEO_THUMBNAIL = true
+	ENABLE_VIDEO_THUMBNAIL = false
 )
 
 func IsDirectory(modeStr string) (bool, error) {
@@ -256,7 +256,7 @@ func IsDirectory(modeStr string) (bool, error) {
 	return (mode & syscall.S_IFMT) == syscall.S_IFDIR, nil
 }
 
-var FILEEXT_TYPE_MAP = map[string]string{
+var EXT_TYPE_MAP = map[string]string{
 	"jpg":   "image",
 	"xmind": "xmind",
 	"mp4":   "video",
@@ -409,7 +409,7 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 		}
 		if withThumbnail && !encrypted {
 			fileExt := strings.ToLower(strings.TrimPrefix(path.Ext(fileName), "."))
-			if fileType, exists := FILEEXT_TYPE_MAP[fileExt]; exists {
+			if fileType, exists := EXT_TYPE_MAP[fileExt]; exists {
 				if fileType == "image" || fileType == "xmind" ||
 					(fileType == "video" && ENABLE_VIDEO_THUMBNAIL) {
 
@@ -434,4 +434,243 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 	})
 
 	return dirInfoList, fileInfoList, nil
+}
+
+func HandleDirOperation(header http.Header, repoId, pathParam, destName, operation string) ([]byte, error) {
+	MigrateSeahubUserToRedis(header)
+
+	if pathParam == "" || pathParam[0] != '/' {
+		klog.Errorf("invalid path param: %s", pathParam)
+		return nil, errors.New("p invalid")
+	}
+
+	if pathParam == "/" {
+		klog.Errorf("invalid path param: %s", pathParam)
+		return nil, errors.New("Can not operate root dir.")
+	}
+
+	operation = strings.ToLower(operation)
+	if operation != "mkdir" && operation != "rename" && operation != "revert" {
+		klog.Errorf("invalid operation: %s", operation)
+		return nil, errors.New("operation can only be 'mkdir', 'rename' or 'revert'.")
+	}
+
+	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+	if repo == nil {
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
+	}
+
+	bflName := header.Get("X-Bfl-User")
+	username := bflName + "@auth.local"
+	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
+	useUsername := username
+
+	pathParam = strings.TrimRight(pathParam, "/")
+	parentDir := path.Dir(pathParam)
+
+	switch operation {
+	case "mkdir":
+		parentDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+		if err != nil {
+			klog.Error(err)
+			return nil, err
+		}
+		if parentDirId == "" {
+			klog.Errorf("parent dir %s not found", parentDir)
+			return nil, errors.New("parent dir not found")
+		}
+
+		permission, err := CheckFolderPermission(username, repoId, parentDir)
+		if err != nil || permission != "rw" {
+			permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
+			if err != nil || permission != "rw" {
+				return nil, errors.New("permission denied")
+			} else {
+				useUsername = oldUsername
+			}
+		}
+
+		newDirName := path.Base(pathParam)
+		if !isValidDirentName(newDirName) {
+			return nil, errors.New("name invalid")
+		}
+
+		retryCount := 0
+		for retryCount < 10 {
+			newDirName = CheckFilenameWithRename(repoId, parentDir, newDirName)
+			if resultCode, err := seaserv.GlobalSeafileAPI.PostDir(repoId, parentDir, newDirName, useUsername); err == nil && resultCode == 0 {
+				break
+			} else if err.Error() == "file already exists" {
+				retryCount++
+				continue
+			} else {
+				klog.Errorf("Create dir error: %v", err)
+				return nil, err
+			}
+		}
+
+		newDirPath := path.Join(parentDir, newDirName)
+		dirInfo := getDirInfo(repoId, newDirPath)
+
+		jsonBytes, err := json.Marshal(dirInfo)
+		if err != nil {
+			return nil, err
+		}
+		return jsonBytes, nil
+
+	case "rename":
+		dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, pathParam)
+		if err != nil {
+			klog.Error(err)
+			return nil, err
+		}
+		if dirId == "" {
+			klog.Errorf("dir %s not found", pathParam)
+			return nil, errors.New("folder not found")
+		}
+
+		permission, err := CheckFolderPermission(username, repoId, parentDir)
+		if err != nil || permission != "rw" {
+			permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
+			if err != nil || permission != "rw" {
+				return nil, errors.New("permission denied")
+			} else {
+				useUsername = oldUsername
+			}
+		}
+
+		oldDirName := path.Base(pathParam)
+		newDirName := destName
+		if newDirName == "" {
+			klog.Errorf("empty new dirname")
+			return nil, errors.New("empty new dirname")
+		}
+
+		if !isValidDirentName(newDirName) {
+			klog.Errorf("name invalid.")
+			return nil, errors.New("name invalid")
+		}
+
+		if newDirName == oldDirName {
+			dirInfo := getDirInfo(repoId, pathParam)
+			jsonBytes, err := json.Marshal(dirInfo)
+			if err != nil {
+				return nil, err
+			}
+			return jsonBytes, nil
+		}
+
+		newDirName = CheckFilenameWithRename(repoId, parentDir, newDirName)
+		if resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldDirName, newDirName, useUsername); err != nil || resultCode != 0 {
+			klog.Errorf("Failed to rename: result_code: %d, err: %v", resultCode, err)
+			return nil, errors.New("failed to rename")
+		}
+
+		newDirPath := path.Join(parentDir, newDirName)
+		dirInfo := getDirInfo(repoId, newDirPath)
+		jsonBytes, err := json.Marshal(dirInfo)
+		if err != nil {
+			return nil, err
+		}
+		return jsonBytes, nil
+
+	case "revert":
+		// we don't use revert now
+		return nil, errors.New("revert is not supported yet")
+
+	default:
+		klog.Errorf("unknown operation: %s", operation)
+		return nil, errors.New("unknown operation")
+	}
+}
+
+func getDirInfo(repoId, dirPath string) map[string]string {
+	dirObj, err := seaserv.GlobalSeafileAPI.GetDirentByPath(repoId, dirPath)
+	if err != nil {
+		klog.Error(err)
+		return nil
+	}
+
+	normalizedPath := strings.TrimSuffix(dirPath, "/")
+	parentDir := path.Dir(normalizedPath)
+
+	dirInfo := make(map[string]string)
+	dirInfo["type"] = "dir"
+	dirInfo["repo_id"] = repoId
+	dirInfo["parent_dir"] = parentDir
+
+	if dirObj != nil {
+		dirInfo["obj_name"] = dirObj["obj_name"]
+		dirInfo["obj_id"] = dirObj["obj_id"]
+		dirInfo["mtime"] = TimestampToISO(dirObj["mtime"])
+	} else {
+		dirInfo["obj_name"] = ""
+		dirInfo["obj_id"] = ""
+		dirInfo["mtime"] = ""
+	}
+
+	return dirInfo
+}
+
+func getNoDuplicateObjName(objName string, existObjNames []string) string {
+	if !contains(existObjNames, objName) {
+		return objName
+	}
+
+	base, ext := splitFilename(objName)
+
+	for i := 1; ; i++ {
+		newName := makeNewName(base, ext, i)
+		if !contains(existObjNames, newName) {
+			return newName
+		}
+	}
+}
+
+func CheckFilenameWithRename(repoId, parentDir, objName string) string {
+	cmmts, err := seaserv.GlobalSeafileAPI.GetCommitList(repoId, 0, 1)
+	if err != nil {
+		klog.Error(err)
+		return ""
+	}
+	if len(cmmts) == 0 {
+		return ""
+	}
+	latestCommit := cmmts[0]
+
+	dirents, err := seaserv.GlobalSeafileAPI.ListDirByCommitAndPath(repoId, latestCommit["id"], parentDir, -1, -1)
+	existObjNames := make([]string, len(dirents))
+	for i, d := range dirents {
+		existObjNames[i] = d["obj_name"]
+	}
+
+	return getNoDuplicateObjName(objName, existObjNames)
+}
+
+func contains(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func splitFilename(filename string) (string, string) {
+	if idx := strings.LastIndex(filename, "."); idx > 0 {
+		return filename[:idx], filename[idx:]
+	}
+	return filename, ""
+}
+
+func makeNewName(base, ext string, i int) string {
+	if ext != "" {
+		return fmt.Sprintf("%s (%d)%s", base, i, ext)
+	}
+	return fmt.Sprintf("%s (%d)", base, i)
 }

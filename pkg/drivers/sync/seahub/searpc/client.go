@@ -38,24 +38,67 @@ func _fret_int(retStr string) (int, error) {
 	return 0, &SearpcError{"Invalid response format"}
 }
 
+//func _fret_string(retStr string) (string, error) {
+//	var dicts map[string]interface{}
+//	if err := json.Unmarshal([]byte(retStr), &dicts); err != nil {
+//		return "", &SearpcError{"Invalid response format"}
+//	}
+//
+//	if errCode, ok := dicts["err_code"]; ok {
+//		klog.Infof("~~~Debug log: errCode: %s", errCode.(string))
+//		return "", &SearpcError{dicts["err_msg"].(string)}
+//	}
+//
+//	if ret, ok := dicts["ret"]; ok {
+//		if s, ok := ret.(string); ok {
+//			return s, nil
+//		}
+//		return "", &SearpcError{"Invalid response format"}
+//	}
+//	return "", &SearpcError{"Invalid response format"}
+//}
+
 func _fret_string(retStr string) (string, error) {
 	var dicts map[string]interface{}
 	if err := json.Unmarshal([]byte(retStr), &dicts); err != nil {
-		return "", &SearpcError{"Invalid response format"}
+		return "", &SearpcError{fmt.Sprintf("Invalid JSON format: %v, raw: %s", err, retStr)}
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Infof("~~~Debug log: errCode: %s", errCode.(string))
-		return "", &SearpcError{dicts["err_msg"].(string)}
+		var errMsg string
+		switch v := errCode.(type) {
+		case float64:
+			errMsg = fmt.Sprintf("Server error code: %d", int(v))
+		case string:
+			errMsg = fmt.Sprintf("Server error: %s", v)
+		default:
+			errMsg = "Unknown error code type"
+		}
+
+		klog.V(2).Infof("RPC Error - Code: %v(%T), Message: %q",
+			errCode, errCode, dicts["err_msg"])
+
+		if msg, ok := dicts["err_msg"].(string); ok {
+			return "", &SearpcError{msg}
+		}
+		return "", &SearpcError{errMsg}
 	}
 
 	if ret, ok := dicts["ret"]; ok {
-		if s, ok := ret.(string); ok {
-			return s, nil
+		switch v := ret.(type) {
+		case string:
+			return v, nil
+		case float64:
+			return strconv.FormatFloat(v, 'f', -1, 64), nil
+		default:
+			klog.V(2).Infof("Unexpected return type: %T, value: %v", v, v)
+			return "", &SearpcError{
+				fmt.Sprintf("Invalid return type: %T, need string", v)}
 		}
-		return "", &SearpcError{"Invalid response format"}
 	}
-	return "", &SearpcError{"Invalid response format"}
+	
+	return "", &SearpcError{
+		fmt.Sprintf("Missing 'ret' field in response: %s", retStr)}
 }
 
 type SearpcObj struct {

@@ -47,8 +47,27 @@ func (c *SeafServerThreadedRpcClient) SeafileDestroyRepo(repoId string) (interfa
 	return CreateRPCMethod(c, "seafile_destroy_repo", "int", []string{"string"})(repoId)
 }
 
+func (c *SeafServerThreadedRpcClient) SeafileEditRepo(repoId, name, description, user string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_edit_repo", "int", []string{"string", "string", "string", "string"})(
+		repoId, name, description, user)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileIsRepoOwner(userId, repoId string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_is_repo_owner", "int", []string{"string", "string"})(
+		userId, repoId)
+}
+
 func (c *SeafServerThreadedRpcClient) SeafileGetRepoOwner(repoId string) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_get_repo_owner", "string", []string{"string"})(repoId)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileGetCommitList(repoId string, offset, limit int) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_commit_list", "objlist", []string{"string", "int", "int"})(
+		repoId, offset, limit)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileGanarateRepoToken(repoId, email string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_ganarate_repo_token", "string", []string{"string", "string"})(repoId, email)
 }
 
 func (c *SeafServerThreadedRpcClient) DeleteRepoTokensByEmail(email string) (interface{}, error) {
@@ -59,9 +78,34 @@ func (c *SeafServerThreadedRpcClient) GetSystemDefaultRepoId() (interface{}, err
 	return CreateRPCMethod(c, "get_system_default_repo_id", "string", []string{})()
 }
 
+func (c *SeafServerThreadedRpcClient) SeafileGetDirIdByCommitAndPath(repoId, commitId, path string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_dir_id_by_commit_and_path", "string", []string{"string", "string", "string"})(
+		repoId, commitId, path)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileGetFileIdByPath(repoId, path string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_file_id_by_path", "string", []string{"string", "string"})(
+		repoId, path)
+}
+
 func (c *SeafServerThreadedRpcClient) SeafileGetDirIdByPath(repoId, path string) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_get_dir_id_by_path", "string", []string{"string", "string"})(
 		repoId, path)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileGetDirentByPath(repoId, path string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_dirent_by_path", "object", []string{"string", "string"})(
+		repoId, path)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileRenameFile(repoId, parentDir, oldname, newname, user string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_rename_file", "int", []string{"string", "string", "string", "string", "string"})(
+		repoId, parentDir, oldname, newname, user)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileGetCommit(repoId string, version int, commitId string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_commit", "object", []string{"string", "int", "string"})(
+		repoId, version, commitId)
 }
 
 func (c *SeafServerThreadedRpcClient) SeafileListDir(repoId, dirId string, offset, limit int) (interface{}, error) {
@@ -74,10 +118,30 @@ func (c *SeafServerThreadedRpcClient) ListDirWithPerm(repoId, dirPath, dirId, us
 		repoId, dirPath, dirId, user, offset, limit)
 }
 
+func (c *SeafServerThreadedRpcClient) SeafileGetFileSize(storeId string, version int, fileId string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_file_size", "int64", []string{"string", "int", "string"})(
+		storeId, version, fileId)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafilePostDir(repoId, parentDir, newDirName, user string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_post_dir", "int", []string{"string", "string", "string", "string"})(
+		repoId, parentDir, newDirName, user)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileDelFile(repoId, parentDir, filename, user string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_del_file", "int", []string{"string", "string", "string", "string"})(
+		repoId, parentDir, filename, user)
+}
+
 func (c *SeafServerThreadedRpcClient) SeafileCopyFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, user string,
 	needProgress, synchronous int) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_copy_file", "object", []string{"string", "string", "string", "string", "string", "string", "string", "int", "int"})(
 		srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, user, needProgress, synchronous)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileIsValidFilename(repoId string, filename string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_is_valid_filename", "int", []string{"string", "string"})(
+		repoId, filename)
 }
 
 func (c *SeafServerThreadedRpcClient) SeafileRemoveShare(repoId, fromEmail, toEmail string) (interface{}, error) {
@@ -98,6 +162,11 @@ func (c *SeafServerThreadedRpcClient) CheckQuota(repoId string, delta int64) (in
 	return CreateRPCMethod(c, "check_quota", "int", []string{"string", "int64"})(repoId, delta)
 }
 
+func (c *SeafServerThreadedRpcClient) SeafileGetUploadTmpFileOffset(repoId, filePath string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_upload_tmp_file_offset", "int64", []string{"string", "string"})(
+		repoId, filePath)
+}
+
 func (c *SeafServerThreadedRpcClient) CheckPermissionByPath(repoId, path, user string) (interface{}, error) {
 	return CreateRPCMethod(c, "check_permission_by_path", "string", []string{"string", "string", "string"})(
 		repoId, path, user)
@@ -110,6 +179,11 @@ func (c *SeafServerThreadedRpcClient) RepoHasBeenShared(repoId string, including
 
 func (c *SeafServerThreadedRpcClient) GetRepoStatus(repoId string) (interface{}, error) {
 	return CreateRPCMethod(c, "get_repo_status", "int", []string{"string"})(repoId)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileWebGetAccessToken(repoId, objId, op, username string, useOnetime int) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_web_get_access_token", "string", []string{"string", "string", "string", "string", "int"})(
+		repoId, objId, op, username, useOnetime)
 }
 
 func (c *SeafServerThreadedRpcClient) SeafileIsPasswdSet(repoId, user string) (interface{}, error) {

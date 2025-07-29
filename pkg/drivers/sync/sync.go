@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"files/pkg/common"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/models"
@@ -80,11 +79,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	var seahubUrl string
 	var previewSize string
 
-	getUrl := "http://127.0.0.1:80/seahub/lib/" + fileParam.Extend + "/file" + common.EscapeURLWithSpace(fileParam.Path) + "?dict=1"
-
-	klog.Infof("Sync preview, user: %s, get url: %s", owner, getUrl)
-
-	filesData, err := s.service.Get(getUrl, http.MethodGet, nil)
+	filesData, err := seahub.ViewLibFile(s.service.Request.Header.Clone(), fileParam, "dict")
 	if err != nil {
 		return nil, err
 	}
@@ -104,16 +99,13 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	if size != "big" {
 		size = "thumb"
 	}
+
 	if size == "big" {
 		previewSize = "/1080"
 	} else {
 		previewSize = "/128"
 	}
-	seahubUrl = "http://127.0.0.1:80/seahub/thumbnail/" + fileParam.Extend + previewSize + fileParam.Path
-
-	klog.Infof("SYNC preview, user: %s, url: %s", owner, seahubUrl)
-
-	res, err := s.service.Get(seahubUrl, http.MethodGet, nil)
+	res, err := seahub.GetThumbnail(s.service.Request.Header.Clone(), fileParam, previewSize)
 	if err != nil {
 		klog.Errorf("Sync preview, get file failed, user: %s, url: %s, err: %s", owner, seahubUrl, err.Error())
 		return nil, err
@@ -132,7 +124,7 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 	var queryParam = contextArgs.QueryParam
 	var owner = fileParam.Owner
 
-	klog.Infof("Sync raw, user: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Sync raw, user: %s, param: %s, queryParam: %v", owner, fileParam.Json(), queryParam)
 	fileName, ok := fileParam.IsFile()
 	if !ok {
 		return nil, fmt.Errorf("not a file")
@@ -141,28 +133,50 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 	var data []byte
 	var err error
 
+	klog.Infof("~~~Charset Debug log: queryParam.RawMeta=%s", queryParam.RawMeta)
 	if queryParam.RawMeta == "true" {
-		getUrl := "http://127.0.0.1:80/seahub/lib/" + fileParam.Extend + "/file" + common.EscapeURLWithSpace(fileParam.Path) + "?dict=1"
-
-		klog.Infof("Sync raw, user: %s, get meta url: %s", fileParam.Owner, getUrl)
-
-		data, err = s.service.Get(getUrl, http.MethodGet, nil)
+		data, err = seahub.ViewLibFile(s.service.Request.Header, fileParam, "dict")
+		klog.Infof("~~~Debug log: from seaserv, data = %s", string(data))
 		if err != nil {
 			return nil, err
 		}
 
 		var fileInfo *models.SyncFile
 		if err := json.Unmarshal(data, &fileInfo); err != nil {
+			klog.Errorf("~~~Debug log, unmarshal json failed, fileInfo = %s, err = %v", string(data), err)
 			return nil, errors.New("file not found")
 		}
 	} else {
-		dlUrl := "http://127.0.0.1:80/seahub/lib/" + fileParam.Extend + "/file" + common.EscapeAndJoin(fileParam.Path, "/") + "/" + "?dl=1"
+		ext := strings.ToLower(filepath.Ext(fileName))
+		if queryParam.RawInline == "true" && (ext == ".txt" || ext == ".log" || ext == ".md") {
+			rawData, err := seahub.ViewLibFile(s.service.Request.Header, fileParam, "dict")
+			if err != nil {
+				return nil, err
+			}
 
-		klog.Infof("Sync raw, user: %s, get download url: %s", fileParam.Owner, dlUrl)
+			var result map[string]interface{}
+			if err := json.Unmarshal(rawData, &result); err != nil {
+				klog.Errorf("JSON parse failed: data=%s, err=%v", string(rawData), err)
+			}
 
-		data, err = s.service.Get(dlUrl, http.MethodGet, nil)
-		if err != nil {
-			return nil, err
+			fileContent, ok := result["file_content"].(string)
+			if !ok {
+				klog.Errorf("no file_content field: data=%s", string(rawData))
+				err = errors.New("invalid file content")
+			}
+
+			if err == nil {
+				data = []byte(fileContent)
+				klog.Infof("~~~Debug log: get file content，length=%d", len(data))
+			} else {
+				data = rawData
+			}
+		} else {
+			data, err = seahub.ViewLibFile(s.service.Request.Header, fileParam, "dl")
+			if err != nil {
+				return nil, err
+			}
+			http.Redirect(s.service.ResponseWriter, s.service.Request, string(data), http.StatusFound)
 		}
 	}
 
@@ -205,10 +219,7 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 			subFolder = "/" + subFolder
 		}
 
-		var url = "http://127.0.0.1:80/seahub/api/v2.1/repos/" + fileParam.Extend + "/dir/?p=" + common.EscapeURLWithSpace(subFolder)
-		data := make(map[string]string)
-		data["operation"] = "mkdir"
-		res, err := s.service.Get(url, http.MethodPost, []byte(utils.ToJson(data)))
+		res, err := seahub.HandleDirOperation(s.service.Request.Header.Clone(), fileParam.Extend, subFolder, "", "mkdir")
 		if err != nil {
 			klog.Errorf("Sync create error: %v, path: %s", err, subFolder)
 			return nil, err
@@ -229,15 +240,7 @@ func (s *SyncStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, erro
 	klog.Infof("Sync delete, user: %s, param: %s, dirents: %v", owner, fileParam.Json(), dirents)
 
 	for _, dirent := range dirents {
-		var data = make(map[string]interface{})
-		data["repo_id"] = fileParam.Extend
-		data["parent_dir"] = fileParam.Path
-		data["dirents"] = []string{strings.Trim(dirent, "/")}
-
-		klog.Infof("Sync delete, delete dirent, param: %s", []byte(utils.ToJson(data)))
-
-		deleteUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/batch-delete-item/"
-		res, err := s.service.Get(deleteUrl, http.MethodDelete, []byte(utils.ToJson(data)))
+		res, err := seahub.HandleBatchDelete(s.service.Request.Header.Clone(), fileParam, []string{strings.Trim(dirent, "/")})
 		if err != nil {
 			klog.Errorf("Sync delete, delete files error: %v, user: %s", err, owner)
 			deleteFailedPaths = append(deleteFailedPaths, dirent)
