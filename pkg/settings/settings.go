@@ -19,6 +19,7 @@ type Server struct {
 	EnableExec            bool   `json:"enableExec"`
 	TypeDetectionByHeader bool   `json:"typeDetectionByHeader"`
 	AuthHook              string `json:"authHook"`
+	RPCPath               string `json:"rpcPath"`
 }
 
 func NewDefaultServer() *Server {
@@ -36,6 +37,7 @@ func NewDefaultServer() *Server {
 		EnableExec:            false,
 		TypeDetectionByHeader: true,
 		AuthHook:              "",
+		RPCPath:               "",
 	}
 }
 
