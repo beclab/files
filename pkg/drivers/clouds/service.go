@@ -1,163 +1,135 @@
 package clouds
 
 import (
-	"encoding/json"
-	"files/pkg/common"
+	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
-	"net/http"
+	"strings"
+
+	"k8s.io/klog/v2"
 )
 
-type Service struct {
-	Owner          string
-	ResponseWriter http.ResponseWriter
-	Request        *http.Request
+type service struct {
+	command rclone.Interface
 }
 
-func NewService(owner string, w http.ResponseWriter, r *http.Request) *Service {
-	return &Service{
-		Owner:          owner,
-		ResponseWriter: w,
-		Request:        r,
+func NewService() *service {
+	return &service{
+		command: rclone.Command,
 	}
 }
 
-func (s *Service) CopyFile(param *models.CopyFileParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveCopyFile)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) CopyFile(param *models.CopyFileParam) ([]byte, error) {
+	return nil, nil
 }
 
-// CreateFolder implements drivers.ServiceInterface.
-func (s *Service) CreateFolder(param *models.PostParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveCreateFolder)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) CreateFolder(param *models.PostParam) ([]byte, error) {
+	return nil, nil
 }
 
-// Delete implements drivers.ServiceInterface.
-func (s *Service) Delete(param *models.DeleteParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveDelete)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) Delete(param *models.DeleteParam) ([]byte, error) {
+	return nil, nil
 }
 
-// DownloadAsync implements drivers.ServiceInterface.
-func (s *Service) DownloadAsync(param *models.DownloadAsyncParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveDownloadAsync)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) DownloadAsync(param *models.DownloadAsyncParam) ([]byte, error) {
+	return nil, nil
 }
 
-// GetFileMetaData implements drivers.ServiceInterface.
-func (s *Service) GetFileMetaData(param *models.ListParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveGetFileMetaData)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) GetFileMetaData(param *models.ListParam) ([]byte, error) {
+	return nil, nil
 }
 
-// List implements drivers.ServiceInterface.
-func (s *Service) List(param *models.ListParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveList)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) MoveFile(param *models.MoveFileParam) ([]byte, error) {
+	return nil, nil
 }
 
-// MoveFile implements drivers.ServiceInterface.
-func (s *Service) MoveFile(param *models.MoveFileParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveMoveFile)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) PauseTask(taskId string) ([]byte, error) {
+	return nil, nil
 }
 
-// PauseTask implements drivers.ServiceInterface.
-func (s *Service) PauseTask(taskId string) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s/%s", host, common.UrlDrivePauseTask, taskId)
-
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPatch, &header, nil)
+func (s *service) QueryAccount() ([]byte, error) {
+	return nil, nil
 }
 
-// QueryAccount implements drivers.ServiceInterface.
-func (s *Service) QueryAccount() ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveQueryAccount)
-
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, nil)
+func (s *service) Rename(param *models.PatchParam) ([]byte, error) {
+	return nil, nil
 }
 
-// QueryTask implements drivers.ServiceInterface.
-func (s *Service) QueryTask(param *models.QueryTaskParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveQueryTask)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) UploadAsync(param *models.UploadAsyncParam) ([]byte, error) {
+	return nil, nil
 }
 
-// Rename implements drivers.ServiceInterface.
-func (s *Service) Rename(param *models.PatchParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveRename)
-
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+func (s *service) QueryTask(param *models.QueryTaskParam) ([]byte, error) {
+	return nil, nil
 }
 
-// ResumeTask implements drivers.ServiceInterface.
-func (s *Service) ResumeTask(taskId string) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s/%s", host, common.UrlDriveResumeTask, taskId)
+func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, error) {
+	klog.Infof("[service] list, param: %s", utils.ToJson(fileParam))
+	var configName = fmt.Sprintf("%s_%s_%s", fileParam.Owner, fileParam.FileType, fileParam.Extend)
+	var config, err = s.command.GetConfig().GetConfig(configName)
+	if err != nil {
+		return nil, err
+	}
 
-	header := s.Request.Header.Clone()
+	var fs string = s.getFs(configName, config.Type, config.Bucket, fileParam.Path)
+	data, err := s.command.GetOperation().List(fs)
+	if err != nil {
+		return nil, err
+	}
 
-	return utils.RequestWithContext(url, http.MethodPatch, &header, nil)
+	if data == nil || data.List == nil || len(data.List) == 0 {
+		return nil, nil
+	}
+
+	var files []*models.CloudResponseData
+	for _, item := range data.List {
+		var f = &models.CloudResponseData{
+			ID:       item.ID,
+			FsType:   fileParam.FileType,
+			FsExtend: fileParam.Extend,
+			FsPath:   fileParam.Path,
+			Path:     item.Path,
+			Name:     item.Name,
+			Size:     item.Size,
+			FileSize: item.Size,
+			Modified: &item.ModTime,
+			IsDir:    item.IsDir,
+			Meta: &models.CloudResponseDataMeta{
+				ID:           item.Path,
+				LastModified: &item.ModTime,
+				Key:          item.Name,
+				Size:         item.Size,
+			},
+		}
+		files = append(files, f)
+	}
+
+	var result = &models.CloudListResponse{
+		StatusCode: "SUCCESS",
+		Data:       files,
+	}
+
+	return result, nil
 }
 
-// UploadAsync implements drivers.ServiceInterface.
-func (s *Service) UploadAsync(param *models.UploadAsyncParam) ([]byte, error) {
-	var host = common.GetHost(s.Owner)
-	var url = fmt.Sprintf("%s/%s", host, common.UrlDriveUploadAsync)
+func (s *service) getFs(configName, configType string, configBucket string, fileParamPath string) string {
+	var fs string
+	var bucket string
+	if configType == "s3" {
+		bucket = configBucket
+		fs = fmt.Sprintf("%s:%s/%s", configName, bucket, strings.TrimPrefix(fileParamPath, "/"))
+	} else if configType == "dropbox" {
+		bucket = ""
+		fs = fmt.Sprintf("%s:", configName)
+	} else if configType == "drive" {
+		bucket = ""
+		if fileParamPath == "root" {
+			fs = fmt.Sprintf("%s:", configName)
+		} else {
+			fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
+		}
+	}
 
-	paramBody, _ := json.Marshal(param)
-	header := s.Request.Header.Clone()
-
-	return utils.RequestWithContext(url, http.MethodPost, &header, paramBody)
+	return fs
 }
