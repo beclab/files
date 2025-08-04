@@ -5,6 +5,7 @@ import (
 	e "errors"
 	"files/pkg/common"
 	"files/pkg/constant"
+	"files/pkg/drivers/sync/seahub"
 	"files/pkg/fileutils"
 	"files/pkg/models"
 	"files/pkg/upload"
@@ -43,6 +44,10 @@ func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (
 	}
 	path := uri + fileParam.Path
 	klog.Infof("~~~Debug log: path=%s", path)
+
+	if fileParam.FileType == "sync" {
+		return seahub.HandleUploadLink(w, r, d)
+	}
 
 	//if strings.HasPrefix(path, upload.CacheRequestPrefix) {
 	//	path = upload.CachePathPrefix + strings.TrimPrefix(path, upload.CacheRequestPrefix)
@@ -107,6 +112,10 @@ func uploadedBytesHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 	parentDir := uri + fileParam.Path
 	klog.Infof("~~~Debug log: parentDir=%s", parentDir)
+
+	if fileParam.FileType == "sync" {
+		return seahub.HandleUploadedBytes(w, r, d)
+	}
 
 	//if strings.HasPrefix(parentDir, upload.CacheRequestPrefix) {
 	//	parentDir = upload.CachePathPrefix + strings.TrimPrefix(parentDir, upload.CacheRequestPrefix)

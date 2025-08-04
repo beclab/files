@@ -85,7 +85,7 @@ func addServerFlags(flags *pflag.FlagSet) {
 	flags.Bool("disable-preview-resize", false, "disable resize of image previews")
 	flags.Bool("disable-exec", false, "disables Command Runner feature")
 	flags.Bool("disable-type-detection-by-header", false, "disables type detection by reading file headers")
-	flags.String("rpc-path", "", "RPC pipe path (Prefer environment variables FB_RPC_PATH)")
+	flags.String("seafile-rpc-path", "", "RPC pipe path (Prefer environment variables FB_SEAFILE_RPC_PATH)")
 }
 
 var rootCmd = &cobra.Command{

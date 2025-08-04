@@ -24,10 +24,10 @@ func InitSeaRPC() {
 }
 
 func initRpcConfig() {
-	rpcPath := v.GetString("rpc.path")
-	klog.Infof("[RPC Config] RPC Path: %s", rpcPath)
+	seafileRpcPath := v.GetString("seafile.rpc.path")
+	klog.Infof("[SEAFILE RPC Config] SEAFILE RPC Path: %s", seafileRpcPath)
 
-	initRpcClient(rpcPath)
+	initRpcClient(seafileRpcPath)
 }
 
 func initRpcClient(pipePath string) {
