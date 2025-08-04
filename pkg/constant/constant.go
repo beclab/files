@@ -2,6 +2,10 @@ package constant
 
 import "os"
 
+var (
+	FreeLimit float64 = 85.00
+)
+
 const (
 	ROOT_PREFIX     = "/data"
 	CACHE_PREFIX    = "/appcache"
@@ -11,6 +15,7 @@ const (
 const (
 	REQUEST_HEADER_OWNER = "X-Bfl-User"
 	REQUEST_HEADER_NODE  = "X-Terminus-Node"
+	REQUEST_HEADER_TOKEN = "Terminus-Nonce"
 )
 
 var (
@@ -41,4 +46,12 @@ const (
 const (
 	Text  = "text"
 	Image = "image"
+)
+
+const (
+	Pending   = "pending"
+	Running   = "running"
+	Failed    = "failed"
+	Cancelled = "cancelled"
+	Completed = "completed"
 )

@@ -84,7 +84,7 @@ func (m *Mount) watchMounted() {
 					continue
 				}
 
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(300 * time.Millisecond)
 				klog.Infof("mount watcher event: %s, op: %s", e.Name, e.Op.String())
 				m.getMounted()
 			}
