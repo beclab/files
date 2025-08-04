@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -113,54 +110,54 @@ func FindStatefulSetByPVCAnnotation(ctx context.Context, client *kubernetes.Clie
 	return "", "", fmt.Errorf("no matching StatefulSet found for PVC identifier %s and key %s", pvcIdentifier, key)
 }
 
-func ExtractPvcFromURL(path string) string {
-	splitPrefix := ""
-	if strings.HasPrefix(path, AppDataPathPrefix) {
-		splitPrefix = AppDataPathPrefix
-	} else if strings.HasPrefix(path, RootPrefix) {
-		splitPrefix = RootPrefix
-	} else if strings.HasPrefix(path, CacheRootPath) {
-		splitPrefix = CacheRootPath
-	}
-
-	trimmedPath := strings.TrimPrefix(path, splitPrefix)
-
-	firstSlash := strings.Index(trimmedPath, "/")
-	if firstSlash == -1 {
-		return ""
-	}
-
-	secondSlash := strings.Index(trimmedPath[firstSlash+1:], "/")
-	if secondSlash == -1 {
-		return trimmedPath[firstSlash+1:]
-	}
-
-	return trimmedPath[firstSlash+1 : firstSlash+1+secondSlash]
-}
-
-func ExpandPaths(A []string, prefix string) []string {
-	var B []string
-	err := filepath.Walk(prefix, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			return nil
-		}
-		for _, element := range A {
-			if strings.HasSuffix(path, element) {
-				B = append(B, path)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		klog.Errorln("Error walking the path:", err)
-	}
-	klog.Infoln("Oringinal Paths: ", A)
-	klog.Infoln("Expanded Paths: ", B)
-	return B
-}
+//func ExtractPvcFromURL(path string) string {
+//	splitPrefix := ""
+//	if strings.HasPrefix(path, AppDataPathPrefix) {
+//		splitPrefix = AppDataPathPrefix
+//	} else if strings.HasPrefix(path, RootPrefix) {
+//		splitPrefix = RootPrefix
+//	} else if strings.HasPrefix(path, CacheRootPath) {
+//		splitPrefix = CacheRootPath
+//	}
+//
+//	trimmedPath := strings.TrimPrefix(path, splitPrefix)
+//
+//	firstSlash := strings.Index(trimmedPath, "/")
+//	if firstSlash == -1 {
+//		return ""
+//	}
+//
+//	secondSlash := strings.Index(trimmedPath[firstSlash+1:], "/")
+//	if secondSlash == -1 {
+//		return trimmedPath[firstSlash+1:]
+//	}
+//
+//	return trimmedPath[firstSlash+1 : firstSlash+1+secondSlash]
+//}
+//
+//func ExpandPaths(A []string, prefix string) []string {
+//	var B []string
+//	err := filepath.Walk(prefix, func(path string, info os.FileInfo, err error) error {
+//		if err != nil {
+//			return err
+//		}
+//		if !info.IsDir() {
+//			return nil
+//		}
+//		for _, element := range A {
+//			if strings.HasSuffix(path, element) {
+//				B = append(B, path)
+//			}
+//		}
+//		return nil
+//	})
+//	if err != nil {
+//		klog.Errorln("Error walking the path:", err)
+//	}
+//	klog.Infoln("Oringinal Paths: ", A)
+//	klog.Infoln("Expanded Paths: ", B)
+//	return B
+//}
 
 // Bfl->PVC
 var BflPVCs *BflPVCCache = nil

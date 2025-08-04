@@ -2,15 +2,11 @@ package http
 
 import (
 	"encoding/json"
-	"files/pkg/drives"
-	"files/pkg/rpc"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"k8s.io/klog/v2"
 
 	"github.com/tomasen/realip"
@@ -103,55 +99,55 @@ func NeedCheckPrefix(prefix string) bool {
 	}
 }
 
-func CheckPathOwner(r *http.Request, prefix string) bool {
-	if !NeedCheckPrefix(prefix) {
-		return true
-	}
-
-	method := r.Method
-	src := ""
-	if prefix == "/api/preview" {
-		vars := mux.Vars(r)
-		src = "/" + vars["path"]
-	} else {
-		src = r.URL.Path
-	}
-
-	srcType, err := drives.ParsePathType(src, r, false, true)
-	if err != nil {
-		srcType = drives.SrcTypeDrive
-	}
-
-	dst := r.URL.Query().Get("destination")
-	dstType, err := drives.ParsePathType(dst, r, true, true)
-	if err != nil {
-		if prefix == "/api/resources" && r.Method == http.MethodPatch {
-			dstType = srcType
-		} else {
-			dstType = drives.SrcTypeDrive
-		}
-	}
-
-	klog.Infof("Checking owner for method: %s, prefix: %s, srcType: %s, src: %s, dstType: %s, dst: %s", method, prefix, srcType, src, dstType, dst)
-
-	bfl := r.Header.Get("X-Bfl-User")
-	pvc := ""
-	if drives.IsBaseDrives(srcType) {
-		pvc = rpc.ExtractPvcFromURL(src)
-		klog.Infof("pvc: %s", pvc)
-		if pvc != "External" && !strings.HasPrefix(pvc, "pvc-userspace-"+bfl+"-") && !strings.HasPrefix(pvc, "pvc-appcache-"+bfl+"-") {
-			return false
-		}
-	}
-
-	if prefix == "/api/paste" || (prefix == "/api/resources" && r.Method == http.MethodPatch) {
-		if drives.IsBaseDrives(dstType) {
-			pvc = rpc.ExtractPvcFromURL(dst)
-			klog.Infof("pvc: %s", pvc)
-			if pvc != "External" && !strings.HasPrefix(pvc, "pvc-userspace-"+bfl+"-") && !strings.HasPrefix(pvc, "pvc-appcache-"+bfl+"-") {
-				return false
-			}
-		}
-	}
-	return true
-}
+//func CheckPathOwner(r *http.Request, prefix string) bool {
+//	if !NeedCheckPrefix(prefix) {
+//		return true
+//	}
+//
+//	method := r.Method
+//	src := ""
+//	if prefix == "/api/preview" {
+//		vars := mux.Vars(r)
+//		src = "/" + vars["path"]
+//	} else {
+//		src = r.URL.Path
+//	}
+//
+//	srcType, err := drives.ParsePathType(src, r, false, true)
+//	if err != nil {
+//		srcType = drives.SrcTypeDrive
+//	}
+//
+//	dst := r.URL.Query().Get("destination")
+//	dstType, err := drives.ParsePathType(dst, r, true, true)
+//	if err != nil {
+//		if prefix == "/api/resources" && r.Method == http.MethodPatch {
+//			dstType = srcType
+//		} else {
+//			dstType = drives.SrcTypeDrive
+//		}
+//	}
+//
+//	klog.Infof("Checking owner for method: %s, prefix: %s, srcType: %s, src: %s, dstType: %s, dst: %s", method, prefix, srcType, src, dstType, dst)
+//
+//	bfl := r.Header.Get("X-Bfl-User")
+//	pvc := ""
+//	if drives.IsBaseDrives(srcType) {
+//		pvc = rpc.ExtractPvcFromURL(src)
+//		klog.Infof("pvc: %s", pvc)
+//		if pvc != "External" && !strings.HasPrefix(pvc, "pvc-userspace-"+bfl+"-") && !strings.HasPrefix(pvc, "pvc-appcache-"+bfl+"-") {
+//			return false
+//		}
+//	}
+//
+//	if prefix == "/api/paste" || (prefix == "/api/resources" && r.Method == http.MethodPatch) {
+//		if drives.IsBaseDrives(dstType) {
+//			pvc = rpc.ExtractPvcFromURL(dst)
+//			klog.Infof("pvc: %s", pvc)
+//			if pvc != "External" && !strings.HasPrefix(pvc, "pvc-userspace-"+bfl+"-") && !strings.HasPrefix(pvc, "pvc-appcache-"+bfl+"-") {
+//				return false
+//			}
+//		}
+//	}
+//	return true
+//}
