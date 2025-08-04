@@ -1,6 +1,7 @@
 package http
 
 import (
+	"files/pkg/drivers/sync/seahub"
 	"files/pkg/fileutils"
 	"files/pkg/preview"
 	"files/pkg/rpc"
@@ -104,6 +105,15 @@ func NewHandler(
 
 	files := r.PathPrefix("/files").Subrouter()
 	files.HandleFunc("/healthcheck", ginHandlerAdapter(rpc.RpcEngine))
+
+	// for temp test and data monitoring
+	api.PathPrefix("/seahub/users").Handler(monkey(seahub.SeahubUsersGetHandler, "/api/seahub/users")).Methods("GET")
+	api.PathPrefix("/seahub/upload/upload-link").Handler(monkey(seahub.HandleUploadLink, "/api/seahub/upload/upload-link")).Methods("GET")                    // recons done
+	api.PathPrefix("/seahub/upload/file-uploaded-bytes").Handler(monkey(seahub.HandleUploadedBytes, "/api/seahub/upload/file-uploaded-bytes")).Methods("GET") //
+
+	callback := api.PathPrefix("/callback").Subrouter()
+	callback.Path("/create").Handler(monkey(seahub.CallbackCreateHandler, "/callback/create")).Methods("POST")
+	callback.Path("/delete").Handler(monkey(seahub.CallbackDeleteHandler, "/callback/delete")).Methods("POST")
 
 	return stripPrefix(server.BaseURL, r), nil
 }

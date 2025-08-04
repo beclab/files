@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	e "errors"
 	"files/pkg/common"
+	"files/pkg/drivers/sync/seahub"
 	"files/pkg/errors"
 	"files/pkg/fileutils"
 	"files/pkg/models"
@@ -75,12 +76,16 @@ func (rc *SyncResourceService) PutHandler(fileParam *models.FileParam) handleFun
 			return http.StatusMethodNotAllowed, nil
 		}
 
-		repoID := fileParam.Extend
+		//repoID := fileParam.Extend
 		prefix, filename := filepath.Split(fileParam.Path)
-		getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/update-link/?p=/"
-		klog.Infoln(getUrl)
-
-		_, getRespBody, err := syncCall(getUrl, "GET", nil, nil, r, nil, true)
+		//getUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + "/update-link/?p=/"
+		//klog.Infoln(getUrl)
+		//
+		//_, getRespBody, err := syncCall(getUrl, "GET", nil, nil, r, nil, true)
+		//if err != nil {
+		//	return common.ErrToStatus(err), err
+		//}
+		getRespBody, err := seahub.HandleUpdateLink(r.Header, fileParam, "api")
 		if err != nil {
 			return common.ErrToStatus(err), err
 		}
@@ -88,7 +93,8 @@ func (rc *SyncResourceService) PutHandler(fileParam *models.FileParam) handleFun
 		updateLink := string(getRespBody)
 		updateLink = strings.Trim(updateLink, "\"")
 
-		updateUrl := "http://127.0.0.1:80/seahub/" + updateLink
+		//updateUrl := "http://127.0.0.1:80/seahub/" + updateLink
+		updateUrl := "http://127.0.0.1:80/" + updateLink
 		klog.Infoln(updateUrl)
 
 		bodyBytes, err := io.ReadAll(r.Body)
@@ -1692,44 +1698,56 @@ func SyncPermToMode(permStr string) os.FileMode {
 }
 
 func ResourceSyncPatch(action string, fileParam *models.FileParam, newFilename string, r *http.Request) (int, []byte, error) {
-	var apiName = "/file/"
-	if strings.HasSuffix(fileParam.Path, "/") {
-		apiName = "/dir/"
-	}
+	//var apiName = "/file/"
+	//if strings.HasSuffix(fileParam.Path, "/") {
+	//	apiName = "/dir/"
+	//}
 
 	repoID := fileParam.Extend
-	prefix, filename := filepath.Split(strings.TrimSuffix(fileParam.Path, "/"))
-	postUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + apiName + "?p=" + common.EscapeAndJoin(prefix+filename, "/")
+	//prefix, filename := filepath.Split(strings.TrimSuffix(fileParam.Path, "/"))
+	//postUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoID + apiName + "?p=" + common.EscapeAndJoin(prefix+filename, "/")
 
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	fields := []struct {
-		key   string
-		value string
-	}{
-		{"operation", action},
-		{"newname", newFilename},
-	}
-
-	for _, field := range fields {
-		if err := writer.WriteField(field.key, field.value); err != nil {
-			return http.StatusInternalServerError, nil, fmt.Errorf("write field failed: %s=%s - %w", field.key, field.value, err)
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("writer close failed: %w", err)
-	}
+	//body := &bytes.Buffer{}
+	//writer := multipart.NewWriter(body)
+	//
+	//fields := []struct {
+	//	key   string
+	//	value string
+	//}{
+	//	{"operation", action},
+	//	{"newname", newFilename},
+	//}
+	//
+	//for _, field := range fields {
+	//	if err := writer.WriteField(field.key, field.value); err != nil {
+	//		return http.StatusInternalServerError, nil, fmt.Errorf("write field failed: %s=%s - %w", field.key, field.value, err)
+	//	}
+	//}
+	//
+	//if err := writer.Close(); err != nil {
+	//	return http.StatusInternalServerError, nil, fmt.Errorf("writer close failed: %w", err)
+	//}
 
 	header := r.Header.Clone()
-	header.Set("Content-Type", writer.FormDataContentType())
-	statusCode, respBody, err := syncCall(postUrl, "POST", body.Bytes(), nil, r, &header, true)
-	if err != nil {
-		return common.ErrToStatus(err), nil, err
+	//header.Set("Content-Type", writer.FormDataContentType())
+	//statusCode, respBody, err := syncCall(postUrl, "POST", body.Bytes(), nil, r, &header, true)
+	//if err != nil {
+	//	return common.ErrToStatus(err), nil, err
+	//}
+	//klog.Infof("statusCode: %d, respBody: %s", statusCode, string(respBody))
+
+	var respBody []byte
+	var err error
+	if strings.HasSuffix(fileParam.Path, "/") {
+		respBody, err = seahub.HandleDirOperation(header, repoID, fileParam.Path, newFilename, action)
+	} else {
+		respBody, err = seahub.HandleFileOperation(header, repoID, fileParam.Path, newFilename, action)
 	}
-	klog.Infof("statusCode: %d, respBody: %s", statusCode, string(respBody))
-	return statusCode, respBody, nil
+	if err != nil {
+		klog.Error(err)
+		return http.StatusInternalServerError, nil, err
+	}
+	return http.StatusOK, respBody, nil
 }
 
 func PasteSyncPatch(task *pool.Task, action string, srcFileParam, dstFileParam *models.FileParam, r *http.Request) error {

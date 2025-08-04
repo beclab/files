@@ -23,10 +23,16 @@ type QueryParam struct {
 }
 
 func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {
+	// TODO: add for sync
+	sizeStr := r.URL.Query().Get("size")
+	if sizeStr == "" {
+		sizeStr = r.URL.Query().Get("thumb")
+	}
+	// add end
 	return &QueryParam{
 		Ctx:                     r.Context(),
 		Owner:                   owner,
-		PreviewSize:             r.URL.Query().Get("size"),
+		PreviewSize:             sizeStr,          // r.URL.Query().Get("size"),
 		PreviewEnableThumbnails: enableThumbnails, // todo
 		PreviewResizePreview:    resizePreview,    // todo
 		RawInline:               strings.TrimSpace(r.URL.Query().Get("inline")),
