@@ -13,7 +13,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func Request(u string, method string, requestParams []byte) ([]byte, error) {
+func Request(ctx context.Context, u string, method string, requestParams []byte) ([]byte, error) {
 	var backoff = wait.Backoff{
 		Duration: 2 * time.Second,
 		Factor:   2,
@@ -23,19 +23,18 @@ func Request(u string, method string, requestParams []byte) ([]byte, error) {
 
 	var result []byte
 	var err error
-	var newRequest *http.Request
-	_ = newRequest
-	var requestBody *bytes.Buffer = nil
-	requestBody = bytes.NewBuffer(requestParams)
 
 	if err := retry.OnError(backoff, func(err error) bool {
 		return true
 	}, func() error {
 		var newRequest *http.Request
+		var requestBody *bytes.Buffer = nil
+		requestBody = bytes.NewBuffer(requestParams)
+
 		if requestParams != nil {
-			newRequest, err = http.NewRequestWithContext(context.Background(), method, u, requestBody)
+			newRequest, err = http.NewRequestWithContext(ctx, method, u, requestBody)
 		} else {
-			newRequest, err = http.NewRequestWithContext(context.Background(), method, u, nil)
+			newRequest, err = http.NewRequestWithContext(ctx, method, u, nil)
 		}
 
 		if err != nil {
