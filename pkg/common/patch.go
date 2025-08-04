@@ -9,14 +9,15 @@ import (
 	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/spf13/afero"
-	"k8s.io/klog/v2"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 )
 
 func CheckParent(src, dst string) error {

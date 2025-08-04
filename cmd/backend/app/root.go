@@ -5,15 +5,19 @@ import (
 	"crypto/tls"
 	"errors"
 	"files/pkg/background_task"
+	"files/pkg/client"
 	"files/pkg/crontab"
 	"files/pkg/drivers"
 	"files/pkg/drivers/sync/seahub/seaserv"
+	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/global"
+	"files/pkg/integration"
 	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
+	"files/pkg/tasks"
 	"files/pkg/watchers"
 	"io"
 	"net"
@@ -216,24 +220,39 @@ user created with the credentials from options "username" and "password".`,
 			checkErr(err)
 		}
 
-		// step7: build driver handler
+		// step7: init commands
+		rclone.NewCommandRclone()
+		rclone.Command.InitServes()
+
+		// step8: build driver handler
 		drivers.NewDriverHandler()
 
-		// step8: init global
+		// step9: init global
 		config := ctrl.GetConfigOrDie()
 		global.InitGlobalData(config)
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
 
-		// step9: init seahub (for test now)
+		// step10: init seahub (for test now)
 		seaserv.InitSeaRPC()
 
-		// step10: watcher
+		// step11: integration
+		f, err := client.NewFactory()
+		if err != nil {
+			checkErr(err)
+		}
+		integration.NewIntegrationManager(f)
+
+		// step12: watcher
 		var w = watchers.NewWatchers(context.Background(), config)
 		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
+		watchers.AddToWatchers[integration.User](w, integration.UserGVR, integration.IntegrationManager().HandlerEvent())
 
 		go w.Run(1)
+
+		// step12: task manager
+		tasks.NewTaskManager()
 
 		sigc := make(chan os.Signal, 1)
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)

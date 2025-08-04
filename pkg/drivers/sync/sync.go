@@ -20,6 +20,7 @@ import (
 type SyncStorage struct {
 	handler *base.HandlerParam
 	service *Service
+	paste   *models.PasteParam
 }
 
 type Files struct {

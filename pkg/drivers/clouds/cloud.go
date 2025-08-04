@@ -20,14 +20,17 @@ import (
 )
 
 type CloudStorage struct {
-	handler *base.HandlerParam
-	service base.CloudServiceInterface
+	handler   *base.HandlerParam
+	service   base.CloudServiceInterface // todo replace
+	serviceEx *serviceEx
+	paste     *models.PasteParam
 }
 
 func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
 	return &CloudStorage{
-		handler: handlerParam,
-		service: NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
+		handler:   handlerParam,
+		serviceEx: NewServiceEx(),
+		service:   NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
 	}
 }
 
@@ -37,7 +40,7 @@ func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 	klog.Infof("Cloud list, user: %s, param: %s", owner, fileParam.Json())
 
-	fileData, err := s.getFiles(fileParam)
+	fileData, err := s.getFiles(fileParam) // todo replace
 	if err != nil {
 		return nil, err
 	}
@@ -418,21 +421,10 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 }
 
 func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListResponse, error) {
-	var data = &models.ListParam{
-		Drive: fileParam.FileType,
-		Name:  fileParam.Extend,
-		Path:  fileParam.Path,
-	}
-
-	res, err := s.service.List(data)
+	res, err := s.serviceEx.List(fileParam)
 	if err != nil {
 		return nil, fmt.Errorf("service list error: %v", err)
 	}
 
-	var filesData *models.CloudListResponse
-	if err := json.Unmarshal(res, &filesData); err != nil {
-		return nil, err
-	}
-
-	return filesData, nil
+	return res, nil
 }
