@@ -39,6 +39,5 @@ bin/
 build/
 /pkg/backend/img/testdata/
 Dockerfile.local
-Dockerfile.rclone
 json/
 rclone_linux_amd64
