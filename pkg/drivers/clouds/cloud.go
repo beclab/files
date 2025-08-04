@@ -20,17 +20,15 @@ import (
 )
 
 type CloudStorage struct {
-	handler   *base.HandlerParam
-	service   base.CloudServiceInterface // todo replace
-	serviceEx *serviceEx
-	paste     *models.PasteParam
+	handler *base.HandlerParam
+	service *service
+	paste   *models.PasteParam
 }
 
 func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
 	return &CloudStorage{
-		handler:   handlerParam,
-		serviceEx: NewServiceEx(),
-		service:   NewService(handlerParam.Owner, handlerParam.ResponseWriter, handlerParam.Request),
+		handler: handlerParam,
+		service: NewService(),
 	}
 }
 
@@ -421,7 +419,7 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 }
 
 func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListResponse, error) {
-	res, err := s.serviceEx.List(fileParam)
+	res, err := s.service.List(fileParam)
 	if err != nil {
 		return nil, fmt.Errorf("service list error: %v", err)
 	}

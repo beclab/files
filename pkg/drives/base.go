@@ -54,12 +54,10 @@ type ResourceService interface {
 }
 
 var (
-	BaseService        = &BaseResourceService{}
-	DriveService       = &DriveResourceService{}
-	CacheService       = &CacheResourceService{}
-	GoogleDriveService = &GoogleDriveResourceService{}
-	SyncService        = &SyncResourceService{}
-	CloudDriveService  = &CloudDriveResourceService{}
+	BaseService  = &BaseResourceService{}
+	DriveService = &DriveResourceService{}
+	CacheService = &CacheResourceService{}
+	SyncService  = &SyncResourceService{}
 )
 
 const (
@@ -104,10 +102,6 @@ func GetResourceService(srcType string) (ResourceService, error) {
 		return CacheService, nil
 	case SrcTypeSync:
 		return SyncService, nil
-	case SrcTypeGoogle:
-		return GoogleDriveService, nil
-	case SrcTypeCloud, SrcTypeAWSS3, SrcTypeTencent, SrcTypeDropbox:
-		return CloudDriveService, nil
 	default:
 		return BaseService, nil
 	}
