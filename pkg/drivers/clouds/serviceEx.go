@@ -28,14 +28,7 @@ func (s *serviceEx) List(fileParam *models.FileParam) (*models.CloudListResponse
 		return nil, err
 	}
 
-	var bucket string
-	if config.Type == "s3" {
-		bucket = config.Bucket
-	} else if config.Type == "dropbox" {
-		bucket = config.Name
-	}
-
-	var fs = fmt.Sprintf("%s:%s/%s", configName, bucket, strings.TrimPrefix(fileParam.Path, "/"))
+	var fs string = s.getFs(configName, config.Type, config.Bucket, fileParam.Path)
 	data, err := s.command.GetOperation().List(fs)
 	if err != nil {
 		return nil, err
@@ -48,6 +41,7 @@ func (s *serviceEx) List(fileParam *models.FileParam) (*models.CloudListResponse
 	var files []*models.CloudResponseData
 	for _, item := range data.List {
 		var f = &models.CloudResponseData{
+			ID:       item.ID,
 			FsType:   fileParam.FileType,
 			FsExtend: fileParam.Extend,
 			FsPath:   fileParam.Path,
@@ -58,6 +52,7 @@ func (s *serviceEx) List(fileParam *models.FileParam) (*models.CloudListResponse
 			Modified: &item.ModTime,
 			IsDir:    item.IsDir,
 			Meta: &models.CloudResponseDataMeta{
+				ID:           item.Path,
 				LastModified: &item.ModTime,
 				Key:          item.Name,
 				Size:         item.Size,
@@ -72,4 +67,25 @@ func (s *serviceEx) List(fileParam *models.FileParam) (*models.CloudListResponse
 	}
 
 	return result, nil
+}
+
+func (s *serviceEx) getFs(configName, configType string, configBucket string, fileParamPath string) string {
+	var fs string
+	var bucket string
+	if configType == "s3" {
+		bucket = configBucket
+		fs = fmt.Sprintf("%s:%s/%s", configName, bucket, strings.TrimPrefix(fileParamPath, "/"))
+	} else if configType == "dropbox" {
+		bucket = ""
+		fs = fmt.Sprintf("%s:", configName)
+	} else if configType == "drive" {
+		bucket = ""
+		if fileParamPath == "root" {
+			fs = fmt.Sprintf("%s:", configName)
+		} else {
+			fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
+		}
+	}
+
+	return fs
 }

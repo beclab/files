@@ -73,7 +73,7 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 
 	if len(changedConfigs.Delete) > 0 {
 		for _, deleteServe := range changedConfigs.Delete {
-			if err := r.stopServe(deleteServe.Name); err != nil {
+			if err := r.stopServe(deleteServe.ConfigName); err != nil {
 				klog.Errorf("[startHttp] stop serve error: %v", err)
 			}
 		}
@@ -104,11 +104,11 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 }
 
 func (r *rclone) restartServe(createConfig *config.Config) error {
-	if err := r.stopServe(createConfig.Name); err != nil {
-		klog.Errorf("restart serve, stop error: %v, name: %s", err, createConfig.Name)
+	if err := r.stopServe(createConfig.ConfigName); err != nil {
+		klog.Errorf("restart serve, stop error: %v, name: %s", err, createConfig.ConfigName)
 	}
 	if err := r.startServe(createConfig); err != nil {
-		klog.Errorf("restart serve, start error: %v, name: %s", err, createConfig.Name)
+		klog.Errorf("restart serve, start error: %v, name: %s", err, createConfig.ConfigName)
 	}
 	return nil
 }
@@ -118,13 +118,11 @@ func (r *rclone) startServe(createConfig *config.Config) error {
 		return fmt.Errorf("create config, %v", err)
 	}
 
-	var targetPath string
-	if createConfig.Type == "dropbox" {
-		targetPath = createConfig.AccessKeyId
-	} else {
-		targetPath = createConfig.Bucket
+	var fsPath, err = r.config.GetFsPath(createConfig.ConfigName)
+	if err != nil {
+		return err
 	}
-	_, err := r.serve.Start(createConfig.Name, targetPath)
+	_, err = r.serve.Start(createConfig.ConfigName, fsPath)
 	if err != nil {
 		return fmt.Errorf("start serve, %v", err)
 	}
@@ -174,7 +172,7 @@ func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateCon
 	for k, v := range serveConfigs {
 		var found bool
 		for _, createConfig := range configs {
-			if k == createConfig.Name {
+			if k == createConfig.ConfigName {
 				found = true
 				break
 			}
@@ -185,13 +183,13 @@ func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateCon
 	}
 
 	for _, createConfig := range configs {
-		if _, ok := serveConfigs[createConfig.Name]; !ok {
+		if _, ok := serveConfigs[createConfig.ConfigName]; !ok {
 			changed.Create = append(changed.Create, createConfig)
 		}
 	}
 
 	for _, createConfig := range configs {
-		serveConfig, ok := serveConfigs[createConfig.Name]
+		serveConfig, ok := serveConfigs[createConfig.ConfigName]
 		if !ok {
 			continue
 		}

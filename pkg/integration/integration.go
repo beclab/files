@@ -49,7 +49,7 @@ func IntegrationManager() *integration {
 func (i *integration) watch() {
 	go func() {
 		for range time.NewTicker(60 * time.Second).C {
-			// i.GetIntegrations()
+			i.GetIntegrations()
 		}
 	}()
 }
@@ -131,8 +131,7 @@ func (i *integration) GetIntegrations() error {
 				Available: token.RawData.Available,
 				Scope:     token.RawData.Scope,
 				IdToken:   token.RawData.IdToken,
-				// ClientId:  token.RawData.ClientId,
-				ClientId: token.ClientId,
+				ClientId:  token.ClientId, // or ?token.RawData.ClientId,
 			}
 
 			userTokens, userExists := i.tokensEx[user.Name]
@@ -159,16 +158,15 @@ func (i *integration) GetIntegrations() error {
 
 			if newToken {
 				var config = &config.Config{
-					Name:            fmt.Sprintf("%s_%s_%s", user.Name, token.Type, token.Name),
-					Type:            token.Type,
-					Provider:        token.Type,
-					AccessKeyId:     token.Name,
-					SecretAccessKey: token.RawData.AccessToken,
-					RefreshToken:    token.RawData.RefreshToken,
-					Url:             token.RawData.Endpoint,
-					Endpoint:        i.parseEndpoint(token.RawData.Endpoint),
-					Bucket:          i.parseBucket(token.RawData.Endpoint),
-					ClientId:        token.ClientId, // only for dropbox
+					ConfigName:   fmt.Sprintf("%s_%s_%s", user.Name, token.Type, token.Name),
+					Name:         token.Name,
+					Type:         token.Type,
+					AccessToken:  token.RawData.AccessToken,
+					RefreshToken: token.RawData.RefreshToken,
+					Url:          token.RawData.Endpoint,
+					Endpoint:     i.parseEndpoint(token.RawData.Endpoint),
+					Bucket:       i.parseBucket(token.RawData.Endpoint),
+					ClientId:     token.ClientId, // only for dropbox
 				}
 
 				configs = append(configs, config)

@@ -1,6 +1,7 @@
 package operations
 
 import (
+	"context"
 	"encoding/json"
 	"files/pkg/drivers/clouds/rclone/common"
 	"files/pkg/drivers/clouds/rclone/config"
@@ -32,11 +33,11 @@ func (o *operations) List(fs string) (*OperationsList, error) {
 		Opt: struct {
 			Metadata bool "json:\"metadata\""
 		}{
-			Metadata: false,
+			Metadata: true,
 		},
 	}
 
-	resp, err := utils.Request(url, http.MethodPost, []byte(commonutils.ToJson(param)))
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, []byte(commonutils.ToJson(param)))
 	if err != nil {
 		klog.Errorf("[rclone] operations list error: %v, fs: %s", err, fs)
 		return nil, err

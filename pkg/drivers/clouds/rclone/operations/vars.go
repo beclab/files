@@ -17,6 +17,7 @@ type OperationsListItem struct {
 	IsDir    bool                        `json:"IsDir"`
 	Tier     string                      `json:"Tier"`
 	Metadata *OperationsListItemMetadata `json:"Metadata"`
+	ID       string                      `json:"ID"`
 }
 
 type OperationsListItemMetadata struct {
