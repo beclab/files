@@ -207,21 +207,11 @@ func (r *FileParam) GetFileParam(uri string) error {
 }
 
 func (r *FileParam) IsFile() (string, bool) {
-	if ok := strings.HasSuffix(r.Path, "/"); !ok {
+	if r.Path == "" || r.Path == "/" || strings.HasSuffix(r.Path, "/") {
 		return "", false
 	}
+
 	return r.Path[strings.LastIndex(r.Path, "/")+1:], true
-}
-
-func (r *FileParam) GetName() string {
-	fileName, isFile := r.IsFile()
-	if isFile {
-		return fileName
-	}
-
-	var tmp = strings.TrimSuffix(r.Path, "/")
-	var p = strings.LastIndex(tmp, "/")
-	return r.Path[p:]
 }
 
 func (r *FileParam) joinPath(pos int, s []string) string {

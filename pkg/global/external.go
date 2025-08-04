@@ -42,6 +42,10 @@ func InitGlobalMounted() {
 	GlobalMounted.watchMounted()
 }
 
+func (m *Mount) Updated() {
+	GlobalMounted.getMounted()
+}
+
 func (m *Mount) watchMounted() {
 	var err error
 	if externalWatcher == nil {
@@ -80,7 +84,7 @@ func (m *Mount) watchMounted() {
 					continue
 				}
 
-				time.Sleep(time.Second)
+				time.Sleep(300 * time.Millisecond)
 				klog.Infof("mount watcher event: %s, op: %s", e.Name, e.Op.String())
 				m.getMounted()
 			}
