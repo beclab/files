@@ -31,6 +31,10 @@ func (r *rclone) GetOperation() operations.Interface {
 	return r.operation
 }
 
+func (r *rclone) GetServe() serve.Interface {
+	return r.serve
+}
+
 func NewCommandRclone() {
 	Command = &rclone{
 		config:    config.NewConfig(),

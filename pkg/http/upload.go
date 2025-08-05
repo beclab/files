@@ -10,13 +10,14 @@ import (
 	"files/pkg/models"
 	"files/pkg/upload"
 	"fmt"
-	"github.com/gorilla/mux"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
+	"k8s.io/klog/v2"
 )
 
 func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {

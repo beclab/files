@@ -11,12 +11,13 @@ var (
 )
 
 type Serve struct {
-	Id           string `json:"id"` // like http-4fecd788
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	Fs           string `json:"fs"`
-	Addr         string `json:"addr"`
-	BufferSize   string `json:"buffer_size"`
+	Id         string `json:"id"` // like http-4fecd788
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	Fs         string `json:"fs"`
+	Addr       string `json:"addr"`
+	BufferSize string `json:"buffer_size"`
+	// BaseUrl      string `json:"baseurl"`
 	VfsCacheMode string `json:"vfs_cache_mode"`
 	Port         int    `json:"port"`
 }

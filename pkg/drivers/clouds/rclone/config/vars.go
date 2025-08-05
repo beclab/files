@@ -1,5 +1,7 @@
 package config
 
+import "encoding/json"
+
 var (
 	CreateConfigPath = "config/create"
 	DeleteConfigPath = "config/delete"
@@ -15,7 +17,7 @@ type CreateConfigChanged struct {
 type CreateConfig struct {
 	Name       string      `json:"name"` // {owner}_{type}_{ACCESS_KEY}
 	Type       string      `json:"type"`
-	Parameters interface{} `json:"parameters"`
+	Parameters interface{} `json:"parameters,omitempty"`
 }
 
 type ConfigParameters struct {
@@ -39,15 +41,16 @@ type ConfigParameters struct {
 }
 
 type Config struct {
-	ConfigName   string `json:"config_name"`
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
-	ExpiresAt    int64  `json:"expires_at"`
-	Available    bool   `json:"available"`
-	CreateAt     int64  `json:"create_at"`
+	ConfigName      string `json:"config_name"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	AccessToken     string `json:"access_token"`
+	SecretAccessKey string `json:"secret_access_key"`
+	RefreshToken    string `json:"refresh_token"`
+	ExpiresIn       int64  `json:"expires_in"`
+	ExpiresAt       int64  `json:"expires_at"`
+	Available       bool   `json:"available"`
+	CreateAt        int64  `json:"create_at"`
 
 	Token string `json:"token"`
 
@@ -68,8 +71,16 @@ func (c *Config) Equal(target *Config) bool {
 		if c.Bucket != target.Bucket {
 			return false
 		}
-	} else if c.Type == "dropbox" || c.Type == "google" {
-		if c.AccessToken != target.AccessToken {
+		if c.SecretAccessKey != target.SecretAccessKey {
+			return false
+		}
+	} else if c.Type == "dropbox" || c.Type == "drive" {
+		var ct *DropBoxToken
+		if err := json.Unmarshal([]byte(c.Token), &ct); err != nil {
+			return false
+		}
+
+		if ct.AccessToken != target.AccessToken {
 			return false
 		}
 		if c.RefreshToken != target.RefreshToken {
@@ -84,4 +95,5 @@ type DropBoxToken struct {
 	RefreshToken string `json:"refresh_token"`
 	TokenType    string `json:"token_type"`
 	Expiry       string `json:"expiry"`
+	ExpiresIn    int64  `json:"expires_at"`
 }
