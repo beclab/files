@@ -8,19 +8,20 @@ import (
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/parser"
 	"files/pkg/pool"
 	"files/pkg/preview"
+	"files/pkg/utils"
 	"fmt"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type CacheResourceService struct {
@@ -721,7 +722,7 @@ func (rs *CacheResourceService) GetTaskFileInfo(fs afero.Fs, fileParam *models.F
 	filename = srcinfo.Name()
 	fileType = ""
 	if !isDir {
-		fileType = parser.MimeTypeByExtension(filename)
+		fileType = utils.MimeTypeByExtension(filename)
 	}
 	return isDir, fileType, filename, nil
 }

@@ -1,4 +1,4 @@
-package previewer
+package preview
 
 import (
 	"bytes"

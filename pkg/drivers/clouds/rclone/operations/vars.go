@@ -1,8 +1,16 @@
 package operations
 
 var (
-	ListPath = "operations/list"
+	ListPath       = "operations/list"
+	MkdirPath      = "operations/mkdir"
+	UploadfilePath = "operations/uploadfile"
+	CopyfilePath   = "operations/copyfile"
+	StatPath       = "operations/stat"
 )
+
+type OperationsStat struct {
+	Item *OperationsListItem `json:"item"`
+}
 
 type OperationsList struct {
 	List []*OperationsListItem `json:"list"`
@@ -17,6 +25,7 @@ type OperationsListItem struct {
 	IsDir    bool                        `json:"IsDir"`
 	Tier     string                      `json:"Tier"`
 	Metadata *OperationsListItemMetadata `json:"Metadata"`
+	ID       string                      `json:"ID"`
 }
 
 type OperationsListItemMetadata struct {
@@ -25,11 +34,20 @@ type OperationsListItemMetadata struct {
 	Tier        string `json:"tier"`
 }
 
-// list
-type OperationsListReq struct {
+// operations request
+type OperationsReq struct {
 	Fs     string `json:"fs"`
 	Remote string `json:"remote"`
-	Opt    struct {
-		Metadata bool `json:"metadata"`
-	} `json:"opt"`
+	Source string `json:"source,omitempty"`
+
+	SrcFs     string `json:"srcFs,omitempty"`
+	SrcRemote string `json:"srcRemote,omitempty"`
+	DstFs     string `json:"dstFs,omitempty"`
+	DstRemote string `json:"dstRemote,omitempty"`
+
+	Opt *OperationsOpt `json:"opt,omitempty"`
+}
+
+type OperationsOpt struct {
+	Metadata bool `json:"metadata,omitempty"`
 }

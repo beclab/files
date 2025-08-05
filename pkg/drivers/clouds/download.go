@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/drivers/base"
 	"files/pkg/fileutils"
 	"files/pkg/models"
 	"files/pkg/utils"
@@ -19,14 +18,14 @@ import (
 
 type Download struct {
 	ctx            context.Context
-	service        base.CloudServiceInterface
+	service        *service
 	fileParam      *models.FileParam
 	fileName       string
 	fileSize       int64
 	fileTargetPath string
 }
 
-func NewDownloader(ctx context.Context, service base.CloudServiceInterface, fileParam *models.FileParam, fileName string, fileSize int64, fileTargetPath string) *Download {
+func NewDownloader(ctx context.Context, service *service, fileParam *models.FileParam, fileName string, fileSize int64, fileTargetPath string) *Download {
 
 	return &Download{
 		ctx:            ctx,

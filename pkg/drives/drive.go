@@ -9,9 +9,9 @@ import (
 	"files/pkg/files"
 	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/parser"
 	"files/pkg/pool"
 	"files/pkg/preview"
+	"files/pkg/utils"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -450,7 +450,7 @@ func (rs *DriveResourceService) GetTaskFileInfo(fs afero.Fs, fileParam *models.F
 	filename = srcinfo.Name()
 	fileType = ""
 	if !isDir {
-		fileType = parser.MimeTypeByExtension(filename)
+		fileType = utils.MimeTypeByExtension(filename)
 	}
 
 	return isDir, fileType, filename, nil

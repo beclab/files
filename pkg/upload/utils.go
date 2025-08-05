@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"files/pkg/constant"
 	"files/pkg/global"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 const (

@@ -1,19 +1,23 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/drivers/clouds/rclone/common"
 	"files/pkg/drivers/clouds/rclone/utils"
 	commonutils "files/pkg/utils"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
+	"time"
 
 	"k8s.io/klog/v2"
 )
 
 type Interface interface {
+	Get(configName string) *ServeResp
 	Start(configName, configPath string) (string, error)
 	Stop(configName string) error
 	GetHttpId(configName string) string
@@ -23,6 +27,11 @@ type Interface interface {
 
 type serve struct {
 	https map[string]*Serve // {owner}_{fileType}_{access_key}
+}
+
+type ServeResp struct {
+	Reader io.ReadCloser
+	Error  error
 }
 
 var _ Interface = &serve{}
@@ -37,8 +46,27 @@ func (s *serve) SetServes(serves map[string]*Serve) {
 	s.https = serves
 }
 
-func (s *serve) Start(configName, configPath string) (string, error) {
+func (s *serve) Get(configName string) *ServeResp {
+	val, ok := s.https[configName]
+	if !ok {
+		return nil
+	}
 
+	var result = new(ServeResp)
+	var addr = val.Addr
+	reader, err := utils.Get(context.Background(), addr, nil, nil)
+	if err != nil {
+		result.Error = err
+		return result
+	}
+
+	result.Reader = reader
+	return result
+}
+
+func (s *serve) Start(configName, configPath string) (string, error) {
+	var ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	port := s.generateServePort()
 
 	addr := fmt.Sprintf("%s:%d", common.ServeHost, port)
@@ -53,10 +81,10 @@ func (s *serve) Start(configName, configPath string) (string, error) {
 	}
 
 	var host = fmt.Sprintf("%s/%s", common.ServeAddr, StartServePath)
-	resp, err := utils.Request(host, http.MethodPost, commonutils.ToBytes(startServe))
+	resp, err := utils.Request(ctx, host, http.MethodPost, nil, commonutils.ToBytes(startServe))
 
 	if err != nil {
-		return "", fmt.Errorf("%v, name: %s, addr: %s", err, configName, addr)
+		return "", fmt.Errorf("%v, configName: %s, addr: %s", err, configName, addr)
 	}
 
 	var respHttp *StartServeResp
@@ -68,22 +96,24 @@ func (s *serve) Start(configName, configPath string) (string, error) {
 
 	s.https[configName] = startServe
 
-	klog.Infof("[rclone] start serve success, name: %s, addr: %s", configName, addr)
+	klog.Infof("[rclone] start serve success, configName: %s, addr: %s", configName, addr)
 
 	return respHttp.Id, nil
 }
 
 func (s *serve) Stop(configName string) error {
+	var ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	var httpId = s.GetHttpId(configName)
 	if httpId == "" {
-		return fmt.Errorf("http not found, name: %s", configName)
+		return fmt.Errorf("http not found, configName: %s", configName)
 	}
 	var host = fmt.Sprintf("%s/%s", common.ServeAddr, StopServePath)
 	var data = map[string]string{
 		"id": httpId,
 	}
-	if _, err := utils.Request(host, http.MethodPost, commonutils.ToBytes(data)); err != nil {
-		klog.Errorf("[rclone] stop serve error: %v, httpId: %s, name: %s", err, httpId, configName)
+	if _, err := utils.Request(ctx, host, http.MethodPost, nil, commonutils.ToBytes(data)); err != nil {
+		klog.Errorf("[rclone] stop serve error: %v, httpId: %s, configName: %s", err, httpId, configName)
 	}
 
 	delete(s.https, configName)
@@ -92,8 +122,10 @@ func (s *serve) Stop(configName string) error {
 }
 
 func (s *serve) List() (map[string]*Serve, error) {
+	var ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	var host = fmt.Sprintf("%s/%s", common.ServeAddr, ListServePath)
-	resp, err := utils.Request(host, http.MethodPost, []byte("{}"))
+	resp, err := utils.Request(ctx, host, http.MethodPost, nil, []byte("{}"))
 	if err != nil {
 		klog.Errorf("[rclone] serve list error: %v", err)
 		return nil, err

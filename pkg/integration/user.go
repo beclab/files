@@ -9,14 +9,9 @@ import (
 )
 
 func (i *integration) getUsers() ([]*User, error) {
-	client, err := i.factory.DynamicClient()
-	if err != nil {
-		return nil, err
-	}
-
 	var users []*User
 
-	unstructuredUsers, err := client.Resource(UserGVR).List(context.Background(), v1.ListOptions{})
+	unstructuredUsers, err := i.client.Resource(UserGVR).List(context.Background(), v1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
