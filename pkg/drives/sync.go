@@ -12,8 +12,8 @@ import (
 	"files/pkg/errors"
 	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/parser"
 	"files/pkg/pool"
+	"files/pkg/utils"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -726,7 +726,7 @@ func (rs *SyncResourceService) GetTaskFileInfo(fs afero.Fs, fileParam *models.Fi
 	} else {
 		isDir = false
 		filename = path.Base(src)
-		fileType = parser.MimeTypeByExtension(filename)
+		fileType = utils.MimeTypeByExtension(filename)
 	}
 	return isDir, fileType, filename, nil
 }

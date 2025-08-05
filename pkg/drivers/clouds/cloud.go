@@ -2,19 +2,19 @@ package clouds
 
 import (
 	"encoding/json"
-	"errors"
 	"files/pkg/constant"
 	"files/pkg/drivers/base"
+	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/parser"
-	"files/pkg/previewer"
+	"files/pkg/preview"
 	"files/pkg/utils"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -38,12 +38,12 @@ func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 	klog.Infof("Cloud list, user: %s, param: %s", owner, fileParam.Json())
 
-	fileData, err := s.getFiles(fileParam) // todo replace
+	fileData, err := s.getFiles(fileParam)
 	if err != nil {
 		return nil, err
 	}
 
-	if fileData.Data != nil && len(fileData.Data) > 0 {
+	if fileData != nil && fileData.Data != nil && len(fileData.Data) > 0 {
 		for _, item := range fileData.Data {
 			item.FsType = fileParam.FileType
 			item.FsExtend = fileParam.Extend
@@ -54,6 +54,7 @@ func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	return utils.ToBytes(fileData), nil
 }
 
+// + todo
 func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
 	var fileParam = contextArgs.FileParam
 	var queryParam = contextArgs.QueryParam
@@ -72,45 +73,50 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		Path:  path,
 	}
 
-	res, err := s.service.GetFileMetaData(data)
+	res, err := s.service.FileStat(owner, data)
 	if err != nil {
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
 
-	var fileMeta *models.CloudResponse
+	if res == nil { // file not found
+		return nil, nil
+	}
+
+	var fileMeta *operations.OperationsStat
 	if err := json.Unmarshal(res, &fileMeta); err != nil {
 		return nil, err
 	}
 
 	klog.Infof("Cloud preview, query: %s, file meta: %s", utils.ToJson(data), string(res))
 
-	if !fileMeta.IsSuccess() {
-		return nil, fmt.Errorf(fileMeta.FailMessage())
-	}
-
-	fileType := parser.MimeTypeByExtension(fileMeta.Data.Name)
+	fileType := utils.MimeTypeByExtension(fileMeta.Item.Name)
 	if !strings.HasPrefix(fileType, "image") {
 		return nil, fmt.Errorf("can't create preview for %s type", fileType)
 	}
 
-	previewCacheKey := previewer.GeneratePreviewCacheKey(fileMeta.Data.Path, fileMeta.Modified(), queryParam.PreviewSize)
+	previewCacheKey := preview.GeneratePreviewCacheKey(fileMeta.Item.Path, fileMeta.Item.ModTime, queryParam.PreviewSize)
 
-	cachedData, ok, err := previewer.GetCache(previewCacheKey)
+	cachedData, ok, err := preview.GetCache(previewCacheKey)
 	if err != nil {
 		return nil, err
 	}
 
-	klog.Infof("Cloud preview cached, file: %s, key: %s, exists: %v", fileMeta.Data.Path, previewCacheKey, ok)
+	klog.Infof("Cloud preview cached, file: %s, key: %s, exists: %v", fileMeta.Item.Path, previewCacheKey, ok)
+	var mods = fileMeta.Item.ModTime
+	modeTime, err := time.Parse("2006-01-02 15:04:05", mods)
+	if err != nil {
+		return nil, err
+	}
 
 	if cachedData != nil {
 		return &models.PreviewHandlerResponse{
-			FileName:     fileMeta.Data.Name,
-			FileModified: fileMeta.Data.Meta.ModifiedTime,
+			FileName:     fileMeta.Item.Name,
+			FileModified: modeTime,
 			Data:         cachedData,
 		}, nil
 	}
 
-	fileTargetPath := CreateFileDownloadFolder(owner, fileMeta.Data.Path)
+	fileTargetPath := CreateFileDownloadFolder(owner, fileMeta.Item.Path)
 
 	if !fileutils.FilePathExists(fileTargetPath) {
 		if err := fileutils.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
@@ -119,29 +125,30 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		}
 	}
 
-	var downloader = NewDownloader(s.handler.Ctx, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
+	var downloader = NewDownloader(s.handler.Ctx, s.service, fileParam, fileMeta.Item.Name, fileMeta.Item.Size, fileTargetPath)
 	if err := downloader.download(); err != nil {
 		return nil, err
 	}
 
-	var imagePath = filepath.Join(fileTargetPath, fileMeta.Data.Name)
+	var imagePath = filepath.Join(fileTargetPath, fileMeta.Item.Name)
 
 	klog.Infof("Cloud preview, download success, file path: %s", imagePath)
 
-	imageData, err := previewer.OpenFile(s.handler.Ctx, imagePath, queryParam.PreviewSize)
+	imageData, err := preview.OpenFile(s.handler.Ctx, imagePath, queryParam.PreviewSize)
 	if err != nil {
 		return nil, err
 	}
 
 	go func() {
-		if err := previewer.SetCache(previewCacheKey, imageData); err != nil {
-			klog.Errorf("Cloud preview, set cache error: %v, file: %s", err, fileMeta.Data.Path)
+		if err := preview.SetCache(previewCacheKey, imageData); err != nil {
+			klog.Errorf("Cloud preview, set cache error: %v, file: %s", err, fileMeta.Item.Path)
 		}
 	}()
 
+	var modTime, _ = time.Parse("2006-01-02 15:04:05", fileMeta.Item.ModTime)
 	return &models.PreviewHandlerResponse{
-		FileName:     fileMeta.Data.Name,
-		FileModified: fileMeta.Data.Meta.ModifiedTime,
+		FileName:     fileMeta.Item.Name,
+		FileModified: modTime, // fileMeta.Item.ModTime,
 		Data:         imageData,
 	}, nil
 }
@@ -163,7 +170,7 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 		Path:  path,
 	}
 
-	res, err := s.service.GetFileMetaData(data)
+	res, err := s.service.FileStat(user, data)
 	if err != nil {
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
@@ -261,21 +268,10 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Cloud create, service request param: %s", utils.ToJson(p))
 
-	res, err := s.service.CreateFolder(p)
+	res, err := s.service.CreateFolder(owner, p)
 	if err != nil {
 		klog.Errorf("Cloud create, error: %v, user: %s, path: %s", err, owner, fileParam.Path)
 		return nil, err
-	}
-
-	var resp *models.CloudResponse
-	if err := json.Unmarshal(res, &resp); err != nil {
-		klog.Errorf("Cloud create, unmarshal error: %v, user: %s, path: %s", err, owner, fileParam.Path)
-		return nil, err
-	}
-
-	if !resp.IsSuccess() {
-		klog.Errorf("Cloud create, resp failed: %s, owner: %s, path: %s", resp.FailMessage(), owner, fileParam.Path)
-		return nil, errors.New(resp.FailMessage())
 	}
 
 	klog.Infof("Cloud create, success, result: %s, user: %s, path: %s", string(res), owner, fileParam.Path)

@@ -5,11 +5,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"files/pkg/background_task"
-	"files/pkg/client"
 	"files/pkg/crontab"
 	"files/pkg/drivers"
-	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/drivers/clouds/rclone"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/drives"
 	"files/pkg/fileutils"
 	"files/pkg/global"
@@ -237,11 +236,7 @@ user created with the credentials from options "username" and "password".`,
 		seaserv.InitSeaRPC()
 
 		// step11: integration
-		f, err := client.NewFactory()
-		if err != nil {
-			checkErr(err)
-		}
-		integration.NewIntegrationManager(f)
+		integration.NewIntegrationManager()
 
 		// step12: watcher
 		var w = watchers.NewWatchers(context.Background(), config)

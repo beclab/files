@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"files/pkg/client"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/config"
 	"files/pkg/utils"
@@ -14,8 +13,11 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 var UserGVR = schema.GroupVersionResource{Group: "iam.kubesphere.io", Version: "v1alpha2", Resource: "users"}
@@ -23,7 +25,7 @@ var UserGVR = schema.GroupVersionResource{Group: "iam.kubesphere.io", Version: "
 var IntegrationService *integration
 
 type integration struct {
-	factory  client.Factory
+	client   *dynamic.DynamicClient
 	rest     *resty.Client
 	tokens   map[string]*IntegrationToken
 	tokensEx map[string]*Integrations
@@ -31,9 +33,19 @@ type integration struct {
 	sync.RWMutex
 }
 
-func NewIntegrationManager(factory client.Factory) {
+func NewIntegrationManager() {
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		panic(err)
+	}
+
+	client, err := dynamic.NewForConfig(config)
+	if err != nil {
+		panic(err)
+	}
+
 	IntegrationService = &integration{
-		factory:  factory,
+		client:   client,
 		rest:     resty.New().SetTimeout(60 * time.Second).SetDebug(true),
 		tokens:   make(map[string]*IntegrationToken),
 		tokensEx: make(map[string]*Integrations),
@@ -177,6 +189,12 @@ func (i *integration) GetIntegrations() error {
 	if len(configs) == 0 {
 		return nil
 	}
+
+	configs = append(configs, &config.Config{
+		ConfigName: "local",
+		Name:       "local",
+		Type:       "local",
+	})
 
 	klog.Infof("integration new configs: %s", utils.ToJson(configs))
 
