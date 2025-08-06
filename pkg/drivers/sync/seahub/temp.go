@@ -31,6 +31,7 @@ func RemoveAdditionalHeaders(header *http.Header) {
 
 // temp func, just for temp compatible before repo CRUD func finished
 func MigrateSeahubUserToRedis(header http.Header) error {
+	MIGRATED = true
 	if MIGRATED {
 		return nil
 	}
