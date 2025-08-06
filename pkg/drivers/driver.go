@@ -6,6 +6,7 @@ import (
 	"files/pkg/drivers/posix/cache"
 	"files/pkg/drivers/posix/external"
 	"files/pkg/drivers/posix/posix"
+	"files/pkg/drivers/sync"
 
 	"k8s.io/klog/v2"
 )
@@ -29,6 +30,9 @@ func (d *driverHandler) NewFileHandler(fileType string, handlerParam *base.Handl
 
 	case "external", "internal", "hdd", "smb", "usb":
 		return external.NewExternalStorage(handlerParam)
+
+	case "sync":
+		return sync.NewSyncStorage(handlerParam)
 
 	case "google", "awss3", "tencent", "dropbox":
 		return clouds.NewCloudStorage(handlerParam)
