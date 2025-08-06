@@ -7,6 +7,7 @@ import (
 	"files/pkg/models"
 	"files/pkg/tasks"
 	"files/pkg/utils"
+	"fmt"
 
 	"k8s.io/klog/v2"
 )
@@ -34,7 +35,7 @@ func (s *SyncStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error) 
 		return s.copyToCloud()
 	}
 
-	return nil, errors.New("")
+	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
 }
 
 func (s *SyncStorage) copyToDrive() (task *tasks.Task, err error) {

@@ -154,7 +154,7 @@ func (s *serve) List() (map[string]*Serve, error) {
 		}
 	}
 
-	klog.Infof("[rclone] serve http list: %s", commonutils.ToJson(serves))
+	klog.Infof("[rclone] serve dump http list: %s", commonutils.ToJson(serves))
 
 	return serves, nil
 }

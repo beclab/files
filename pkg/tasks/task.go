@@ -4,7 +4,7 @@ import (
 	"context"
 	"files/pkg/constant"
 	"files/pkg/models"
-	"files/pkg/paste/commands"
+	"files/pkg/paste/handlers"
 	"fmt"
 
 	"k8s.io/klog/v2"
@@ -24,7 +24,7 @@ type Task struct {
 	cancel   context.CancelFunc
 	canceled bool
 
-	command *commands.Command
+	handler *handlers.Handler
 
 	manager *taskManager
 }
@@ -52,10 +52,10 @@ func (t *Task) Run() error {
 
 		klog.Infof("Task Id: %s", t.id)
 		t.state = constant.Running
-		t.command.UpdateProgress = t.updateProgress
-		t.command.UpdateTotalSize = t.updateTotalSize
+		t.handler.UpdateProgress = t.updateProgress
+		t.handler.UpdateTotalSize = t.updateTotalSize
 
-		if err = t.command.Exec(); err != nil {
+		if err = t.handler.Exec(); err != nil {
 			klog.Errorf("Task Failed: %v", err)
 			if err.Error() == "context canceled" {
 				t.state = constant.Cancelled

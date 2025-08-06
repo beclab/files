@@ -219,6 +219,10 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	return nil, nil
 }
 
+func (s *PosixStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return 0, nil
+}
+
 func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FileParam, listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string) {
 	defer close(dataChan)
 

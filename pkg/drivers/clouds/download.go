@@ -2,7 +2,6 @@ package clouds
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/fileutils"
@@ -59,15 +58,15 @@ func (d *Download) download() error {
 	klog.Infof("Cloud download, owner: %s, param: %s", owner, utils.ToJson(p))
 
 	type asyncResult struct {
-		data []byte
-		err  error
+		jobId int
+		err   error
 	}
 
 	ch := make(chan asyncResult, 1)
 	defer close(ch)
 	go func() {
-		res, err := d.service.DownloadAsync(p)
-		ch <- asyncResult{data: res, err: err}
+		res, err := d.service.DownloadAsync(owner, p)
+		ch <- asyncResult{jobId: res, err: err}
 	}()
 
 	var resp asyncResult
@@ -85,19 +84,6 @@ func (d *Download) download() error {
 		return resp.err
 	}
 
-	var task models.TaskResponse
-	if err := json.Unmarshal(resp.data, &task); err != nil {
-		return err
-	}
-
-	if !task.IsSuccess() {
-		return errors.New(task.FailMessage())
-	}
-
-	var taskQueryParam = &models.QueryTaskParam{
-		TaskIds: []string{task.Data.ID},
-	}
-
 	var ticker = time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -108,31 +94,27 @@ func (d *Download) download() error {
 		case <-ticker.C:
 		}
 
-		res, err := d.service.QueryTask(taskQueryParam)
+		res, err := d.service.QueryJob(resp.jobId)
 		if err != nil {
+			klog.Errorf("Cloud download, query job error: %v", err)
 			return err
 		}
 
-		var taskResp *models.TaskQueryResponse
-		if err := json.Unmarshal(res, &taskResp); err != nil {
-			return err
-		}
+		klog.Infof("Cloud download task status, user: %s, file: %s, id: %d, status:%s", owner, d.fileName, resp.jobId, utils.ToJson(res))
 
-		if len(taskResp.Data) == 0 {
-			return fmt.Errorf("task not found")
-		}
-
-		klog.Infof("Cloud download task status, user: %s, file: %s, id: %s, status:%s", owner, d.fileName, task.Data.ID, taskResp.Status(task.Data.ID))
-
-		if taskResp.Completed(task.Data.ID) {
+		if res.Finished {
 			return nil
 		}
 
-		if taskResp.InProgress(task.Data.ID) {
+		if res.Error == "job not found" {
+			return nil
+		}
+
+		if !res.Success && !res.Finished {
 			continue
 		}
 
-		return errors.New(taskResp.Status(task.Data.ID))
+		return errors.New(res.Error)
 	}
 }
 

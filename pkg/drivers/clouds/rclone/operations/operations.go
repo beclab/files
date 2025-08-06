@@ -1,7 +1,6 @@
 package operations
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"files/pkg/drivers/clouds/rclone/common"
@@ -9,11 +8,7 @@ import (
 	"files/pkg/drivers/clouds/rclone/utils"
 	commonutils "files/pkg/utils"
 	"fmt"
-	"io"
-	"mime/multipart"
 	"net/http"
-	"net/url"
-	"os"
 
 	"k8s.io/klog/v2"
 )
@@ -23,7 +18,11 @@ type Interface interface {
 	Stat(fs string, remote string) (*OperationsStat, error)
 	Mkdir(fs string, dirName string) error
 	Uploadfile(fs string, dirName string) error
-	Copyfile(srcFs string, srcR string, dstFs string, dstR string) error
+	Copyfile(srcFs string, srcR string, dstFs string, dstR string, async *bool) (*OperationsCopyFileResp, error)
+	Deletefile(fs string, remote string) error
+	Size(fs string) (*OperationsSizeResp, error)
+
+	Copy(srcFs, dstFs string) (*OperationsCopyFileResp, error) // copy a directory,no suit for files
 }
 
 type operations struct {
@@ -32,6 +31,48 @@ type operations struct {
 
 func NewOperations() *operations {
 	return &operations{}
+}
+
+func (o *operations) Size(fs string) (*OperationsSizeResp, error) {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, SizePath)
+
+	var param = OperationsReq{
+		Fs: fs,
+	}
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations size error: %v, fs: %s", err, fs)
+		return nil, err
+	}
+
+	var data *OperationsSizeResp
+	if err := json.Unmarshal(resp, &data); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations size done, resp: %s, fs: %s", string(resp), fs)
+
+	return data, nil
+}
+
+func (o *operations) Deletefile(fs string, remote string) error {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, DeletefilePath)
+
+	var param = OperationsReq{
+		Fs:     fs,
+		Remote: remote,
+	}
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations deletefile error: %v, fs: %s, remote: %s", err, fs, remote)
+		return err
+	}
+
+	klog.Infof("[rclone] operations deletefile done, resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
+
+	return nil
 }
 
 func (o *operations) Stat(fs string, remote string) (*OperationsStat, error) {
@@ -62,7 +103,7 @@ func (o *operations) Stat(fs string, remote string) (*OperationsStat, error) {
 	return data, nil
 }
 
-func (o *operations) Copyfile(srcFs string, srcR string, dstFs string, dstR string) error {
+func (o *operations) Copyfile(srcFs string, srcR string, dstFs string, dstR string, async *bool) (*OperationsCopyFileResp, error) {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, CopyfilePath)
 	var param = OperationsReq{
 		SrcFs:     srcFs,
@@ -71,52 +112,29 @@ func (o *operations) Copyfile(srcFs string, srcR string, dstFs string, dstR stri
 		DstRemote: dstR,
 	}
 
+	if async != nil {
+		param.Async = async
+	}
+
 	klog.Infof("[rclone] operations copyfile, data: %s", commonutils.ToJson(param))
 
 	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
 	if err != nil {
 		klog.Errorf("[rclone] operations mkdir error: %v", err)
-		return err
+		return nil, err
 	}
 
-	klog.Infof("[rclone] operations copyfile success, resp: %s", string(resp))
+	var job *OperationsCopyFileResp
+	if err := json.Unmarshal(resp, &job); err != nil {
+		return nil, err
+	}
 
-	return nil
+	klog.Infof("[rclone] operations copyfile success, resp: %s", commonutils.ToJson(job))
+
+	return job, nil
 }
 
 func (o *operations) Uploadfile(fs string, dirName string) error {
-	var url = fmt.Sprintf("%s/%s?fs=%s&remote=%s", common.ServeAddr, UploadfilePath, url.QueryEscape(fs), url.QueryEscape(dirName))
-	// var param = OperationsReq{
-	// 	Fs:     fs,
-	// 	Remote: dirName,
-	// 	Source: "/root/.keep",
-	// }
-	payload := &bytes.Buffer{}
-	file, errFile1 := os.Open("/root/.keep")
-	defer file.Close()
-	writer := multipart.NewWriter(payload)
-	part1, errFile1 := writer.CreateFormFile("File", ".")
-	_, errFile1 = io.Copy(part1, file)
-	if errFile1 != nil {
-		return errFile1
-	}
-	err := writer.Close()
-	if err != nil {
-		return err
-	}
-
-	headers := make(http.Header)
-	headers.Set("Content-Type", "application/octet-stream")
-	headers.Set("Content-Type", writer.FormDataContentType())
-
-	resp, err := utils.Request(context.Background(), url, http.MethodPost, &headers, []byte(payload.String()))
-	if err != nil {
-		klog.Errorf("[rclone] operations uploadfile error: %v, fs: %s", err, fs)
-		return err
-	}
-
-	klog.Infof("[rclone] operations uploadfile success fs: %s, remote: %s, resp: %s", fs, dirName, string(resp))
-
 	return nil
 }
 
@@ -163,4 +181,32 @@ func (o *operations) List(fs string) (*OperationsList, error) {
 	klog.Infof("[rclone] operations list done, fs: %s", fs)
 
 	return data, nil
+}
+
+func (o *operations) Copy(srcFs, dstFs string) (*OperationsCopyFileResp, error) {
+	var async = true
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, SyncCopyPath)
+	var param = SyncCopyReq{
+		SrcFs:              srcFs,
+		DstFs:              dstFs,
+		CreateEmptySrcDirs: true,
+		Async:              &async,
+	}
+
+	klog.Infof("[rclone] operations copy, srcFs: %s, dstFs: %s", srcFs, dstFs)
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations copy error: %v", err)
+		return nil, err
+	}
+
+	var job *OperationsCopyFileResp
+	if err := json.Unmarshal(resp, &job); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations copy success, resp: %s", commonutils.ToJson(job))
+
+	return job, nil
 }

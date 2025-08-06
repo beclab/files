@@ -1,4 +1,4 @@
-package commands
+package handlers
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (c *Command) Rsync() error {
+func (c *Handler) Rsync() error {
 	var src = c.src
 	var dst = c.dst
 	var srcUri, err = src.GetResourceUri()
@@ -78,7 +78,7 @@ func (c *Command) Rsync() error {
 	return c.rsync()
 }
 
-func (c *Command) rsync() error {
+func (c *Handler) rsync() error {
 	klog.Infof("Rsync - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
 
 	rsync, err := utils.GetCommand("rsync")
@@ -118,7 +118,7 @@ func (c *Command) rsync() error {
 	return nil
 }
 
-func (c *Command) move() error {
+func (c *Handler) move() error {
 	klog.Infof("Move - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
 
 	mv, err := utils.GetCommand("mv")
@@ -150,7 +150,7 @@ func (c *Command) move() error {
 	return nil
 }
 
-func (c *Command) generateNewName(srcFileInfo *fileutils.PathMeta) (string, string, error) {
+func (c *Handler) generateNewName(srcFileInfo *fileutils.PathMeta) (string, string, error) {
 	var dstUri, _ = c.dst.GetResourceUri()
 	var dstPath = dstUri + c.dst.Path
 	var targetPath string
@@ -196,7 +196,7 @@ func (c *Command) generateNewName(srcFileInfo *fileutils.PathMeta) (string, stri
 
 }
 
-func (c *Command) checkDstPathPermission() error {
+func (c *Handler) checkDstPathPermission() error {
 	var dst, _ = c.dst.GetResourceUri()
 	var dstPath = dst + c.dst.Path
 	var tmp = strings.TrimSuffix(dstPath, "/")

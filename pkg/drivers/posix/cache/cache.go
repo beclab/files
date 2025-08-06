@@ -41,3 +41,7 @@ func (s *CacheStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 func (s *CacheStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
 	return s.posix.Raw(contextArgs)
 }
+
+func (s *CacheStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return s.posix.Rename(fileParam)
+}

@@ -2,15 +2,25 @@ package rclone
 
 import (
 	"errors"
+	"files/pkg/constant"
 	"files/pkg/drivers/clouds/rclone/config"
+	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/drivers/clouds/rclone/serve"
+	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	"k8s.io/klog/v2"
 )
+
+var localConfig = &config.Config{
+	ConfigName: "local",
+	Name:       "local",
+	Type:       "local",
+}
 
 var Command *rclone
 
@@ -20,7 +30,12 @@ type rclone struct {
 	config    config.Interface
 	serve     serve.Interface
 	operation operations.Interface
+	job       job.Interface
 	sync.RWMutex
+}
+
+func (r *rclone) GetJob() job.Interface {
+	return r.job
 }
 
 func (r *rclone) GetConfig() config.Interface {
@@ -40,6 +55,7 @@ func NewCommandRclone() {
 		config:    config.NewConfig(),
 		serve:     serve.NewServe(),
 		operation: operations.NewOperations(),
+		job:       job.NewJob(),
 	}
 }
 
@@ -70,6 +86,8 @@ func (r *rclone) InitServes() {
 func (r *rclone) StartHttp(configs []*config.Config) error {
 	r.Lock()
 	defer r.Unlock()
+
+	configs = append(configs, localConfig)
 
 	changedConfigs := r.checkChangedConfigs(configs)
 
@@ -107,12 +125,39 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 	return nil
 }
 
+func (r *rclone) FormatFs(param *models.FileParam) (string, error) { // format  dir
+	switch param.FileType {
+	case constant.Drive, constant.Cache, constant.External:
+		uri, err := param.GetResourceUri()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("local:%s", filepath.Join(uri, filepath.Dir(param.Path))), nil
+	case constant.Sync:
+		return "", errors.New("sync not support")
+	case constant.AwsS3, constant.TencentCos:
+		var configName = fmt.Sprintf("%s_%s_%s", param.Owner, param.FileType, param.Extend)
+		config, err := r.config.GetConfig(configName)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s:%s", configName, filepath.Join(config.Bucket, filepath.Dir(param.Path))), nil
+	case constant.DropBox, constant.GoogleDrive:
+		return fmt.Sprintf("%s_%s_%s:%s", param.Owner, param.FileType, param.Extend, filepath.Dir(param.Path)), nil
+	}
+	return "", errors.New("fs invalid")
+}
+
+func (r *rclone) FormatRemote(param *models.FileParam) (string, error) { // format  file
+	return filepath.Base(param.Path), nil
+}
+
 func (r *rclone) restartServe(createConfig *config.Config) error {
 	if err := r.stopServe(createConfig.ConfigName); err != nil {
-		klog.Errorf("restart serve, stop error: %v, name: %s", err, createConfig.ConfigName)
+		klog.Errorf("restart serve, stop error: %v, configName: %s", err, createConfig.ConfigName)
 	}
 	if err := r.startServe(createConfig); err != nil {
-		klog.Errorf("restart serve, start error: %v, name: %s", err, createConfig.ConfigName)
+		klog.Errorf("restart serve, start error: %v, configName: %s", err, createConfig.ConfigName)
 	}
 	return nil
 }
@@ -130,6 +175,8 @@ func (r *rclone) startServe(createConfig *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("start serve, %v", err)
 	}
+
+	klog.Infof("start serve success, configName: %s", createConfig.ConfigName)
 
 	return nil
 }
@@ -195,6 +242,11 @@ func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateCon
 	for _, createConfig := range configs {
 		serveConfig, ok := serveConfigs[createConfig.ConfigName]
 		if !ok {
+			continue
+		}
+
+		if httpId := r.serve.GetHttpId(createConfig.ConfigName); httpId == "" {
+			changed.Update = append(changed.Update, createConfig)
 			continue
 		}
 
