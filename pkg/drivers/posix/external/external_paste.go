@@ -7,6 +7,7 @@ import (
 	"files/pkg/models"
 	"files/pkg/tasks"
 	"files/pkg/utils"
+	"fmt"
 
 	"k8s.io/klog/v2"
 )
@@ -30,12 +31,12 @@ func (s *ExternalStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, err
 	} else if dstType == constant.Sync {
 		return s.copyToSync()
 
-	} else if dstType == constant.Cloud {
+	} else if dstType == constant.AwsS3 || dstType == constant.TencentCos || dstType == constant.GoogleDrive || dstType == constant.DropBox {
 		return s.copyToCloud()
 
 	}
 
-	return nil, errors.New("")
+	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
 }
 
 func (s *ExternalStorage) copyToDrive() (task *tasks.Task, err error) {

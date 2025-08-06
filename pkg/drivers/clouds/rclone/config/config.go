@@ -8,7 +8,6 @@ import (
 	commonutils "files/pkg/utils"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -64,13 +63,8 @@ func (c *config) Create(param *Config) error {
 	_, err := utils.Request(ctx, url, http.MethodPost, nil, []byte(commonutils.ToJson(data)))
 	if err != nil {
 		klog.Warningf("[rclone] create config, result: %s", err.Error())
-		if !strings.Contains(err.Error(), "failed to start auth webserver") {
-			return err
-		}
 	}
-
 	param.Type = c.parseType(param.Type)
-
 	c.configs[param.ConfigName] = param
 
 	klog.Infof("[rclone] create config success, configName: %s", param.ConfigName)
@@ -112,6 +106,12 @@ func (c *config) Dump() (map[string]*Config, error) {
 	if err := json.Unmarshal(resp, &configs); err != nil {
 		klog.Errorf("[rclone] dump unmarshal error: %v", err)
 		return nil, err
+	}
+
+	if configs != nil && len(configs) > 0 {
+		for k, v := range configs {
+			v.ConfigName = k
+		}
 	}
 
 	klog.Infof("[rclone] config dump: %s", commonutils.ToJson(configs))
@@ -156,7 +156,7 @@ func (c *config) GetFsPath(configName string) (string, error) {
 		return "", nil
 	}
 
-	return "", fmt.Errorf("config not found, configName: %s", configName)
+	return "", fmt.Errorf("config fspath not found, configName: %s", configName)
 }
 
 func (c *config) parseType(s string) string {

@@ -25,10 +25,9 @@ var UserGVR = schema.GroupVersionResource{Group: "iam.kubesphere.io", Version: "
 var IntegrationService *integration
 
 type integration struct {
-	client   *dynamic.DynamicClient
-	rest     *resty.Client
-	tokens   map[string]*IntegrationToken
-	tokensEx map[string]*Integrations
+	client *dynamic.DynamicClient
+	rest   *resty.Client
+	tokens map[string]*Integrations
 
 	sync.RWMutex
 }
@@ -45,10 +44,9 @@ func NewIntegrationManager() {
 	}
 
 	IntegrationService = &integration{
-		client:   client,
-		rest:     resty.New().SetTimeout(60 * time.Second).SetDebug(true),
-		tokens:   make(map[string]*IntegrationToken),
-		tokensEx: make(map[string]*Integrations),
+		client: client,
+		rest:   resty.New().SetTimeout(60 * time.Second).SetDebug(true),
+		tokens: make(map[string]*Integrations),
 	}
 
 	IntegrationService.watch()
@@ -61,7 +59,7 @@ func IntegrationManager() *integration {
 func (i *integration) watch() {
 	go func() {
 		for range time.NewTicker(60 * time.Second).C {
-			i.GetIntegrations()
+			// i.GetIntegrations()
 		}
 	}()
 }
@@ -146,7 +144,7 @@ func (i *integration) GetIntegrations() error {
 				ClientId:  token.ClientId, // or ?token.RawData.ClientId,
 			}
 
-			userTokens, userExists := i.tokensEx[user.Name]
+			userTokens, userExists := i.tokens[user.Name]
 			if !userExists {
 				newToken = true
 				var tokenSets = make(map[string]*IntegrationToken)
@@ -154,7 +152,7 @@ func (i *integration) GetIntegrations() error {
 				userTokens = &Integrations{
 					Tokens: tokenSets,
 				}
-				i.tokensEx[user.Name] = userTokens
+				i.tokens[user.Name] = userTokens
 			} else {
 				val, tokenExists := userTokens.Tokens[token.Name]
 				if !tokenExists {
@@ -189,12 +187,6 @@ func (i *integration) GetIntegrations() error {
 	if len(configs) == 0 {
 		return nil
 	}
-
-	configs = append(configs, &config.Config{
-		ConfigName: "local",
-		Name:       "local",
-		Type:       "local",
-	})
 
 	klog.Infof("integration new configs: %s", utils.ToJson(configs))
 

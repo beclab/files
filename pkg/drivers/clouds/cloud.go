@@ -60,7 +60,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	var queryParam = contextArgs.QueryParam
 	var owner = fileParam.Owner
 
-	klog.Infof("Cloud preview, user: %s, gsar: %s", owner, utils.ToJson(contextArgs))
+	klog.Infof("Cloud preview, user: %s, args: %s", owner, utils.ToJson(contextArgs))
 
 	var path = fileParam.Path
 	if strings.HasSuffix(path, "/") {
@@ -77,7 +77,6 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	if err != nil {
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
-
 	if res == nil { // file not found
 		return nil, nil
 	}
@@ -103,7 +102,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 
 	klog.Infof("Cloud preview cached, file: %s, key: %s, exists: %v", fileMeta.Item.Path, previewCacheKey, ok)
 	var mods = fileMeta.Item.ModTime
-	modeTime, err := time.Parse("2006-01-02 15:04:05", mods)
+	modeTime, err := time.Parse(time.RFC3339Nano, mods)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +128,6 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	if err := downloader.download(); err != nil {
 		return nil, err
 	}
-
 	var imagePath = filepath.Join(fileTargetPath, fileMeta.Item.Name)
 
 	klog.Infof("Cloud preview, download success, file path: %s", imagePath)
@@ -145,7 +143,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		}
 	}()
 
-	var modTime, _ = time.Parse("2006-01-02 15:04:05", fileMeta.Item.ModTime)
+	var modTime, _ = time.Parse(time.RFC3339Nano, fileMeta.Item.ModTime)
 	return &models.PreviewHandlerResponse{
 		FileName:     fileMeta.Item.Name,
 		FileModified: modTime, // fileMeta.Item.ModTime,
@@ -280,6 +278,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 }
 
 func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, error) {
+	var owner = fileDeleteArg.FileParam.Owner
 	var fileParam = fileDeleteArg.FileParam
 	var fileType = fileParam.FileType
 	var user = fileParam.Owner
@@ -334,29 +333,14 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 			Path:  p,
 		}
 
-		res, err := s.service.Delete(data)
-		klog.Infof("Cloud delete, user: %s, service request result: %s", user, string(res))
+		_, err = s.service.Delete(owner, fileDeleteArg.FileParam.Path, data)
 		if err != nil {
 			klog.Errorf("Cloud delete, delete files error: %v, user: %s", err, user)
 			deleteFailedPaths = append(deleteFailedPaths, dp)
 			continue
 		}
 
-		var result *models.CloudResponse
-
-		if err := json.Unmarshal(res, &result); err != nil {
-			klog.Errorf("Cloud delete, unmarshal error: %v, data: %s, user: %s", err, string(res), user)
-			deleteFailedPaths = append(deleteFailedPaths, dp)
-			continue
-		}
-
-		if !result.IsSuccess() {
-			klog.Errorf("Cloud delete, failed message: %s", result.FailMessage())
-			deleteFailedPaths = append(deleteFailedPaths, dp)
-			continue
-		}
-
-		klog.Infof("Cloud delete, delete success, user: %s, file: %s, isDir: %v, path: %s", user, result.Data.Name, result.Data.IsDir, result.Data.Path)
+		klog.Infof("Cloud delete, delete success, user: %s, file: %s", user, p)
 	}
 
 	if len(deleteFailedPaths) > 0 {
@@ -364,6 +348,10 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	}
 
 	return nil, nil
+}
+
+func (s *CloudStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return 0, nil
 }
 
 func (s *CloudStorage) generateListingData(fileParam *models.FileParam,

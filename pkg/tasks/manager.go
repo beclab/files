@@ -5,7 +5,7 @@ import (
 	"files/pkg/constant"
 	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/paste/commands"
+	"files/pkg/paste/handlers"
 	"fmt"
 	"sync"
 	"time"
@@ -59,7 +59,7 @@ func (t *taskManager) CreateTask(taskType TaskType, param *models.PasteParam) *T
 		ctx:      ctx,
 		cancel:   cancel,
 		manager:  t,
-		command:  t.buildCommand(ctx, taskType, param),
+		handler:  t.buildHandler(ctx, taskType, param),
 	}
 }
 
@@ -110,34 +110,34 @@ func (t *taskManager) GetTask(taskId string) *TaskInfo {
 	return res
 }
 
-func (t *taskManager) buildCommand(ctx context.Context, taskType TaskType, param *models.PasteParam) *commands.Command {
-	var command = commands.NewCommand(ctx, param)
+func (t *taskManager) buildHandler(ctx context.Context, taskType TaskType, param *models.PasteParam) *handlers.Handler {
+	var handler = handlers.NewHandler(ctx, param)
 
 	var f func() error
 
 	switch taskType {
 
 	case Rsync:
-		f = command.Rsync
+		f = handler.Rsync
 	case DownloadFromFiles:
-		f = command.DownloadFromFiles
+		f = handler.DownloadFromFiles
 	case DownloadFromSync:
-		f = command.DownloadFromSync
+		f = handler.DownloadFromSync
 	case DownloadFromCloud:
-		f = command.DownloadFromCloud
+		f = handler.DownloadFromCloud
 	case UploadToSync:
-		f = command.UploadToSync
+		f = handler.UploadToSync
 	case UploadToCloud:
-		f = command.UploadToCloud
+		f = handler.UploadToCloud
 	case SyncCopy:
-		f = command.SyncCopy
+		f = handler.SyncCopy
 	case CloudCopy:
-		f = command.CloudCopy
+		f = handler.CloudCopy
 	}
 
-	command.Exec = f
+	handler.Exec = f
 
-	return command
+	return handler
 }
 
 func (t *taskManager) generateTaskId() string {

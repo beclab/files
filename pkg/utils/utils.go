@@ -2,8 +2,17 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 )
+
+func FilePathExists(name string) bool {
+	_, err := os.Stat(name)
+	if err != nil && os.IsNotExist(err) {
+		return false
+	}
+	return true
+}
 
 func GetCommand(c string) (string, error) {
 	return exec.LookPath(c)

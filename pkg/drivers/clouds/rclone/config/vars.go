@@ -60,6 +60,7 @@ type Config struct {
 	ClientId string `json:"client_id"`
 }
 
+// todo need to test
 func (c *Config) Equal(target *Config) bool {
 	if c.Type == "awss3" || c.Type == "tencent" {
 		if c.Url != target.Url {

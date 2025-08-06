@@ -41,3 +41,7 @@ func (s *ExternalStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, 
 func (s *ExternalStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
 	return s.posix.Raw(contextArgs)
 }
+
+func (s *ExternalStorage) Rename(fileParam *models.FileParam) (int, error) {
+	return s.posix.Rename(fileParam)
+}
