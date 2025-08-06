@@ -328,7 +328,9 @@ func main() {
 	if err = db3.Table("profile_profile").
 		Where("contact_email LIKE ?", "%@seafile.com").
 		Find(&profiles).Error; err != nil {
-		klog.Fatal("Failed to query profile_profile:", err)
+		klog.Error("Failed to query profile_profile:", err)
+		klog.Info("No profile table, no need to update")
+		return
 	}
 
 	klog.Infof("Found %d profiles: %v", len(profiles), profiles)
