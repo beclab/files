@@ -319,6 +319,11 @@ func main() {
 	logTableStructure(db2, "", DB_NAME2)
 	logTableData(db2, "", DB_NAME2, 0)
 
+	if db3 == nil {
+		klog.Info("No need to update")
+		return
+	}
+
 	var profiles []Profile
 	if err = db3.Table("profile_profile").
 		Where("contact_email LIKE ?", "%@seafile.com").
@@ -329,11 +334,6 @@ func main() {
 	klog.Infof("Found %d profiles: %v", len(profiles), profiles)
 
 	previewData := generateDetailedPreviewReport(db1, db2, profiles)
-
-	if db3 == nil {
-		klog.Info("No need to update")
-		return
-	}
 
 	if err := executeUpdates(db1, db2, previewData); err != nil {
 		klog.Fatalf("Update failed: %v", err)
