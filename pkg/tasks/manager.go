@@ -50,6 +50,7 @@ func NewTaskManager() {
 func (t *taskManager) CreateTask(taskType TaskType, param *models.PasteParam) *Task {
 
 	var ctx, cancel = context.WithCancel(context.Background())
+	var _, isFile = param.Src.IsFile()
 
 	return &Task{
 		taskType: taskType,
@@ -59,6 +60,7 @@ func (t *taskManager) CreateTask(taskType TaskType, param *models.PasteParam) *T
 		ctx:      ctx,
 		cancel:   cancel,
 		manager:  t,
+		isFile:   isFile,
 		handler:  t.buildHandler(ctx, taskType, param),
 	}
 }
@@ -93,7 +95,7 @@ func (t *taskManager) GetTask(taskId string) *TaskInfo {
 	var res = &TaskInfo{
 		Id:            task.id,
 		Action:        task.param.Action,
-		IsDir:         true,
+		IsDir:         !task.isFile,
 		FileName:      srcFileName,
 		Dst:           dstUri,
 		DstPath:       dstFileName,

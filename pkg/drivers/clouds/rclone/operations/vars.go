@@ -5,11 +5,17 @@ var (
 	MkdirPath      = "operations/mkdir"
 	UploadfilePath = "operations/uploadfile"
 	CopyfilePath   = "operations/copyfile"
+	Movefilepath   = "operations/movefile"
 	DeletefilePath = "operations/deletefile"
+	DeletePath     = "operations/delete"
+	DeletedirPath  = "operations/rmdir"
+	DeletedirsPath = "operations/rmdirs"
+	PurgePath      = "operations/purge"
 	StatPath       = "operations/stat"
 	SizePath       = "operations/size"
 
 	SyncCopyPath = "sync/copy"
+	SyncMovePath = "sync/move"
 )
 
 type OperationsStat struct {
@@ -49,12 +55,18 @@ type OperationsReq struct {
 	DstFs     string `json:"dstFs,omitempty"`
 	DstRemote string `json:"dstRemote,omitempty"`
 	Async     *bool  `json:"_async,omitempty"`
+	LeaveRoot *bool  `json:"leaveRoot,omitempty"`
 
 	Opt *OperationsOpt `json:"opt,omitempty"`
 }
 
 type OperationsOpt struct {
-	Metadata bool `json:"metadata,omitempty"`
+	Recurse    bool `json:"recurse,omitempty"`
+	NoModTime  bool `json:"noModTime,omitempty"`
+	NoMimeType bool `json:"noMimeType,omitempty"`
+	DirsOnly   bool `json:"dirsOnly,omitempty"`
+	FilesOnly  bool `json:"filesOnly,omitempty"`
+	Metadata   bool `json:"metadata,omitempty"`
 }
 
 type OperationsCopyFileResp struct {
@@ -80,5 +92,6 @@ type SyncCopyReq struct {
 	SrcFs              string `json:"srcFs"`
 	DstFs              string `json:"dstFs"`
 	CreateEmptySrcDirs bool   `json:"createEmptySrcDirs"`
+	DeleteEmptySrcDirs bool   `json:"deleteEmptySrcDirs"`
 	Async              *bool  `json:"_async,omitempty"`
 }

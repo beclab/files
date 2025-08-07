@@ -62,9 +62,9 @@ func NewHandler(
 	api.PathPrefix("/repos").Handler(common(renameRepoHandler)).Methods("PATCH")
 
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(listHandler, "/api/resources/")).Methods("GET")    // list files
-	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(createHandler, "/api/resources/")).Methods("POST") // create
+	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(createHandler, "/api/resources/")).Methods("POST") // create directory
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(renameHandler, "/api/resources")).Methods("PATCH") // rename
-	api.PathPrefix("/resources").Handler(wrapperFilesDeleteArgs(deleteHandler, "/api/resources/")).Methods("DELETE")  // delete files
+	api.PathPrefix("/resources").Handler(wrapperFilesDeleteArgs(deleteHandler, "/api/resources/")).Methods("DELETE")  // delete
 
 	api.PathPrefix("/tree").Handler(wrapWithTreeParm(treeHandler, "/api/tree/")).Methods("GET")                      // walk through files
 	api.PathPrefix("/preview/{path:.*}").Handler(wrapperPreviewArgs(previewHandler, "/api/preview/")).Methods("GET") // preview image
@@ -77,7 +77,6 @@ func NewHandler(
 	// ~
 
 	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT") // edit txt // recons done
-	// api.PathPrefix("/resources").Handler(monkey(resourcePatchHandler(fileCache), "/api/resources")).Methods("PATCH") // todo rename // recons done
 
 	api.PathPrefix("/mounted").Handler(monkey(resourceMountedHandler, "/api/mounted")).Methods("GET")  // no need to recons
 	api.PathPrefix("/mount").Handler(monkey(resourceMountHandler, "/api/mount")).Methods("POST")       // no need to recons

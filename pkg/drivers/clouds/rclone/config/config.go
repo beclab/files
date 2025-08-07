@@ -49,7 +49,7 @@ func (c *config) SetConfigs(configs map[string]*Config) {
 }
 
 func (c *config) Create(param *Config) error {
-	var ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+	var ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, CreateConfigPath)
 	var t = c.parseType(param.Type)
@@ -73,7 +73,7 @@ func (c *config) Create(param *Config) error {
 }
 
 func (c *config) Delete(configName string) error {
-	var ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+	var ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, DeleteConfigPath)
 	var data = map[string]string{

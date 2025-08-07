@@ -281,6 +281,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	var owner = fileDeleteArg.FileParam.Owner
 	var fileParam = fileDeleteArg.FileParam
 	var fileType = fileParam.FileType
+	_ = fileType
 	var user = fileParam.Owner
 	var dirents = fileDeleteArg.Dirents
 	var deleteFailedPaths []string
@@ -302,35 +303,21 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	}
 
 	for _, dp := range dirents {
-		var direntPath string
-		dp = strings.TrimSpace(dp)
-
-		if fileType == constant.GoogleDrive {
-			direntPath = dp
-		} else {
-			direntPath = fileParam.Path + strings.TrimLeft(dp, "/")
-		}
+		dp = strings.TrimSpace(dp) //  /path/ or /file
 
 		klog.Infof("Cloud delete, user: %s, dirent: %s", user, dp)
 
-		dpd, err := url.PathUnescape(direntPath)
+		dpd, err := url.PathUnescape(dp)
 		if err != nil {
-			klog.Errorf("Cloud delete, path unescape error: %v, path: %s", err, direntPath)
+			klog.Errorf("Cloud delete, path unescape error: %v, path: %s", err, dp)
 			deleteFailedPaths = append(deleteFailedPaths, dp)
 			continue
-		}
-
-		var p = dpd
-		if fileParam.FileType == constant.DropBox {
-			p = strings.TrimRight(p, "/")
-		} else if fileParam.FileType == constant.GoogleDrive {
-			p = strings.Trim(p, "/")
 		}
 
 		var data = &models.DeleteParam{
 			Drive: fileParam.FileType,
 			Name:  fileParam.Extend,
-			Path:  p,
+			Path:  dpd,
 		}
 
 		_, err = s.service.Delete(owner, fileDeleteArg.FileParam.Path, data)
@@ -340,7 +327,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 			continue
 		}
 
-		klog.Infof("Cloud delete, delete success, user: %s, file: %s", user, p)
+		klog.Infof("Cloud delete, delete success, user: %s, file: %s", user, dpd)
 	}
 
 	if len(deleteFailedPaths) > 0 {
@@ -351,6 +338,62 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 }
 
 func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	var owner = contextArgs.FileParam.Owner
+	var fileParam = contextArgs.FileParam
+	klog.Infof("Cloud rename, user: %s, param: %s", owner, utils.ToJson(contextArgs))
+
+	var srcName, isSrcFile = getRenamedSrcName(fileParam.Path) // srcName have no /
+	var dstName = contextArgs.QueryParam.Destination
+	var srcPrefixPath = getRenamedSrcPrefixPath(fileParam.Path)
+
+	if srcName == dstName {
+		klog.Infof("Cloud rename, name not changed, user: %s, srcName: %s, dstName: %s", owner, srcName, dstName)
+		return nil, nil
+	}
+
+	var configName string = fmt.Sprintf("%s_%s_%s", owner, fileParam.FileType, fileParam.Extend)
+	var srcFs, srcRemote string
+	if isSrcFile {
+		srcFs = srcPrefixPath
+		srcRemote = srcName
+	} else {
+		srcRemote = fileParam.Path
+	}
+
+	srcStat, err := s.service.Stat(configName, srcFs, strings.TrimPrefix(srcRemote, "/"), isSrcFile)
+	if err != nil {
+		return nil, err
+	}
+
+	if srcStat == nil || srcStat.Item == nil {
+		return nil, fmt.Errorf("path %s not exists", fileParam.Path)
+	}
+
+	var dstFs, dstRemote string
+	dstRemote = srcPrefixPath + dstName
+	if !isSrcFile {
+		dstRemote = dstRemote + "/"
+	}
+
+	dstStat, err := s.service.Stat(configName, dstFs, strings.TrimPrefix(dstRemote, "/"), isSrcFile)
+	if err != nil {
+		klog.Errorf("Cloud rename, user: %s, stat error: %v", owner, err)
+		return nil, err
+	}
+
+	klog.Infof("Cloud rename, user: %s, isSrcFile: %v, srcPrefixPath: %s, stat: %s", owner, isSrcFile, srcPrefixPath, utils.ToJson(dstStat))
+
+	if dstStat != nil && dstStat.Item != nil {
+		return nil, fmt.Errorf("The name %s already exists. Please choose another name.", dstName)
+	}
+
+	resp, err := s.service.Rename(owner, contextArgs.FileParam, srcName, srcPrefixPath, dstName, isSrcFile)
+	if err != nil {
+		return nil, err
+	}
+
+	klog.Infof("Cloud rename, user: %s, resp: %s", owner, string(resp))
+
 	return nil, nil
 }
 
