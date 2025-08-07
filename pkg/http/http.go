@@ -105,6 +105,8 @@ func NewHandler(
 	api.PathPrefix("/seahub/users").Handler(monkey(seahub.SeahubUsersGetHandler, "/api/seahub/users")).Methods("GET")
 	api.PathPrefix("/seahub/upload/upload-link").Handler(monkey(seahub.HandleUploadLink, "/api/seahub/upload/upload-link")).Methods("GET")                    // recons done
 	api.PathPrefix("/seahub/upload/file-uploaded-bytes").Handler(monkey(seahub.HandleUploadedBytes, "/api/seahub/upload/file-uploaded-bytes")).Methods("GET") //
+	api.PathPrefix("/seahub/copy").Handler(monkey(seahub.BatchCopyHandler, "/api/seahub/copy")).Methods("PATCH")
+	api.PathPrefix("/seahub/move").Handler(monkey(seahub.BatchMoveHandler, "/api/seahub/move")).Methods("PATCH")
 
 	callback := r.PathPrefix("/callback").Subrouter()
 	callback.Path("/create").Handler(monkey(seahub.CallbackCreateHandler, "/callback/create")).Methods("POST")

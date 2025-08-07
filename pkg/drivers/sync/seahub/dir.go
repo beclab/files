@@ -313,6 +313,10 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 		}
 	}
 
+	if parentDir != "/" {
+		parentDir += "/"
+	} // for compatible for responses of other disks
+
 	for _, dirent := range dirList {
 		dirInfo := map[string]interface{}{
 			"type":       "dir",
@@ -321,6 +325,7 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 			"mtime":      dirent["mtime"],
 			"permission": dirent["permission"],
 			"parent_dir": parentDir,
+			"path":       filepath.Join(parentDir, dirent["obj_name"].(string)),
 			"mode":       dirent["mode"],
 		}
 		dirInfoList = append(dirInfoList, dirInfo)
