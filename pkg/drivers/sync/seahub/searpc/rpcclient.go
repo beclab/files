@@ -135,6 +135,12 @@ func (c *SeafServerThreadedRpcClient) SeafileCopyFile(srcRepo, srcDir, srcFilena
 		srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, user, needProgress, synchronous)
 }
 
+func (c *SeafServerThreadedRpcClient) SeafileMoveFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename string,
+	replace int, user string, needProgress, synchronous int) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_move_file", "object", []string{"string", "string", "string", "string", "string", "string", "int", "string", "int", "int"})(
+		srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, replace, user, needProgress, synchronous)
+}
+
 func (c *SeafServerThreadedRpcClient) SeafileIsValidFilename(repoId string, filename string) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_is_valid_filename", "int", []string{"string", "string"})(
 		repoId, filename)

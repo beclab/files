@@ -371,6 +371,19 @@ func (s *SeafileAPI) CopyFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dst
 	return ReturnObject(ret)
 }
 
+func (s *SeafileAPI) MoveFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename string, replace bool, username string, needProgress, synchronous int) (map[string]string, error) {
+	replaceInt := 0
+	if replace {
+		replaceInt = 1
+	}
+	ret, err := s.rpcClient.SeafileMoveFile(srcRepo, srcDir, srcFilename, dstRepo, dstDir, dstFilename, replaceInt, username, needProgress, synchronous)
+	if err != nil {
+		klog.Errorf("~~~Debug log: RPC call failed - error: %v", err)
+		return nil, err
+	}
+	return ReturnObject(ret)
+}
+
 func (s *SeafileAPI) RenameFile(repoId, parentDir, oldname, newname, username string) (int, error) {
 	ret, err := s.rpcClient.SeafileRenameFile(repoId, parentDir, oldname, newname, username)
 	if err != nil {

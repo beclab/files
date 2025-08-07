@@ -264,7 +264,28 @@ func (s *SyncStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, erro
 }
 
 func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	return nil, nil
+	var fileParam = contextArgs.FileParam
+	var owner = fileParam.Owner
+
+	klog.Infof("Sync rename, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
+
+	var respBody []byte
+	var err error
+	header := s.service.Request.Header.Clone()
+	repoID := fileParam.Extend
+	newFilename := contextArgs.QueryParam.Destination
+	action := "rename"
+	if strings.HasSuffix(fileParam.Path, "/") {
+		respBody, err = seahub.HandleDirOperation(header, repoID, fileParam.Path, newFilename, action)
+	} else {
+		respBody, err = seahub.HandleFileOperation(header, repoID, fileParam.Path, newFilename, action)
+	}
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+
+	return respBody, nil
 }
 
 func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData *Files, stopChan <-chan struct{}, dataChan chan<- string) {
