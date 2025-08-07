@@ -21,6 +21,7 @@ type fileHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextA
 /**
  * list
  * create
+ * rename
  */
 func listHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
 	return handler.List(contextArgs)
@@ -28,6 +29,10 @@ func listHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]b
 
 func createHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
 	return handler.Create(contextArgs)
+}
+
+func renameHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
+	return handler.Rename(contextArgs)
 }
 
 func fileHandle(fn fileHandlerFunc, prefix string) http.Handler {

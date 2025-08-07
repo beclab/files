@@ -18,7 +18,7 @@ type Execute interface {
 
 	Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error)
 
-	Rename(fileParam *models.FileParam) (int, error)
+	Rename(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 	Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 }

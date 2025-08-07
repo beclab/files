@@ -263,8 +263,8 @@ func (s *SyncStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, erro
 	return nil, nil
 }
 
-func (s *SyncStorage) Rename(fileParam *models.FileParam) (int, error) {
-	return 0, nil
+func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	return nil, nil
 }
 
 func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData *Files, stopChan <-chan struct{}, dataChan chan<- string) {

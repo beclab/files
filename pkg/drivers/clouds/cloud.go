@@ -350,8 +350,8 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	return nil, nil
 }
 
-func (s *CloudStorage) Rename(fileParam *models.FileParam) (int, error) {
-	return 0, nil
+func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	return nil, nil
 }
 
 func (s *CloudStorage) generateListingData(fileParam *models.FileParam,

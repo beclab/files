@@ -42,6 +42,6 @@ func (s *CacheStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 	return s.posix.Raw(contextArgs)
 }
 
-func (s *CacheStorage) Rename(fileParam *models.FileParam) (int, error) {
-	return s.posix.Rename(fileParam)
+func (s *CacheStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	return s.posix.Rename(contextArgs)
 }
