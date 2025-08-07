@@ -220,6 +220,109 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 }
 
 func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	// path:   /a/    -->   /b/      or  /b(1)/
+	// file:   /a.txt -->   /b.txt   or  /b(1).txt
+	// file:   /a.txt -->   /b.log   or  /b(1).log
+	// file:   /a     -->   /a.txt   or  /a(1).txt
+
+	var fileParam = contextArgs.FileParam
+	var owner = fileParam.Owner
+
+	if fileParam.Path == "/" {
+		return nil, fmt.Errorf("path invalid, path: %s", fileParam.Path)
+	}
+
+	var uri, err = fileParam.GetResourceUri()
+	if err != nil {
+		return nil, err
+	}
+
+	klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, utils.ToJson(contextArgs))
+
+	var srcName, isSrcFile = getRenamedSrcName(fileParam.Path)
+	var dstName = contextArgs.QueryParam.Destination // no /
+
+	klog.Infof("Posix rename, user: %s, uri: %s, isFile: %v, src: %s, dst: %s, args: %s", owner, uri, isSrcFile, srcName, dstName, utils.ToJson(contextArgs))
+
+	if srcName == dstName {
+		return nil, nil
+	}
+
+	var srcFilenamePrefix = srcName
+	var dstFilenamePrefix = dstName
+	var srcFilenameExt, dstFilenameExt string
+
+	if isSrcFile {
+		srcFilenameExt = filepath.Ext(srcName)
+		srcFilenamePrefix = strings.TrimSuffix(srcFilenamePrefix, srcFilenameExt)
+
+		dstFilenameExt = filepath.Ext(dstName)
+		dstFilenamePrefix = strings.TrimSuffix(dstFilenamePrefix, dstFilenameExt)
+	}
+
+	var afs = afero.NewOsFs()
+	var srcPrefixPath = gerRenamedSrcPrefixPath(fileParam.Path)
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:       afero.NewBasePathFs(afs, uri),
+		FsType:   fileParam.FileType,
+		FsExtend: fileParam.Extend,
+		Path:     srcPrefixPath,
+		Expand:   Expand,
+		Content:  NoContent,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if file == nil || file.Items == nil || len(file.Items) == 0 {
+		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
+	}
+
+	var sameItem string
+	var itemNames []string
+	for _, item := range file.Items {
+		if item.IsDir == !isSrcFile {
+			if item.Name == srcName {
+				continue
+			}
+		}
+		if sameItem == "" {
+			if item.Name == dstName {
+				sameItem = item.Name
+			}
+		}
+
+		var tmp = item.Name
+		if isSrcFile {
+			if srcFilenameExt != dstFilenameExt {
+				tmp = strings.TrimSuffix(item.Name, dstFilenameExt)
+			} else {
+				tmp = strings.TrimSuffix(item.Name, srcFilenameExt)
+			}
+		}
+
+		if strings.HasPrefix(tmp, dstFilenamePrefix) {
+			itemNames = append(itemNames, tmp)
+		}
+	}
+
+	var newDstName string
+	if len(itemNames) > 0 {
+		newDstName = utils.GenerateDupCommonName(itemNames, dstFilenamePrefix, sameItem)
+	} else {
+		newDstName = dstFilenamePrefix
+	}
+
+	newDstName = newDstName + dstFilenameExt
+	var rSrcPath = uri + fileParam.Path
+	var rDstPath = uri + srcPrefixPath + newDstName
+
+	klog.Infof("Posix rename, src: %s, dst: %s", rSrcPath, rDstPath)
+
+	if err = afs.Rename(rSrcPath, rDstPath); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 

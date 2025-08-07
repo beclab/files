@@ -162,7 +162,7 @@ func (c *Handler) generateNewName(srcFileInfo *fileutils.PathMeta) (string, stri
 	var ext = srcFileInfo.Ext
 	var isDir = srcFileInfo.IsDir
 	if !isDir {
-		targetPath = strings.ReplaceAll(dstPath, srcFileInfo.Name, "")
+		targetPath = strings.TrimSuffix(dstPath, srcFileInfo.Name) //strings.ReplaceAll(dstPath, srcFileInfo.Name, "")
 		targetName = strings.ReplaceAll(srcFileInfo.Name, srcFileInfo.Ext, "")
 	} else {
 		var tmp = strings.TrimSuffix(dstPath, "/")
@@ -172,7 +172,7 @@ func (c *Handler) generateNewName(srcFileInfo *fileutils.PathMeta) (string, stri
 		targetName = strings.Trim(targetName, "/")
 	}
 
-	dupNames, err := fileutils.CollectDupNames(targetPath, targetName, ext, isDir)
+	dupNames, err := utils.CollectDupNames(targetPath, targetName, ext, isDir)
 	if err != nil {
 		return "", "", err
 	}
@@ -180,6 +180,8 @@ func (c *Handler) generateNewName(srcFileInfo *fileutils.PathMeta) (string, stri
 	if dupNames == nil || len(dupNames) == 0 {
 		return "", "", nil
 	}
+
+	klog.Errorf("command - Rsync, dup names: %v", dupNames)
 
 	newPrefixName := fileutils.GenerateDupCommonName(dupNames, targetName)
 	var newName string
@@ -190,7 +192,7 @@ func (c *Handler) generateNewName(srcFileInfo *fileutils.PathMeta) (string, stri
 	}
 
 	// new dst.Path
-	var newDstPath string = fileutils.UpdatePathName(c.dst.Path, newName, isDir)
+	var newDstPath string = utils.UpdatePathName(c.dst.Path, newName, isDir)
 
 	return newName, newDstPath, nil
 

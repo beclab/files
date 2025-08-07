@@ -19,6 +19,7 @@ type Task struct {
 	progress  int
 	transfer  int64
 	totalSize int64
+	isFile    bool
 
 	ctx      context.Context
 	cancel   context.CancelFunc
