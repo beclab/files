@@ -16,6 +16,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
+var (
+	DefaultLocalRootPath = "/data/"
+	DefaultKeepFileName  = ".keep"
+)
+
 var localConfig = &config.Config{
 	ConfigName: "local",
 	Name:       "local",
@@ -256,4 +261,54 @@ func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateCon
 	}
 
 	return changed
+}
+
+func (r *rclone) GenerateS3EmptyDirectories(configName string, srcPath, srcName, dstPath, dstName string) error {
+	var config, err = r.GetConfig().GetConfig(configName)
+	if err != nil {
+		return err
+	}
+
+	klog.Infof("[rclone] generate, configName: %s, srcPath: %s, srcName: %s, dstPath: %s, dstName: %s")
+
+	var fs = fmt.Sprintf("%s:%s/%s", configName, config.Bucket, srcPath)
+	var opts = &operations.OperationsOpt{
+		Recurse:    true,
+		NoModTime:  true,
+		NoMimeType: true,
+		DirsOnly:   true,
+	}
+
+	klog.Infof("[rclone] generate list src, fs: %s", fs)
+	items, err := r.GetOperation().List(fs, opts)
+	if err != nil {
+		return err
+	}
+
+	if items == nil || items.List == nil || len(items.List) == 0 {
+		return nil
+	}
+
+	var srcFs, srcR string
+	var dstFs, dstR string
+
+	srcFs = fmt.Sprintf("local:%s", DefaultLocalRootPath)
+	srcR = DefaultKeepFileName
+	dstFs = fmt.Sprintf("%s:%s/%s", configName, config.Bucket, dstPath)
+
+	for _, item := range items.List {
+		dstR = filepath.Join(dstName, item.Path) + "/"
+		klog.Infof("[rclone] generate mk empty dir >>> dstFs: %s, dstR: %s", dstFs, dstR)
+
+		_, err := r.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
+		if err != nil {
+			klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)
+			return err
+		}
+
+		klog.Infof("[rclone] generate mk empty dir done <<< dstFs: %s, dstR: %s", dstFs, dstR)
+	}
+
+	return nil
+
 }

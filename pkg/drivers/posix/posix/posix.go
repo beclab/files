@@ -220,10 +220,6 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 }
 
 func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	// path:   /a/    -->   /b/      or  /b(1)/
-	// file:   /a.txt -->   /b.txt   or  /b(1).txt
-	// file:   /a.txt -->   /b.log   or  /b(1).log
-	// file:   /a     -->   /a.txt   or  /a(1).txt
 
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
@@ -278,44 +274,20 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
 	}
 
-	var sameItem string
-	var itemNames []string
+	var existsName bool
 	for _, item := range file.Items {
-		if item.IsDir == !isSrcFile {
-			if item.Name == srcName {
-				continue
-			}
-		}
-		if sameItem == "" {
-			if item.Name == dstName {
-				sameItem = item.Name
-			}
-		}
-
-		var tmp = item.Name
-		if isSrcFile {
-			if srcFilenameExt != dstFilenameExt {
-				tmp = strings.TrimSuffix(item.Name, dstFilenameExt)
-			} else {
-				tmp = strings.TrimSuffix(item.Name, srcFilenameExt)
-			}
-		}
-
-		if strings.HasPrefix(tmp, dstFilenamePrefix) {
-			itemNames = append(itemNames, tmp)
+		if item.Name == dstName {
+			existsName = true
+			break
 		}
 	}
 
-	var newDstName string
-	if len(itemNames) > 0 {
-		newDstName = utils.GenerateDupCommonName(itemNames, dstFilenamePrefix, sameItem)
-	} else {
-		newDstName = dstFilenamePrefix
+	if existsName {
+		return nil, fmt.Errorf("The name '%s' already exists. Please choose another name.", dstName)
 	}
 
-	newDstName = newDstName + dstFilenameExt
 	var rSrcPath = uri + fileParam.Path
-	var rDstPath = uri + srcPrefixPath + newDstName
+	var rDstPath = uri + srcPrefixPath + dstName
 
 	klog.Infof("Posix rename, src: %s, dst: %s", rSrcPath, rDstPath)
 

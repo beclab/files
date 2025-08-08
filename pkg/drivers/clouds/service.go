@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
+	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/fileutils"
 	"files/pkg/models"
 	"files/pkg/utils"
@@ -30,6 +31,34 @@ func NewService() *service {
 	}
 }
 
+func (s *service) Stat(srcParam *models.FileParam, srcPrefixPath, dstName string) (*operations.OperationsStat, error) {
+	klog.Infof("[service] stat, param: %s", utils.ToJson(srcParam))
+	var configName = fmt.Sprintf("%s_%s_%s", srcParam.Owner, srcParam.FileType, srcParam.Extend)
+	var config, err = s.command.GetConfig().GetConfig(configName)
+	if err != nil {
+		return nil, err
+	}
+
+	var _, isFile = srcParam.IsFile()
+	var fs = s.getFs(configName, config.Type, config.Bucket, "")
+	var remote = filepath.Join(srcPrefixPath, dstName)
+	remote = strings.TrimPrefix(remote, "/")
+
+	if !isFile {
+		remote = remote + "/"
+	}
+
+	klog.Infof("[service] stat, fs: %s, remote: %s", fs, remote)
+
+	statResp, err := s.command.GetOperation().Stat(fs, remote)
+	if err != nil {
+		return nil, err
+	}
+
+	return statResp, nil
+
+}
+
 func (s *service) CopyFile(param *models.CopyFileParam) ([]byte, error) {
 	return nil, nil
 }
@@ -43,7 +72,6 @@ func (s *service) CreateFolder(owner string, param *models.PostParam) ([]byte, e
 		return nil, err
 	}
 
-	fmt.Println("---config---", utils.ToJson(config))
 	if config.Type == "s3" {
 		if err := s.generateKeepFile(); err != nil {
 			return nil, err
@@ -81,11 +109,27 @@ func (s *service) Delete(owner string, parentPath string, param *models.DeletePa
 		return nil, err
 	}
 
-	var fs = s.getFs(configName, config.Type, config.Bucket, parentPath)
-	var remote = strings.TrimPrefix(param.Path, "/")
+	var isFile = true
+	if strings.HasSuffix(param.Path, "/") {
+		isFile = false
+	}
 
-	if err = s.command.GetOperation().Deletefile(fs, remote); err != nil {
-		return nil, err
+	var fs, remote string
+
+	if isFile {
+		fs = s.getFs(configName, config.Type, config.Bucket, parentPath)
+		remote = strings.TrimPrefix(param.Path, "/")
+		if err = s.command.GetOperation().Deletefile(fs, remote); err != nil {
+			return nil, err
+		}
+
+	} else {
+		fs = s.getFs(configName, config.Type, config.Bucket, parentPath)
+		remote = strings.Trim(param.Path, "/")
+
+		if err = s.command.GetOperation().Purge(fs, remote); err != nil {
+			return nil, err
+		}
 	}
 
 	return nil, nil
@@ -154,7 +198,27 @@ func (s *service) QueryAccount() ([]byte, error) {
 	return nil, nil
 }
 
-func (s *service) Rename(param *models.PatchParam) ([]byte, error) {
+func (s *service) Rename(owner string, param *models.FileParam, srcName string, srcPrefixPath string, dstName string, isFile bool) ([]byte, error) {
+	if isFile {
+		if err := s.renameFile(owner, param, srcPrefixPath, srcName, dstName); err != nil {
+			return nil, err
+		}
+
+		return nil, nil
+	}
+
+	if param.FileType == "awss3" || param.FileType == "tencent" {
+		var configName = fmt.Sprintf("%s_%s_%s", owner, param.FileType, param.Extend)
+		if err := s.command.GenerateS3EmptyDirectories(configName, srcPrefixPath, srcName, "", dstName); err != nil {
+			klog.Errorf("[service] rename, generate s3 empty directories error: %v", err)
+			return nil, err
+		}
+	}
+
+	if err := s.renameDirectory(owner, param, srcPrefixPath, srcName, dstName); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 
@@ -183,7 +247,10 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 	}
 
 	var fs string = s.getFs(configName, config.Type, config.Bucket, fileParam.Path)
-	data, err := s.command.GetOperation().List(fs)
+	var opts = &operations.OperationsOpt{
+		Metadata: true,
+	}
+	data, err := s.command.GetOperation().List(fs, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -230,13 +297,17 @@ func (s *service) getFs(configName, configType string, configBucket string, file
 		bucket = configBucket
 		fs = fmt.Sprintf("%s:%s", configName, filepath.Join(bucket, fileParamPath))
 	} else if configType == "dropbox" {
-		fs = fmt.Sprintf("%s:%s", configName, strings.TrimPrefix(fileParamPath, "/"))
-	} else if configType == "drive" {
-		if fileParamPath == "root" {
-			fs = fmt.Sprintf("%s:", configName)
-		} else {
-			fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
+		if fileParamPath == "/" {
+			fileParamPath = ""
 		}
+		fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
+	} else if configType == "drive" {
+		fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
+		// if fileParamPath == "root" {
+		// 	fs = fmt.Sprintf("%s:", configName)
+		// } else {
+		// 	fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
+		// }
 	}
 
 	return fs
@@ -251,6 +322,55 @@ func (s *service) generateKeepFile() error {
 	if err := os.WriteFile(keepfile, []byte{}, 0o644); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (s *service) renameFile(owner string, param *models.FileParam, srcPrefixPath string, srcName, dstName string) error {
+	var configName = fmt.Sprintf("%s_%s_%s", owner, param.FileType, param.Extend)
+	var config, err = s.command.GetConfig().GetConfig(configName)
+	if err != nil {
+		return err
+	}
+
+	var srcFs, srcRemote string
+	var dstFs, dstRemote string
+
+	srcFs = s.getFs(configName, config.Type, config.Bucket, srcPrefixPath)
+	srcRemote = srcName
+	dstFs = s.getFs(configName, config.Type, config.Bucket, srcPrefixPath)
+	dstRemote = dstName
+
+	resp, err := s.command.GetOperation().MoveFile(srcFs, srcRemote, dstFs, dstRemote, nil)
+	if err != nil {
+		klog.Errorf("[service] rename file, owner: %s, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s, error: %v", owner, srcFs, srcRemote, dstFs, dstRemote, err)
+		return err
+	}
+
+	klog.Infof("[service] rename file, owner: %s, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s, result: %s", owner, srcFs, srcRemote, dstFs, dstRemote, utils.ToJson(resp))
+
+	return err
+}
+
+func (s *service) renameDirectory(owner string, param *models.FileParam, srcPrefixPath string, srcName, dstName string) error {
+	var configName = fmt.Sprintf("%s_%s_%s", owner, param.FileType, param.Extend)
+	var config, err = s.command.GetConfig().GetConfig(configName)
+	if err != nil {
+		return err
+	}
+
+	var srcFs, dstFs string
+
+	srcFs = s.getFs(configName, config.Type, config.Bucket, param.Path)
+	dstFs = s.getFs(configName, config.Type, config.Bucket, filepath.Join(srcPrefixPath, dstName))
+
+	resp, err := s.command.GetOperation().Move(srcFs, dstFs)
+	if err != nil {
+		klog.Errorf("[service] rename dir, owner: %s, srcFs: %s, dstFs: %s, error: %v", owner, srcFs, dstFs, err)
+		return err
+	}
+
+	klog.Infof("[service] rename dir, owner: %s, srcFs: %s, dstFs: %s, result: %s", owner, srcFs, dstFs, utils.ToJson(resp))
 
 	return nil
 }
