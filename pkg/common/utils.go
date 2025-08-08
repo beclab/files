@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	libErrors "files/pkg/errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -70,15 +69,15 @@ func ErrToStatus(err error) int {
 		return http.StatusOK
 	case os.IsPermission(err):
 		return http.StatusForbidden
-	case os.IsNotExist(err), err == libErrors.ErrNotExist:
+	case os.IsNotExist(err), err == ErrNotExist:
 		return http.StatusNotFound
-	case os.IsExist(err), err == libErrors.ErrExist:
+	case os.IsExist(err), err == ErrExist:
 		return http.StatusConflict
-	case errors.Is(err, libErrors.ErrPermissionDenied):
+	case errors.Is(err, ErrPermissionDenied):
 		return http.StatusForbidden
-	case errors.Is(err, libErrors.ErrInvalidRequestParams):
+	case errors.Is(err, ErrInvalidRequestParams):
 		return http.StatusBadRequest
-	case errors.Is(err, libErrors.ErrRootUserDeletion):
+	case errors.Is(err, ErrRootUserDeletion):
 		return http.StatusForbidden
 	case err.Error() == "file size exceeds 4GB":
 		return http.StatusRequestEntityTooLarge

@@ -4,9 +4,7 @@ import (
 	"context"
 	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/pool"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,24 +25,24 @@ type RecordsStatusProcessor func(db *gorm.DB, processedPaths map[string]bool, sr
 
 type ResourceService interface {
 	// resource handlers
-	DeleteHandler(fileCache fileutils.FileCache) handleFunc // not used now
+	DeleteHandler(fileCache files.FileCache) handleFunc // not used now
 	PutHandler(fileParam *models.FileParam) handleFunc
-	PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc
+	PatchHandler(fileCache files.FileCache, fileParam *models.FileParam) handleFunc
 
 	// paste funcs
-	PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error
-	PasteDirFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+	PasteSame(task *common.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileCache files.FileCache, w http.ResponseWriter, r *http.Request) error
+	PasteDirFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 		dstFileParam *models.FileParam, dstType, dst string, d *common.Data, fileMode os.FileMode,
 		fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
-	PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request,
+	PasteDirTo(task *common.Task, fs afero.Fs, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request,
 		d *common.Data, driveIdCache map[string]string) error
-	PasteFileFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+	PasteFileFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 		dstFileParam *models.FileParam, dstType, dst string, d *common.Data, mode os.FileMode, diskSize int64,
 		fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error
-	PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string, srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, left, right int, w http.ResponseWriter, r *http.Request,
+	PasteFileTo(task *common.Task, fs afero.Fs, bufferPath, dst string, srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, left, right int, w http.ResponseWriter, r *http.Request,
 		d *common.Data, diskSize int64) error
 	GetStat(fs afero.Fs, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) (os.FileInfo, int64, os.FileMode, bool, error)
-	MoveDelete(task *pool.Task, fileCache fileutils.FileCache, fileParam *models.FileParam, d *common.Data, w http.ResponseWriter, r *http.Request) error
+	MoveDelete(task *common.Task, fileCache files.FileCache, fileParam *models.FileParam, d *common.Data, w http.ResponseWriter, r *http.Request) error
 	GetFileCount(fs afero.Fs, fileParam *models.FileParam, countType string, w http.ResponseWriter, r *http.Request) (int64, error)
 	GetTaskFileInfo(fs afero.Fs, fileParam *models.FileParam, w http.ResponseWriter, r *http.Request) (isDir bool, fileType string, filename string, err error)
 
@@ -197,7 +195,7 @@ func GetMountedData(ctx context.Context) {
 
 type BaseResourceService struct{}
 
-func (rs *BaseResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
+func (rs *BaseResourceService) DeleteHandler(fileCache files.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		if r.URL.Path == "/" {
 			return http.StatusForbidden, nil
@@ -235,7 +233,7 @@ func (rs *BaseResourceService) PutHandler(fileParam *models.FileParam) handleFun
 			return http.StatusNotFound, nil
 		}
 
-		info, err := fileutils.WriteFile(files.DefaultFs, urlPath, r.Body)
+		info, err := files.WriteFile(files.DefaultFs, urlPath, r.Body)
 		etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
 		w.Header().Set("ETag", etag)
 
@@ -243,7 +241,7 @@ func (rs *BaseResourceService) PutHandler(fileParam *models.FileParam) handleFun
 	}
 }
 
-func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc {
+func (rs *BaseResourceService) PatchHandler(fileCache files.FileCache, fileParam *models.FileParam) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		action := "rename" // only this for PATCH /api/resources
 
@@ -274,12 +272,12 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileP
 			return http.StatusForbidden, nil
 		}
 
-		err = common.CheckParent(src, dst)
+		err = CheckParent(src, dst)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
 
-		dst = common.AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
+		dst = AddVersionSuffix(dst, files.DefaultFs, strings.HasSuffix(src, "/"))
 
 		srcExternalType := files.GetExternalType(src, MountedData)
 		dstExternalType := files.GetExternalType(dst, MountedData)
@@ -296,7 +294,7 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileP
 			}
 		}
 
-		var task *pool.Task = nil
+		var task *common.Task = nil
 		if needTask != 0 {
 			// only for cache now
 			handler, err := GetResourceService(SrcTypeCache)
@@ -306,14 +304,14 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileP
 			isDir, fileType, filename, err := handler.GetTaskFileInfo(files.DefaultFs, fileParam, w, r)
 
 			taskID := fmt.Sprintf("task%d", time.Now().UnixNano())
-			task = pool.NewTask(taskID, source, destination, src, dst, SrcTypeCache, SrcTypeCache, action, true, false, isDir, fileType, filename)
-			pool.TaskManager.Store(taskID, task)
-			pool.WorkerPool.Submit(func() {
+			task = common.NewTask(taskID, source, destination, src, dst, SrcTypeCache, SrcTypeCache, action, true, false, isDir, fileType, filename)
+			common.TaskManager.Store(taskID, task)
+			common.WorkerPool.Submit(func() {
 				klog.Infof("Task %s started", taskID)
 				defer klog.Infof("Task %s exited", taskID)
 
-				if loadedTask, ok := pool.TaskManager.Load(taskID); ok {
-					if concreteTask, ok := loadedTask.(*pool.Task); ok {
+				if loadedTask, ok := common.TaskManager.Load(taskID); ok {
+					if concreteTask, ok := loadedTask.(*common.Task); ok {
 						concreteTask.Status = "running"
 						concreteTask.Progress = 0
 
@@ -324,34 +322,34 @@ func (rs *BaseResourceService) PatchHandler(fileCache fileutils.FileCache, fileP
 			return common.RenderJSON(w, r, map[string]string{"task_id": taskID})
 		}
 
-		err = common.PatchAction(nil, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
+		err = PatchAction(nil, r.Context(), action, src, dst, srcExternalType, dstExternalType, fileCache)
 		return common.ErrToStatus(err), err
 	}
 }
 
-func (rs *BaseResourceService) PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rs *BaseResourceService) PasteSame(task *common.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam, fileCache files.FileCache, w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+func (rs *BaseResourceService) PasteDirFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string,
+func (rs *BaseResourceService) PasteDirTo(task *common.Task, fs afero.Fs, src, dst string,
 	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+func (rs *BaseResourceService) PasteFileFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	return fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string,
+func (rs *BaseResourceService) PasteFileTo(task *common.Task, fs afero.Fs, bufferPath, dst string,
 	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	return fmt.Errorf("Not Implemented")
@@ -362,7 +360,7 @@ func (rs *BaseResourceService) GetStat(fs afero.Fs, fileParam *models.FileParam,
 	return nil, 0, 0, false, fmt.Errorf("Not Implemented")
 }
 
-func (rs *BaseResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, fileParam *models.FileParam, d *common.Data,
+func (rs *BaseResourceService) MoveDelete(task *common.Task, fileCache files.FileCache, fileParam *models.FileParam, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	return fmt.Errorf("Not Implemented")
 }
@@ -383,8 +381,8 @@ func (rs *BaseResourceService) parsePathToURI(path string) (string, string) {
 	return "error", ""
 }
 
-func executePatchTask(task *pool.Task, action, srcType, dstType string,
-	d *common.Data, fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) {
+func executePatchTask(task *common.Task, action, srcType, dstType string,
+	d *common.Data, fileCache files.FileCache, w http.ResponseWriter, r *http.Request) {
 	select {
 	case <-task.Ctx.Done():
 		return
@@ -398,7 +396,7 @@ func executePatchTask(task *pool.Task, action, srcType, dstType string,
 	go func() {
 		defer wg.Done()
 		var err error
-		err = common.PatchAction(task, task.Ctx, action, task.Source, task.Dest, "", "", fileCache)
+		err = PatchAction(task, task.Ctx, action, task.Source, task.Dest, "", "", fileCache)
 
 		if common.ErrToStatus(err) == http.StatusRequestEntityTooLarge {
 			fmt.Fprintln(w, err.Error())

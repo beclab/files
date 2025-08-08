@@ -4,8 +4,8 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"files/pkg/common"
-	"files/pkg/fileutils"
+	"files/pkg/drives"
+	"files/pkg/files"
 	"io"
 	"io/ioutil"
 	"k8s.io/klog/v2"
@@ -208,10 +208,10 @@ func MoveFileByInfo(fileInfo FileInfo, uploadsDir string) error {
 	filePath := filepath.Join(uploadsDir, fileInfo.ID)
 
 	// Construct target path
-	destinationPath := common.AddVersionSuffix(fileInfo.FullPath, nil, false)
+	destinationPath := drives.AddVersionSuffix(fileInfo.FullPath, nil, false)
 
 	// Move files to target path
-	err := fileutils.MoveFileOs(filePath, destinationPath)
+	err := files.MoveFileOs(filePath, destinationPath)
 	if err != nil {
 		return err
 	}

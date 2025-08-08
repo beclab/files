@@ -2,7 +2,6 @@ package sync
 
 import (
 	"errors"
-	"files/pkg/constant"
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/tasks"
@@ -19,19 +18,19 @@ func (s *SyncStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error) 
 
 	klog.Infof("Sync - Paste, dst: %s, param: %s", dstType, utils.ToJson(pasteParam))
 
-	if dstType == constant.Drive {
+	if dstType == utils.Drive {
 		return s.copyToDrive()
 
-	} else if dstType == constant.External {
+	} else if dstType == utils.External {
 		return s.copyToExternal()
 
-	} else if dstType == constant.Cache {
+	} else if dstType == utils.Cache {
 		return s.copyToCache()
 
-	} else if dstType == constant.Sync {
+	} else if dstType == utils.Sync {
 		return s.copyToSync()
 
-	} else if dstType == constant.Cloud {
+	} else if dstType == utils.Cloud {
 		return s.copyToCloud()
 	}
 

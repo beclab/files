@@ -8,6 +8,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"files/pkg/common"
 	"fmt"
 	"hash"
 	"io"
@@ -24,8 +25,6 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/spf13/afero"
-
-	"files/pkg/errors"
 )
 
 var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), os.Getenv("ROOT_PREFIX"))
@@ -457,7 +456,7 @@ func stat(opts FileOptions) (*FileInfo, error) {
 // algorithm. The checksums data is saved on File object.
 func (i *FileInfo) Checksum(algo string) error {
 	if i.IsDir {
-		return errors.ErrIsDirectory
+		return common.ErrIsDirectory
 	}
 
 	if i.Checksums == nil {
@@ -482,7 +481,7 @@ func (i *FileInfo) Checksum(algo string) error {
 	case "sha512":
 		h = sha512.New()
 	default:
-		return errors.ErrInvalidOption
+		return common.ErrInvalidOption
 	}
 
 	_, err = io.Copy(h, reader)

@@ -1,8 +1,9 @@
 package http
 
 import (
+	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/preview"
 	"files/pkg/rpc"
 	"net/http"
@@ -11,14 +12,12 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/gorilla/mux"
-
-	"files/pkg/settings"
 )
 
 func NewHandler(
 	imgSvc preview.ImgService,
-	fileCache fileutils.FileCache,
-	server *settings.Server,
+	fileCache files.FileCache,
+	server *common.Server,
 ) (http.Handler, error) {
 	server.Clean()
 

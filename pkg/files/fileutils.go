@@ -1,10 +1,9 @@
-package fileutils
+package files
 
 import (
 	"crypto/rand"
 	"encoding/base64"
 	e "errors"
-	"files/pkg/files"
 	"fmt"
 	"io"
 	"io/fs"
@@ -462,7 +461,7 @@ func GetFileInfo(filePath string) (*PathMeta, error) {
 	var meta = new(PathMeta)
 	var afs = afero.NewOsFs()
 
-	obj, err := files.NewFileInfo(files.FileOptions{
+	obj, err := NewFileInfo(FileOptions{
 		Fs:      afs,
 		Path:    filePath,
 		Expand:  false,

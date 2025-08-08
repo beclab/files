@@ -2,10 +2,9 @@ package clouds
 
 import (
 	"encoding/json"
-	"files/pkg/constant"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/clouds/rclone/operations"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/preview"
 	"files/pkg/utils"
@@ -117,8 +116,8 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 
 	fileTargetPath := CreateFileDownloadFolder(owner, fileMeta.Item.Path)
 
-	if !fileutils.FilePathExists(fileTargetPath) {
-		if err := fileutils.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
+	if !files.FilePathExists(fileTargetPath) {
+		if err := files.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
 			klog.Errorln(err)
 			return nil, err
 		}
@@ -186,8 +185,8 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 
 	fileTargetPath := CreateFileDownloadFolder(user, fileMeta.Data.Path)
 
-	if !fileutils.FilePathExists(fileTargetPath) {
-		if err := fileutils.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
+	if !files.FilePathExists(fileTargetPath) {
+		if err := files.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
 			klog.Errorln(err)
 			return nil, err
 		}
@@ -253,7 +252,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		}
 	}
 
-	if fileParam.FileType == constant.GoogleDrive {
+	if fileParam.FileType == utils.GoogleDrive {
 		parentPath = strings.Trim(parentPath, "/")
 	}
 
@@ -305,7 +304,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 		var direntPath string
 		dp = strings.TrimSpace(dp)
 
-		if fileType == constant.GoogleDrive {
+		if fileType == utils.GoogleDrive {
 			direntPath = dp
 		} else {
 			direntPath = fileParam.Path + strings.TrimLeft(dp, "/")
@@ -321,9 +320,9 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 		}
 
 		var p = dpd
-		if fileParam.FileType == constant.DropBox {
+		if fileParam.FileType == utils.DropBox {
 			p = strings.TrimRight(p, "/")
-		} else if fileParam.FileType == constant.GoogleDrive {
+		} else if fileParam.FileType == utils.GoogleDrive {
 			p = strings.Trim(p, "/")
 		}
 
@@ -367,7 +366,7 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 		klog.Infof("Cloud tree, firstItem Path: %s", firstItem.Path)
 		klog.Infof("Cloud tree, firstItem Name: %s", firstItem.Name)
 		var firstItemPath string
-		if fileParam.FileType == constant.GoogleDrive {
+		if fileParam.FileType == utils.GoogleDrive {
 			firstItemPath = firstItem.Meta.ID
 		} else {
 			firstItemPath = firstItem.Path

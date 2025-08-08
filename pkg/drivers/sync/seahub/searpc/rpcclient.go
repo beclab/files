@@ -1,13 +1,9 @@
-package seafile
+package searpc
 
-import (
-	"files/pkg/drivers/sync/seahub/searpc"
-)
-
-type NamedPipeClient = searpc.NamedPipeClient
-type SearpcClient = searpc.SearpcClient
-
-var CreateRPCMethod = searpc.CreateRPCMethod
+//type NamedPipeClient = NamedPipeClient
+//type SearpcClient = SearpcClient
+//
+//var CreateRPCMethod = CreateRPCMethod
 
 type SeafServerThreadedRpcClient struct {
 	*NamedPipeClient
@@ -15,7 +11,7 @@ type SeafServerThreadedRpcClient struct {
 
 func NewSeafServerClient(pipePath string) *SeafServerThreadedRpcClient {
 	return &SeafServerThreadedRpcClient{
-		NamedPipeClient: searpc.NewNamedPipeClient(pipePath, "seafserv-threaded-rpcserver", 5),
+		NamedPipeClient: NewNamedPipeClient(pipePath, "seafserv-threaded-rpcserver", 5),
 	}
 }
 

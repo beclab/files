@@ -16,12 +16,11 @@ import (
 	"github.com/tomasen/realip"
 
 	"files/pkg/common"
-	"files/pkg/settings"
 )
 
 type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
 
-func handle(fn handleFunc, prefix string, server *settings.Server) http.Handler {
+func handle(fn handleFunc, prefix string, server *common.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		//checked := CheckPathOwner(r, prefix)
 		//if !checked {

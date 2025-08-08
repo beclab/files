@@ -1,7 +1,6 @@
 package seaserv
 
 import (
-	"files/pkg/drivers/sync/seahub/seafile"
 	"files/pkg/drivers/sync/seahub/searpc"
 	v "github.com/spf13/viper"
 	"k8s.io/klog/v2"
@@ -9,7 +8,7 @@ import (
 )
 
 type SearpcError = searpc.SearpcError
-type SeafileRpcClient = seafile.SeafServerThreadedRpcClient
+type SeafileRpcClient = searpc.SeafServerThreadedRpcClient
 
 var SeafservThreadedRpc *SeafileRpcClient
 var CcnetThreadedRpc *SeafileRpcClient
@@ -37,7 +36,7 @@ func initRpcClient(pipePath string) {
 
 	socketPath := filepath.Join(pipePath, "seafile.sock")
 	klog.Infof("~~~Debug log: Creating RPC client with socket path: %s", socketPath)
-	SeafservThreadedRpc = seafile.NewSeafServerClient(socketPath)
+	SeafservThreadedRpc = searpc.NewSeafServerClient(socketPath)
 	klog.Infof("~~~Debug log: Successfully created SeafservThreadedRpc client")
 
 	CcnetThreadedRpc = SeafservThreadedRpc

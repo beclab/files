@@ -2,10 +2,10 @@ package http
 
 import (
 	"encoding/json"
-	"files/pkg/constant"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"fmt"
 	"net/http"
 	"strings"
@@ -30,7 +30,7 @@ func treeHandle(fn treeHandlerFunc, prefix string) http.Handler {
 			http.Error(w, "path invalid", http.StatusBadRequest)
 			return
 		}
-		var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+		var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
 		if owner == "" {
 			http.Error(w, "user not found", http.StatusBadRequest)
 			return

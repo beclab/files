@@ -6,9 +6,7 @@ import (
 	e "errors"
 	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/utils"
 	"fmt"
@@ -28,7 +26,7 @@ type CacheResourceService struct {
 	BaseResourceService
 }
 
-func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
+func ExecuteCacheSameTask(task *common.Task, r *http.Request) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -74,9 +72,9 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 				}
 
 				var apiResponse struct {
-					Code int        `json:"code"`
-					Msg  string     `json:"msg"`
-					Task *pool.Task `json:"task"`
+					Code int          `json:"code"`
+					Msg  string       `json:"msg"`
+					Task *common.Task `json:"task"`
 				}
 				if err := json.Unmarshal(body, &apiResponse); err != nil {
 					TaskLog(task, "error", fmt.Sprintf("failed to unmarshal response: %v", err))
@@ -114,7 +112,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 				}
 
 				if apiResponse.Task.Status == "failed" {
-					pool.FailTask(task.ID)
+					common.FailTask(task.ID)
 					done = true
 					return
 				}
@@ -134,9 +132,9 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 					}
 
 					var finalApiResponse struct {
-						Code int        `json:"code"`
-						Msg  string     `json:"msg"`
-						Task *pool.Task `json:"task"`
+						Code int          `json:"code"`
+						Msg  string       `json:"msg"`
+						Task *common.Task `json:"task"`
 					}
 					if err := json.Unmarshal(finalBody, &finalApiResponse); err != nil {
 						TaskLog(task, "error", fmt.Sprintf("final unmarshal failed: %v", err))
@@ -149,7 +147,7 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 						return
 					}
 
-					pool.CompleteTask(task.ID)
+					common.CompleteTask(task.ID)
 
 					done = true
 					return
@@ -164,8 +162,8 @@ func ExecuteCacheSameTask(task *pool.Task, r *http.Request) error {
 	}
 }
 
-func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
-	fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (*CacheResourceService) PasteSame(task *common.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
+	fileCache files.FileCache, w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
 		return nil
@@ -174,7 +172,7 @@ func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string,
 
 	srcExternalType := srcFileParam.FileType
 	dstExternalType := dstFileParam.FileType
-	return common.PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
+	return PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
 
 	//patchUrl := "http://127.0.0.1:80/api/resources/" + common.EscapeURLWithSpace(strings.TrimLeft(src, "/")) + "?action=" + action + "&destination=" + common.EscapeURLWithSpace(dst) + "&task=1"
 	//method := "PATCH"
@@ -218,7 +216,7 @@ func (*CacheResourceService) PasteSame(task *pool.Task, action, src, dst string,
 	//return nil
 }
 
-func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+func (rs *CacheResourceService) PasteDirFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	select {
@@ -430,7 +428,7 @@ func (rs *CacheResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFi
 	//return nil
 }
 
-func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string,
+func (rs *CacheResourceService) PasteDirTo(task *common.Task, fs afero.Fs, src, dst string,
 	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	select {
@@ -440,7 +438,7 @@ func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, ds
 	}
 
 	mode := fileMode
-	if err := fileutils.MkdirAllWithChown(fs, dst, mode); err != nil {
+	if err := files.MkdirAllWithChown(fs, dst, mode); err != nil {
 		klog.Errorln(err)
 		return err
 	}
@@ -450,7 +448,7 @@ func (rs *CacheResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, ds
 	return nil
 }
 
-func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+func (rs *CacheResourceService) PasteFileFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	select {
@@ -513,7 +511,7 @@ func (rs *CacheResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcF
 	return nil
 }
 
-func (rs *CacheResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string,
+func (rs *CacheResourceService) PasteFileTo(task *common.Task, fs afero.Fs, bufferPath, dst string,
 	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	select {
@@ -548,7 +546,7 @@ func (rs *CacheResourceService) GetStat(fs afero.Fs, fileParam *models.FileParam
 	return info, info.Size(), info.Mode(), info.IsDir(), nil
 }
 
-func (rs *CacheResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, fileParam *models.FileParam, d *common.Data,
+func (rs *CacheResourceService) MoveDelete(task *common.Task, fileCache files.FileCache, fileParam *models.FileParam, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
@@ -752,7 +750,7 @@ func CacheMkdirAll(dst string, mode os.FileMode, r *http.Request) error {
 	return nil
 }
 
-func CacheFileToBuffer(task *pool.Task, src string, bufferFilePath string, left, right int) error {
+func CacheFileToBuffer(task *common.Task, src string, bufferFilePath string, left, right int) error {
 	newSrc := strings.Replace(src, "AppData/", "appcache/", 1)
 	newPath, err := common.UnescapeURLIfEscaped(newSrc)
 	if err != nil {
@@ -760,7 +758,7 @@ func CacheFileToBuffer(task *pool.Task, src string, bufferFilePath string, left,
 	}
 	klog.Infoln("newSrc:", newSrc, ", newPath:", newPath)
 
-	err = fileutils.ExecuteRsync(task, newPath, bufferFilePath, left, right)
+	err = files.ExecuteRsync(task, newPath, bufferFilePath, left, right)
 	if err != nil {
 		klog.Errorf("Failed to initialize rsync: %v\n", err)
 		return err
@@ -769,10 +767,10 @@ func CacheFileToBuffer(task *pool.Task, src string, bufferFilePath string, left,
 	return nil
 }
 
-func CacheBufferToFile(task *pool.Task, bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data, left, right int) (int, error) {
+func CacheBufferToFile(task *common.Task, bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data, left, right int) (int, error) {
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		if err := fileutils.MkdirAllWithChown(files.DefaultFs, targetPath, mode); err != nil {
+		if err := files.MkdirAllWithChown(files.DefaultFs, targetPath, mode); err != nil {
 			klog.Errorln(err)
 			return common.ErrToStatus(err), err
 		}
@@ -787,7 +785,7 @@ func CacheBufferToFile(task *pool.Task, bufferFilePath string, targetPath string
 	})
 
 	newTargetPath := strings.Replace(targetPath, "AppData/", "appcache/", 1)
-	err = fileutils.ExecuteRsync(task, bufferFilePath, newTargetPath, left, right)
+	err = files.ExecuteRsync(task, bufferFilePath, newTargetPath, left, right)
 
 	if err != nil {
 		err = os.RemoveAll(newTargetPath)
@@ -800,7 +798,7 @@ func CacheBufferToFile(task *pool.Task, bufferFilePath string, targetPath string
 	return common.ErrToStatus(err), err
 }
 
-func ResourceCacheDelete(fileCache fileutils.FileCache, path string, ctx context.Context, d *common.Data, r *http.Request) (int, error) {
+func ResourceCacheDelete(fileCache files.FileCache, path string, ctx context.Context, d *common.Data, r *http.Request) (int, error) {
 	if path == "/" {
 		return http.StatusForbidden, nil
 	}
