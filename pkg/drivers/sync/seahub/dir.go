@@ -313,6 +313,10 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 		}
 	}
 
+	if parentDir != "/" {
+		parentDir += "/"
+	} // for compatible for responses of other disks
+	
 	for _, dirent := range dirList {
 		dirInfo := map[string]interface{}{
 			"type":       "dir",
