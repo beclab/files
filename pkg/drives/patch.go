@@ -1,12 +1,10 @@
-package common
+package drives
 
 import (
 	"bytes"
 	"context"
-	"files/pkg/errors"
+	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/fileutils"
-	"files/pkg/pool"
 	"files/pkg/preview"
 	"fmt"
 	"os"
@@ -28,7 +26,7 @@ func CheckParent(src, dst string) error {
 
 	rel = filepath.ToSlash(rel)
 	if !strings.HasPrefix(rel, "../") && rel != ".." && rel != "." {
-		return errors.ErrSourceIsParent
+		return common.ErrSourceIsParent
 	}
 
 	return nil
@@ -137,13 +135,13 @@ func Rmrf(path string) error {
 
 func safeRemoveAll(fs afero.Fs, source string) error {
 	// TODO: not used for the time being
-	realPath := filepath.Join(RootPrefix, source)
+	realPath := filepath.Join(common.RootPrefix, source)
 	for {
 		err := fs.RemoveAll(source)
 		if err != nil {
 			klog.Errorf("Error attempting to delete folder %s: %v", realPath, err)
 		} else {
-			exists, err := pathExistsInLsOutput(filepath.Join(RootPrefix, source), true)
+			exists, err := pathExistsInLsOutput(filepath.Join(common.RootPrefix, source), true)
 			if !exists && err == nil {
 				klog.Infof("Successfully deleted folder %s", realPath)
 				return nil
@@ -158,11 +156,11 @@ func safeRemoveAll(fs afero.Fs, source string) error {
 	}
 }
 
-func MoveDir(ctx context.Context, fs afero.Fs, source, dest, srcExternalType, dstExternalType string, fileCache fileutils.FileCache, delete bool) error {
+func MoveDir(ctx context.Context, fs afero.Fs, source, dest, srcExternalType, dstExternalType string, fileCache files.FileCache, delete bool) error {
 	var err error
 	if delete {
 		// first recursively delete all thumbs
-		err = filepath.Walk(RootPrefix+source, func(path string, info os.FileInfo, err error) error {
+		err = filepath.Walk(common.RootPrefix+source, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -208,7 +206,7 @@ func MoveDir(ctx context.Context, fs afero.Fs, source, dest, srcExternalType, ds
 	}
 
 	// Create the destination directory.
-	if err = fileutils.MkdirAllWithChown(fs, dest, srcinfo.Mode()); err != nil {
+	if err = files.MkdirAllWithChown(fs, dest, srcinfo.Mode()); err != nil {
 		klog.Errorln(err)
 		return err
 	}
@@ -233,7 +231,7 @@ func MoveDir(ctx context.Context, fs afero.Fs, source, dest, srcExternalType, ds
 			}
 		} else {
 			// Perform the file copy.
-			err = MoveFile(ctx, fs, fsource, fdest, fileCache, false)
+			err = PatchMoveFile(ctx, fs, fsource, fdest, fileCache, false)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -248,7 +246,7 @@ func MoveDir(ctx context.Context, fs afero.Fs, source, dest, srcExternalType, ds
 	if errString != "" {
 		klog.Infof("Rollbacking: Dest ExternalType is %s", dstExternalType)
 		if dstExternalType == "smb" {
-			err = Rmrf(RootPrefix + dest)
+			err = Rmrf(common.RootPrefix + dest)
 		} else {
 			err = fs.RemoveAll(dest)
 		}
@@ -260,9 +258,9 @@ func MoveDir(ctx context.Context, fs afero.Fs, source, dest, srcExternalType, ds
 
 	// finally delete all for folder is OK
 	if delete {
-		klog.Infof("Moving is going to Delete folder %s with ExternalType %s", RootPrefix+source, srcExternalType)
+		klog.Infof("Moving is going to Delete folder %s with ExternalType %s", common.RootPrefix+source, srcExternalType)
 		if srcExternalType == "smb" {
-			err = Rmrf(RootPrefix + source)
+			err = Rmrf(common.RootPrefix + source)
 		} else {
 			err = fs.RemoveAll(source)
 		}
@@ -274,7 +272,7 @@ func MoveDir(ctx context.Context, fs afero.Fs, source, dest, srcExternalType, ds
 	return nil
 }
 
-func MoveFile(ctx context.Context, fs afero.Fs, src, dst string, fileCache fileutils.FileCache, delete bool) error {
+func PatchMoveFile(ctx context.Context, fs afero.Fs, src, dst string, fileCache files.FileCache, delete bool) error {
 	src = path.Clean("/" + src)
 	dst = path.Clean("/" + dst)
 
@@ -297,10 +295,10 @@ func MoveFile(ctx context.Context, fs afero.Fs, src, dst string, fileCache fileu
 		}
 	}
 
-	return fileutils.MoveFile(fs, src, dst)
+	return files.MoveFile(fs, src, dst)
 }
 
-func Move(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
+func Move(ctx context.Context, fs afero.Fs, task *common.Task, src, dst, srcExternalType, dstExternalType string, fileCache files.FileCache) error {
 	if src = path.Clean("/" + src); src == "" {
 		return os.ErrNotExist
 	}
@@ -330,7 +328,7 @@ func Move(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst, srcExtern
 			return MoveDir(ctx, fs, src, dst, srcExternalType, dstExternalType, fileCache, true)
 		}
 
-		return MoveFile(ctx, fs, src, dst, fileCache, true)
+		return PatchMoveFile(ctx, fs, src, dst, fileCache, true)
 	}
 
 	go func() {
@@ -344,18 +342,18 @@ func Move(ctx context.Context, fs afero.Fs, task *pool.Task, src, dst, srcExtern
 	return nil
 }
 
-func PatchAction(task *pool.Task, ctx context.Context, action, src, dst, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
+func PatchAction(task *common.Task, ctx context.Context, action, src, dst, srcExternalType, dstExternalType string, fileCache files.FileCache) error {
 	switch action {
 	case "copy":
-		return fileutils.Copy(files.DefaultFs, task, src, dst)
+		return files.Copy(files.DefaultFs, task, src, dst)
 	case "rename", "move":
 		return Move(ctx, files.DefaultFs, task, src, dst, srcExternalType, dstExternalType, fileCache)
 	default:
-		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
+		return fmt.Errorf("unsupported action %s: %w", action, common.ErrInvalidRequestParams)
 	}
 }
 
-func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType string, fileCache fileutils.FileCache) error {
+func ExecuteMoveWithRsync(task *common.Task, srcExternalType, dstExternalType string, fileCache files.FileCache) error {
 	srcinfo, err := files.DefaultFs.Stat(task.Source)
 	if err != nil {
 		return err
@@ -363,7 +361,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 
 	if srcinfo.IsDir() {
 		// first recursively delete all thumbs
-		err = filepath.Walk(RootPrefix+task.Source, func(path string, info os.FileInfo, err error) error {
+		err = filepath.Walk(common.RootPrefix+task.Source, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -415,21 +413,21 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 	// no matter what situation, try to rename all first
 	if files.DefaultFs.Rename(task.Source, task.Dest) == nil {
 		task.Logging(fmt.Sprintf("rename from %s to %s successfully", task.Source, task.Dest))
-		pool.CompleteTask(task.ID)
+		common.CompleteTask(task.ID)
 		return nil
 	}
 	// if rename all failed, recursively do things below, without delthumbs any more
 
 	// Get properties of source.
 	go func() {
-		err = fileutils.ExecuteRsync(task, "", "", 0, 99)
+		err = files.ExecuteRsync(task, "", "", 0, 99)
 		if err != nil {
 			klog.Errorf("Failed to initialize rsync: %v\n", err)
-			pool.FailTask(task.ID)
+			common.FailTask(task.ID)
 			return
 		}
 		if srcExternalType == "smb" {
-			err = Rmrf(RootPrefix + task.Source)
+			err = Rmrf(common.RootPrefix + task.Source)
 		} else {
 			err = files.DefaultFs.RemoveAll(task.Source)
 		}
@@ -437,7 +435,7 @@ func ExecuteMoveWithRsync(task *pool.Task, srcExternalType, dstExternalType stri
 			klog.Errorf("Failed to remove %v: %v", task.Source, err)
 			return
 		}
-		pool.CompleteTask(task.ID)
+		common.CompleteTask(task.ID)
 	}()
 	return nil
 }

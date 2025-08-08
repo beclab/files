@@ -2,7 +2,7 @@ package models
 
 import (
 	"errors"
-	"files/pkg/constant"
+	"files/pkg/utils"
 	"net/http"
 )
 
@@ -15,7 +15,7 @@ type TaskParam struct {
 }
 
 func NewTaskParam(r *http.Request) (*TaskParam, error) {
-	var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
 	if owner == "" {
 		return nil, errors.New("user not found")
 	}

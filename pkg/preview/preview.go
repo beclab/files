@@ -5,7 +5,6 @@ import (
 	"context"
 	"files/pkg/diskcache"
 	"files/pkg/files"
-	"files/pkg/fileutils"
 	"files/pkg/img"
 	"files/pkg/redisutils"
 	"fmt"
@@ -39,7 +38,7 @@ func SetContentDisposition(w http.ResponseWriter, r *http.Request, file *files.F
 	}
 }
 
-func CreatePreview(imgSvc ImgService, fileCache fileutils.FileCache,
+func CreatePreview(imgSvc ImgService, fileCache files.FileCache,
 	file *files.FileInfo, previewSize PreviewSize, method int) ([]byte, error) {
 	klog.Infoln("!!!!CreatePreview:", previewSize)
 	fd, err := file.Fs.Open(file.Path)
@@ -95,7 +94,7 @@ func PreviewCacheKey(f *files.FileInfo, previewSize PreviewSize) string {
 	return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
 }
 
-func DelThumbs(ctx context.Context, fileCache fileutils.FileCache, file *files.FileInfo) error {
+func DelThumbs(ctx context.Context, fileCache files.FileCache, file *files.FileInfo) error {
 	for _, previewSizeName := range PreviewSizeNames() {
 		size, _ := ParsePreviewSize(previewSizeName)
 		cacheKey := PreviewCacheKey(file, size)

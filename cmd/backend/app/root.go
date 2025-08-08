@@ -4,18 +4,17 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"files/pkg/background_task"
-	"files/pkg/crontab"
+	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/drives"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/integration"
-	"files/pkg/pool"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
+	"files/pkg/rpc"
 	"files/pkg/tasks"
 	"files/pkg/watchers"
 	"io"
@@ -41,8 +40,6 @@ import (
 
 	fbhttp "files/pkg/http"
 	"files/pkg/img"
-	"files/pkg/settings"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -164,7 +161,7 @@ user created with the credentials from options "username" and "password".`,
 			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil {
 				klog.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
 			}
-			if err := fileutils.Chown(nil, diskcache.CacheDir, 1000, 1000); err != nil {
+			if err := files.Chown(nil, diskcache.CacheDir, 1000, 1000); err != nil {
 				klog.Fatalf("can't chown directory %s to user %d: %s", diskcache.CacheDir, 1000, err)
 			}
 			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
@@ -172,19 +169,18 @@ user created with the credentials from options "username" and "password".`,
 
 		// step4: Crontab
 		//		- CleanupOldFilesAndRedisEntries
-		crontab.InitCrontabs()
+		InitCrontabs()
 
 		// step5: BackgroundTask
 		// 		- initRpcServer
 		//		- initWatcher
-		drives.GetMountedData(nil)
-
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		background_task.InitBackgroundTaskManager(ctx)
+		rpc.InitRpcService(ctx)
+		drives.GetMountedData(ctx)
 
-		pool.WorkerPool = pond.NewPool(1)
-		defer pool.WorkerPool.Stop()
+		common.WorkerPool = pond.NewPool(1)
+		defer common.WorkerPool.Stop()
 
 		// step6: run http server
 		server := getRunParams(cmd.Flags())
@@ -272,8 +268,8 @@ func cleanupHandler(listener net.Listener, c chan os.Signal) {
 	os.Exit(0)
 }
 
-func getRunParams(flags *pflag.FlagSet) *settings.Server {
-	server := settings.NewDefaultServer()
+func getRunParams(flags *pflag.FlagSet) *common.Server {
+	server := common.NewDefaultServer()
 
 	if val, set := getParamB(flags, "root"); set {
 		server.Root = val

@@ -1,6 +1,7 @@
-package crontab
+package app
 
 import (
+	"files/pkg/drives"
 	"files/pkg/redisutils"
 	"files/pkg/upload"
 	"github.com/robfig/cron/v3"
@@ -23,6 +24,17 @@ func InitCrontabs() {
 		klog.Fatalf("AddFunc CleanupOldFilesAndRedisEntries err:%v", err)
 	} else {
 		klog.Info("Crontab task: CleanupOldFilesAndRedisEntries added successfully.")
+	}
+
+	_, err = c.AddFunc("*/5 * * * *", func() {
+		cleanupMux.Lock()
+		defer cleanupMux.Unlock()
+		drives.GetMountedData(nil)
+	})
+	if err != nil {
+		klog.Fatalf("AddFunc GetMountedData err:%v", err)
+	} else {
+		klog.Info("Crontab task: GetMountedData added successfully.")
 	}
 
 	upload.Init(c)

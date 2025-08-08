@@ -3,10 +3,8 @@ package posix
 import (
 	"encoding/json"
 	"errors"
-	"files/pkg/constant"
 	"files/pkg/drivers/base"
 	"files/pkg/files"
-	"files/pkg/fileutils"
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/preview"
@@ -145,7 +143,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	dirName := filepath.Join(resourceUri, contextArgs.FileParam.Path)
-	if fileutils.FilePathExists(dirName) {
+	if files.FilePathExists(dirName) {
 		return nil, errors.New("%s already exists")
 	}
 
@@ -156,7 +154,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	fileMode := os.FileMode(mode)
 
-	if err := fileutils.MkdirAllWithChown(nil, dirName, fileMode); err != nil {
+	if err := files.MkdirAllWithChown(nil, dirName, fileMode); err != nil {
 		return nil, err
 	}
 
@@ -265,7 +263,7 @@ func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FilePa
 }
 
 func (s *PosixStorage) isExternal(fileType string, extend string) bool {
-	return (fileType == constant.External || fileType == constant.Usb || fileType == constant.Hdd || fileType == constant.Internal || fileType == constant.Smb) && extend != ""
+	return (fileType == utils.External || fileType == utils.Usb || fileType == utils.Hdd || fileType == utils.Internal || fileType == utils.Smb) && extend != ""
 }
 
 func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content bool) (*files.FileInfo, error) {

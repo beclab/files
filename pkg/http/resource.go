@@ -3,11 +3,11 @@ package http
 import (
 	"files/pkg/common"
 	"files/pkg/drives"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"net/http"
 )
 
-func resourceDeleteHandler(fileCache fileutils.FileCache) handleFunc {
+func resourceDeleteHandler(fileCache files.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		//srcType := r.URL.Query().Get("src")
 		srcType, err := drives.ParsePathType(r.URL.Path, r, false, true)
@@ -33,7 +33,7 @@ func resourcePutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) 
 	return handler.PutHandler(fileParam)(w, r, d)
 }
 
-func resourcePatchHandler(fileCache fileutils.FileCache) handleFunc {
+func resourcePatchHandler(fileCache files.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		fileParam, handler, err := UrlPrep(r, "")
 		if err != nil {

@@ -2,7 +2,7 @@ package models
 
 import (
 	"errors"
-	"files/pkg/constant"
+	"files/pkg/utils"
 	"net/http"
 	"strings"
 )
@@ -19,7 +19,7 @@ func NewHttpContextArgs(r *http.Request, prefix string, enableThumbnails bool, r
 		return nil, errors.New("path invalid")
 	}
 
-	var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
 	if owner == "" {
 		return nil, errors.New("user not found")
 	}

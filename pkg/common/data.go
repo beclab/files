@@ -1,8 +1,6 @@
 package common
 
-import "files/pkg/settings"
-
 type Data struct {
-	Server *settings.Server
+	Server *Server
 	Raw    interface{}
 }

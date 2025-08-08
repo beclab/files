@@ -7,9 +7,7 @@ import (
 	e "errors"
 	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/pool"
 	"files/pkg/preview"
 	"files/pkg/utils"
 	"fmt"
@@ -37,8 +35,8 @@ type DriveResourceService struct {
 	BaseResourceService
 }
 
-func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
-	fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rs *DriveResourceService) PasteSame(task *common.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
+	fileCache files.FileCache, w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
 		return nil
@@ -49,10 +47,10 @@ func (rs *DriveResourceService) PasteSame(task *pool.Task, action, src, dst stri
 	//dstExternalType := files.GetExternalType(dst, MountedData)
 	srcExternalType := srcFileParam.FileType
 	dstExternalType := dstFileParam.FileType
-	return common.PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
+	return PatchAction(task, task.Ctx, action, src, dst, srcExternalType, dstExternalType, fileCache)
 }
 
-func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+func (rs *DriveResourceService) PasteDirFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	select {
@@ -149,7 +147,7 @@ func (rs *DriveResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFi
 	return nil
 }
 
-func (rs *DriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string,
+func (rs *DriveResourceService) PasteDirTo(task *common.Task, fs afero.Fs, src, dst string,
 	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	select {
@@ -159,14 +157,14 @@ func (rs *DriveResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, ds
 	}
 
 	mode := fileMode
-	if err := fileutils.MkdirAllWithChown(fs, dst, mode); err != nil {
+	if err := files.MkdirAllWithChown(fs, dst, mode); err != nil {
 		klog.Errorln(err)
 		return err
 	}
 	return nil
 }
 
-func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+func (rs *DriveResourceService) PasteFileFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	select {
@@ -235,7 +233,7 @@ func (rs *DriveResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcF
 	return nil
 }
 
-func (rs *DriveResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string,
+func (rs *DriveResourceService) PasteFileTo(task *common.Task, fs afero.Fs, bufferPath, dst string,
 	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode,
 	left, right int, w http.ResponseWriter, r *http.Request, d *common.Data, diskSize int64) error {
 	select {
@@ -270,7 +268,7 @@ func (rs *DriveResourceService) GetStat(fs afero.Fs, fileParam *models.FileParam
 	return info, info.Size(), info.Mode(), info.IsDir(), nil
 }
 
-func (rs *DriveResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, fileParam *models.FileParam, d *common.Data,
+func (rs *DriveResourceService) MoveDelete(task *common.Task, fileCache files.FileCache, fileParam *models.FileParam, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
@@ -517,14 +515,14 @@ func ResourceDriveGetInfo(path string, r *http.Request, d *common.Data) (*files.
 	return file, http.StatusOK, nil
 }
 
-func DriveFileToBuffer(task *pool.Task, file *files.FileInfo, bufferFilePath string, left, right int) error {
+func DriveFileToBuffer(task *common.Task, file *files.FileInfo, bufferFilePath string, left, right int) error {
 	path, err := common.UnescapeURLIfEscaped(file.Path)
 	if err != nil {
 		return err
 	}
 	klog.Infoln("file.Path:", file.Path, ", path:", path)
 
-	err = fileutils.ExecuteRsync(task, "/data"+path, bufferFilePath, left, right)
+	err = files.ExecuteRsync(task, "/data"+path, bufferFilePath, left, right)
 	if err != nil {
 		klog.Errorf("Failed to initialize rsync: %v\n", err)
 		return err
@@ -533,7 +531,7 @@ func DriveFileToBuffer(task *pool.Task, file *files.FileInfo, bufferFilePath str
 	return nil
 }
 
-func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data, left, right int) (int, error) {
+func DriveBufferToFile(task *common.Task, bufferFilePath string, targetPath string, mode os.FileMode, d *common.Data, left, right int) (int, error) {
 	klog.Infoln("***DriveBufferToFile!")
 	klog.Infoln("*** bufferFilePath:", bufferFilePath)
 	klog.Infoln("*** targetPath:", targetPath)
@@ -546,7 +544,7 @@ func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string
 
 	// Directories creation on POST.
 	if strings.HasSuffix(targetPath, "/") {
-		if err = fileutils.MkdirAllWithChown(files.DefaultFs, targetPath, mode); err != nil {
+		if err = files.MkdirAllWithChown(files.DefaultFs, targetPath, mode); err != nil {
 			klog.Errorln(err)
 			return common.ErrToStatus(err), err
 		}
@@ -560,7 +558,7 @@ func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string
 		ReadHeader: d.Server.TypeDetectionByHeader,
 	})
 
-	err = fileutils.ExecuteRsync(task, bufferFilePath, "/data"+targetPath, left, right)
+	err = files.ExecuteRsync(task, bufferFilePath, "/data"+targetPath, left, right)
 
 	if err != nil {
 		_ = files.DefaultFs.RemoveAll(targetPath)
@@ -569,7 +567,7 @@ func DriveBufferToFile(task *pool.Task, bufferFilePath string, targetPath string
 	return common.ErrToStatus(err), err
 }
 
-func ResourceDriveDelete(fileCache fileutils.FileCache, path string, ctx context.Context, d *common.Data) (int, error) {
+func ResourceDriveDelete(fileCache files.FileCache, path string, ctx context.Context, d *common.Data) (int, error) {
 	if path == "/" {
 		return http.StatusForbidden, nil
 	}

@@ -3,7 +3,6 @@ package http
 import (
 	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/fileutils"
 	"fmt"
 	"github.com/spf13/afero"
 	"net/http"
@@ -33,7 +32,7 @@ func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	responseData := make(map[string]interface{})
-	responseData["uid"], err = fileutils.GetUID(files.DefaultFs, dealUrlPath)
+	responseData["uid"], err = files.GetUID(files.DefaultFs, dealUrlPath)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -81,9 +80,9 @@ func permissionPutHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	}
 
 	if recursive == 0 {
-		err = fileutils.Chown(files.DefaultFs, dealUrlPath, uid, gid)
+		err = files.Chown(files.DefaultFs, dealUrlPath, uid, gid)
 	} else {
-		err = fileutils.ChownRecursive(urlPath, uid, gid)
+		err = files.ChownRecursive(urlPath, uid, gid)
 	}
 	if err != nil {
 		return http.StatusInternalServerError, err

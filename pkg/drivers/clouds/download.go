@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
@@ -122,12 +122,12 @@ func (d *Download) generateBufferFolder() (string, error) {
 	var owner = d.fileParam.Owner
 	var exists = false
 	var bufferFolder = path.Join("/", "data", "buffer", owner)
-	if fileutils.FilePathExists(bufferFolder) {
+	if files.FilePathExists(bufferFolder) {
 		exists = true
 	}
 
 	if !exists {
-		if err := fileutils.MkdirAllWithChown(nil, bufferFolder, 0755); err != nil {
+		if err := files.MkdirAllWithChown(nil, bufferFolder, 0755); err != nil {
 			return "", err
 		}
 	}

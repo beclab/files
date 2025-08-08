@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
@@ -244,7 +244,7 @@ func (s *service) getFs(configName, configType string, configBucket string, file
 
 func (s *service) generateKeepFile() error {
 	var keepfile = fmt.Sprintf("%s%s", DefaultLocalRootPath, DefaultKeepFileName)
-	if f := fileutils.FilePathExists(keepfile); f {
+	if f := files.FilePathExists(keepfile); f {
 		return nil
 	}
 

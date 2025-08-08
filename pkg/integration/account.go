@@ -1,7 +1,7 @@
 package integration
 
 import (
-	"files/pkg/constant"
+	"files/pkg/utils"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,7 +17,7 @@ func (i *integration) getAccounts(owner string) ([]*accountsResponseData, error)
 	settingsUrl := fmt.Sprintf("http://%s/legacy/v1alpha1/service.settings/v1/api/account/all", server)
 
 	klog.Infof("fetch integration from settings: %s", settingsUrl)
-	resp, err := i.rest.R().SetHeader(constant.REQUEST_HEADER_TOKEN, headerNonce).
+	resp, err := i.rest.R().SetHeader(utils.REQUEST_HEADER_TOKEN, headerNonce).
 		SetResult(&accountsResponse{}).
 		Get(settingsUrl)
 
@@ -47,7 +47,7 @@ func (i *integration) getToken(owner string, accountName string, accountType str
 	data["name"] = i.formatUrl(accountType, accountName)
 	klog.Infof("fetch integration from settings: %s", settingsUrl)
 	resp, err := i.rest.R().SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(constant.REQUEST_HEADER_TOKEN, headerNonce).
+		SetHeader(utils.REQUEST_HEADER_TOKEN, headerNonce).
 		SetBody(data).
 		SetResult(&accountResponse{}).
 		Post(settingsUrl)

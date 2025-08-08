@@ -1,7 +1,7 @@
-package fileutils
+package files
 
 import (
-	"files/pkg/pool"
+	"files/pkg/common"
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 	"os"
@@ -10,7 +10,7 @@ import (
 )
 
 // Copy copies a file or folder from one place to another.
-func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
+func Copy(fs afero.Fs, task *common.Task, src, dst string) error {
 	if src = path.Clean("/" + src); src == "" {
 		return os.ErrNotExist
 	}
@@ -51,7 +51,7 @@ func Copy(fs afero.Fs, task *pool.Task, src, dst string) error {
 			klog.Errorf("failed to execute rsync: %v\n", err)
 			return
 		}
-		pool.CompleteTask(task.ID)
+		common.CompleteTask(task.ID)
 	}()
 
 	return nil

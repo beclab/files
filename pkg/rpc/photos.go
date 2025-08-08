@@ -3,7 +3,7 @@ package rpc
 import (
 	"encoding/json"
 	"files/pkg/common"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/redisutils"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -220,7 +220,7 @@ func (s *Service) preCheckHandler(c *gin.Context) {
 	basePath := "/data/" + pvc + "/Home/Pictures/" + req.DeviceName
 
 	if _, err = os.Stat(basePath); os.IsNotExist(err) {
-		if err = fileutils.MkdirAllWithChown(nil, basePath, 0755); err != nil {
+		if err = files.MkdirAllWithChown(nil, basePath, 0755); err != nil {
 			klog.Errorln(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create and chown directory for " + basePath})
 			return
@@ -235,7 +235,7 @@ func (s *Service) preCheckHandler(c *gin.Context) {
 		dirPath := filepath.Dir(filePath)
 
 		if _, err = os.Stat(dirPath); os.IsNotExist(err) {
-			if err = fileutils.MkdirAllWithChown(nil, dirPath, 0755); err != nil {
+			if err = files.MkdirAllWithChown(nil, dirPath, 0755); err != nil {
 				klog.Errorln(err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create and chown directory for " + filePath})
 				return
