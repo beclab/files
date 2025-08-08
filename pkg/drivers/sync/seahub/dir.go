@@ -325,7 +325,7 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 			"mtime":      dirent["mtime"],
 			"permission": dirent["permission"],
 			"parent_dir": parentDir,
-			"path":       dirent["path"],
+			"path":       filepath.Join(parentDir, dirent["obj_name"].(string)),
 			"mode":       dirent["mode"],
 		}
 		dirInfoList = append(dirInfoList, dirInfo)

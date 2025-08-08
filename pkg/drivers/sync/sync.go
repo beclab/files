@@ -218,7 +218,7 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 	}
 
 	klog.Infof("Sync create success, result: %s, path: %s", string(res), p)
-	
+
 	//parts := strings.Split(p, "/")
 	//subFolder := "/"
 	//
