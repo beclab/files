@@ -208,7 +208,7 @@ func (c *Handler) cloudTransfer() error {
 	if isFile {
 		copyResp, err = cmd.GetOperation().Copyfile(srcFs, srcRemote, dstFs, dstRemote, &async)
 	} else {
-		if c.dst.FileType == utils.AwsS3 { // todo  tencent test
+		if c.dst.FileType == utils.AwsS3 || c.dst.FileType == utils.GoogleDrive { // todo  tencent test
 			var srcConfigName, srcPrefixPath string
 
 			var srcName, _ = utils.GetFileNameFromPath(c.src.Path)
@@ -240,7 +240,7 @@ func (c *Handler) cloudTransfer() error {
 
 			klog.Infof("cloudTransfer - generate mk empty dir, srcConfig: %s, dstConfig: %s, srcPath: %s, dstPath: %s, srcName: %s, dstName: %s", srcConfigName, dstConfigName, srcPrefixPath, dstPrefixPath, srcName, dstName)
 
-			if err := cmd.GenerateS3EmptyDirectories(srcConfigName, dstConfigName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
+			if err := cmd.GenerateS3EmptyDirectories(c.dst.FileType, srcConfigName, dstConfigName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
 				return err
 			}
 		}

@@ -117,7 +117,7 @@ func (o *operations) Copyfile(srcFs string, srcR string, dstFs string, dstR stri
 		return nil, err
 	}
 
-	klog.Infof("[rclone] operations copyfile success, resp: %s", commonutils.ToJson(job))
+	klog.Infof("[rclone] operations copyfile done! resp: %s", commonutils.ToJson(job))
 
 	return job, nil
 }
@@ -148,7 +148,7 @@ func (o *operations) MoveFile(srcFs string, srcR string, dstFs string, dstR stri
 		return nil, err
 	}
 
-	klog.Infof("[rclone] operations movefile success, resp: %s", commonutils.ToJson(job))
+	klog.Infof("[rclone] operations movefile done! resp: %s", commonutils.ToJson(job))
 
 	return job, nil
 }
@@ -170,7 +170,7 @@ func (o *operations) Mkdir(fs string, dirName string) error {
 		return err
 	}
 
-	klog.Infof("[rclone] operations mkdir success fs: %s, remote: %s, resp: %s", fs, dirName, string(resp))
+	klog.Infof("[rclone] operations mkdir done! fs: %s, remote: %s, resp: %s", fs, dirName, string(resp))
 
 	return nil
 }
@@ -226,7 +226,7 @@ func (o *operations) Copy(srcFs, dstFs string, async *bool) (*OperationsCopyFile
 		return nil, err
 	}
 
-	klog.Infof("[rclone] operations copy success, resp: %s", commonutils.ToJson(job))
+	klog.Infof("[rclone] operations copy done! resp: %s", commonutils.ToJson(job))
 
 	return job, nil
 }
@@ -253,7 +253,7 @@ func (o *operations) Move(srcFs, dstFs string) (*OperationsCopyFileResp, error) 
 		return nil, err
 	}
 
-	klog.Infof("[rclone] operations move success, resp: %s", commonutils.ToJson(job))
+	klog.Infof("[rclone] operations move done! resp: %s", commonutils.ToJson(job))
 
 	return job, nil
 

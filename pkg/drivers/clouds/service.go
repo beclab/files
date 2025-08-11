@@ -103,6 +103,7 @@ func (s *service) CreateFolder(owner string, param *models.PostParam) ([]byte, e
 	}
 
 	var fs string = s.getFs(configName, config.Type, config.Bucket, param.ParentPath)
+	klog.Infof("[service] createFolder, fs: %s, remote: %s", fs, param.FolderName)
 	if err = s.command.GetOperation().Mkdir(fs, param.FolderName); err != nil {
 		klog.Errorf("[service] createFolder error: %v, fs: %s", err, fs)
 	}
@@ -225,7 +226,7 @@ func (s *service) Rename(owner string, param *models.FileParam, srcName string, 
 
 	if param.FileType == utils.AwsS3 || param.FileType == utils.TencentCos {
 		var dstPrefixPath = srcPrefixPath
-		if err := s.command.GenerateS3EmptyDirectories(configName, configName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
+		if err := s.command.GenerateS3EmptyDirectories(param.FileType, configName, configName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
 			klog.Errorf("[service] rename, generate s3 empty directories error: %v", err)
 			return nil, err
 		}
