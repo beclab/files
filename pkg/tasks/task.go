@@ -55,6 +55,7 @@ func (t *Task) Run() error {
 		t.state = utils.Running
 		t.handler.UpdateProgress = t.updateProgress
 		t.handler.UpdateTotalSize = t.updateTotalSize
+		t.handler.GetProgress = t.GetProgress
 
 		if err = t.handler.Exec(); err != nil {
 			klog.Errorf("Task Failed: %v", err)
@@ -87,4 +88,8 @@ func (t *Task) updateProgress(progress int, transfer int64) {
 
 func (t *Task) updateTotalSize(totalSize int64) {
 	t.totalSize = totalSize
+}
+
+func (t *Task) GetProgress() (string, int, int64, int64) {
+	return t.state, t.progress, t.transfer, t.totalSize
 }

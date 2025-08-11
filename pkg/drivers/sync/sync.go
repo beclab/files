@@ -218,25 +218,6 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 
 	klog.Infof("Sync create success, result: %s, path: %s", string(res), fileParam.Path)
 
-	//p := strings.Trim(fileParam.Path, "/")
-	//parts := strings.Split(p, "/")
-	//subFolder := "/"
-	//
-	//for _, part := range parts {
-	//	subFolder = filepath.Join(subFolder, part)
-	//	if !strings.HasPrefix(subFolder, "/") {
-	//		subFolder = "/" + subFolder
-	//	}
-	//
-	//	res, err := seahub.HandleDirOperation(s.service.Request.Header.Clone(), fileParam.Extend, subFolder, "", "mkdir")
-	//	if err != nil {
-	//		klog.Errorf("Sync create error: %v, path: %s", err, subFolder)
-	//		return nil, err
-	//	}
-	//
-	//	klog.Infof("Sync create success, result: %s, path: %s", string(res), subFolder)
-	//}
-
 	return nil, nil
 }
 

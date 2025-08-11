@@ -131,7 +131,7 @@ func handleRename(repoId, pathParam, bflName, newName string) ([]byte, error) {
 		return nil, errors.New("failed to rename")
 	}
 
-	fileInfo := getFileInfo(repoId, path.Join(parentDir, newName))
+	fileInfo := GetFileInfo(repoId, path.Join(parentDir, newName))
 
 	jsonBytes, err := json.Marshal(fileInfo)
 	if err != nil {
@@ -140,7 +140,7 @@ func handleRename(repoId, pathParam, bflName, newName string) ([]byte, error) {
 	return jsonBytes, nil
 }
 
-func getFileInfo(repoId, filePath string) map[string]interface{} {
+func GetFileInfo(repoId, filePath string) map[string]interface{} {
 	fileInfo := make(map[string]interface{})
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {

@@ -39,6 +39,7 @@ type Handler struct {
 	Exec            func() error
 	UpdateTotalSize func(totalSize int64)
 	UpdateProgress  func(progress int, transfer int64)
+	GetProgress     func() (string, int, int64, int64)
 }
 
 func NewHandler(ctx context.Context, param *models.PasteParam) *Handler {

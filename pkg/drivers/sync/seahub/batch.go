@@ -14,6 +14,25 @@ import (
 	"strings"
 )
 
+func HandleDelete(header http.Header, fileParam *models.FileParam) error {
+	parentDir, filename := filepath.Split(strings.TrimSuffix(fileParam.Path, "/"))
+	if filename == "" {
+		return errors.New("filename is empty")
+	}
+	newFileParam := &models.FileParam{
+		Owner:    fileParam.Owner,
+		FileType: fileParam.FileType,
+		Extend:   fileParam.Extend,
+		Path:     parentDir,
+	}
+	dirents := []string{filename}
+	_, err := HandleBatchDelete(header, newFileParam, dirents)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func HandleBatchDelete(header http.Header, fileParam *models.FileParam, dirents []string) ([]byte, error) {
 	MigrateSeahubUserToRedis(header)
 

@@ -1,6 +1,8 @@
 package seahub
 
 import (
+	"k8s.io/klog/v2"
+	"os"
 	"path"
 	"strings"
 )
@@ -83,4 +85,28 @@ func getFileTypeAndExt(filename string) (FileType, string) {
 	}
 
 	return UNKNOWN, ext
+}
+
+func SyncPermToMode(permStr string) os.FileMode {
+	perm := os.FileMode(0)
+	if permStr == "r" {
+		perm = perm | 0555
+	} else if permStr == "w" {
+		perm = perm | 0311
+	} else if permStr == "x" {
+		perm = perm | 0111
+	} else if permStr == "rw" {
+		perm = perm | 0755
+	} else if permStr == "rx" {
+		perm = perm | 0555
+	} else if permStr == "wx" {
+		perm = perm | 0311
+	} else if permStr == "rwx" {
+		perm = perm | 0755
+	} else {
+		klog.Infoln("invalid permission string")
+		return 0
+	}
+
+	return perm
 }
