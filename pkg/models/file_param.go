@@ -84,9 +84,9 @@ func (p *FileParam) convert(url string) (err error) {
 
 	} else if fileType == utils.GoogleDrive {
 
-		if subPath != "/" {
-			subPath = strings.Trim(subPath, "/")
-		}
+		// if subPath != "/" {
+		// 	subPath = strings.Trim(subPath, "/")
+		// }
 		p.FileType = utils.GoogleDrive
 		p.Extend = extend
 		p.Path = subPath
