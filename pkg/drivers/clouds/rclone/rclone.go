@@ -264,7 +264,7 @@ func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateCon
 	return changed
 }
 
-func (r *rclone) GenerateS3EmptyDirectories(srcConfigName, dstConfigName string, srcPath, dstPath, srcName, dstName string) error {
+func (r *rclone) GenerateS3EmptyDirectories(dstFileType string, srcConfigName, dstConfigName string, srcPath, dstPath, srcName, dstName string) error {
 	var srcConfig, err = r.GetConfig().GetConfig(srcConfigName)
 	if err != nil {
 		return err
@@ -333,10 +333,17 @@ func (r *rclone) GenerateS3EmptyDirectories(srcConfigName, dstConfigName string,
 		dstR = strings.TrimPrefix(dstR, "/")
 		klog.Infof("[rclone] generate mk empty dir >>> dstFs: %s, dstR: %s", dstFs, dstR)
 
-		_, err := r.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
-		if err != nil {
-			klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)
-			return err
+		if dstFileType == utils.AwsS3 {
+			_, err := r.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
+			if err != nil {
+				klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)
+				return err
+			}
+		} else if dstFileType == utils.GoogleDrive {
+			if err := r.GetOperation().Mkdir(dstFs, dstR); err != nil {
+				klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)
+				return err
+			}
 		}
 
 		klog.Infof("[rclone] generate mk empty dir done <<< dstFs: %s, dstR: %s", dstFs, dstR)

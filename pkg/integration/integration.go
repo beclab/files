@@ -59,7 +59,7 @@ func IntegrationManager() *integration {
 func (i *integration) watch() {
 	go func() {
 		for range time.NewTicker(60 * time.Second).C {
-			// i.GetIntegrations()
+			i.GetIntegrations()
 		}
 	}()
 }
