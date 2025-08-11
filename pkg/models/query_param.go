@@ -10,16 +10,16 @@ import (
 type QueryParam struct {
 	Ctx                     context.Context `json:"-"`
 	Owner                   string          `json:"owner"`
-	PreviewSize             string          `json:"previewSize"`
-	PreviewEnableThumbnails bool            `json:"previewEnableThumbnails"`
-	PreviewResizePreview    bool            `json:"previewResizePreview"`
-	RawInline               string          `json:"rawInline"`
-	RawMeta                 string          `json:"rawMeta"` // return json
-	Files                   string          `json:"files"`   // like x,y,z
-	FileMode                string          `json:"fileMode"`
-	RepoName                string          `json:"repoName"`
-	RepoId                  string          `json:"repoId"`
-	Destination             string          `json:"destination"`
+	PreviewSize             string          `json:"previewSize,omitempty"`
+	PreviewEnableThumbnails bool            `json:"previewEnableThumbnails,omitempty"`
+	PreviewResizePreview    bool            `json:"previewResizePreview,omitempty"`
+	RawInline               string          `json:"rawInline,omitempty"`
+	RawMeta                 string          `json:"rawMeta,omitempty"` // return json
+	Files                   string          `json:"files,omitempty"`   // like x,y,z
+	FileMode                string          `json:"fileMode,omitempty"`
+	RepoName                string          `json:"repoName,omitempty"`
+	RepoId                  string          `json:"repoId,omitempty"`
+	Destination             string          `json:"destination,omitempty"`
 }
 
 func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {

@@ -31,9 +31,9 @@ type config struct {
 }
 
 var localConfig = &Config{
-	ConfigName: "local",
-	Name:       "local",
-	Type:       "local",
+	ConfigName: commonutils.Local,
+	Name:       commonutils.Local,
+	Type:       commonutils.Local,
 }
 
 var _ Interface = &config{}
@@ -49,7 +49,7 @@ func (c *config) SetConfigs(configs map[string]*Config) {
 }
 
 func (c *config) Create(param *Config) error {
-	var ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+	var ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, CreateConfigPath)
 	var t = c.parseType(param.Type)
@@ -73,7 +73,7 @@ func (c *config) Create(param *Config) error {
 }
 
 func (c *config) Delete(configName string) error {
-	var ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+	var ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, DeleteConfigPath)
 	var data = map[string]string{
@@ -150,9 +150,9 @@ func (c *config) GetFsPath(configName string) (string, error) {
 		return "", fmt.Errorf("config not found, configName: %s", configName)
 	}
 
-	if val.Type == "awss3" || val.Type == "tencent" {
+	if val.Type == commonutils.AwsS3 || val.Type == commonutils.TencentCos {
 		return val.Bucket, nil
-	} else if val.Type == "dropbox" || val.Type == "google" {
+	} else if val.Type == commonutils.DropBox || val.Type == commonutils.GoogleDrive {
 		return "", nil
 	}
 
@@ -161,14 +161,14 @@ func (c *config) GetFsPath(configName string) (string, error) {
 
 func (c *config) parseType(s string) string {
 	switch s {
-	case "awss3", "tencent":
-		return "s3"
-	case "dropbox":
-		return "dropbox"
-	case "google":
-		return "drive"
-	case "local":
-		return "local"
+	case commonutils.AwsS3, commonutils.TencentCos:
+		return commonutils.RcloneTypeS3
+	case commonutils.DropBox:
+		return commonutils.RcloneTypeDropbox
+	case commonutils.GoogleDrive:
+		return commonutils.RcloneTypeDrive
+	case commonutils.Local:
+		return commonutils.RcloneTypeLocal
 	default:
 		return ""
 	}
@@ -176,19 +176,19 @@ func (c *config) parseType(s string) string {
 
 func (c *config) parseProvider(s string) string {
 	switch s {
-	case "awss3":
-		return "AWS"
-	case "tencent":
-		return "TencentCOS"
+	case commonutils.AwsS3:
+		return commonutils.ProviderAWS
+	case commonutils.TencentCos:
+		return commonutils.ProviderTencentCOS
 	default:
 		return ""
 	}
 }
 
 func (c *config) parseCreateConfigParameters(param *Config) *ConfigParameters {
-	if param.Type == "awss3" {
+	if param.Type == commonutils.AwsS3 {
 		return c.parseS3Params(param)
-	} else if param.Type == "dropbox" || param.Type == "google" {
+	} else if param.Type == commonutils.DropBox || param.Type == commonutils.GoogleDrive {
 		return c.parseDropboxParams(param)
 	}
 

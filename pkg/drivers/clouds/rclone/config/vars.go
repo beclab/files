@@ -1,6 +1,9 @@
 package config
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"files/pkg/utils"
+)
 
 var (
 	CreateConfigPath = "config/create"
@@ -62,7 +65,7 @@ type Config struct {
 
 // todo need to test
 func (c *Config) Equal(target *Config) bool {
-	if c.Type == "awss3" || c.Type == "tencent" {
+	if c.Type == utils.AwsS3 || c.Type == utils.TencentCos {
 		if c.Url != target.Url {
 			return false
 		}
@@ -75,7 +78,7 @@ func (c *Config) Equal(target *Config) bool {
 		if c.SecretAccessKey != target.SecretAccessKey {
 			return false
 		}
-	} else if c.Type == "dropbox" || c.Type == "drive" {
+	} else if c.Type == utils.RcloneTypeDropbox || c.Type == utils.RcloneTypeDrive {
 		var ct *DropBoxToken
 		if err := json.Unmarshal([]byte(c.Token), &ct); err != nil {
 			return false

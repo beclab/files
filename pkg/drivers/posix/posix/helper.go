@@ -4,6 +4,7 @@ import (
 	"errors"
 	"files/pkg/files"
 	"os"
+	"strings"
 
 	"github.com/spf13/afero"
 )
@@ -37,4 +38,25 @@ func extractErrMsg(err error) string {
 	// 	}
 	// 	err = next
 	// }
+}
+
+func getRenamedSrcName(s string) (string, bool) {
+
+	var isFile = strings.HasSuffix(s, "/")
+	var tmp = strings.TrimSuffix(s, "/")
+	var p = strings.LastIndex(tmp, "/")
+	var r = tmp[p:]
+	r = strings.Trim(r, "/")
+
+	return r, !isFile
+}
+
+func gerRenamedSrcPrefixPath(s string) string {
+	if s == "/" {
+		return s
+	}
+
+	var r = strings.TrimSuffix(s, "/")
+	var p = strings.LastIndex(r, "/")
+	return r[:p+1]
 }

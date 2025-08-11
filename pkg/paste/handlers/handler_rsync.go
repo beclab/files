@@ -161,7 +161,7 @@ func (c *Handler) generateNewName(srcFileInfo *files.PathMeta) (string, string, 
 	var ext = srcFileInfo.Ext
 	var isDir = srcFileInfo.IsDir
 	if !isDir {
-		targetPath = strings.ReplaceAll(dstPath, srcFileInfo.Name, "")
+		targetPath = strings.TrimSuffix(dstPath, srcFileInfo.Name) //strings.ReplaceAll(dstPath, srcFileInfo.Name, "")
 		targetName = strings.ReplaceAll(srcFileInfo.Name, srcFileInfo.Ext, "")
 	} else {
 		var tmp = strings.TrimSuffix(dstPath, "/")
@@ -171,7 +171,7 @@ func (c *Handler) generateNewName(srcFileInfo *files.PathMeta) (string, string, 
 		targetName = strings.Trim(targetName, "/")
 	}
 
-	dupNames, err := files.CollectDupNames(targetPath, targetName, ext, isDir)
+	dupNames, err := utils.CollectDupNames(targetPath, targetName, ext, isDir)
 	if err != nil {
 		return "", "", err
 	}
