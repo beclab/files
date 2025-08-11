@@ -58,7 +58,17 @@ func (s *service) Stat(configName, fs, remote string, isFile bool) (*operations.
 
 }
 
-func (s *service) CopyFile(param *models.CopyFileParam) ([]byte, error) {
+func (s *service) CopyFile(configName string, fsPrefix, dstR string) ([]byte, error) {
+	var config, err = s.command.GetConfig().GetConfig(configName)
+	if err != nil {
+		return nil, err
+	}
+
+	var srcFs = fmt.Sprintf("local:%s", DefaultLocalRootPath)
+	var srcR = DefaultKeepFileName
+	var dstFs = fmt.Sprintf("%s:%s/%s", configName, config.Bucket, fsPrefix)
+
+	s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
 	return nil, nil
 }
 

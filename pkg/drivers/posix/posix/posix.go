@@ -2,7 +2,6 @@ package posix
 
 import (
 	"encoding/json"
-	"errors"
 	"files/pkg/drivers/base"
 	"files/pkg/files"
 	"files/pkg/global"
@@ -10,6 +9,7 @@ import (
 	"files/pkg/preview"
 	"files/pkg/utils"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -136,6 +136,14 @@ func (s *PosixStorage) Tree(fileParam *models.FileParam, stopChan chan struct{},
 }
 
 func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	var user = contextArgs.FileParam.Owner
+	var fileParam = contextArgs.FileParam
+
+	klog.Infof("Posix create, user: %s, param: %s", user, utils.ToJson(contextArgs))
+
+	dstFileOrDirName, isFile := utils.GetFileNameFromPath(fileParam.Path)
+	dstPrefixPath := utils.GetPrefixPath(fileParam.Path)
+	dstFileExt := filepath.Ext(dstFileOrDirName)
 
 	resourceUri, err := contextArgs.FileParam.GetResourceUri()
 	if err != nil {
@@ -143,9 +151,6 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	dirName := filepath.Join(resourceUri, contextArgs.FileParam.Path)
-	if files.FilePathExists(dirName) {
-		return nil, errors.New("%s already exists")
-	}
 
 	mode, err := strconv.ParseUint(contextArgs.QueryParam.FileMode, 8, 32)
 	if err != nil {
@@ -154,8 +159,60 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	fileMode := os.FileMode(mode)
 
-	if err := files.MkdirAllWithChown(nil, dirName, fileMode); err != nil {
+	var afs = afero.NewOsFs()
+	entries, err := afero.ReadDir(afs, filepath.Join(resourceUri, dstPrefixPath))
+	if err != nil {
 		return nil, err
+	}
+
+	var dupNames []string
+	for _, entry := range entries {
+		infoName := entry.Name()
+		if isFile {
+			infoExt := filepath.Ext(infoName)
+			if infoExt != dstFileExt {
+				continue
+			}
+			dupNames = append(dupNames, strings.TrimSuffix(infoName, dstFileExt))
+		} else {
+			if strings.Contains(infoName, dstFileOrDirName) {
+				dupNames = append(dupNames, infoName)
+			}
+		}
+	}
+
+	klog.Infof("Posix create, dupNames: %d", len(dupNames))
+
+	newName := utils.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
+
+	if newName != "" {
+		if isFile {
+			newName = newName + dstFileExt
+		}
+
+	} else {
+		newName = dstFileOrDirName
+	}
+
+	dirName = filepath.Join(resourceUri, dstPrefixPath, newName)
+	klog.Infof("Posix create, file path: %s, filename: %s", dirName, dstFileOrDirName)
+	if isFile {
+		file, err := os.OpenFile(dirName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fileMode)
+		if err != nil {
+			klog.Errorf("Posix create, file error: %v, dirName: %s", err, dirName)
+			return nil, err
+		}
+		defer file.Close()
+	} else {
+		if !strings.HasSuffix(dirName, "/") {
+			dirName = dirName + "/"
+		}
+
+		if err := afs.MkdirAll(dirName, fileMode); err != nil {
+			klog.Errorf("Posix create, dir error: %v, dir: %s", err, dirName)
+			return nil, err
+		}
+
 	}
 
 	return nil, nil
@@ -234,7 +291,14 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, utils.ToJson(contextArgs))
 
 	var srcName, isSrcFile = getRenamedSrcName(fileParam.Path)
-	var dstName = contextArgs.QueryParam.Destination // no /
+	srcName, err = url.PathUnescape(srcName)
+	if err != nil {
+		return nil, err
+	}
+	dstName, err := url.PathUnescape(contextArgs.QueryParam.Destination) // no /
+	if err != nil {
+		return nil, err
+	}
 
 	klog.Infof("Posix rename, user: %s, uri: %s, isFile: %v, src: %s, dst: %s, args: %s", owner, uri, isSrcFile, srcName, dstName, utils.ToJson(contextArgs))
 

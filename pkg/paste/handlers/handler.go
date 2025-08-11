@@ -9,6 +9,7 @@ import (
 	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -90,9 +91,16 @@ func (c *Handler) cloudTransfer() error {
 	srcFileOrDirName, isFile := utils.GetFileNameFromPath(c.src.Path)
 	dstFileOrDirName, _ := utils.GetFileNameFromPath(c.dst.Path)
 
+	var srcFileExt string
+	if isFile {
+		srcFileExt = filepath.Ext(srcFileOrDirName)
+	}
+
 	var listDstFs, listDstUri string
 	var listResult *operations.OperationsList
 	var opts = &operations.OperationsOpt{}
+
+	klog.Infof("cloudTransfer - owner: %s, srcName: %s, dstName: %s, isFile: %v", c.owner, srcFileOrDirName, dstFileOrDirName, isFile)
 
 	// check dst name exsts
 	if c.dst.FileType == utils.Drive || c.dst.FileType == utils.Cache || c.dst.FileType == utils.External {
@@ -127,8 +135,19 @@ func (c *Handler) cloudTransfer() error {
 		klog.Infof("cloudTransfer - check name exists, count: %d", len(listResult.List))
 		var dupNames []string
 		for _, item := range listResult.List {
-			if strings.Contains(item.Name, srcFileOrDirName) {
-				dupNames = append(dupNames, item.Name)
+			if isFile {
+				var tmpExt = filepath.Ext(item.Name)
+				if tmpExt != srcFileExt {
+					continue
+				}
+				var tmp = strings.TrimSuffix(item.Name, srcFileExt)
+				if strings.Contains(tmp, strings.TrimSuffix(srcFileOrDirName, srcFileExt)) {
+					dupNames = append(dupNames, tmp)
+				}
+			} else {
+				if strings.Contains(item.Name, srcFileOrDirName) {
+					dupNames = append(dupNames, item.Name)
+				}
 			}
 		}
 
@@ -137,17 +156,16 @@ func (c *Handler) cloudTransfer() error {
 
 		klog.Infof("cloudTransfer - check name exists, dstPath: %s, dstPrefixPath: %s, dupNames: %v", c.dst.Path, dstPrefixPath, dupNames)
 		if len(dupNames) > 0 {
-			newName = utils.GenerateDupCommonName(dupNames, dstFileOrDirName, dstFileOrDirName)
+			newName = utils.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, srcFileExt), dstFileOrDirName)
 		}
 
 		if newName != "" {
-			newName = dstPrefixPath + newName
+			newName = dstPrefixPath + newName + srcFileExt
+			if !isFile {
+				newName = newName + "/"
+			}
+			c.dst.Path = newName
 		}
-		if !isFile {
-			newName = newName + "/"
-		}
-
-		c.dst.Path = newName
 
 		klog.Infof("cloudTransfer - check name exists done! newDstPath: %s", newName)
 	}

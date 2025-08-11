@@ -237,41 +237,88 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
-	klog.Infof("Cloud create, user: %s, param: %s", owner, fileParam.Json())
+	dstPrefixPath := utils.GetPrefixPath(fileParam.Path)
+	dstFileOrDirName, isFile := utils.GetFileNameFromPath(fileParam.Path)
 
-	var path = strings.TrimRight(fileParam.Path, "/")
-	var parts = strings.Split(path, "/")
-	var parentPath string
-	var folderName string
-	for i := 0; i < len(parts); i++ {
-		if i < len(parts)-1 {
-			parentPath += parts[i] + "/"
-		}
-		if i == len(parts)-1 {
-			folderName = parts[i]
-		}
-	}
+	klog.Infof("Cloud create, user: %s, param: %s, prefixPath: %s, name: %s, isFile: %v", owner, fileParam.Json(), dstPrefixPath, dstFileOrDirName, isFile)
 
-	if fileParam.FileType == utils.GoogleDrive {
-		parentPath = strings.Trim(parentPath, "/")
-	}
+	dstPrefixPath = strings.TrimPrefix(dstPrefixPath, "/")
+	dstFileExt := filepath.Ext(dstFileOrDirName)
+	// if fileParam.FileType == utils.GoogleDrive {
+	// 	parentPath = strings.Trim(parentPath, "/")
+	// }
 
-	var p = &models.PostParam{
-		Drive:      fileParam.FileType,
-		Name:       fileParam.Extend,
-		ParentPath: parentPath,
-		FolderName: folderName,
-	}
-
-	klog.Infof("Cloud create, service request param: %s", utils.ToJson(p))
-
-	res, err := s.service.CreateFolder(owner, p)
+	var configName = fmt.Sprintf("%s_%s_%s", owner, fileParam.FileType, fileParam.Extend)
+	var config, err = s.service.command.GetConfig().GetConfig(configName)
 	if err != nil {
-		klog.Errorf("Cloud create, error: %v, user: %s, path: %s", err, owner, fileParam.Path)
+		return nil, err
+	}
+	var fs = s.service.getFs(configName, config.Type, config.Bucket, dstPrefixPath)
+	var opts = &operations.OperationsOpt{}
+	if isFile {
+		opts.FilesOnly = true
+	} else {
+		opts.DirsOnly = true
+	}
+	lists, err := s.service.command.GetOperation().List(fs, opts)
+	if err != nil {
 		return nil, err
 	}
 
-	klog.Infof("Cloud create, success, result: %s, user: %s, path: %s", string(res), owner, fileParam.Path)
+	var dupNames []string
+	if lists != nil && lists.List != nil && len(lists.List) > 0 {
+		for _, item := range lists.List {
+			var tmpExt = filepath.Ext(item.Name)
+			if tmpExt != dstFileExt {
+				continue
+			}
+			if isFile {
+				if strings.Contains(strings.TrimSuffix(item.Name, tmpExt), strings.TrimSuffix(dstFileOrDirName, dstFileExt)) {
+					dupNames = append(dupNames, strings.TrimSuffix(item.Name, tmpExt))
+				}
+			} else {
+				if strings.Contains(item.Name, dstFileOrDirName) {
+					dupNames = append(dupNames, item.Name)
+				}
+			}
+
+		}
+	}
+
+	newName := utils.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
+	if newName != "" {
+		newName = newName + dstFileExt
+	} else {
+		newName = dstFileOrDirName
+	}
+
+	klog.Infof("Cloud create, dupNames: %d, newName: %s", len(dupNames), newName)
+
+	if !isFile {
+		var p = &models.PostParam{
+			Drive:      fileParam.FileType,
+			Name:       fileParam.Extend,
+			ParentPath: dstPrefixPath,
+			FolderName: newName,
+		}
+
+		klog.Infof("Cloud create, dir, service request param: %s", utils.ToJson(p))
+
+		res, err := s.service.CreateFolder(owner, p)
+		if err != nil {
+			klog.Errorf("Cloud create, dir error: %v, user: %s, path: %s", err, owner, fileParam.Path)
+			return nil, err
+		}
+		klog.Infof("Cloud create, dir done! result: %s, user: %s, path: %s", string(res), owner, fileParam.Path)
+		return nil, nil
+	} else {
+		if _, err := s.service.CopyFile(configName, dstPrefixPath, newName); err != nil {
+			klog.Errorf("Cloud create, file error: %v, dstPrefixPath: %s, newName: %s", err, dstPrefixPath, newName)
+			return nil, err
+		}
+
+		klog.Errorf("Cloud create, file done! dstPrefixPath: %s, newName: %s", dstPrefixPath, newName)
+	}
 
 	return nil, nil
 }
