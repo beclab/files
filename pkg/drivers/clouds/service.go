@@ -5,7 +5,7 @@ import (
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
@@ -213,7 +213,7 @@ func (s *service) Rename(owner string, param *models.FileParam, srcName string, 
 		return nil, nil
 	}
 
-	if param.FileType == "awss3" || param.FileType == "tencent" {
+	if param.FileType == utils.AwsS3 || param.FileType == utils.TencentCos {
 		var dstPrefixPath = srcPrefixPath
 		if err := s.command.GenerateS3EmptyDirectories(configName, configName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
 			klog.Errorf("[service] rename, generate s3 empty directories error: %v", err)
@@ -321,7 +321,7 @@ func (s *service) getFs(configName, configType string, configBucket string, file
 
 func (s *service) generateKeepFile() error {
 	var keepfile = fmt.Sprintf("%s%s", DefaultLocalRootPath, DefaultKeepFileName)
-	if f := fileutils.FilePathExists(keepfile); f {
+	if f := files.FilePathExists(keepfile); f {
 		return nil
 	}
 

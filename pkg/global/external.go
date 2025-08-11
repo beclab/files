@@ -2,7 +2,6 @@ package global
 
 import (
 	"encoding/json"
-	"files/pkg/constant"
 	"files/pkg/files"
 	"files/pkg/utils"
 	"net/http"
@@ -96,7 +95,7 @@ func (m *Mount) getMounted() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var host = constant.OlaresdHost
+	var host = utils.OlaresdHost
 
 	if host == "" {
 		klog.Errorf("olaresd host invalid, host: %s", host)

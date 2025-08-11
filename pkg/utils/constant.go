@@ -1,4 +1,4 @@
-package constant
+package utils
 
 import "os"
 
@@ -25,6 +25,7 @@ var (
 )
 
 const (
+	Local       = "local"
 	Posix       = "posix"
 	Drive       = "drive"
 	Home        = "home"
@@ -41,6 +42,14 @@ const (
 	GoogleDrive = "google"
 	DropBox     = "dropbox"
 	TencentCos  = "tencent"
+
+	RcloneTypeLocal   = "local"
+	RcloneTypeS3      = "s3"
+	RcloneTypeDrive   = "drive"
+	RcloneTypeDropbox = "dropbox"
+
+	ProviderAWS        = "AWS"
+	ProviderTencentCOS = "TencentCOS"
 )
 
 const (

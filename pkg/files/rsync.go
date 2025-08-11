@@ -1,10 +1,10 @@
-package fileutils
+package files
 
 import (
 	"bufio"
 	"context"
 	e "errors"
-	"files/pkg/pool"
+	"files/pkg/common"
 	"fmt"
 	"io"
 	"math"
@@ -40,11 +40,11 @@ func parseFloat(s string) float64 {
 	return f
 }
 
-func externalCheckHeartBeat(cmdDone chan struct{}, task *pool.Task, path string, interval time.Duration) {
+func externalCheckHeartBeat(cmdDone chan struct{}, task *common.Task, path string, interval time.Duration) {
 	srcPath, err := extractBaseDirectory(path)
 	if err != nil {
 		task.ErrChan <- fmt.Errorf("[TASK EXECUTE ERROR]: %w", err)
-		pool.FailTask(task.ID)
+		common.FailTask(task.ID)
 	}
 
 	ticker := time.NewTicker(interval)
@@ -60,14 +60,14 @@ func externalCheckHeartBeat(cmdDone chan struct{}, task *pool.Task, path string,
 		default:
 			if err = checkDirectory(srcPath); err != nil {
 				task.ErrChan <- fmt.Errorf("not found: %w", err)
-				pool.FailTask(task.ID)
+				common.FailTask(task.ID)
 				return
 			}
 		}
 	}
 }
 
-func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight int) error {
+func ExecuteRsync(task *common.Task, src, dst string, progressLeft, progressRight int) error {
 	klog.Infoln("Starting ExecuteRsync function")
 
 	stdoutReader, stdoutWriter := io.Pipe()
@@ -197,7 +197,7 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 								for _, match := range matches {
 									if len(match) > 1 {
 										p := int(math.Floor(parseFloat(match[1])))
-										p = pool.ProcessProgress(p, progressLeft, progressRight)
+										p = common.ProcessProgress(p, progressLeft, progressRight)
 										matched = true
 										select {
 										case task.ProgressChan <- p:
@@ -328,7 +328,7 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 						klog.Errorf("ExecuteRsync failed with error: %v", firstErr)
 						errMsg := parseRsyncError(firstErr, task)
 						task.ErrChan <- e.New(errMsg)
-						pool.FailTask(task.ID)
+						common.FailTask(task.ID)
 						return
 					}()
 					return
@@ -409,14 +409,14 @@ func ExecuteRsync(task *pool.Task, src, dst string, progressLeft, progressRight 
 			errMsg := parseRsyncError(firstErr, task)
 			task.Log = append(task.Log, "["+time.Now().Format("2006-01-02 15:04:05")+"]"+errMsg)
 			task.FailedReason = errMsg
-			pool.FailTask(task.ID)
+			common.FailTask(task.ID)
 		}
 	}
 
 	return firstErr
 }
 
-func parseRsyncError(err error, task *pool.Task) string {
+func parseRsyncError(err error, task *common.Task) string {
 	errStr := err.Error()
 	task.Logging(errStr)
 	if errStr == "exit status 11" {

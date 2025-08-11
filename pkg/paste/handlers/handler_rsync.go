@@ -2,8 +2,7 @@ package handlers
 
 import (
 	"context"
-	"files/pkg/constant"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/utils"
 	"fmt"
 	"strings"
@@ -28,13 +27,13 @@ func (c *Handler) Rsync() error {
 
 	srcPath := srcUri + src.Path
 
-	if dst.FileType == constant.External {
+	if dst.FileType == utils.External {
 		if err = c.checkDstPathPermission(); err != nil {
 			return err
 		}
 	}
 
-	pathMeta, err := fileutils.GetFileInfo(srcPath)
+	pathMeta, err := files.GetFileInfo(srcPath)
 	if err != nil {
 		klog.Errorf("command - Rsync, get src meta info error: %v", err)
 		return err
@@ -44,14 +43,14 @@ func (c *Handler) Rsync() error {
 
 	klog.Infof("command - Rsync, srcPath: %s, srcMeta: %s", srcPath, utils.ToJson(pathMeta))
 
-	dstFree, dstUsedPercent, err := fileutils.GetSpaceSize(dstUri)
+	dstFree, dstUsedPercent, err := files.GetSpaceSize(dstUri)
 	if err != nil {
 		klog.Errorf("command - Rsync, get dst space size error: %v", err)
 		return err
 	}
 
-	if dstUsedPercent > constant.FreeLimit {
-		return fmt.Errorf("target disk usage has reached %.2f%%. Please clean up disk space first.", constant.FreeLimit)
+	if dstUsedPercent > utils.FreeLimit {
+		return fmt.Errorf("target disk usage has reached %.2f%%. Please clean up disk space first.", utils.FreeLimit)
 	}
 
 	if pathMeta.Size > int64(dstFree) {
@@ -150,12 +149,12 @@ func (c *Handler) move() error {
 	return nil
 }
 
-func (c *Handler) generateNewName(srcFileInfo *fileutils.PathMeta) (string, string, error) {
+func (c *Handler) generateNewName(srcFileInfo *files.PathMeta) (string, string, error) {
 	var dstUri, _ = c.dst.GetResourceUri()
 	var dstPath = dstUri + c.dst.Path
 	var targetPath string
 	var targetName string
-	if !fileutils.FilePathExists(dstPath) {
+	if !files.FilePathExists(dstPath) {
 		return "", "", nil
 	}
 
@@ -181,9 +180,7 @@ func (c *Handler) generateNewName(srcFileInfo *fileutils.PathMeta) (string, stri
 		return "", "", nil
 	}
 
-	klog.Errorf("command - Rsync, dup names: %v", dupNames)
-
-	newPrefixName := fileutils.GenerateDupCommonName(dupNames, targetName)
+	newPrefixName := files.GenerateDupCommonName(dupNames, targetName)
 	var newName string
 	if isDir {
 		newName = newPrefixName
@@ -192,7 +189,7 @@ func (c *Handler) generateNewName(srcFileInfo *fileutils.PathMeta) (string, stri
 	}
 
 	// new dst.Path
-	var newDstPath string = utils.UpdatePathName(c.dst.Path, newName, isDir)
+	var newDstPath string = files.UpdatePathName(c.dst.Path, newName, isDir)
 
 	return newName, newDstPath, nil
 
@@ -205,5 +202,5 @@ func (c *Handler) checkDstPathPermission() error {
 	var pos = strings.LastIndex(tmp, "/")
 	dstPath = tmp[:pos] + "/"
 
-	return fileutils.WriteTempFile(dstPath)
+	return files.WriteTempFile(dstPath)
 }

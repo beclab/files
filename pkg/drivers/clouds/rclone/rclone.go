@@ -2,7 +2,6 @@ package rclone
 
 import (
 	"errors"
-	"files/pkg/constant"
 	"files/pkg/drivers/clouds/rclone/config"
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
@@ -24,9 +23,9 @@ var (
 )
 
 var localConfig = &config.Config{
-	ConfigName: "local",
-	Name:       "local",
-	Type:       "local",
+	ConfigName: utils.Local,
+	Name:       utils.Local,
+	Type:       utils.Local,
 }
 
 var Command *rclone
@@ -134,22 +133,22 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 
 func (r *rclone) FormatFs(param *models.FileParam) (string, error) { // format  dir
 	switch param.FileType {
-	case constant.Drive, constant.Cache, constant.External:
+	case utils.Drive, utils.Cache, utils.External:
 		uri, err := param.GetResourceUri()
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("local:%s", filepath.Join(uri, filepath.Dir(param.Path))), nil
-	case constant.Sync:
+	case utils.Sync:
 		return "", errors.New("sync not support")
-	case constant.AwsS3, constant.TencentCos:
+	case utils.AwsS3, utils.TencentCos:
 		var configName = fmt.Sprintf("%s_%s_%s", param.Owner, param.FileType, param.Extend)
 		config, err := r.config.GetConfig(configName)
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s:%s", configName, filepath.Join(config.Bucket, filepath.Dir(param.Path))), nil
-	case constant.DropBox, constant.GoogleDrive:
+	case utils.DropBox, utils.GoogleDrive:
 		return fmt.Sprintf("%s_%s_%s:%s", param.Owner, param.FileType, param.Extend, filepath.Dir(param.Path)), nil
 	}
 	return "", errors.New("fs invalid")

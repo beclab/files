@@ -3,8 +3,8 @@ package models
 import (
 	"encoding/json"
 	"errors"
-	"files/pkg/constant"
 	"files/pkg/global"
+	"files/pkg/utils"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -52,51 +52,51 @@ func (p *FileParam) convert(url string) (err error) {
 		subPath = subPath + "/" + s[i]
 	}
 
-	if fileType == constant.Drive {
+	if fileType == utils.Drive {
 
 		if extend != "Home" && extend != "Data" {
 			return fmt.Errorf("invalid drive type: %s", extend)
 		}
-		p.FileType = constant.Drive
+		p.FileType = utils.Drive
 		p.Extend = extend
 		p.Path = subPath
 
-	} else if fileType == constant.Cache {
+	} else if fileType == utils.Cache {
 
 		if !global.GlobalNode.CheckNodeExists(extend) {
 			return fmt.Errorf("node %s not found", extend)
 		}
-		p.FileType = constant.Cache
+		p.FileType = utils.Cache
 		p.Extend = extend
 		p.Path = subPath
 
-	} else if fileType == constant.Sync {
+	} else if fileType == utils.Sync {
 
-		p.FileType = constant.Sync
+		p.FileType = utils.Sync
 		p.Extend = extend
 		p.Path = subPath
 
-	} else if fileType == constant.AwsS3 || fileType == constant.DropBox {
+	} else if fileType == utils.AwsS3 || fileType == utils.DropBox {
 
 		p.FileType = fileType
 		p.Extend = extend
 		p.Path = subPath
 
-	} else if fileType == constant.GoogleDrive {
+	} else if fileType == utils.GoogleDrive {
 
-		// if subPath != "/" {
-		// 	subPath = strings.Trim(subPath, "/")
-		// }
-		p.FileType = constant.GoogleDrive
+		if subPath != "/" {
+			subPath = strings.Trim(subPath, "/")
+		}
+		p.FileType = utils.GoogleDrive
 		p.Extend = extend
 		p.Path = subPath
 
-	} else if fileType == constant.External {
+	} else if fileType == utils.External {
 		if !global.GlobalNode.CheckNodeExists(extend) {
 			return fmt.Errorf("node %s not found", extend)
 		}
 
-		p.FileType = constant.External
+		p.FileType = utils.External
 		// don't check file type is exists
 		p.Extend = extend
 		p.Path = subPath
@@ -121,17 +121,17 @@ func (r *FileParam) GetResourceUri() (string, error) {
 		if pvc == "" {
 			return "", errors.New("pvc user not found")
 		}
-		return filepath.Join(constant.ROOT_PREFIX, pvc, r.Extend), nil
+		return filepath.Join(utils.ROOT_PREFIX, pvc, r.Extend), nil
 	} else if r.FileType == "cache" {
 		var pvc = global.GlobalData.GetPvcCache(r.Owner)
 		if pvc == "" {
 			return "", errors.New("pvc cache not found")
 		}
-		return filepath.Join(constant.CACHE_PREFIX, pvc), nil
+		return filepath.Join(utils.CACHE_PREFIX, pvc), nil
 	} else if r.FileType == "external" {
-		return filepath.Join(constant.EXTERNAL_PREFIX), nil
+		return filepath.Join(utils.EXTERNAL_PREFIX), nil
 	} else if r.FileType == "internal" || r.FileType == "smb" || r.FileType == "usb" || r.FileType == "hdd" {
-		return filepath.Join(constant.EXTERNAL_PREFIX), nil
+		return filepath.Join(utils.EXTERNAL_PREFIX), nil
 	} else if r.FileType == "sync" {
 		return filepath.Join("/", r.FileType, r.Extend), nil
 	} else if r.FileType == "google" || r.FileType == "dropbox" || r.FileType == "awss3" {
@@ -150,7 +150,7 @@ func (r *FileParam) GetFileParam(uri string) error {
 		return errors.New("url invalid")
 	}
 
-	if s[0] == constant.AwsS3 || s[0] == constant.DropBox || s[0] == constant.GoogleDrive {
+	if s[0] == utils.AwsS3 || s[0] == utils.DropBox || s[0] == utils.GoogleDrive {
 		r.Owner = ""
 		r.FileType = s[0]
 		r.Extend = s[1]
@@ -159,7 +159,7 @@ func (r *FileParam) GetFileParam(uri string) error {
 
 	}
 
-	if s[0] == constant.Sync {
+	if s[0] == utils.Sync {
 		r.Owner = ""
 		r.FileType = s[0]
 		r.Extend = s[1]
@@ -168,37 +168,37 @@ func (r *FileParam) GetFileParam(uri string) error {
 
 	}
 
-	if strings.HasPrefix(uri, constant.ROOT_PREFIX+"/") {
-		var p = strings.TrimPrefix(uri, constant.ROOT_PREFIX+"/")
+	if strings.HasPrefix(uri, utils.ROOT_PREFIX+"/") {
+		var p = strings.TrimPrefix(uri, utils.ROOT_PREFIX+"/")
 		s = strings.Split(p, "/")
 		pvcUser, err := global.GlobalData.GetPvcUserName(s[0])
 		if err == nil {
 			r.Owner = pvcUser
-			r.FileType = constant.Drive
+			r.FileType = utils.Drive
 			r.Extend = s[1]
 			r.Path = r.joinPath(2, s)
 			return nil
 		}
 	}
 
-	if strings.HasPrefix(uri, constant.CACHE_PREFIX+"/") {
-		var p = strings.TrimPrefix(uri, constant.CACHE_PREFIX+"/")
+	if strings.HasPrefix(uri, utils.CACHE_PREFIX+"/") {
+		var p = strings.TrimPrefix(uri, utils.CACHE_PREFIX+"/")
 		s = strings.Split(p, "/")
 		pvcCache, err := global.GlobalData.GetPvcCacheName(s[0])
 		if err == nil {
 			r.Owner = pvcCache
-			r.FileType = constant.Cache
+			r.FileType = utils.Cache
 			r.Extend = global.CurrentNodeName
 			r.Path = r.joinPath(1, s)
 			return nil
 		}
 	}
 
-	if strings.HasPrefix(uri, constant.EXTERNAL_PREFIX+"/") {
-		var p = strings.TrimPrefix(uri, constant.EXTERNAL_PREFIX+"/")
+	if strings.HasPrefix(uri, utils.EXTERNAL_PREFIX+"/") {
+		var p = strings.TrimPrefix(uri, utils.EXTERNAL_PREFIX+"/")
 		s = strings.Split(p, "/")
 		r.Owner = ""
-		r.FileType = constant.External
+		r.FileType = utils.External
 		r.Extend = global.CurrentNodeName
 		r.Path = r.joinPath(0, s)
 		return nil

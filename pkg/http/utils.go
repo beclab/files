@@ -2,9 +2,9 @@ package http
 
 import (
 	"encoding/json"
-	"files/pkg/constant"
 	"files/pkg/drives"
 	"files/pkg/models"
+	"files/pkg/utils"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -176,7 +176,7 @@ func ParseFormData(r *http.Request, v interface{}) error {
 }
 
 func UrlPrep(r *http.Request, path string) (*models.FileParam, drives.ResourceService, error) {
-	var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
 	if path == "" {
 		path = r.URL.Path
 	}

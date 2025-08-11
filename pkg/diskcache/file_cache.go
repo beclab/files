@@ -5,7 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"io"
 	"os"
 	"path/filepath"
@@ -52,7 +52,7 @@ func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
 	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil {
 		return err
 	}
-	if err := fileutils.Chown(f.fs, filepath.Dir(fileName), 1000, 1000); err != nil {
+	if err := files.Chown(f.fs, filepath.Dir(fileName), 1000, 1000); err != nil {
 		klog.Errorf("can't chown directory %s to user %d: %s", filepath.Dir(fileName), 1000, err)
 		return err
 	}

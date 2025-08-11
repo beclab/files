@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"files/pkg/constant"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
@@ -96,7 +95,7 @@ func (c *Handler) cloudTransfer() error {
 	var opts = &operations.OperationsOpt{}
 
 	// check dst name exsts
-	if c.dst.FileType == constant.Drive || c.dst.FileType == constant.Cache || c.dst.FileType == constant.External {
+	if c.dst.FileType == utils.Drive || c.dst.FileType == utils.Cache || c.dst.FileType == utils.External {
 		listDstUri, err = c.dst.GetResourceUri()
 		if err != nil {
 			return err
@@ -191,16 +190,16 @@ func (c *Handler) cloudTransfer() error {
 	if isFile {
 		copyResp, err = cmd.GetOperation().Copyfile(srcFs, srcRemote, dstFs, dstRemote, &async)
 	} else {
-		if c.dst.FileType == "awss3" { // todo  tencent test
+		if c.dst.FileType == utils.AwsS3 { // todo  tencent test
 			var srcConfigName, srcPrefixPath string
 
 			var srcName, _ = utils.GetFileNameFromPath(c.src.Path)
-			if c.src.FileType == constant.Drive || c.src.FileType == constant.Cache || c.src.FileType == constant.External {
+			if c.src.FileType == utils.Drive || c.src.FileType == utils.Cache || c.src.FileType == utils.External {
 				srcUri, err := c.src.GetResourceUri()
 				if err != nil {
 					return err
 				}
-				srcConfigName = "local"
+				srcConfigName = utils.Local
 				srcPrefixPath = srcUri + utils.GetPrefixPath(c.src.Path)
 			} else {
 				srcConfigName = fmt.Sprintf("%s_%s_%s", c.owner, c.src.FileType, c.src.Extend)
@@ -209,12 +208,12 @@ func (c *Handler) cloudTransfer() error {
 
 			var dstConfigName, dstPrefixPath string
 			var dstName, _ = utils.GetFileNameFromPath(c.dst.Path)
-			if c.dst.FileType == constant.Drive || c.dst.FileType == constant.Cache || c.dst.FileType == constant.External {
+			if c.dst.FileType == utils.Drive || c.dst.FileType == utils.Cache || c.dst.FileType == utils.External {
 				dstUri, err := c.dst.GetResourceUri()
 				if err != nil {
 					return err
 				}
-				dstConfigName = "local"
+				dstConfigName = utils.Local
 				dstPrefixPath = dstUri + utils.GetPrefixPath(c.dst.Path)
 			} else {
 				dstConfigName = fmt.Sprintf("%s_%s_%s", c.owner, c.dst.FileType, c.dst.Extend)

@@ -3,7 +3,7 @@ package models
 import (
 	"encoding/json"
 	"errors"
-	"files/pkg/constant"
+	"files/pkg/utils"
 	"fmt"
 	"net/http"
 )
@@ -24,7 +24,7 @@ type PasteParam struct {
 }
 
 func NewPasteParam(r *http.Request) (*PasteParam, error) {
-	var owner = r.Header.Get(constant.REQUEST_HEADER_OWNER)
+	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
 	if owner == "" {
 		return nil, errors.New("user not found")
 	}

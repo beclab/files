@@ -6,9 +6,7 @@ import (
 	"errors"
 	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/fileutils"
 	"files/pkg/models"
-	"files/pkg/pool"
 	"fmt"
 	"io"
 	"math"
@@ -113,7 +111,7 @@ func GenerateBufferFileName(originalFilePath, bflName string, extRemains bool) (
 		bufferFolderPath = "/data/buffer/" + bflName
 	}
 
-	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
+	if err := files.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
 		klog.Errorln(err)
 		return "", err
 	}
@@ -140,7 +138,7 @@ func GenerateBufferFolder(originalFilePath, bflName string) (string, error) {
 	bufferPathName := fmt.Sprintf("%s_%s", timestampPlus, originalPathName) // as parent folder
 	bufferPathName = common.RemoveSlash(bufferPathName)
 	bufferFolderPath := "/data/buffer/" + bflName + "/" + bufferPathName
-	if err := fileutils.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
+	if err := files.MkdirAllWithChown(nil, bufferFolderPath, 0755); err != nil {
 		klog.Errorln(err)
 		return "", err
 	}
@@ -179,7 +177,7 @@ func MakeDiskBuffer(filePath string, bufferSize int64, delete bool) error {
 	return nil
 }
 
-func RemoveDiskBuffer(task *pool.Task, filePath string, srcType string) {
+func RemoveDiskBuffer(task *common.Task, filePath string, srcType string) {
 	if task != nil {
 		defer task.RemoveBuffer(filePath)
 	}
@@ -327,7 +325,7 @@ func RawDirHandler(w http.ResponseWriter, r *http.Request, d *common.Data, file 
 	}
 	defer ar.Close()
 
-	commonDir := fileutils.CommonPrefix(filepath.Separator, filenames...)
+	commonDir := files.CommonPrefix(filepath.Separator, filenames...)
 
 	name := filepath.Base(commonDir)
 	if name == "." || name == "" || name == string(filepath.Separator) {
@@ -458,7 +456,7 @@ func TaskCancellable(srcType, dstType string, same bool) bool {
 	return true
 }
 
-func TaskLog(task *pool.Task, level string, args ...interface{}) {
+func TaskLog(task *common.Task, level string, args ...interface{}) {
 	switch level {
 	case "info":
 		klog.Infoln(args...)
@@ -488,7 +486,7 @@ func TaskLog(task *pool.Task, level string, args ...interface{}) {
 	}
 }
 
-func CalculateProgressRange(task *pool.Task, currentFileSize int64) (left, mid, right int) {
+func CalculateProgressRange(task *common.Task, currentFileSize int64) (left, mid, right int) {
 	klog.Infof("taskProgress=%d, totalFileSize=%d, currentFileSize=%d, transferred=%d",
 		task.Progress, task.TotalFileSize, currentFileSize, task.Transferred)
 
@@ -573,7 +571,7 @@ func MapProgressByTime(left, right int, size, speed int64, usedTime int) int {
 }
 
 // SimulateProgress simulates the progress over time by calling MapProgress every second.
-func SimulateProgress(ctx context.Context, left, right int, size, speed int64, task *pool.Task) {
+func SimulateProgress(ctx context.Context, left, right int, size, speed int64, task *common.Task) {
 	startTime := time.Now()
 	for {
 		select {

@@ -9,10 +9,8 @@ import (
 	e "errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
-	"files/pkg/errors"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/models"
-	"files/pkg/pool"
 	"files/pkg/utils"
 	"fmt"
 	"io"
@@ -37,7 +35,7 @@ type SyncResourceService struct {
 	BaseResourceService
 }
 
-func (rc *SyncResourceService) DeleteHandler(fileCache fileutils.FileCache) handleFunc {
+func (rc *SyncResourceService) DeleteHandler(fileCache files.FileCache) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		src := strings.TrimPrefix(r.URL.Path, "/"+SrcTypeSync)
 		repoID, prefix, filename := ParseSyncPath(src)
@@ -138,7 +136,7 @@ func (rc *SyncResourceService) PutHandler(fileParam *models.FileParam) handleFun
 	}
 }
 
-func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache, fileParam *models.FileParam) handleFunc {
+func (rc *SyncResourceService) PatchHandler(fileCache files.FileCache, fileParam *models.FileParam) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 		// only for rename
 		action := "rename"
@@ -202,8 +200,8 @@ func (rc *SyncResourceService) PatchHandler(fileCache fileutils.FileCache, fileP
 	}
 }
 
-func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
-	fileCache fileutils.FileCache, w http.ResponseWriter, r *http.Request) error {
+func (rc *SyncResourceService) PasteSame(task *common.Task, action, src, dst string, srcFileParam, dstFileParam *models.FileParam,
+	fileCache files.FileCache, w http.ResponseWriter, r *http.Request) error {
 	klog.Infof("Request headers: %v", r.Header)
 	select {
 	case <-task.Ctx.Done():
@@ -222,15 +220,15 @@ func (rc *SyncResourceService) PasteSame(task *pool.Task, action, src, dst strin
 	if err != nil {
 		TaskLog(task, "info", fmt.Sprintf("%s from %s to %s failed", action, src, dst))
 		TaskLog(task, "error", err.Error())
-		pool.FailTask(task.ID)
+		common.FailTask(task.ID)
 	} else {
 		TaskLog(task, "info", fmt.Sprintf("%s from %s to %s successfully", action, src, dst))
-		pool.CompleteTask(task.ID)
+		common.CompleteTask(task.ID)
 	}
 	return err
 }
 
-func (rs *SyncResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+func (rs *SyncResourceService) PasteDirFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	fileMode os.FileMode, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	select {
@@ -373,7 +371,7 @@ func (rs *SyncResourceService) PasteDirFrom(task *pool.Task, fs afero.Fs, srcFil
 	return nil
 }
 
-func (rs *SyncResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst string,
+func (rs *SyncResourceService) PasteDirTo(task *common.Task, fs afero.Fs, src, dst string,
 	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, fileCount int64, w http.ResponseWriter,
 	r *http.Request, d *common.Data, driveIdCache map[string]string) error {
 	select {
@@ -389,7 +387,7 @@ func (rs *SyncResourceService) PasteDirTo(task *pool.Task, fs afero.Fs, src, dst
 	return nil
 }
 
-func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
+func (rs *SyncResourceService) PasteFileFrom(task *common.Task, fs afero.Fs, srcFileParam *models.FileParam, srcType, src string,
 	dstFileParam *models.FileParam, dstType, dst string, d *common.Data,
 	mode os.FileMode, diskSize int64, fileCount int64, w http.ResponseWriter, r *http.Request, driveIdCache map[string]string) error {
 	select {
@@ -453,7 +451,7 @@ func (rs *SyncResourceService) PasteFileFrom(task *pool.Task, fs afero.Fs, srcFi
 	return nil
 }
 
-func (rs *SyncResourceService) PasteFileTo(task *pool.Task, fs afero.Fs, bufferPath, dst string,
+func (rs *SyncResourceService) PasteFileTo(task *common.Task, fs afero.Fs, bufferPath, dst string,
 	srcFileParam, dstFileParam *models.FileParam, fileMode os.FileMode, left, right int, w http.ResponseWriter,
 	r *http.Request, d *common.Data, diskSize int64) error {
 	select {
@@ -555,7 +553,7 @@ func (rs *SyncResourceService) GetStat(fs afero.Fs, fileParam *models.FileParam,
 	}
 }
 
-func (rs *SyncResourceService) MoveDelete(task *pool.Task, fileCache fileutils.FileCache, fileParam *models.FileParam, d *common.Data,
+func (rs *SyncResourceService) MoveDelete(task *common.Task, fileCache files.FileCache, fileParam *models.FileParam, d *common.Data,
 	w http.ResponseWriter, r *http.Request) error {
 	select {
 	case <-task.Ctx.Done():
@@ -1109,7 +1107,7 @@ func SyncMkdirAll(dst string, mode os.FileMode, isDir bool, r *http.Request) err
 	return nil
 }
 
-func SyncFileToBuffer(task *pool.Task, src, bufferFilePath string, srcFileParam *models.FileParam, r *http.Request, left, right int, diskSize int64) error {
+func SyncFileToBuffer(task *common.Task, src, bufferFilePath string, srcFileParam *models.FileParam, r *http.Request, left, right int, diskSize int64) error {
 	select {
 	case <-task.Ctx.Done():
 		return nil
@@ -1240,7 +1238,7 @@ func generateUniqueIdentifier(relativePath string) string {
 	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
 }
 
-func SyncBufferToFile(task *pool.Task, bufferFilePath, dst string, dstFileParam *models.FileParam, size int64, r *http.Request, left, right int) (int, error) {
+func SyncBufferToFile(task *common.Task, bufferFilePath, dst string, dstFileParam *models.FileParam, size int64, r *http.Request, left, right int) (int, error) {
 	// Step1: deal with URL
 	//dst = strings.Trim(dst, "/")
 	//if !strings.Contains(dst, "/") {
@@ -1750,7 +1748,7 @@ func ResourceSyncPatch(action string, fileParam *models.FileParam, newFilename s
 	return http.StatusOK, respBody, nil
 }
 
-func PasteSyncPatch(task *pool.Task, action string, srcFileParam, dstFileParam *models.FileParam, r *http.Request) error {
+func PasteSyncPatch(task *common.Task, action string, srcFileParam, dstFileParam *models.FileParam, r *http.Request) error {
 	var apiName string
 	switch action {
 	case "copy":
@@ -1758,7 +1756,7 @@ func PasteSyncPatch(task *pool.Task, action string, srcFileParam, dstFileParam *
 	case "move":
 		apiName = "sync-batch-move-item"
 	default:
-		return fmt.Errorf("unsupported action %s: %w", action, errors.ErrInvalidRequestParams)
+		return fmt.Errorf("unsupported action %s: %w", action, common.ErrInvalidRequestParams)
 	}
 
 	// It seems that we can't mkdir althrough when using sync-bacth-copy/move-item, so we must use false for isDir here.

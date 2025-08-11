@@ -1,7 +1,7 @@
 package app
 
 import (
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"fmt"
 	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
@@ -37,7 +37,7 @@ func dbExists(path string) (bool, error) {
 			if err = os.MkdirAll(d, 0700); err != nil {
 				return false, err
 			}
-			if err = fileutils.Chown(nil, d, 1000, 1000); err != nil {
+			if err = files.Chown(nil, d, 1000, 1000); err != nil {
 				klog.Errorf("can't chown directory %s to user %d: %s", d, 1000, err)
 				return false, err
 			}

@@ -2,10 +2,10 @@ package tasks
 
 import (
 	"context"
-	"files/pkg/constant"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/paste/handlers"
+	"files/pkg/utils"
 	"fmt"
 	"sync"
 	"time"
@@ -56,7 +56,7 @@ func (t *taskManager) CreateTask(taskType TaskType, param *models.PasteParam) *T
 		taskType: taskType,
 		id:       t.generateTaskId(),
 		param:    param,
-		state:    constant.Pending,
+		state:    utils.Pending,
 		ctx:      ctx,
 		cancel:   cancel,
 		manager:  t,
@@ -89,8 +89,8 @@ func (t *taskManager) GetTask(taskId string) *TaskInfo {
 
 	var srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
 	var dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
-	var dstFileName = fileutils.GetPathName(dst.Path)
-	var srcFileName = fileutils.GetPathName(src.Path)
+	var dstFileName = files.GetPathName(dst.Path)
+	var srcFileName = files.GetPathName(src.Path)
 
 	var res = &TaskInfo{
 		Id:            task.id,

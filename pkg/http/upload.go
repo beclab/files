@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	e "errors"
 	"files/pkg/common"
-	"files/pkg/constant"
 	"files/pkg/drivers/sync/seahub"
-	"files/pkg/fileutils"
+	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/upload"
+	"files/pkg/utils"
 	"fmt"
 	"net/http"
 	"os"
@@ -75,14 +75,14 @@ func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (
 	}
 
 	if !upload.CheckDirExist(path) {
-		if err := fileutils.MkdirAllWithChown(nil, path, os.ModePerm); err != nil {
+		if err := files.MkdirAllWithChown(nil, path, os.ModePerm); err != nil {
 			klog.Error("err:", err)
 			return http.StatusInternalServerError, err
 		}
 	}
 
 	uploadID := upload.MakeUid(path)
-	uploadLink := fmt.Sprintf("/upload/upload-link/%s/%s", constant.NodeName, uploadID)
+	uploadLink := fmt.Sprintf("/upload/upload-link/%s/%s", utils.NodeName, uploadID)
 
 	w.Write([]byte(uploadLink))
 	return 0, nil
@@ -307,7 +307,7 @@ func uploadChunksHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 
 		dirPath := filepath.Dir(fullPath)
 		if !upload.CheckDirExist(dirPath) {
-			if err := fileutils.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
+			if err := files.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
 				klog.Error("err:", err)
 				return http.StatusInternalServerError, err
 			}

@@ -2,7 +2,6 @@ package cache
 
 import (
 	"errors"
-	"files/pkg/constant"
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/tasks"
@@ -19,19 +18,19 @@ func (s *CacheStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 
 	klog.Infof("Cache - Paste, dst: %s, param: %s", dstType, utils.ToJson(pasteParam))
 
-	if dstType == constant.Drive {
+	if dstType == utils.Drive {
 		return s.copyToDrive()
 
-	} else if dstType == constant.External {
+	} else if dstType == utils.External {
 		return s.copyToExternal()
 
-	} else if dstType == constant.Cache {
+	} else if dstType == utils.Cache {
 		return s.copyToCache()
 
-	} else if dstType == constant.Sync {
+	} else if dstType == utils.Sync {
 		return s.copyToSync()
 
-	} else if dstType == constant.AwsS3 || dstType == constant.TencentCos || dstType == constant.GoogleDrive || dstType == constant.DropBox {
+	} else if dstType == utils.AwsS3 || dstType == utils.TencentCos || dstType == utils.GoogleDrive || dstType == utils.DropBox {
 		return s.copyToCloud()
 
 	}
