@@ -1,6 +1,7 @@
 package seahub
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
@@ -8,13 +9,109 @@ import (
 	"files/pkg/models"
 	"files/pkg/utils"
 	"fmt"
+	"io"
 	"k8s.io/klog/v2"
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 var FILE_SERVER_ROOT = "/seafhttp"
+
+func GenerateUniqueIdentifier(relativePath string) string {
+	h := md5.New()
+	io.WriteString(h, relativePath+time.Now().String())
+	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
+}
+
+func GetUploadLink(header http.Header, fileParam *models.FileParam, reqFrom string, replace bool) (string, error) {
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return "", err
+	}
+	path := uri + fileParam.Path
+	klog.Infof("~~~Debug log: path=%s", path)
+
+	repoId := fileParam.Extend
+	parentDir := fileParam.Path
+	if parentDir == "" {
+		parentDir = "/"
+	}
+
+	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
+	if err != nil {
+		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
+		return "", err
+	}
+	if repo == nil {
+		klog.Errorf("fail to get repo id %s", repoId)
+		return "", errors.New("library not found")
+	}
+
+	dirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	if err != nil {
+		klog.Errorf("fail to get dir id %s, err=%s", parentDir, err)
+		return "", err
+	}
+	if dirID == "" {
+		klog.Errorf("fail to get dir id %s", parentDir)
+		return "", errors.New("folder not found")
+	}
+
+	bflName := header.Get("X-Bfl-User")
+	username := bflName + "@auth.local"
+	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
+	useUsername := username
+
+	permission, err := CheckFolderPermission(username, repoId, parentDir)
+	if err != nil || permission != "rw" {
+		permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
+		if err != nil || permission != "rw" {
+			return "", errors.New("permission denied")
+		} else {
+			useUsername = oldUsername
+		}
+	}
+
+	quota, err := seaserv.GlobalSeafileAPI.CheckQuota(repoId, 0)
+	if err != nil {
+		klog.Errorf("fail to check quota %s, err=%s", repoId, err)
+		return "", err
+	}
+	if quota < 0 {
+		return "", errors.New("quota exceeded") // original status_code=443 in seahub
+	}
+
+	objID, _ := json.Marshal(map[string]string{"parent_dir": parentDir})
+	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, string(objID), "upload", useUsername, false)
+	if err != nil {
+		klog.Errorf("fail to get file server token %s, err=%s", string(objID), err)
+		return "", err
+	}
+	if token == "" {
+		return "", errors.New("internal server error")
+	}
+
+	klog.Infof("~~~Debug log: token=%s", token)
+
+	var url string
+
+	switch reqFrom {
+	case "api":
+		if strings.Contains(permission, "custom") {
+			replace = false
+		}
+		url = genFileUploadURL(token, "upload-api", replace)
+	case "web":
+		url = genFileUploadURL(token, "upload-aj", false)
+	default:
+		return "", errors.New("invalid 'from' parameter")
+	}
+
+	klog.Infof("~~~Debug log: url=%s", url)
+	return url, nil
+}
 
 func HandleUploadLink(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
 	MigrateSeahubUserToRedis(r.Header)
@@ -38,92 +135,14 @@ func HandleUploadLink(w http.ResponseWriter, r *http.Request, d *common.Data) (i
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-	path := uri + fileParam.Path
-	klog.Infof("~~~Debug log: path=%s", path)
-
-	repoId := fileParam.Extend
-	parentDir := fileParam.Path
-	if parentDir == "" {
-		parentDir = "/"
-	}
-
-	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
-	if err != nil {
-		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
-		return http.StatusBadRequest, err
-	}
-	if repo == nil {
-		klog.Errorf("fail to get repo id %s", repoId)
-		return http.StatusNotFound, errors.New("library not found")
-	}
-
-	dirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
-	if err != nil {
-		klog.Errorf("fail to get dir id %s, err=%s", parentDir, err)
-		return http.StatusBadRequest, err
-	}
-	if dirID == "" {
-		klog.Errorf("fail to get dir id %s", parentDir)
-		return http.StatusNotFound, errors.New("folder not found")
-	}
-
-	bflName := r.Header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
-
-	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission != "rw" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-		if err != nil || permission != "rw" {
-			return http.StatusForbidden, errors.New("permission denied")
-		} else {
-			useUsername = oldUsername
-		}
-	}
-
-	quota, err := seaserv.GlobalSeafileAPI.CheckQuota(repoId, 0)
-	if err != nil {
-		klog.Errorf("fail to check quota %s, err=%s", repoId, err)
-		return http.StatusBadRequest, err
-	}
-	if quota < 0 {
-		return http.StatusBadRequest, errors.New("quota exceeded") // original status_code=443 in seahub
-	}
-
-	objID, _ := json.Marshal(map[string]string{"parent_dir": parentDir})
-	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, string(objID), "upload", useUsername, false)
-	if err != nil {
-		klog.Errorf("fail to get file server token %s, err=%s", string(objID), err)
-		return http.StatusBadRequest, err
-	}
-	if token == "" {
-		return http.StatusInternalServerError, errors.New("internal server error")
-	}
-
-	klog.Infof("~~~Debug log: token=%s", token)
 
 	reqFrom := r.URL.Query().Get("from")
-	var url string
+	replace := strings.ToLower(r.URL.Query().Get("replace")) == "true"
 
-	switch reqFrom {
-	case "api":
-		replace := strings.ToLower(r.URL.Query().Get("replace")) == "true"
-		if strings.Contains(permission, "custom") {
-			replace = false
-		}
-		url = genFileUploadURL(token, "upload-api", replace)
-	case "web":
-		url = genFileUploadURL(token, "upload-aj", false)
-	default:
-		return http.StatusBadRequest, errors.New("invalid 'from' parameter")
+	url, err := GetUploadLink(r.Header.Clone(), fileParam, reqFrom, replace)
+	if err != nil {
+		return http.StatusBadRequest, err
 	}
-
-	klog.Infof("~~~Debug log: url=%s", url)
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte(url))

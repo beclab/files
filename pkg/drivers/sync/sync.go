@@ -210,24 +210,13 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 
 	klog.Infof("Sync create, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
 
-	p := strings.Trim(fileParam.Path, "/")
-	parts := strings.Split(p, "/")
-	subFolder := "/"
-
-	for _, part := range parts {
-		subFolder = filepath.Join(subFolder, part)
-		if !strings.HasPrefix(subFolder, "/") {
-			subFolder = "/" + subFolder
-		}
-
-		res, err := seahub.HandleDirOperation(s.service.Request.Header.Clone(), fileParam.Extend, subFolder, "", "mkdir")
-		if err != nil {
-			klog.Errorf("Sync create error: %v, path: %s", err, subFolder)
-			return nil, err
-		}
-
-		klog.Infof("Sync create success, result: %s, path: %s", string(res), subFolder)
+	res, err := seahub.HandleDirOperation(s.service.Request.Header.Clone(), fileParam.Extend, fileParam.Path, "", "mkdir")
+	if err != nil {
+		klog.Errorf("Sync create error: %v, path: %s", err, fileParam.Path)
+		return nil, err
 	}
+
+	klog.Infof("Sync create success, result: %s, path: %s", string(res), fileParam.Path)
 
 	return nil, nil
 }
@@ -264,7 +253,28 @@ func (s *SyncStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, erro
 }
 
 func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	return nil, nil
+	var fileParam = contextArgs.FileParam
+	var owner = fileParam.Owner
+
+	klog.Infof("Sync rename, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
+
+	var respBody []byte
+	var err error
+	header := s.service.Request.Header.Clone()
+	repoID := fileParam.Extend
+	newFilename := contextArgs.QueryParam.Destination
+	action := "rename"
+	if strings.HasSuffix(fileParam.Path, "/") {
+		respBody, err = seahub.HandleDirOperation(header, repoID, fileParam.Path, newFilename, action)
+	} else {
+		respBody, err = seahub.HandleFileOperation(header, repoID, fileParam.Path, newFilename, action)
+	}
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+
+	return respBody, nil
 }
 
 func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData *Files, stopChan <-chan struct{}, dataChan chan<- string) {
