@@ -598,6 +598,7 @@ func GetPathName(p string) string {
 	} else {
 		var pos = strings.LastIndex(p, "/")
 		var tmp = p[pos:]
+		tmp = strings.Trim(tmp, "/")
 		return tmp
 	}
 }

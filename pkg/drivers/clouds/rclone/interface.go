@@ -11,8 +11,7 @@ import (
 type Interface interface {
 	InitServes()
 	StartHttp(configs []*config.Config) error
-	FormatFs(param *models.FileParam) (string, error)
-	FormatRemote(param *models.FileParam) (string, error)
+	GetFsPrefix(param *models.FileParam) (string, error)
 	GenerateS3EmptyDirectories(dstFileType string, srcConfigName, dstConfigName string, srcPath, dstPath, srcName, dstName string) error
 
 	GetConfig() config.Interface

@@ -131,31 +131,26 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 	return nil
 }
 
-func (r *rclone) FormatFs(param *models.FileParam) (string, error) { // format  dir
+// configName:bucket or configName:
+func (r *rclone) GetFsPrefix(param *models.FileParam) (string, error) {
 	switch param.FileType {
 	case utils.Drive, utils.Cache, utils.External:
 		uri, err := param.GetResourceUri()
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("local:%s", filepath.Join(uri, filepath.Dir(param.Path))), nil
-	case utils.Sync:
-		return "", errors.New("sync not support")
+		return fmt.Sprintf("local:%s", uri), nil
 	case utils.AwsS3, utils.TencentCos:
 		var configName = fmt.Sprintf("%s_%s_%s", param.Owner, param.FileType, param.Extend)
 		config, err := r.config.GetConfig(configName)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s:%s", configName, filepath.Join(config.Bucket, filepath.Dir(param.Path))), nil
+		return fmt.Sprintf("%s:%s", configName, config.Bucket), nil
 	case utils.DropBox, utils.GoogleDrive:
-		return fmt.Sprintf("%s_%s_%s:%s", param.Owner, param.FileType, param.Extend, filepath.Dir(param.Path)), nil
+		return fmt.Sprintf("%s_%s_%s:", param.Owner, param.FileType, param.Extend), nil
 	}
 	return "", errors.New("fs invalid")
-}
-
-func (r *rclone) FormatRemote(param *models.FileParam) (string, error) { // format  file
-	return filepath.Base(param.Path), nil
 }
 
 func (r *rclone) restartServe(createConfig *config.Config) error {
@@ -333,14 +328,14 @@ func (r *rclone) GenerateS3EmptyDirectories(dstFileType string, srcConfigName, d
 		dstR = strings.TrimPrefix(dstR, "/")
 		klog.Infof("[rclone] generate mk empty dir >>> dstFs: %s, dstR: %s", dstFs, dstR)
 
-		if dstFileType == utils.AwsS3 {
+		if dstFileType == utils.AwsS3 || dstFileType == utils.TencentCos {
 			_, err := r.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
 			if err != nil {
 				klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)
 				return err
 			}
-		} else if dstFileType == utils.GoogleDrive {
-			if err := r.GetOperation().Mkdir(dstFs, dstR); err != nil {
+		} else { // if dstFileType == utils.DropBox || dstFileType == utils.GoogleDrive
+			if err := r.GetOperation().Mkdir(dstFs, strings.Trim(dstR, "/")); err != nil {
 				klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)
 				return err
 			}

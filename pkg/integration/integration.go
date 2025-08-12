@@ -58,7 +58,7 @@ func IntegrationManager() *integration {
 
 func (i *integration) watch() {
 	go func() {
-		for range time.NewTicker(60 * time.Second).C {
+		for range time.NewTicker(15 * time.Second).C {
 			i.GetIntegrations()
 		}
 	}()
@@ -99,12 +99,15 @@ func (i *integration) GetIntegrations() error {
 		return fmt.Errorf("users not exists")
 	}
 
-	klog.Infof("integration get users: %s", utils.ToJson(users))
+	for _, user := range users {
+		klog.Infof("integration get users: %s", user.Name)
+	}
 
 	var configs []*config.Config
 
 	for _, user := range users {
 		accounts, err := i.getAccounts(user.Name)
+
 		if err != nil {
 			klog.Errorf("get user accounts error: %v, user: %s", err, user.Name)
 			continue
@@ -117,70 +120,100 @@ func (i *integration) GetIntegrations() error {
 		klog.Infof("integration get accounts, user: %s, data: %s", user.Name, utils.ToJson(accounts))
 
 		for _, acc := range accounts {
-			token, err := i.getToken(user.Name, acc.Name, acc.Type)
-			if err != nil {
-				klog.Errorf("get token error: %v, user: %s, name: %s", err, user.Name, acc.Name)
-				continue
-			}
+			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)
 
-			if token == nil || token.RawData == nil {
-				klog.Infof("token not exists, skip, user: %s, name: %s", user.Name, acc.Name)
-				continue
-			}
+			klog.Infof("integration, check token expired, name: %s, accName: %s, flag: %v, err: %v", user.Name, acc.Name, flag, err)
 
-			var newToken bool
-			var getToken = &IntegrationToken{
-				Owner:     user.Name,
-				Name:      token.Name,
-				Type:      token.Type,
-				AccessKey: token.RawData.AccessToken,
-				SecretKey: token.RawData.RefreshToken,
-				Endpoint:  token.RawData.Endpoint,
-				Bucket:    token.RawData.Bucket,
-				ExpiresAt: token.RawData.ExpiresAt,
-				Available: token.RawData.Available,
-				Scope:     token.RawData.Scope,
-				IdToken:   token.RawData.IdToken,
-				ClientId:  token.ClientId, // or ?token.RawData.ClientId,
-			}
+			// if err == nil && !flag {
+			// 	klog.Infof("integration, token not expired, skip, user: %s, account: %s, type: %s", user.Name, acc.Name, acc.Type)
+			// 	continue
+			// }
 
-			userTokens, userExists := i.tokens[user.Name]
-			if !userExists {
-				newToken = true
-				var tokenSets = make(map[string]*IntegrationToken)
-				tokenSets[token.Name] = getToken
-				userTokens = &Integrations{
-					Tokens: tokenSets,
-				}
-				i.tokens[user.Name] = userTokens
-			} else {
-				val, tokenExists := userTokens.Tokens[token.Name]
-				if !tokenExists {
-					newToken = true
-					userTokens.Tokens[token.Name] = getToken
-				} else {
-					if e := reflect.DeepEqual(val, getToken); !e {
-						newToken = true
-						userTokens.Tokens[token.Name] = getToken
-					}
-				}
-			}
-
-			if newToken {
+			if err == nil && !flag {
 				var config = &config.Config{
-					ConfigName:   fmt.Sprintf("%s_%s_%s", user.Name, token.Type, token.Name),
-					Name:         token.Name,
-					Type:         token.Type,
-					AccessToken:  token.RawData.AccessToken,
-					RefreshToken: token.RawData.RefreshToken,
-					Url:          token.RawData.Endpoint,
-					Endpoint:     i.parseEndpoint(token.RawData.Endpoint),
-					Bucket:       i.parseBucket(token.RawData.Endpoint),
-					ClientId:     token.ClientId, // only for dropbox
+					ConfigName:   fmt.Sprintf("%s_%s_%s", user.Name, existsToken.Type, existsToken.Name),
+					Name:         existsToken.Name,
+					Type:         i.parseToRcloneType(existsToken.Type),
+					Provider:     i.parseToRcloneProvider(existsToken.Type),
+					AccessToken:  existsToken.AccessKey,
+					RefreshToken: existsToken.SecretKey,
+					Url:          existsToken.Endpoint,
+					Endpoint:     i.parseEndpoint(existsToken.Endpoint),
+					Bucket:       i.parseBucket(existsToken.Endpoint),
+					ClientId:     existsToken.ClientId, // only for dropbox
+					ExpiresAt:    existsToken.ExpiresAt,
 				}
 
 				configs = append(configs, config)
+			} else {
+				token, err := i.getToken(user.Name, acc.Name, acc.Type)
+				if err != nil {
+					klog.Errorf("get token error: %v, user: %s, name: %s", err, user.Name, acc.Name)
+					continue
+				}
+
+				if token == nil || token.RawData == nil {
+					klog.Infof("token not exists, skip, user: %s, name: %s", user.Name, acc.Name)
+					continue
+				}
+
+				var newToken bool
+				var getToken = &IntegrationToken{
+					Owner:     user.Name,
+					Name:      token.Name,
+					Type:      token.Type,
+					AccessKey: token.RawData.AccessToken,
+					SecretKey: token.RawData.RefreshToken,
+					Endpoint:  token.RawData.Endpoint,
+					Bucket:    token.RawData.Bucket,
+					ExpiresAt: token.RawData.ExpiresAt,
+					Available: token.RawData.Available,
+					Scope:     token.RawData.Scope,
+					IdToken:   token.RawData.IdToken,
+					ClientId:  token.ClientId, // or ?token.RawData.ClientId,
+				}
+
+				userTokens, userExists := i.tokens[user.Name]
+				if !userExists {
+					newToken = true
+					var tokenSets = make(map[string]*IntegrationToken)
+					tokenSets[token.Name] = getToken
+					userTokens = &Integrations{
+						Tokens: tokenSets,
+					}
+					i.tokens[user.Name] = userTokens
+				} else {
+					val, tokenExists := userTokens.Tokens[token.Name]
+					if !tokenExists {
+						newToken = true
+						userTokens.Tokens[token.Name] = getToken
+					} else {
+						if e := reflect.DeepEqual(val, getToken); !e {
+							newToken = true
+							userTokens.Tokens[token.Name] = getToken
+						}
+					}
+				}
+
+				if newToken {
+					var config = &config.Config{
+						ConfigName:   fmt.Sprintf("%s_%s_%s", user.Name, token.Type, token.Name),
+						Name:         token.Name,
+						Type:         i.parseToRcloneType(token.Type),
+						Provider:     i.parseToRcloneProvider(token.Type),
+						AccessToken:  token.RawData.AccessToken,
+						RefreshToken: token.RawData.RefreshToken,
+						Url:          token.RawData.Endpoint,
+						Endpoint:     i.parseEndpoint(token.RawData.Endpoint),
+						Bucket:       i.parseBucket(token.RawData.Endpoint),
+						ClientId:     token.ClientId, // only for dropbox
+						ExpiresAt:    token.RawData.ExpiresAt,
+					}
+
+					configs = append(configs, config)
+				}
 			}
+
 		}
 	}
 
@@ -188,7 +221,7 @@ func (i *integration) GetIntegrations() error {
 		return nil
 	}
 
-	klog.Infof("integration new configs: %s", utils.ToJson(configs))
+	// klog.Infof("integration new configs: %d", len(configs))
 
 	rclone.Command.StartHttp(configs)
 
@@ -235,4 +268,43 @@ func (i *integration) parseBucket(s string) string {
 	}
 
 	return bucket
+}
+
+func (i *integration) parseToRcloneType(s string) string {
+	if s == utils.AwsS3 || s == utils.TencentCos {
+		return utils.RcloneTypeS3
+	} else if s == utils.DropBox {
+		return utils.RcloneTypeDropbox
+	} else if s == utils.GoogleDrive {
+		return utils.RcloneTypeDrive
+	}
+	return utils.RcloneTypeLocal
+}
+
+func (i *integration) parseToRcloneProvider(s string) string {
+	if s == utils.AwsS3 {
+		return utils.ProviderAWS
+	} else if s == utils.TencentCos {
+		return utils.ProviderTencentCOS
+	}
+	return ""
+}
+
+func (i *integration) checkTokenExpired(user string, tokenName string) (bool, *IntegrationToken, error) {
+	v, ok := i.tokens[user]
+	if !ok {
+		return false, nil, fmt.Errorf("user not found")
+	}
+
+	t, ok := v.Tokens[tokenName]
+	if !ok {
+		return false, nil, fmt.Errorf("token not found")
+	}
+
+	if t.ExpiresAt == 0 {
+		return false, t, nil
+	}
+
+	return i.checkExpired(t.ExpiresAt), t, nil
+
 }

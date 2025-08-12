@@ -224,12 +224,10 @@ func (s *service) Rename(owner string, param *models.FileParam, srcName string, 
 		return nil, nil
 	}
 
-	if param.FileType == utils.AwsS3 || param.FileType == utils.TencentCos {
-		var dstPrefixPath = srcPrefixPath
-		if err := s.command.GenerateS3EmptyDirectories(param.FileType, configName, configName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
-			klog.Errorf("[service] rename, generate s3 empty directories error: %v", err)
-			return nil, err
-		}
+	var dstPrefixPath = srcPrefixPath
+	if err := s.command.GenerateS3EmptyDirectories(param.FileType, configName, configName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
+		klog.Errorf("[service] rename, generate s3 empty directories error: %v", err)
+		return nil, err
 	}
 
 	if err := s.renameDirectory(owner, param, srcPrefixPath, srcName, dstName); err != nil {
@@ -310,21 +308,16 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 func (s *service) getFs(configName, configType string, configBucket string, fileParamPath string) string {
 	var fs string
 	var bucket string
-	if configType == "s3" {
+	if configType == utils.RcloneTypeS3 {
 		bucket = configBucket
 		fs = fmt.Sprintf("%s:%s", configName, filepath.Join(bucket, fileParamPath))
-	} else if configType == "dropbox" {
+	} else if configType == utils.RcloneTypeDropbox {
 		if fileParamPath == "/" {
 			fileParamPath = ""
 		}
 		fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
-	} else if configType == "drive" {
+	} else if configType == utils.RcloneTypeDrive {
 		fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
-		// if fileParamPath == "root" {
-		// 	fs = fmt.Sprintf("%s:", configName)
-		// } else {
-		// 	fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
-		// }
 	}
 
 	return fs
