@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"files/pkg/utils"
 )
 
@@ -47,6 +46,7 @@ type Config struct {
 	ConfigName      string `json:"config_name"`
 	Name            string `json:"name"`
 	Type            string `json:"type"`
+	Provider        string `json:"provider"`
 	AccessToken     string `json:"access_token"`
 	SecretAccessKey string `json:"secret_access_key"`
 	RefreshToken    string `json:"refresh_token"`
@@ -63,31 +63,13 @@ type Config struct {
 	ClientId string `json:"client_id"`
 }
 
-// todo need to test
 func (c *Config) Equal(target *Config) bool {
-	if c.Type == utils.AwsS3 || c.Type == utils.TencentCos {
-		if c.Url != target.Url {
-			return false
-		}
-		if c.Endpoint != target.Endpoint {
-			return false
-		}
-		if c.Bucket != target.Bucket {
-			return false
-		}
-		if c.SecretAccessKey != target.SecretAccessKey {
+	if c.Type == utils.RcloneTypeS3 {
+		if c.Url != target.Url || c.Endpoint != target.Endpoint || c.Bucket != target.Bucket || c.SecretAccessKey != target.SecretAccessKey {
 			return false
 		}
 	} else if c.Type == utils.RcloneTypeDropbox || c.Type == utils.RcloneTypeDrive {
-		var ct *DropBoxToken
-		if err := json.Unmarshal([]byte(c.Token), &ct); err != nil {
-			return false
-		}
-
-		if ct.AccessToken != target.AccessToken {
-			return false
-		}
-		if c.RefreshToken != target.RefreshToken {
+		if c.AccessToken != target.AccessToken || c.RefreshToken != target.RefreshToken || c.ExpiresAt != target.ExpiresAt {
 			return false
 		}
 	}
@@ -99,5 +81,5 @@ type DropBoxToken struct {
 	RefreshToken string `json:"refresh_token"`
 	TokenType    string `json:"token_type"`
 	Expiry       string `json:"expiry"`
-	ExpiresIn    int64  `json:"expires_at"`
+	ExpiresAt    int64  `json:"expires_at"`
 }

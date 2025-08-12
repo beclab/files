@@ -52,9 +52,10 @@ func NewHandler(ctx context.Context, param *models.PasteParam) *Handler {
 	}
 }
 
-func (c *Handler) getSize(fs string, remote string, isFile bool) (int64, error) {
+func (c *Handler) getSize(fsPrfix string, srcPath string, srcName string, srcPrefixPath string, isFile bool) (int64, error) {
 	cmd := rclone.Command
-	if remote == "" {
+	if !isFile {
+		var fs = fsPrfix + srcPath
 		resp, err := cmd.GetOperation().Size(fs)
 		if err != nil {
 			return 0, err
@@ -70,7 +71,8 @@ func (c *Handler) getSize(fs string, remote string, isFile bool) (int64, error) 
 		opts.DirsOnly = true
 	}
 
-	resp, err := cmd.GetOperation().Stat(fs, remote, opts)
+	var fs = fsPrfix + srcPrefixPath
+	resp, err := cmd.GetOperation().Stat(fs, srcName, opts)
 	if err != nil {
 		return 0, err
 	}
@@ -83,49 +85,62 @@ func (c *Handler) cloudTransfer() error {
 	// DownloadFromCloud
 	// CopyToCloud
 
-	klog.Infof("cloudTransfer - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
+	klog.Infof("cloudTransfer - start, owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
 
 	var err error
 
 	cmd := rclone.Command
 
 	srcFileOrDirName, isFile := utils.GetFileNameFromPath(c.src.Path)
+	srcPrefix := utils.GetPrefixPath(c.src.Path)
 	dstFileOrDirName, _ := utils.GetFileNameFromPath(c.dst.Path)
+	dstPrefix := utils.GetPrefixPath(c.dst.Path)
 
 	var srcFileExt string
 	if isFile {
 		srcFileExt = filepath.Ext(srcFileOrDirName)
 	}
 
-	var listDstFs, listDstUri string
+	var listDstFs string
 	var listResult *operations.OperationsList
 	var opts = &operations.OperationsOpt{}
 
 	klog.Infof("cloudTransfer - owner: %s, srcName: %s, dstName: %s, isFile: %v", c.owner, srcFileOrDirName, dstFileOrDirName, isFile)
 
-	// check dst name exsts
-	if c.dst.FileType == utils.Drive || c.dst.FileType == utils.Cache || c.dst.FileType == utils.External {
-		listDstUri, err = c.dst.GetResourceUri()
-		if err != nil {
-			return err
-		}
-		listDstFs = "local:" + listDstUri + utils.GetPrefixPath(c.dst.Path)
-	} else {
-		listDstConfigName := fmt.Sprintf("%s_%s_%s", c.owner, c.dst.FileType, c.dst.Extend)
-		dstConfig, err := cmd.GetConfig().GetConfig(listDstConfigName)
-		if err != nil {
-			return err
-		}
-		listDstFs = fmt.Sprintf("%s:%s%s", listDstConfigName, dstConfig.Bucket, utils.GetPrefixPath(c.dst.Path))
+	// get src fs prefix
+
+	srcFsPrefix, err := cmd.GetFsPrefix(c.src) // configName:bucket or configName:
+	if err != nil {
+		return err
 	}
 
+	dstFsPrefix, err := cmd.GetFsPrefix(c.dst) // configName:bucket or configName:
+	if err != nil {
+		return err
+	}
+
+	// check src size
+	size, err := c.getSize(srcFsPrefix, c.src.Path, srcFileOrDirName, srcPrefix, isFile)
+	if err != nil {
+		klog.Errorf("cloudTransfer - get size error: %v, srcFsPrefix: %s, srcPath: %s, srcName: %s, srcPrefix: %s, isFile: %v", err, srcFsPrefix, c.src.Path, srcFileOrDirName, srcPrefix, isFile)
+		return err
+	}
+
+	klog.Errorf("cloudTransfer - get size done! srcFsPrefix: %s, srcPath: %s, srcName: %s, srcPrefix: %s, isFile: %v", srcFsPrefix, c.src.Path, srcFileOrDirName, srcPrefix, isFile)
+
+	c.UpdateTotalSize(size)
+
+	// check dst name exists
 	if isFile {
 		opts.FilesOnly = true
 	} else {
 		opts.DirsOnly = true
 	}
 
+	listDstFs = dstFsPrefix + dstPrefix
+
 	klog.Infof("cloudTransfer - get list, fs: %s", listDstFs)
+
 	listResult, err = cmd.GetOperation().List(listDstFs, opts)
 	if err != nil {
 		klog.Errorf("cloudTransfer - get dst list error: %v", err)
@@ -152,10 +167,11 @@ func (c *Handler) cloudTransfer() error {
 			}
 		}
 
-		var newName string
 		dstPrefixPath := utils.GetPrefixPath(c.dst.Path)
 
 		klog.Infof("cloudTransfer - check name exists, dstPath: %s, dstPrefixPath: %s, dupNames: %v", c.dst.Path, dstPrefixPath, dupNames)
+
+		var newName string
 		if len(dupNames) > 0 {
 			newName = utils.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, srcFileExt), dstFileOrDirName)
 		}
@@ -173,78 +189,69 @@ func (c *Handler) cloudTransfer() error {
 
 	var srcFs, dstFs string
 	var srcRemote, dstRemote string
-	srcFs, err = cmd.FormatFs(c.src)
-	if err != nil {
-		klog.Errorf("cloudTransfer - format src fs error: %v", err)
-		return err
-	}
 
-	dstFs, err = cmd.FormatFs(c.dst)
-	if err != nil {
-		klog.Errorf("cloudTransfer - format dst fs error: %v", err)
-		return err
-	}
-
-	if isFile {
-		srcRemote, err = cmd.FormatRemote(c.src)
-		if err != nil {
-			klog.Errorf("cloudTransfer - format src remote error: %v", err)
-			return err
-		}
-		dstRemote, _ = cmd.FormatRemote(c.dst)
-	}
-
-	// update size
-	size, err := c.getSize(srcFs, srcRemote, isFile)
-	if err != nil {
-		return err
-	}
-	c.UpdateTotalSize(size)
-
-	klog.Infof("cloudTransfer - isfile: %v, srcFs: %s, dstFs: %s, srcRemote: %s, dstRemote: %s", isFile, srcFs, dstFs, srcRemote, dstRemote)
+	// klog.Infof("cloudTransfer - addr, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s, isFile: %v", srcFs, srcRemote, dstFs, dstRemote, isFile)
 
 	var done bool
 	var async = true
 	var copyResp *operations.OperationsCopyFileResp
+
 	if isFile {
+		srcFs = srcFsPrefix + srcPrefix
+		srcRemote = srcFileOrDirName
+		dstFs = dstFsPrefix + dstPrefix
+		dstRemote, _ = utils.GetFileNameFromPath(c.dst.Path) // strings.Trim(newName, "/")
+
+		klog.Infof("cloudTransfer - copyFile, srcFs: %s, dstFs: %s, srcRemote: %s, dstRemote: %s", srcFs, dstFs, srcRemote, dstRemote)
+
+		// srcFs  configName:xxx
 		copyResp, err = cmd.GetOperation().Copyfile(srcFs, srcRemote, dstFs, dstRemote, &async)
 	} else {
-		if c.dst.FileType == utils.AwsS3 || c.dst.FileType == utils.GoogleDrive { // todo  tencent test
-			var srcConfigName, srcPrefixPath string
+		// dir
+		dstName, _ := utils.GetFileNameFromPath(c.dst.Path)
+		srcFs = srcFsPrefix + c.src.Path
+		dstFs = dstFsPrefix + dstPrefix + dstName
 
-			var srcName, _ = utils.GetFileNameFromPath(c.src.Path)
-			if c.src.FileType == utils.Drive || c.src.FileType == utils.Cache || c.src.FileType == utils.External {
-				srcUri, err := c.src.GetResourceUri()
-				if err != nil {
-					return err
-				}
-				srcConfigName = utils.Local
-				srcPrefixPath = srcUri + utils.GetPrefixPath(c.src.Path)
-			} else {
-				srcConfigName = fmt.Sprintf("%s_%s_%s", c.owner, c.src.FileType, c.src.Extend)
-				srcPrefixPath = utils.GetPrefixPath(c.src.Path)
-			}
+		klog.Infof("cloudTransfer - syncCopy, srcFs: %s, dstFs: %s", srcFs, dstFs)
 
-			var dstConfigName, dstPrefixPath string
-			var dstName, _ = utils.GetFileNameFromPath(c.dst.Path)
-			if c.dst.FileType == utils.Drive || c.dst.FileType == utils.Cache || c.dst.FileType == utils.External {
-				dstUri, err := c.dst.GetResourceUri()
-				if err != nil {
-					return err
-				}
-				dstConfigName = utils.Local
-				dstPrefixPath = dstUri + utils.GetPrefixPath(c.dst.Path)
-			} else {
-				dstConfigName = fmt.Sprintf("%s_%s_%s", c.owner, c.dst.FileType, c.dst.Extend)
-				dstPrefixPath = utils.GetPrefixPath(c.dst.Path)
-			}
+		// if c.dst.FileType == utils.AwsS3 || c.dst.FileType == utils.TencentCos || c.dst.FileType == utils.DropBox || c.dst.FileType == utils.GoogleDrive {
+		var srcConfigName, srcPrefixPath string
 
-			klog.Infof("cloudTransfer - generate mk empty dir, srcConfig: %s, dstConfig: %s, srcPath: %s, dstPath: %s, srcName: %s, dstName: %s", srcConfigName, dstConfigName, srcPrefixPath, dstPrefixPath, srcName, dstName)
-
-			if err := cmd.GenerateS3EmptyDirectories(c.dst.FileType, srcConfigName, dstConfigName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
+		var srcName, _ = utils.GetFileNameFromPath(c.src.Path)
+		if c.src.FileType == utils.Drive || c.src.FileType == utils.Cache || c.src.FileType == utils.External {
+			srcUri, err := c.src.GetResourceUri()
+			if err != nil {
 				return err
 			}
+			srcConfigName = utils.Local
+			srcPrefixPath = srcUri + utils.GetPrefixPath(c.src.Path)
+		} else {
+			srcConfigName = fmt.Sprintf("%s_%s_%s", c.owner, c.src.FileType, c.src.Extend)
+			srcPrefixPath = utils.GetPrefixPath(c.src.Path)
 		}
+
+		var dstConfigName, dstPrefixPath string
+		dstName, _ = utils.GetFileNameFromPath(c.dst.Path) // +
+		if c.dst.FileType == utils.Drive || c.dst.FileType == utils.Cache || c.dst.FileType == utils.External {
+			dstUri, err := c.dst.GetResourceUri()
+			if err != nil {
+				return err
+			}
+			dstConfigName = utils.Local
+			dstPrefixPath = dstUri + utils.GetPrefixPath(c.dst.Path)
+		} else {
+			dstConfigName = fmt.Sprintf("%s_%s_%s", c.owner, c.dst.FileType, c.dst.Extend)
+			dstPrefixPath = utils.GetPrefixPath(c.dst.Path)
+		}
+
+		klog.Infof("cloudTransfer - generate mk empty dir, srcConfig: %s, dstConfig: %s, srcPath: %s, dstPath: %s, srcName: %s, dstName: %s", srcConfigName, dstConfigName, srcPrefixPath, dstPrefixPath, srcName, dstName)
+
+		if err := cmd.GenerateS3EmptyDirectories(c.dst.FileType, srcConfigName, dstConfigName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
+			return err
+		}
+		// }
+
+		klog.Infof("cloudTransfer - syncCopy, srcFs: %s, dstFs: %s", srcFs, dstFs)
 
 		copyResp, err = cmd.GetOperation().Copy(srcFs, dstFs, &async)
 	}

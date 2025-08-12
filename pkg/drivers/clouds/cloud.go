@@ -389,7 +389,7 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	klog.Infof("Cloud rename, user: %s, param: %s", owner, utils.ToJson(contextArgs))
 
 	var srcName, isSrcFile = getRenamedSrcName(fileParam.Path) // srcName have no /
-	var dstName = contextArgs.QueryParam.Destination
+	var dstName, _ = url.PathUnescape(contextArgs.QueryParam.Destination)
 	var srcPrefixPath = getRenamedSrcPrefixPath(fileParam.Path)
 
 	if srcName == dstName {

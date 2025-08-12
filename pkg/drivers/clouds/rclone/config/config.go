@@ -49,22 +49,21 @@ func (c *config) SetConfigs(configs map[string]*Config) {
 }
 
 func (c *config) Create(param *Config) error {
-	var ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+	var ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, CreateConfigPath)
-	var t = c.parseType(param.Type)
 	var data = &CreateConfig{
 		Name:       param.ConfigName,
-		Type:       c.parseType(param.Type),
+		Type:       param.Type,
 		Parameters: c.parseCreateConfigParameters(param),
 	}
 
-	klog.Infof("[rclone] create config: %s, param: %s", t, commonutils.ToJson(data))
+	klog.Infof("[rclone] create config: %s, param: %s", param.Type, commonutils.ToJson(data))
 	_, err := utils.Request(ctx, url, http.MethodPost, nil, []byte(commonutils.ToJson(data)))
 	if err != nil {
 		klog.Warningf("[rclone] create config, result: %s", err.Error())
 	}
-	param.Type = c.parseType(param.Type)
+
 	c.configs[param.ConfigName] = param
 
 	klog.Infof("[rclone] create config success, configName: %s", param.ConfigName)
@@ -111,10 +110,22 @@ func (c *config) Dump() (map[string]*Config, error) {
 	if configs != nil && len(configs) > 0 {
 		for k, v := range configs {
 			v.ConfigName = k
+
+			if v.Type == commonutils.RcloneTypeDropbox || v.Type == commonutils.RcloneTypeDrive {
+				token, err := c.formatToken(v)
+				if err != nil {
+					klog.Errorf("[rclone] dump config, format token error: %v, configName: %s", err, k)
+					continue
+				}
+
+				v.AccessToken = token.AccessToken
+				v.RefreshToken = token.RefreshToken
+				v.ExpiresAt = token.ExpiresAt
+			}
 		}
 	}
 
-	klog.Infof("[rclone] config dump: %s", commonutils.ToJson(configs))
+	klog.Infof("[rclone] config dump: %d", len(configs))
 
 	return configs, nil
 }
@@ -150,45 +161,21 @@ func (c *config) GetFsPath(configName string) (string, error) {
 		return "", fmt.Errorf("config not found, configName: %s", configName)
 	}
 
-	if val.Type == commonutils.AwsS3 || val.Type == commonutils.TencentCos {
+	if val.Type == commonutils.RcloneTypeS3 {
 		return val.Bucket, nil
-	} else if val.Type == commonutils.DropBox || val.Type == commonutils.GoogleDrive {
+	} else if val.Type == commonutils.RcloneTypeDropbox || val.Type == commonutils.RcloneTypeDrive {
+		return "", nil
+	} else if val.Type == commonutils.RcloneTypeLocal {
 		return "", nil
 	}
 
 	return "", fmt.Errorf("config fspath not found, configName: %s", configName)
 }
 
-func (c *config) parseType(s string) string {
-	switch s {
-	case commonutils.AwsS3, commonutils.TencentCos:
-		return commonutils.RcloneTypeS3
-	case commonutils.DropBox:
-		return commonutils.RcloneTypeDropbox
-	case commonutils.GoogleDrive:
-		return commonutils.RcloneTypeDrive
-	case commonutils.Local:
-		return commonutils.RcloneTypeLocal
-	default:
-		return ""
-	}
-}
-
-func (c *config) parseProvider(s string) string {
-	switch s {
-	case commonutils.AwsS3:
-		return commonutils.ProviderAWS
-	case commonutils.TencentCos:
-		return commonutils.ProviderTencentCOS
-	default:
-		return ""
-	}
-}
-
 func (c *config) parseCreateConfigParameters(param *Config) *ConfigParameters {
-	if param.Type == commonutils.AwsS3 {
+	if param.Type == commonutils.RcloneTypeS3 {
 		return c.parseS3Params(param)
-	} else if param.Type == commonutils.DropBox || param.Type == commonutils.GoogleDrive {
+	} else if param.Type == commonutils.RcloneTypeDropbox || param.Type == commonutils.RcloneTypeDrive {
 		return c.parseDropboxParams(param)
 	}
 
@@ -203,13 +190,13 @@ func (c *config) parseGoogleDrive(param *Config) *ConfigParameters {
 }
 
 func (c *config) parseDropboxParams(param *Config) *ConfigParameters {
-
+	var eat = time.UnixMilli(param.ExpiresAt)
 	var dropboxToken = &DropBoxToken{
 		AccessToken:  param.AccessToken,
 		RefreshToken: param.RefreshToken,
-		TokenType:    "Bearer",
-		Expiry:       "0001-01-01T00:00:00Z", //commonutils.ParseUnixMilli(param.ExpiresAt).String(),
-		ExpiresIn:    param.ExpiresIn,
+		TokenType:    "bearer",
+		Expiry:       eat.Format(time.RFC3339Nano),
+		ExpiresAt:    param.ExpiresAt,
 	}
 
 	return &ConfigParameters{
@@ -223,11 +210,20 @@ func (c *config) parseS3Params(param *Config) *ConfigParameters {
 	return &ConfigParameters{
 		ConfigName:      param.ConfigName,
 		Name:            param.Name,
-		Provider:        c.parseProvider(param.Type),
+		Provider:        param.Provider,
 		AccessKeyId:     param.Name,
 		SecretAccessKey: param.AccessToken,
 		Url:             param.Url,
 		Endpoint:        param.Endpoint,
 		Bucket:          param.Bucket,
 	}
+}
+
+func (c *config) formatToken(config *Config) (*DropBoxToken, error) {
+	var t *DropBoxToken
+	if err := json.Unmarshal([]byte(config.Token), &t); err != nil {
+		return nil, err
+	}
+
+	return t, nil
 }

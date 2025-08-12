@@ -290,7 +290,7 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, utils.ToJson(contextArgs))
 
-	var srcName, isSrcFile = getRenamedSrcName(fileParam.Path)
+	var srcName, isSrcFile = utils.GetFileNameFromPath(fileParam.Path)
 	srcName, err = url.PathUnescape(srcName)
 	if err != nil {
 		return nil, err
@@ -319,7 +319,7 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	var afs = afero.NewOsFs()
-	var srcPrefixPath = gerRenamedSrcPrefixPath(fileParam.Path)
+	var srcPrefixPath = utils.GetPrefixPath(fileParam.Path)
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:       afero.NewBasePathFs(afs, uri),
 		FsType:   fileParam.FileType,
