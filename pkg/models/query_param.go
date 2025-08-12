@@ -20,6 +20,7 @@ type QueryParam struct {
 	RepoName                string          `json:"repoName,omitempty"`
 	RepoId                  string          `json:"repoId,omitempty"`
 	Destination             string          `json:"destination,omitempty"`
+	ShareType               string          `json:"shareType,omitempty"`
 }
 
 func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {
@@ -42,6 +43,7 @@ func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resi
 		RepoName:                strings.TrimSpace(r.URL.Query().Get("repoName")),
 		RepoId:                  strings.TrimSpace(r.URL.Query().Get("repoId")),
 		Destination:             strings.TrimSpace(r.URL.Query().Get("destination")),
+		ShareType:               strings.TrimSpace(r.URL.Query().Get("type")), // "mine", "shared", "share_to_me"
 	}
 }
 

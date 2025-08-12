@@ -45,9 +45,6 @@ func (c *Handler) DownloadFromSync() error {
 		return err
 	}
 	klog.Infof("~~~Copy Debug log: DownloadFromSync - GetFromSyncFileCount - totalSize: %d", totalSize)
-	if totalSize == 0 {
-		return errors.New("DownloadFromSync - GetFromSyncFileCount - empty total size")
-	}
 	c.UpdateTotalSize(totalSize)
 
 	_, isFile := c.src.IsFile()
@@ -195,12 +192,6 @@ func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileP
 		dst = c.dst
 	}
 
-	srcUri, err := src.GetResourceUri()
-	if err != nil {
-		return err
-	}
-	srcFullPath := srcUri + src.Path
-
 	dstUri, err := dst.GetResourceUri()
 	if err != nil {
 		return err
@@ -225,7 +216,7 @@ func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileP
 		return err
 	}
 
-	var fdstBase string = dstFullPath
+	var fdstBase string = strings.TrimPrefix(dstFullPath, dstUri)
 
 	direntInterfaceList, ok := dirInfo["dirent_list"].([]interface{})
 	if !ok {
@@ -250,22 +241,22 @@ func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileP
 		default:
 		}
 
-		fsrc := filepath.Join(srcFullPath, item["name"].(string))
+		fsrc := filepath.Join(src.Path, item["name"].(string))
 		fdst := filepath.Join(fdstBase, item["name"].(string))
 
-		klog.Infof("~~~Debug log: srcUri=%s, fsrc=%s", srcUri, fsrc)
+		klog.Infof("~~~Debug log: fsrc=%s", fsrc)
 		fsrcFileParam := &models.FileParam{
 			Owner:    src.Owner,
 			FileType: src.FileType,
 			Extend:   src.Extend,
-			Path:     fsrc, //strings.TrimPrefix("/sync"+fsrc, strings.TrimPrefix(srcUri, "/data")),
+			Path:     fsrc,
 		}
-		klog.Infof("~~~Debug log: dstUri=%s, fdst=%s", dstUri, fdst)
+		klog.Infof("~~~Debug log: fdst=%s", fdst)
 		fdstFileParam := &models.FileParam{
 			Owner:    dst.Owner,
 			FileType: dst.FileType,
 			Extend:   dst.Extend,
-			Path:     fdst, //strings.TrimPrefix(fdst, strings.TrimPrefix(dstUri, "/data")),
+			Path:     fdst,
 		}
 
 		if item["type"].(string) == "dir" {
@@ -294,9 +285,9 @@ func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool) st
 	base := strings.TrimSuffix(name, ext)
 	renamed := ""
 	bubble := ""
-	//if fileParam.FileType == "sync" {
-	//	bubble = " "
-	//}
+	if fileParam.FileType == "sync" {
+		bubble = " "
+	}
 
 	var err error
 	uri, err := fileParam.GetResourceUri()
@@ -305,8 +296,26 @@ func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool) st
 	}
 
 	for {
-		if _, err = os.Stat(source); err != nil {
-			break
+		if fileParam.FileType == "sync" {
+			var header = http.Header{
+				utils.REQUEST_HEADER_OWNER: []string{fileParam.Owner},
+			}
+			if isDir {
+				dirInfoRes, err := seahub.HandleGetRepoDir(header, fileParam)
+				if err != nil || dirInfoRes == nil {
+					break
+				}
+			} else {
+				fileInfo := seahub.GetFileInfo(fileParam.Extend, fileParam.Path)
+				if fileInfo == nil {
+					break
+				}
+			}
+
+		} else {
+			if _, err = os.Stat(source); err != nil {
+				break
+			}
 		}
 		if !isDir {
 			renamed = fmt.Sprintf("%s%s(%d)%s", base, bubble, counter, ext)
@@ -393,6 +402,10 @@ func (c *Handler) DownloadFileFromSync(header http.Header, src, dst *models.File
 
 	dstFullPath = AddVersionSuffix(dstFullPath, dst, false)
 	klog.Infof("~~~Debug log: dstFullPath after addversionsuffix=%s", dstFullPath)
+
+	if err := os.MkdirAll(filepath.Dir(dstFullPath), 0755); err != nil {
+		return fmt.Errorf("failed to create parent directories: %v", err)
+	}
 
 	dstFile, err := os.OpenFile(dstFullPath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
 	if err != nil {
