@@ -31,7 +31,6 @@ import (
 
 	"files/pkg/diskcache"
 
-	"github.com/alitto/pond/v2"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -178,9 +177,6 @@ user created with the credentials from options "username" and "password".`,
 		defer cancel()
 		rpc.InitRpcService(ctx)
 		drives.GetMountedData(ctx)
-
-		common.WorkerPool = pond.NewPool(1)
-		defer common.WorkerPool.Stop()
 
 		// step6: run http server
 		server := getRunParams(cmd.Flags())

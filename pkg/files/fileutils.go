@@ -512,36 +512,6 @@ func GetFileInfo(filePath string) (*PathMeta, error) {
 	return meta, nil
 }
 
-func CollectDupNames(p string, prefixName string, ext string, isDir bool) ([]string, error) {
-	// p = strings.Split(p,"/")[:len(x)-2]
-	var result []string
-	var afs = afero.NewOsFs()
-	entries, err := afero.ReadDir(afs, p)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() != isDir {
-			continue
-		}
-
-		infoName := entry.Name()
-		if isDir {
-			if strings.Contains(infoName, prefixName) {
-				result = append(result, infoName)
-			}
-		} else {
-			infoName = strings.TrimSuffix(infoName, ext)
-			if strings.Contains(infoName, prefixName) {
-				result = append(result, infoName)
-			}
-		}
-	}
-
-	return result, nil
-}
-
 func GenerateDupCommonName(existsName []string, prefixName string) string {
 	var filePrefixName = prefixName
 
