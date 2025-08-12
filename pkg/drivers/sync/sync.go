@@ -10,6 +10,7 @@ import (
 	"files/pkg/utils"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -262,7 +263,11 @@ func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error
 	var err error
 	header := s.service.Request.Header.Clone()
 	repoID := fileParam.Extend
-	newFilename := contextArgs.QueryParam.Destination
+	newFilename, err := url.QueryUnescape(contextArgs.QueryParam.Destination)
+	if err != nil {
+		klog.Errorf("Sync rename error: %v, path: %s", err, contextArgs.QueryParam.Destination)
+		return nil, err
+	}
 	action := "rename"
 	if strings.HasSuffix(fileParam.Path, "/") {
 		respBody, err = seahub.HandleDirOperation(header, repoID, fileParam.Path, newFilename, action)

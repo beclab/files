@@ -41,9 +41,6 @@ func (c *Handler) UploadToSync() error {
 		return err
 	}
 	klog.Infof("~~~Copy Debug log: UploadToSync - GetFromSyncFileCount - totalSize: %d", totalSize)
-	if totalSize == 0 {
-		return errors.New("DownloadFromSync - GetFromSyncFileCount - empty total size")
-	}
 	c.UpdateTotalSize(totalSize)
 
 	_, isFile := c.src.IsFile()
@@ -58,12 +55,19 @@ func (c *Handler) UploadToSync() error {
 			return err
 		}
 	}
-	//if c.action == "move" {
-	//	err = (header, c.src)
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
+	if c.action == "move" {
+		srcUri := ""
+		srcUri, err = c.src.GetResourceUri()
+		if err != nil {
+			return err
+		}
+		srcFullPath := srcUri + c.src.Path
+		err = os.RemoveAll(srcFullPath)
+		if err != nil {
+			klog.Errorf("~~~Copy Debug Log: UploadToSync - RemoveAll - %v", err)
+			return err
+		}
+	}
 	_, _, transferred, _ := c.GetProgress()
 	c.UpdateProgress(100, transferred)
 	return nil
@@ -140,14 +144,17 @@ func (c *Handler) UploadDirToSync(header http.Header, src, dst *models.FileParam
 	}
 	dstFullPath := dstUri + dst.Path
 
-	res, err := seahub.HandleDirOperation(header, dst.Extend, dst.Path, "", "mkdir")
+	dstFullPath = AddVersionSuffix(dstFullPath, dst, true)
+	klog.Infof("~~~Debug log: dstFullPath after addversionsuffix=%s", dstFullPath)
+
+	var fdstBase string = strings.TrimPrefix(dstFullPath, dstUri)
+
+	res, err := seahub.HandleDirOperation(header, dst.Extend, fdstBase, "", "mkdir")
 	if err != nil {
 		klog.Errorf("Sync create error: %v, path: %s", err, dst.Path)
 		return err
 	}
 	klog.Infof("Sync create success, result: %s, path: %s", string(res), dst.Path)
-
-	var fdstBase string = dstFullPath
 
 	dir, _ := os.Open(srcFullPath)
 	obs, err := dir.Readdir(-1)
@@ -164,7 +171,7 @@ func (c *Handler) UploadDirToSync(header http.Header, src, dst *models.FileParam
 		default:
 		}
 
-		fsrc := filepath.Join(srcFullPath, obj.Name())
+		fsrc := filepath.Join(src.Path, obj.Name())
 		fdst := filepath.Join(fdstBase, obj.Name())
 
 		fsrcFileParam := &models.FileParam{
@@ -234,7 +241,6 @@ func (c *Handler) UploadFileToSync(header http.Header, src, dst *models.FilePara
 
 	left, _, right := c.CalculateSyncProgressRange(diskSize)
 
-	//repoId := dst.Extend
 	prefix, filename := filepath.Split(dst.Path)
 	prefix = strings.TrimPrefix(prefix, "/")
 

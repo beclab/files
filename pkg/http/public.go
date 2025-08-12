@@ -57,6 +57,10 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
  * get repos
  */
 func reposGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+	if contextQueryArgs.ShareType == "shared" || contextQueryArgs.ShareType == "share_to_me" {
+		return nil, nil
+	}
+
 	var owner = contextQueryArgs.Owner
 
 	var header = &http.Header{

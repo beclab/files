@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/models"
 	"files/pkg/utils"
@@ -29,9 +28,6 @@ func (c *Handler) SyncCopy() error {
 		return err
 	}
 	klog.Infof("~~~Copy Debug log: DownloadFromSync - GetFromSyncFileCount - totalSize: %d", totalSize)
-	if totalSize == 0 {
-		return errors.New("DownloadFromSync - GetFromSyncFileCount - empty total size")
-	}
 	c.UpdateTotalSize(totalSize)
 
 	err = c.DoSyncCopy(header, nil, nil)
