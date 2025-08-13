@@ -212,7 +212,7 @@ func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileP
 	klog.Infof("~~~Debug log: dstFullPath after addversionsuffix=%s", dstFullPath)
 
 	mode := seahub.SyncPermToMode(dirInfo["user_perm"].(string))
-	if err = files.MkdirAllWithChown(files.DefaultFs, dstFullPath, mode); err != nil {
+	if err = files.MkdirAllWithChown(nil, dstFullPath, mode); err != nil {
 		klog.Errorln(err)
 		return err
 	}
@@ -404,7 +404,8 @@ func (c *Handler) DownloadFileFromSync(header http.Header, src, dst *models.File
 	dstFullPath = AddVersionSuffix(dstFullPath, dst, false)
 	klog.Infof("~~~Debug log: dstFullPath after addversionsuffix=%s", dstFullPath)
 
-	if err := os.MkdirAll(filepath.Dir(dstFullPath), 0755); err != nil {
+	if err = files.MkdirAllWithChown(nil, filepath.Dir(dstFullPath), 0755); err != nil {
+		klog.Errorln(err)
 		return fmt.Errorf("failed to create parent directories: %v", err)
 	}
 

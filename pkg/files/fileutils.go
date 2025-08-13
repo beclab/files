@@ -83,6 +83,11 @@ func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error
 	klog.Infoln("***tempFilePath:", tempFilePath)
 	klog.Infoln("***tempFileName:", tempFileName)
 
+	if err = MkdirAllWithChown(nil, dir, 0755); err != nil {
+		klog.Errorln(err)
+		return err
+	}
+
 	targetFile, err := os.OpenFile(tempFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return err
