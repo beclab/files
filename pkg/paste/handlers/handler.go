@@ -80,6 +80,22 @@ func (c *Handler) getSize(fsPrfix string, srcPath string, srcName string, srcPre
 	return resp.Item.Size, nil
 }
 
+func (c *Handler) cloudPaste() error {
+	var action = c.action
+
+	var err = c.cloudTransfer()
+
+	if err == nil {
+		if action == "copy" {
+			return nil
+		}
+
+		return c.clearTarget(true)
+	}
+
+	return c.clearTarget(false)
+}
+
 func (c *Handler) cloudTransfer() error {
 	// UploadToCloud
 	// DownloadFromCloud
@@ -323,4 +339,81 @@ func (c *Handler) cloudTransfer() error {
 			return c.ctx.Err()
 		}
 	}
+}
+
+// copy done
+func (c *Handler) clearTarget(isSrc bool) error {
+	var err error
+	var cmd = rclone.Command
+	var owner = c.owner
+	var configName string
+	var isSrcLocal bool
+	var target *models.FileParam
+
+	if isSrc {
+		target = c.src
+	} else {
+		target = c.dst
+	}
+
+	srcFileOrDirName, isFile := utils.GetFileNameFromPath(target.Path)
+	srcPrefixPath := utils.GetPrefixPath(target.Path)
+
+	if target.FileType == utils.Drive || target.FileType == utils.Cache || target.FileType == utils.External {
+		isSrcLocal = true
+	}
+
+	if isSrcLocal {
+		configName = utils.Local
+	} else {
+		configName = fmt.Sprintf("%s_%s_%s", c.owner, target.FileType, target.Extend)
+	}
+
+	config, err := cmd.GetConfig().GetConfig(configName)
+	if err != nil {
+		return err
+	}
+
+	var srcFsPrefix string
+	if isSrcLocal {
+		srcUri, err := target.GetResourceUri()
+		if err != nil {
+			return err
+		}
+		srcFsPrefix = fmt.Sprintf("%s:%s", configName, srcUri)
+	} else {
+		srcFsPrefix = fmt.Sprintf("%s:%s", configName, config.Bucket)
+	}
+
+	if isFile {
+		var fs, remote string
+		fs = srcFsPrefix + srcPrefixPath
+		remote = srcFileOrDirName
+
+		if err = cmd.GetOperation().Deletefile(fs, remote); err != nil {
+			klog.Errorf("cloudTransfer - clear file error: %v, isSrc: %v, user: %s, fs: %s, remote: %s", err, isSrc, owner, fs, remote)
+			return err
+		}
+
+		cmd.GetOperation().FsCacheClear()
+
+		klog.Infof("cloudTransfer - clear file done! isSrc: %v, user: %s, fs: %s, remote: %s", isSrc, owner, fs, remote)
+
+		return nil
+	}
+
+	// purge
+	var fs = srcFsPrefix + srcPrefixPath
+	var remote = srcFileOrDirName
+
+	if err = cmd.GetOperation().Purge(fs, remote); err != nil {
+		klog.Errorf("cloudTransfer - clear directory error: %v, isSrc: %v, user: %s, fs: %s, remote: %s", err, isSrc, owner, fs, remote)
+		return err
+	}
+
+	cmd.GetOperation().FsCacheClear()
+
+	klog.Infof("cloudTransfer - clear directory done! isSrc: %v, user: %s, fs: %s, remote: %s", isSrc, owner, fs, remote)
+
+	return nil
 }

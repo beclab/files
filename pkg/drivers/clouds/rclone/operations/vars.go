@@ -10,12 +10,15 @@ var (
 	DeletePath     = "operations/delete"
 	DeletedirPath  = "operations/rmdir"
 	DeletedirsPath = "operations/rmdirs"
+	CleanupPath    = "operations/cleanup"
 	PurgePath      = "operations/purge"
 	StatPath       = "operations/stat"
 	SizePath       = "operations/size"
 
 	SyncCopyPath = "sync/copy"
 	SyncMovePath = "sync/move"
+
+	FsCacheClearPath = "fscache/clear"
 )
 
 type OperationsStat struct {

@@ -376,6 +376,10 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 		klog.Infof("Cloud delete, delete success, user: %s, file: %s", user, dpd)
 	}
 
+	if err := s.service.command.GetOperation().FsCacheClear(); err != nil {
+		klog.Errorf("Cloud delete, fscache clear error: %v", err)
+	}
+
 	if len(deleteFailedPaths) > 0 {
 		return utils.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
 	}
@@ -436,6 +440,10 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	resp, err := s.service.Rename(owner, contextArgs.FileParam, srcName, srcPrefixPath, dstName, isSrcFile)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := s.service.command.GetOperation().FsCacheClear(); err != nil {
+		klog.Errorf("Cloud rename, fscache clear error: %v", err)
 	}
 
 	klog.Infof("Cloud rename, user: %s, resp: %s", owner, string(resp))

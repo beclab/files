@@ -253,7 +253,6 @@ func (s *service) QueryJob(jobId int) (*job.JobStatusResp, error) {
 }
 
 func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, error) {
-	klog.Infof("[service] list, param: %s", utils.ToJson(fileParam))
 	var configName = fmt.Sprintf("%s_%s_%s", fileParam.Owner, fileParam.FileType, fileParam.Extend)
 	var config, err = s.command.GetConfig().GetConfig(configName)
 	if err != nil {
@@ -265,6 +264,9 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 	var opts = &operations.OperationsOpt{
 		Metadata: true,
 	}
+
+	klog.Infof("[service] list, configBucket: %s, fs: %s, param: %s", config.Bucket, fs, utils.ToJson(fileParam))
+
 	data, err := s.command.GetOperation().List(fs, opts)
 	if err != nil {
 		return nil, err
@@ -310,7 +312,10 @@ func (s *service) getFs(configName, configType string, configBucket string, file
 	var bucket string
 	if configType == utils.RcloneTypeS3 {
 		bucket = configBucket
-		fs = fmt.Sprintf("%s:%s", configName, filepath.Join(bucket, fileParamPath))
+		if !strings.HasPrefix(fileParamPath, "/") {
+			fileParamPath = "/" + fileParamPath
+		}
+		fs = fmt.Sprintf("%s:%s%s", configName, bucket, fileParamPath)
 	} else if configType == utils.RcloneTypeDropbox {
 		if fileParamPath == "/" {
 			fileParamPath = ""
