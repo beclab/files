@@ -81,24 +81,6 @@ type FileOptions struct {
 var TerminusdHost = os.Getenv("TERMINUSD_HOST")
 var ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
 
-func CheckPath(s, prefix, except string) bool {
-	if prefix == "" || except == "" {
-		return false
-	}
-
-	if !strings.HasPrefix(s, prefix) {
-		return false
-	}
-
-	remaining := s[len(prefix):]
-
-	if strings.HasSuffix(remaining, except) {
-		remaining = remaining[:len(remaining)-len(except)]
-	}
-
-	return !strings.Contains(remaining, except)
-}
-
 type Response struct {
 	Code    int        `json:"code"`
 	Data    []DiskInfo `json:"data"`
@@ -155,65 +137,6 @@ func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
 		return nil, fmt.Errorf("error code received: %d", response.Code)
 	}
 	return response.Data, nil
-}
-
-func GetExternalType(filePath string, mountedData []DiskInfo) string {
-	if !strings.HasPrefix(filePath, ExternalPrefix) {
-		return ""
-	}
-
-	if mountedData == nil || len(mountedData) == 0 {
-		return "others"
-	}
-
-	fileName := strings.TrimPrefix(strings.TrimSuffix(filePath, "/"), ExternalPrefix)
-
-	firstSlashIndex := strings.Index(fileName, "/")
-	if firstSlashIndex != -1 {
-		fileName = fileName[:firstSlashIndex]
-	}
-
-	for _, mounted := range mountedData {
-		if mounted.Path == fileName {
-			return mounted.Type
-		}
-	}
-
-	return "others"
-}
-
-func GetExternalExtraInfos(file *FileInfo, mountedData []DiskInfo, depth int) {
-	var fileName string
-
-	if depth == 1 {
-		// only for external/XXX (depth=1)
-		fileName = strings.TrimPrefix(strings.TrimSuffix(file.Path, "/"), "/")
-		lastSlashIndex := strings.LastIndex(fileName, "/")
-		if lastSlashIndex != -1 {
-			fileName = fileName[lastSlashIndex+1:]
-		}
-	} else {
-		// for all below external (depth=0 or other non-1 number)
-		fileName = strings.TrimPrefix(strings.TrimSuffix(file.Path, "/"), ExternalPrefix)
-
-		firstSlashIndex := strings.Index(fileName, "/")
-		if firstSlashIndex != -1 {
-			fileName = fileName[:firstSlashIndex]
-		}
-	}
-
-	for _, mounted := range mountedData {
-		if mounted.Path == fileName {
-			file.ExternalType = mounted.Type
-			if mounted.ReadOnly != nil {
-				file.ReadOnly = mounted.ReadOnly
-			}
-			return
-		}
-	}
-
-	file.ExternalType = "others"
-	return
 }
 
 func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
@@ -352,29 +275,6 @@ func NewFileInfo(opts FileOptions) (*FileInfo, error) {
 	if opts.Expand {
 		if file.IsDir {
 			if err := file.readListing(opts.ReadHeader); err != nil {
-				return nil, err
-			}
-			return file, nil
-		}
-
-		err = file.detectType(opts.Modify, opts.Content, true)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return file, err
-}
-
-func NewFileInfoWithDiskInfo(opts FileOptions, mountedData []DiskInfo) (*FileInfo, error) {
-	file, err := stat(opts)
-	if err != nil {
-		return nil, err
-	}
-
-	if opts.Expand {
-		if file.IsDir {
-			if err := file.readListingWithDiskInfo(opts.ReadHeader, mountedData); err != nil {
 				return nil, err
 			}
 			return file, nil
@@ -710,77 +610,6 @@ func (i *FileInfo) readListing(readHeader bool) error {
 		}
 
 		if file.IsDir {
-			listing.NumDirs++
-		} else {
-			listing.NumFiles++
-
-			if isInvalidLink {
-				file.Type = "invalid_link"
-			} else {
-				err := file.detectType(true, false, readHeader)
-				if err != nil {
-					return err
-				}
-			}
-
-			listing.Size += file.Size
-			listing.FileSize += file.Size
-		}
-
-		listing.Items = append(listing.Items, file)
-	}
-
-	i.Listing = listing
-	return nil
-}
-
-func (i *FileInfo) readListingWithDiskInfo(readHeader bool, mountedData []DiskInfo) error {
-	dir, err := i.readDirents()
-	if err != nil {
-		return err
-	}
-
-	listing := &Listing{
-		Items:         []*FileInfo{},
-		NumDirs:       0,
-		NumFiles:      0,
-		NumTotalFiles: 0,
-		Size:          0,
-		FileSize:      0,
-	}
-
-	for _, f := range dir {
-		name := f.Name()
-		fPath := path.Join(i.Path, name)
-
-		isSymlink, isInvalidLink := false, false
-		if IsSymlink(f.Mode()) {
-			isSymlink = true
-			info, err := i.Fs.Stat(fPath)
-			if err == nil {
-				f = info
-			} else {
-				isInvalidLink = true
-			}
-		}
-
-		file := &FileInfo{
-			Fs:        i.Fs,
-			Name:      name,
-			Size:      f.Size(),
-			ModTime:   f.ModTime(),
-			Mode:      f.Mode(),
-			IsDir:     f.IsDir(),
-			IsSymlink: isSymlink,
-			Extension: filepath.Ext(name),
-			Path:      fPath,
-		}
-
-		if file.IsDir {
-			if CheckPath(file.Path, ExternalPrefix, "/") {
-				//if strings.HasPrefix(file.Path, ExternalPrefix) {
-				GetExternalExtraInfos(file, mountedData, 1)
-			}
 			listing.NumDirs++
 		} else {
 			listing.NumFiles++

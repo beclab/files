@@ -1,14 +1,10 @@
 package utils
 
 import (
-	"bufio"
-	"os"
 	"path"
 	"strconv"
 	"strings"
 	"time"
-
-	"code.sajari.com/docconv"
 )
 
 func ParseInt(s string) (int, error) {
@@ -32,67 +28,6 @@ func ParseUnixMilli(s int64) time.Time {
 	var date = time.UnixMilli(s)
 
 	return date
-}
-
-var ParseAble = map[string]bool{
-	".doc":      true,
-	".docx":     true,
-	".pdf":      true,
-	".txt":      true,
-	".md":       true,
-	".markdown": true,
-}
-
-func IsParseAble(filename string) bool {
-	fileType := GetTypeFromName(filename)
-	_, ok := ParseAble[fileType]
-	return ok
-}
-
-func GetTypeFromName(filename string) string {
-	return strings.ToLower(path.Ext(filename))
-}
-
-func ParseDoc(filepath string) (string, error) {
-	fileType := GetTypeFromName(filepath)
-	if _, ok := ParseAble[fileType]; !ok {
-		return "", nil
-	}
-
-	var result strings.Builder
-
-	if fileType == ".txt" || fileType == ".md" || fileType == ".markdown" {
-		file, err := os.Open(filepath)
-		if err != nil {
-			return "", err
-		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			result.WriteString(scanner.Text())
-			result.WriteString("\n")
-		}
-
-		if err := scanner.Err(); err != nil {
-			return "", err
-		}
-
-		return result.String(), nil
-	}
-
-	file, err := os.Open(filepath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	mimeType := MimeTypeByExtension(filepath)
-	res, err := docconv.Convert(file, mimeType, true)
-	if err != nil {
-		return "", err
-	}
-	return res.Body, nil
 }
 
 func MimeTypeByExtension(filename string) string {
