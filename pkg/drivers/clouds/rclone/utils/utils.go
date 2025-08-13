@@ -89,7 +89,9 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 		// newRequest.Header.Add("Content-Type", "application/octet-stream")
 
 		client := &http.Client{}
+		start := time.Now()
 		resp, err := client.Do(newRequest)
+		klog.Infof("[request] url: %s, elapsed: %s", u, time.Since(start))
 		if err != nil {
 			return err
 		}

@@ -30,6 +30,8 @@ type Interface interface {
 
 	Copy(srcFs, dstFs string, async *bool) (*OperationsCopyFileResp, error) // copy a directory,no suit for files
 	Move(srcFs, dstFs string) (*OperationsCopyFileResp, error)              // move a directory, no suit for files
+
+	FsCacheClear() error
 }
 
 type operations struct {
@@ -360,6 +362,25 @@ func (o *operations) Purge(fs string, remote string) error {
 	}
 
 	klog.Infof("[rclone] operations purge done, resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
+
+	return nil
+}
+
+func (o *operations) FsCacheClear() error {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, FsCacheClearPath)
+
+	klog.Info("[rclone] operations fscacheClear")
+
+	var header = make(http.Header)
+	header.Add("Content-Type", "application/octet-stream")
+
+	_, err := utils.Request(context.Background(), url, http.MethodPost, &header, nil)
+	if err != nil {
+		klog.Errorf("[rclone] operations fscacheClear error: %v", err)
+		return err
+	}
+
+	klog.Info("[rclone] operations fscacheClear done!")
 
 	return nil
 }
