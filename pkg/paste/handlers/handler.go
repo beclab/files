@@ -119,7 +119,11 @@ func (c *Handler) cloudTransfer() error {
 
 	var listDstFs string
 	var listResult *operations.OperationsList
-	var opts = &operations.OperationsOpt{}
+	var opts = &operations.OperationsOpt{
+		NoModTime:  true,
+		NoMimeType: true,
+		Metadata:   false,
+	}
 
 	klog.Infof("cloudTransfer - owner: %s, srcName: %s, dstName: %s, isFile: %v", c.owner, srcFileOrDirName, dstFileOrDirName, isFile)
 

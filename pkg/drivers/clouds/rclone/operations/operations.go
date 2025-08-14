@@ -21,9 +21,6 @@ type Interface interface {
 	Copyfile(srcFs string, srcR string, dstFs string, dstR string, async *bool) (*OperationsCopyFileResp, error)
 	MoveFile(srcFs string, srcR string, dstFs string, dstR string, async *bool) (*OperationsCopyFileResp, error)
 	Deletefile(fs string, remote string) error
-	DeleteDir(fs string, remote string) error
-	DeleteDirs(fs string, remote string, leaveRoot bool) error
-	Delete(fs string) error
 	Purge(fs string, remote string) error
 
 	Size(fs string) (*OperationsSizeResp, error)
@@ -88,7 +85,7 @@ func (o *operations) Stat(fs string, remote string, opts *OperationsOpt) (*Opera
 		return nil, err
 	}
 
-	klog.Infof("[rclone] operations stat done, fs: %s, data: %s", fs, commonutils.ToJson(data))
+	klog.Infof("[rclone] operations stat done! fs: %s, data: %s", fs, commonutils.ToJson(data))
 
 	return data, nil
 }
@@ -277,70 +274,7 @@ func (o *operations) Deletefile(fs string, remote string) error {
 		return err
 	}
 
-	klog.Infof("[rclone] operations deletefile done, resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
-
-	return nil
-}
-
-func (o *operations) Delete(fs string) error {
-	var url = fmt.Sprintf("%s/%s", common.ServeAddr, DeletePath)
-
-	var param = OperationsReq{
-		Fs: fs,
-	}
-
-	klog.Infof("[rclone] operations delete, param: %s", commonutils.ToJson(param))
-
-	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
-	if err != nil {
-		klog.Errorf("[rclone] operations delete error: %v, fs: %s", err, fs)
-		return err
-	}
-
-	klog.Infof("[rclone] operations delete done, resp: %s, fs: %s", string(resp), fs)
-
-	return nil
-}
-
-func (o *operations) DeleteDir(fs string, remote string) error {
-	var url = fmt.Sprintf("%s/%s", common.ServeAddr, DeletedirPath)
-
-	var param = OperationsReq{
-		Fs:     fs,
-		Remote: remote,
-	}
-
-	klog.Infof("[rclone] operations rmdir, param: %s", commonutils.ToJson(param))
-
-	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
-	if err != nil {
-		klog.Errorf("[rclone] operations rmdir error: %v, fs: %s, remote: %s", err, fs, remote)
-		return err
-	}
-
-	klog.Infof("[rclone] operations rmdir done, resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
-
-	return nil
-}
-
-func (o *operations) DeleteDirs(fs string, remote string, leaveRoot bool) error {
-	var url = fmt.Sprintf("%s/%s", common.ServeAddr, DeletedirsPath)
-
-	var param = OperationsReq{
-		Fs:        fs,
-		Remote:    remote,
-		LeaveRoot: &leaveRoot,
-	}
-
-	klog.Infof("[rclone] operations rmdirs, param: %s", commonutils.ToJson(param))
-
-	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
-	if err != nil {
-		klog.Errorf("[rclone] operations rmdirs error: %v, fs: %s, remote: %s", err, fs, remote)
-		return err
-	}
-
-	klog.Infof("[rclone] operations rmdirs done, resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
+	klog.Infof("[rclone] operations deletefile done! resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
 
 	return nil
 }

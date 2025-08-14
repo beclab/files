@@ -17,7 +17,7 @@ import (
 )
 
 type Interface interface {
-	Get(configName string) *ServeResp
+	Get(configName string, fpath string, header *http.Header) *ServeResp
 	Start(configName, configPath string) (string, error)
 	Stop(configName string) error
 	GetHttpId(configName string) string
@@ -30,8 +30,10 @@ type serve struct {
 }
 
 type ServeResp struct {
-	Reader io.ReadCloser
-	Error  error
+	Body       io.ReadCloser
+	Header     http.Header
+	StatusCode int
+	Error      error
 }
 
 var _ Interface = &serve{}
@@ -46,21 +48,41 @@ func (s *serve) SetServes(serves map[string]*Serve) {
 	s.https = serves
 }
 
-func (s *serve) Get(configName string) *ServeResp {
+func (s *serve) Get(configName string, fpath string, header *http.Header) *ServeResp {
 	val, ok := s.https[configName]
 	if !ok {
 		return nil
 	}
 
 	var result = new(ServeResp)
-	var addr = val.Addr
-	reader, err := utils.Get(context.Background(), addr, nil, nil)
+	var addr = fmt.Sprintf("http://%s", val.Addr+fpath)
+
+	klog.Infof("[serve] get addr: %s", addr)
+
+	req, err := http.NewRequestWithContext(context.Background(), "GET", addr, nil)
 	if err != nil {
 		result.Error = err
 		return result
 	}
 
-	result.Reader = reader
+	if header != nil {
+		for k, vs := range *header {
+			for _, v := range vs {
+				req.Header.Add(k, v)
+			}
+		}
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		result.Error = err
+		return result
+	}
+
+	result.Body = resp.Body
+	result.StatusCode = resp.StatusCode
+	result.Header = resp.Header
+
 	return result
 }
 

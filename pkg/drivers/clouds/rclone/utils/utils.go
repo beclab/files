@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -13,41 +12,6 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 )
-
-func Get(ctx context.Context, u string, header *http.Header, requestParams []byte) (io.ReadCloser, error) {
-	var err error
-	var newRequest *http.Request
-	var requestBody *bytes.Buffer = nil
-	requestBody = bytes.NewBuffer(requestParams)
-
-	if requestParams != nil {
-		newRequest, err = http.NewRequest("GET", u, requestBody)
-	} else {
-		newRequest, err = http.NewRequest("GET", u, nil)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	if header != nil {
-		newRequest.Header = *header
-	}
-
-	resp, err := http.DefaultClient.Do(newRequest)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	_, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		klog.Errorln("Error reading response body:", err)
-		return nil, err
-	}
-
-	return resp.Body, nil
-}
 
 func Request(ctx context.Context, u string, method string, header *http.Header, requestParams []byte) ([]byte, error) {
 	var backoff = wait.Backoff{
