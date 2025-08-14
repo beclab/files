@@ -60,7 +60,7 @@ func createDefaultLibrary(newUsername string) (string, error) {
 	return defaultRepo, nil
 }
 
-func CallbackCreateHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func CallbackCreateHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	MigrateSeahubUserToRedis(r.Header)
 	var data map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -125,7 +125,7 @@ func createUser(username string) (bool, error) {
 	return true, nil
 }
 
-func CallbackDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func CallbackDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	MigrateSeahubUserToRedis(r.Header)
 	var requestData map[string]string
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {

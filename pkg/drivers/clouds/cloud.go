@@ -2,12 +2,12 @@ package clouds
 
 import (
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/preview"
-	"files/pkg/utils"
 	"fmt"
 	"net/url"
 	"os"
@@ -50,7 +50,7 @@ func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 		}
 	}
 
-	return utils.ToBytes(fileData), nil
+	return common.ToBytes(fileData), nil
 }
 
 // + todo
@@ -59,7 +59,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	var queryParam = contextArgs.QueryParam
 	var owner = fileParam.Owner
 
-	klog.Infof("Cloud preview, user: %s, args: %s", owner, utils.ToJson(contextArgs))
+	klog.Infof("Cloud preview, user: %s, args: %s", owner, common.ToJson(contextArgs))
 
 	var path = fileParam.Path
 	if strings.HasSuffix(path, "/") {
@@ -85,9 +85,9 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		return nil, err
 	}
 
-	klog.Infof("Cloud preview, query: %s, file meta: %s", utils.ToJson(data), string(res))
+	klog.Infof("Cloud preview, query: %s, file meta: %s", common.ToJson(data), string(res))
 
-	fileType := utils.MimeTypeByExtension(fileMeta.Item.Name)
+	fileType := common.MimeTypeByExtension(fileMeta.Item.Name)
 	if !strings.HasPrefix(fileType, "image") {
 		return nil, fmt.Errorf("can't create preview for %s type", fileType)
 	}
@@ -155,7 +155,7 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 	var user = fileParam.Owner
 	var path = fileParam.Path
 
-	klog.Infof("Cloud raw, user: %s, path: %s, args: %s", user, path, utils.ToJson(contextArgs))
+	klog.Infof("Cloud raw, user: %s, path: %s, args: %s", user, path, common.ToJson(contextArgs))
 
 	if strings.HasSuffix(path, "/") {
 		return nil, fmt.Errorf("not a file")
@@ -177,7 +177,7 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 		return nil, err
 	}
 
-	klog.Infof("Cloud raw, query: %s, file meta: %s", utils.ToJson(data), string(res))
+	klog.Infof("Cloud raw, query: %s, file meta: %s", common.ToJson(data), string(res))
 
 	if !fileMeta.IsSuccess() {
 		return nil, fmt.Errorf(fileMeta.FailMessage())
@@ -237,8 +237,8 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
-	dstPrefixPath := utils.GetPrefixPath(fileParam.Path)
-	dstFileOrDirName, isFile := utils.GetFileNameFromPath(fileParam.Path)
+	dstPrefixPath := common.GetPrefixPath(fileParam.Path)
+	dstFileOrDirName, isFile := common.GetFileNameFromPath(fileParam.Path)
 
 	klog.Infof("Cloud create, user: %s, param: %s, prefixPath: %s, name: %s, isFile: %v", owner, fileParam.Json(), dstPrefixPath, dstFileOrDirName, isFile)
 
@@ -285,7 +285,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		}
 	}
 
-	newName := utils.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
+	newName := common.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
 	if newName != "" {
 		newName = newName + dstFileExt
 	} else {
@@ -302,7 +302,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 			FolderName: newName,
 		}
 
-		klog.Infof("Cloud create, dir, service request param: %s", utils.ToJson(p))
+		klog.Infof("Cloud create, dir, service request param: %s", common.ToJson(p))
 
 		res, err := s.service.CreateFolder(owner, p)
 		if err != nil {
@@ -332,7 +332,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	var dirents = fileDeleteArg.Dirents
 	var deleteFailedPaths []string
 
-	klog.Infof("Cloud delete, user: %s, param: %s", user, utils.ToJson(fileParam))
+	klog.Infof("Cloud delete, user: %s, param: %s", user, common.ToJson(fileParam))
 
 	var invalidPaths []string
 
@@ -345,7 +345,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	}
 
 	if len(invalidPaths) > 0 {
-		return utils.ToBytes(invalidPaths), fmt.Errorf("invalid path")
+		return common.ToBytes(invalidPaths), fmt.Errorf("invalid path")
 	}
 
 	for _, dp := range dirents {
@@ -381,7 +381,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	}
 
 	if len(deleteFailedPaths) > 0 {
-		return utils.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
+		return common.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
 	}
 
 	return nil, nil
@@ -390,7 +390,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var owner = contextArgs.FileParam.Owner
 	var fileParam = contextArgs.FileParam
-	klog.Infof("Cloud rename, user: %s, param: %s", owner, utils.ToJson(contextArgs))
+	klog.Infof("Cloud rename, user: %s, param: %s", owner, common.ToJson(contextArgs))
 
 	var srcName, isSrcFile = getRenamedSrcName(fileParam.Path) // srcName have no /
 	var dstName, _ = url.PathUnescape(contextArgs.QueryParam.Destination)
@@ -431,7 +431,7 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, err
 	}
 
-	klog.Infof("Cloud rename, user: %s, isSrcFile: %v, srcPrefixPath: %s, stat: %s", owner, isSrcFile, srcPrefixPath, utils.ToJson(dstStat))
+	klog.Infof("Cloud rename, user: %s, isSrcFile: %v, srcPrefixPath: %s, stat: %s", owner, isSrcFile, srcPrefixPath, common.ToJson(dstStat))
 
 	if dstStat != nil && dstStat.Item != nil {
 		return nil, fmt.Errorf("The name %s already exists. Please choose another name.", dstName)
@@ -464,7 +464,7 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 		klog.Infof("Cloud tree, firstItem Path: %s", firstItem.Path)
 		klog.Infof("Cloud tree, firstItem Name: %s", firstItem.Name)
 		var firstItemPath string
-		if fileParam.FileType == utils.GoogleDrive {
+		if fileParam.FileType == common.GoogleDrive {
 			firstItemPath = firstItem.Meta.ID
 		} else {
 			firstItemPath = firstItem.Path
@@ -487,7 +487,7 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 			firstItem.FsType = fileParam.FileType
 			firstItem.FsExtend = fileParam.Extend
 			firstItem.FsPath = firstItem.Path
-			dataChan <- fmt.Sprintf("%s\n\n", utils.ToJson(firstItem))
+			dataChan <- fmt.Sprintf("%s\n\n", common.ToJson(firstItem))
 			streamFiles = streamFiles[1:]
 		}
 

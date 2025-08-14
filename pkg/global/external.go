@@ -2,8 +2,8 @@ package global
 
 import (
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/utils"
 	"net/http"
 	"strings"
 	"sync"
@@ -95,7 +95,7 @@ func (m *Mount) getMounted() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var host = utils.OlaresdHost
+	var host = common.OlaresdHost
 
 	if host == "" {
 		klog.Errorf("olaresd host invalid, host: %s", host)
@@ -109,7 +109,7 @@ func (m *Mount) getMounted() {
 
 	headers := make(http.Header)
 	headers.Set("X-Signature", "temp_signature")
-	res, err := utils.RequestWithContext(url, http.MethodGet, &headers, nil)
+	res, err := common.RequestWithContext(url, http.MethodGet, &headers, nil)
 	if err != nil {
 		klog.Errorf("get mounted error: %v", err)
 		return
@@ -134,7 +134,7 @@ func (m *Mount) getMounted() {
 		}
 	}
 
-	klog.Infof("mounted device: %s", utils.ToJson(result.Data))
+	klog.Infof("mounted device: %s", common.ToJson(result.Data))
 }
 
 func (m *Mount) CheckExternalType(path string, isDir bool) string {

@@ -2,12 +2,12 @@ package posix
 
 import (
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/drivers/base"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/preview"
-	"files/pkg/utils"
 	"fmt"
 	"net/url"
 	"os"
@@ -66,7 +66,7 @@ func (s *PosixStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	var queryParam = contextArgs.QueryParam
 	var owner = fileParam.Owner
 
-	klog.Infof("Posix preview, user: %s, args: %s", owner, utils.ToJson(contextArgs))
+	klog.Infof("Posix preview, user: %s, args: %s", owner, common.ToJson(contextArgs))
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
@@ -88,7 +88,7 @@ func (s *PosixStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 	var fileParam = contextArgs.FileParam
 	var user = fileParam.Owner
 
-	klog.Infof("Posix raw, user: %s, args: %s", user, utils.ToJson(contextArgs))
+	klog.Infof("Posix raw, user: %s, args: %s", user, common.ToJson(contextArgs))
 
 	fileData, err := s.getFiles(fileParam, NoExpand, NoContent)
 	if err != nil {
@@ -99,7 +99,7 @@ func (s *PosixStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 		return nil, fmt.Errorf("not supported currently")
 	}
 
-	klog.Infof("Posix raw, file: %s", utils.ToJson(fileData))
+	klog.Infof("Posix raw, file: %s", common.ToJson(fileData))
 
 	r, err := getRawFile(fileData)
 	if err != nil {
@@ -139,10 +139,10 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	var user = contextArgs.FileParam.Owner
 	var fileParam = contextArgs.FileParam
 
-	klog.Infof("Posix create, user: %s, param: %s", user, utils.ToJson(contextArgs))
+	klog.Infof("Posix create, user: %s, param: %s", user, common.ToJson(contextArgs))
 
-	dstFileOrDirName, isFile := utils.GetFileNameFromPath(fileParam.Path)
-	dstPrefixPath := utils.GetPrefixPath(fileParam.Path)
+	dstFileOrDirName, isFile := common.GetFileNameFromPath(fileParam.Path)
+	dstPrefixPath := common.GetPrefixPath(fileParam.Path)
 	dstFileExt := filepath.Ext(dstFileOrDirName)
 
 	resourceUri, err := contextArgs.FileParam.GetResourceUri()
@@ -183,7 +183,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Posix create, dupNames: %d", len(dupNames))
 
-	newName := utils.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
+	newName := common.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
 
 	if newName != "" {
 		if isFile {
@@ -249,7 +249,7 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	}
 
 	if len(invalidPaths) > 0 {
-		return utils.ToBytes(invalidPaths), fmt.Errorf("invalid path")
+		return common.ToBytes(invalidPaths), fmt.Errorf("invalid path")
 	}
 
 	for _, dirent := range dirents {
@@ -288,9 +288,9 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, err
 	}
 
-	klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, utils.ToJson(contextArgs))
+	klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, common.ToJson(contextArgs))
 
-	var srcName, isSrcFile = utils.GetFileNameFromPath(fileParam.Path)
+	var srcName, isSrcFile = common.GetFileNameFromPath(fileParam.Path)
 	srcName, err = url.PathUnescape(srcName)
 	if err != nil {
 		return nil, err
@@ -300,7 +300,7 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, err
 	}
 
-	klog.Infof("Posix rename, user: %s, uri: %s, isFile: %v, src: %s, dst: %s, args: %s", owner, uri, isSrcFile, srcName, dstName, utils.ToJson(contextArgs))
+	klog.Infof("Posix rename, user: %s, uri: %s, isFile: %v, src: %s, dst: %s, args: %s", owner, uri, isSrcFile, srcName, dstName, common.ToJson(contextArgs))
 
 	if srcName == dstName {
 		return nil, nil
@@ -319,7 +319,7 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	var afs = afero.NewOsFs()
-	var srcPrefixPath = utils.GetPrefixPath(fileParam.Path)
+	var srcPrefixPath = common.GetPrefixPath(fileParam.Path)
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:       afero.NewBasePathFs(afs, uri),
 		FsType:   fileParam.FileType,
@@ -389,7 +389,7 @@ func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FilePa
 			}
 			streamFiles = append(nestedItems, streamFiles[1:]...)
 		} else {
-			dataChan <- fmt.Sprintf("%s\n\n", utils.ToJson(firstItem))
+			dataChan <- fmt.Sprintf("%s\n\n", common.ToJson(firstItem))
 			streamFiles = streamFiles[1:]
 		}
 
@@ -402,7 +402,7 @@ func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FilePa
 }
 
 func (s *PosixStorage) isExternal(fileType string, extend string) bool {
-	return (fileType == utils.External || fileType == utils.Usb || fileType == utils.Hdd || fileType == utils.Internal || fileType == utils.Smb) && extend != ""
+	return (fileType == common.External || fileType == common.Usb || fileType == common.Hdd || fileType == common.Internal || fileType == common.Smb) && extend != ""
 }
 
 func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content bool) (*files.FileInfo, error) {

@@ -2,6 +2,7 @@ package drives
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	e "errors"
 	"files/pkg/common"
@@ -25,7 +26,7 @@ type SyncResourceService struct {
 
 // TODO：protected
 func (rc *SyncResourceService) PutHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	return func(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 		// Only allow PUT for files.
 		var err error
 		if strings.HasSuffix(fileParam.Path, "/") {
@@ -156,4 +157,34 @@ func syncCall(dst, method string, reqBodyJson []byte, w http.ResponseWriter, r *
 		return response.StatusCode, body, nil
 	}
 	return response.StatusCode, nil, nil
+}
+
+func SuitableResponseReader(resp *http.Response) io.ReadCloser {
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			klog.Errorf("unzip response failed: %v\n", err)
+			return nil
+		}
+		return &autoCloseReader{
+			Reader: gzipReader,
+			closer: resp.Body,
+		}
+	}
+	return resp.Body
+}
+
+type autoCloseReader struct {
+	io.Reader
+	closer io.Closer
+}
+
+func (a *autoCloseReader) Close() error {
+	return a.closer.Close()
+}
+
+func RemoveAdditionalHeaders(header *http.Header) {
+	header.Del("Traceparent")
+	header.Del("Tracestate")
+	return
 }

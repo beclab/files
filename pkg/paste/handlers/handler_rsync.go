@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"context"
+	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/utils"
 	"fmt"
 	"strings"
 
@@ -27,7 +27,7 @@ func (c *Handler) Rsync() error {
 
 	srcPath := srcUri + src.Path
 
-	if dst.FileType == utils.External {
+	if dst.FileType == common.External {
 		if err = c.checkDstPathPermission(); err != nil {
 			return err
 		}
@@ -41,7 +41,7 @@ func (c *Handler) Rsync() error {
 
 	c.UpdateTotalSize(pathMeta.Size)
 
-	klog.Infof("command - Rsync, srcPath: %s, srcMeta: %s", srcPath, utils.ToJson(pathMeta))
+	klog.Infof("command - Rsync, srcPath: %s, srcMeta: %s", srcPath, common.ToJson(pathMeta))
 
 	dstFree, dstUsedPercent, err := files.GetSpaceSize(dstUri)
 	if err != nil {
@@ -49,12 +49,12 @@ func (c *Handler) Rsync() error {
 		return err
 	}
 
-	if dstUsedPercent > utils.FreeLimit {
-		return fmt.Errorf("target disk usage has reached %.2f%%. Please clean up disk space first.", utils.FreeLimit)
+	if dstUsedPercent > common.FreeLimit {
+		return fmt.Errorf("target disk usage has reached %.2f%%. Please clean up disk space first.", common.FreeLimit)
 	}
 
 	if pathMeta.Size > int64(dstFree) {
-		return fmt.Errorf("not enough free space on target disk, required: %s, available: %s", utils.FormatBytes(uint64(pathMeta.Size)), utils.FormatBytes(dstFree))
+		return fmt.Errorf("not enough free space on target disk, required: %s, available: %s", common.FormatBytes(pathMeta.Size), common.FormatBytes(int64(dstFree)))
 	}
 
 	klog.Infof("command - Rsync, srcPath: %s, dstUri: %s, dstFree: %d, dstUsed: %.2f%%", srcPath, dstUri, dstFree, dstUsedPercent)
@@ -78,9 +78,9 @@ func (c *Handler) Rsync() error {
 }
 
 func (c *Handler) rsync() error {
-	klog.Infof("Rsync - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
+	klog.Infof("Rsync - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, common.ToJson(c.src), common.ToJson(c.dst))
 
-	rsync, err := utils.GetCommand("rsync")
+	rsync, err := common.GetCommand("rsync")
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func (c *Handler) rsync() error {
 		dstPath,
 	}
 
-	_, err = utils.ExecRsync(c.ctx, rsync, args, c.UpdateProgress)
+	_, err = common.ExecRsync(c.ctx, rsync, args, c.UpdateProgress)
 
 	if err != nil {
 		return err
@@ -118,9 +118,9 @@ func (c *Handler) rsync() error {
 }
 
 func (c *Handler) move() error {
-	klog.Infof("Move - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
+	klog.Infof("Move - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, common.ToJson(c.src), common.ToJson(c.dst))
 
-	mv, err := utils.GetCommand("mv")
+	mv, err := common.GetCommand("mv")
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (c *Handler) move() error {
 
 	var args = []string{srcPath, dstPath}
 
-	if _, err = utils.ExecCommand(context.Background(), mv, args); err != nil {
+	if _, err = common.ExecCommand(context.Background(), mv, args); err != nil {
 		return err
 	}
 
@@ -171,7 +171,7 @@ func (c *Handler) generateNewName(srcFileInfo *files.PathMeta) (string, string, 
 		targetName = strings.Trim(targetName, "/")
 	}
 
-	dupNames, err := utils.CollectDupNames(targetPath, targetName, ext, isDir)
+	dupNames, err := common.CollectDupNames(targetPath, targetName, ext, isDir)
 	if err != nil {
 		return "", "", err
 	}

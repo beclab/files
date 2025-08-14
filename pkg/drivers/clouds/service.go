@@ -2,12 +2,12 @@ package clouds
 
 import (
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/files"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,7 +73,7 @@ func (s *service) CopyFile(configName string, fsPrefix, dstR string) ([]byte, er
 }
 
 func (s *service) CreateFolder(owner string, param *models.PostParam) ([]byte, error) {
-	klog.Infof("[service] creatFolder, param: %s", utils.ToJson(param))
+	klog.Infof("[service] creatFolder, param: %s", common.ToJson(param))
 
 	var configName = fmt.Sprintf("%s_%s_%s", owner, param.Drive, param.Name)
 	var config, err = s.command.GetConfig().GetConfig(configName)
@@ -97,7 +97,7 @@ func (s *service) CreateFolder(owner string, param *models.PostParam) ([]byte, e
 			return nil, err
 		}
 
-		klog.Infof("[service] createfolder success, data: %s", utils.ToJson(copyResp))
+		klog.Infof("[service] createfolder success, data: %s", common.ToJson(copyResp))
 
 		return nil, nil
 	}
@@ -112,7 +112,7 @@ func (s *service) CreateFolder(owner string, param *models.PostParam) ([]byte, e
 }
 
 func (s *service) Delete(owner string, parentPath string, param *models.DeleteParam) ([]byte, error) {
-	klog.Infof("[service] delete, parent: %s, param: %s", parentPath, utils.ToJson(param))
+	klog.Infof("[service] delete, parent: %s, param: %s", parentPath, common.ToJson(param))
 	var configName = fmt.Sprintf("%s_%s_%s", owner, param.Drive, param.Name)
 	var config, err = s.command.GetConfig().GetConfig(configName)
 	if err != nil {
@@ -182,7 +182,7 @@ func (s *service) FileStat(owner string, param *models.ListParam) ([]byte, error
 	var fs = s.getFs(configName, config.Type, config.Bucket, filepath.Dir(param.Path))
 	var remote = strings.TrimPrefix(param.Path, "/")
 
-	klog.Infof("[service] file stat, param: %s, fs: %s, remote: %s", utils.ToJson(param), fs, remote)
+	klog.Infof("[service] file stat, param: %s, fs: %s, remote: %s", common.ToJson(param), fs, remote)
 
 	var opts = &operations.OperationsOpt{
 		FilesOnly: true,
@@ -196,7 +196,7 @@ func (s *service) FileStat(owner string, param *models.ListParam) ([]byte, error
 		return nil, nil
 	}
 
-	return utils.ToBytes(data), nil
+	return common.ToBytes(data), nil
 }
 
 func (s *service) MoveFile(param *models.MoveFileParam) ([]byte, error) {
@@ -265,7 +265,7 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 		Metadata: true,
 	}
 
-	klog.Infof("[service] list, configBucket: %s, fs: %s, param: %s", config.Bucket, fs, utils.ToJson(fileParam))
+	klog.Infof("[service] list, configBucket: %s, fs: %s, param: %s", config.Bucket, fs, common.ToJson(fileParam))
 
 	data, err := s.command.GetOperation().List(fs, opts)
 	if err != nil {
@@ -310,18 +310,18 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 func (s *service) getFs(configName, configType string, configBucket string, fileParamPath string) string {
 	var fs string
 	var bucket string
-	if configType == utils.RcloneTypeS3 {
+	if configType == common.RcloneTypeS3 {
 		bucket = configBucket
 		if !strings.HasPrefix(fileParamPath, "/") {
 			fileParamPath = "/" + fileParamPath
 		}
 		fs = fmt.Sprintf("%s:%s%s", configName, bucket, fileParamPath)
-	} else if configType == utils.RcloneTypeDropbox {
+	} else if configType == common.RcloneTypeDropbox {
 		if fileParamPath == "/" {
 			fileParamPath = ""
 		}
 		fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
-	} else if configType == utils.RcloneTypeDrive {
+	} else if configType == common.RcloneTypeDrive {
 		fs = fmt.Sprintf("%s:%s", configName, fileParamPath)
 	}
 
@@ -359,7 +359,7 @@ func (s *service) renameFile(configName string, srcPrefixPath string, srcRemote,
 		return err
 	}
 
-	klog.Infof("[service] rename file, configName: %s, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s, result: %s", configName, srcFs, srcRemote, dstFs, dstRemote, utils.ToJson(resp))
+	klog.Infof("[service] rename file, configName: %s, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s, result: %s", configName, srcFs, srcRemote, dstFs, dstRemote, common.ToJson(resp))
 
 	return err
 }
@@ -382,7 +382,7 @@ func (s *service) renameDirectory(owner string, param *models.FileParam, srcPref
 		return err
 	}
 
-	klog.Infof("[service] rename dir done! owner: %s, srcFs: %s, dstFs: %s, result: %s", owner, srcFs, dstFs, utils.ToJson(resp))
+	klog.Infof("[service] rename dir done! owner: %s, srcFs: %s, dstFs: %s, result: %s", owner, srcFs, dstFs, common.ToJson(resp))
 
 	var purgeSrcFs = s.getFs(configName, config.Type, config.Bucket, srcPrefixPath)
 	if err = s.command.GetOperation().Purge(purgeSrcFs, srcName); err != nil {

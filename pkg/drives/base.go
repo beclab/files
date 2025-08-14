@@ -22,7 +22,7 @@ var (
 	MountedTicker = time.NewTicker(5 * time.Minute)
 )
 
-type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error)
 type PathProcessor func(*gorm.DB, string, string, time.Time) (int, error)
 type RecordsStatusProcessor func(db *gorm.DB, processedPaths map[string]bool, srcTypes []string, status int) error
 
@@ -126,7 +126,7 @@ type BaseResourceService struct{}
 
 // TODO：protected
 func (rs *BaseResourceService) PutHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	return func(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 		// Only allow PUT for files.
 		if strings.HasSuffix(fileParam.Path, "/") {
 			return http.StatusMethodNotAllowed, nil

@@ -109,23 +109,3 @@ func getEnvInfo() {
 	klog.Infof("uploadFileType:%s, uploadLimitedSize:%s", uploadFileType, uploadLimitedSize)
 	klog.Infof("allowAllFileType:%t supportedFileTypes:%v, limitedSize:%d", allowAllFileType, supportedFileTypes, limitedSize)
 }
-
-func CheckType(filetype string) bool {
-	if allowAllFileType {
-		return true
-	}
-
-	return supportedFileTypes[filetype]
-}
-
-func CheckSize(filesize int64) bool {
-	if filesize < 0 {
-		return false
-	}
-
-	if limitedSize <= 0 {
-		return true
-	}
-
-	return limitedSize >= filesize
-}

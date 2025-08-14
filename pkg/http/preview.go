@@ -4,10 +4,10 @@ package http
 import (
 	"bytes"
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"net/http"
 
@@ -35,7 +35,7 @@ func previewHandle(fn previewHandlerFunc, prefix string) http.Handler {
 			return
 		}
 
-		klog.Infof("[Incoming] preview, user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, r.Method, utils.ToJson(contextArg))
+		klog.Infof("[Incoming] preview, user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, r.Method, common.ToJson(contextArg))
 
 		var handlerParam = &base.HandlerParam{
 			Ctx:            r.Context(),

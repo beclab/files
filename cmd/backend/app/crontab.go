@@ -1,9 +1,9 @@
 package app
 
 import (
+	"files/pkg/drivers/posix/upload"
 	"files/pkg/drives"
 	"files/pkg/redisutils"
-	"files/pkg/upload"
 	"github.com/robfig/cron/v3"
 	"k8s.io/klog/v2"
 	"sync"

@@ -97,7 +97,7 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 	return common.RenderJSON(w, r, responseData)
 }
 
-func md5Handler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func md5Handler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	fileParam, _, err := UrlPrep(r, "")
 	if err != nil {
 		return http.StatusBadRequest, err

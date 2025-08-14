@@ -2,12 +2,12 @@ package rclone
 
 import (
 	"errors"
+	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone/config"
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/drivers/clouds/rclone/serve"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -23,9 +23,9 @@ var (
 )
 
 var localConfig = &config.Config{
-	ConfigName: utils.Local,
-	Name:       utils.Local,
-	Type:       utils.Local,
+	ConfigName: common.Local,
+	Name:       common.Local,
+	Type:       common.Local,
 }
 
 var Command *rclone
@@ -97,7 +97,7 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 
 	changedConfigs := r.checkChangedConfigs(configs)
 
-	klog.Infof("[startHttp] changed configs: %s", utils.ToJson(changedConfigs))
+	klog.Infof("[startHttp] changed configs: %s", common.ToJson(changedConfigs))
 
 	if len(changedConfigs.Delete) > 0 {
 		for _, deleteServe := range changedConfigs.Delete {
@@ -134,20 +134,20 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 // configName:bucket or configName:
 func (r *rclone) GetFsPrefix(param *models.FileParam) (string, error) {
 	switch param.FileType {
-	case utils.Drive, utils.Cache, utils.External:
+	case common.Drive, common.Cache, common.External:
 		uri, err := param.GetResourceUri()
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("local:%s", uri), nil
-	case utils.AwsS3, utils.TencentCos:
+	case common.AwsS3, common.TencentCos:
 		var configName = fmt.Sprintf("%s_%s_%s", param.Owner, param.FileType, param.Extend)
 		config, err := r.config.GetConfig(configName)
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s:%s", configName, config.Bucket), nil
-	case utils.DropBox, utils.GoogleDrive:
+	case common.DropBox, common.GoogleDrive:
 		return fmt.Sprintf("%s_%s_%s:", param.Owner, param.FileType, param.Extend), nil
 	}
 	return "", errors.New("fs invalid")
@@ -328,7 +328,7 @@ func (r *rclone) GenerateS3EmptyDirectories(dstFileType string, srcConfigName, d
 		dstR = strings.TrimPrefix(dstR, "/")
 		klog.Infof("[rclone] generate mk empty dir >>> dstFs: %s, dstR: %s", dstFs, dstR)
 
-		if dstFileType == utils.AwsS3 || dstFileType == utils.TencentCos {
+		if dstFileType == common.AwsS3 || dstFileType == common.TencentCos {
 			_, err := r.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
 			if err != nil {
 				klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)

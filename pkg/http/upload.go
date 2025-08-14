@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	e "errors"
 	"files/pkg/common"
+	"files/pkg/drivers/posix/upload"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
 	"files/pkg/models"
-	"files/pkg/upload"
-	"files/pkg/utils"
 	"fmt"
 	"net/http"
 	"os"
@@ -20,7 +19,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	owner, _, _, uploadsDir, err := upload.GetPVC(r)
 	if err != nil {
 		return http.StatusBadRequest, e.New("bfl header missing or invalid")
@@ -71,13 +70,13 @@ func uploadLinkHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (
 	}
 
 	uploadID := upload.MakeUid(path)
-	uploadLink := fmt.Sprintf("/upload/upload-link/%s/%s", utils.NodeName, uploadID)
+	uploadLink := fmt.Sprintf("/upload/upload-link/%s/%s", common.NodeName, uploadID)
 
 	w.Write([]byte(uploadLink))
 	return 0, nil
 }
 
-func uploadedBytesHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func uploadedBytesHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	owner, _, _, uploadsDir, err := upload.GetPVC(r)
 	if err != nil {
 		return http.StatusBadRequest, e.New("bfl header missing or invalid")
@@ -184,7 +183,7 @@ func uploadedBytesHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	return common.RenderJSON(w, r, responseData)
 }
 
-func uploadChunksHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func uploadChunksHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	startTime := time.Now()
 	klog.Infof("Function UploadChunks started at: %s\n", startTime)
 	defer func() {
@@ -418,7 +417,7 @@ func uploadChunksHandler(w http.ResponseWriter, r *http.Request, d *common.Data)
 
 		if info.Offset == offsetStart || (info.Offset-offsetEnd < 0 && info.Offset-offsetStart > 0) {
 			if resumableInfo.MD5 != "" {
-				md5, err := upload.CalculateMD5(fileHeader)
+				md5, err := common.MD5FileHeader(fileHeader)
 				if err != nil {
 					return http.StatusInternalServerError, err
 				}

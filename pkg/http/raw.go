@@ -2,10 +2,10 @@ package http
 
 import (
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"mime"
 	"net/http"
@@ -33,7 +33,7 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 			return
 		}
 
-		klog.Infof("[Incoming] raw, user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, r.Method, utils.ToJson(contextArg))
+		klog.Infof("[Incoming] raw, user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, r.Method, common.ToJson(contextArg))
 
 		var handlerParam = &base.HandlerParam{
 			Ctx:            r.Context(),

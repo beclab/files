@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/robfig/cron/v3"
 	"k8s.io/klog/v2"
+	"mime/multipart"
 	"path/filepath"
 	"runtime/debug"
 	"sync"
@@ -13,6 +14,36 @@ import (
 var (
 	InfoSyncMap sync.Map
 )
+
+type FileMetaData struct {
+	FileRelativePath string `json:"file_relative_path" form:"file_relative_path" binding:"required"`
+	FileType         string `json:"file_type" form:"file_type" binding:"required"`
+	FileSize         int64  `json:"file_size" form:"file_size" binding:"required"`
+	StoragePath      string `json:"storage_path" form:"storage_path" binding:"required"`
+	FullPath         string `json:"full_path"` // storage_path(must exist) + file_relative_path
+}
+
+type FileInfo struct {
+	ID             string    `json:"id"`
+	Offset         int64     `json:"offset"`
+	LastUpdateTime time.Time `json:"-"`
+	FileMetaData
+}
+
+type ResumableInfo struct {
+	ResumableChunkNumber      int                   `json:"resumableChunkNumber" form:"resumableChunkNumber"`
+	ResumableChunkSize        int64                 `json:"resumableChunkSize" form:"resumableChunkSize"`
+	ResumableCurrentChunkSize int64                 `json:"resumableCurrentChunkSize" form:"resumableCurrentChunkSize"`
+	ResumableTotalSize        int64                 `json:"resumableTotalSize" form:"resumableTotalSize"`
+	ResumableType             string                `json:"resumableType" form:"resumableType"`
+	ResumableIdentifier       string                `json:"resumableIdentifier" form:"resumableIdentifier"`
+	ResumableFilename         string                `json:"resumableFilename" form:"resumableFilename"`
+	ResumableRelativePath     string                `json:"resumableRelativePath" form:"resumableRelativePath"`
+	ResumableTotalChunks      int                   `json:"resumableTotalChunks" form:"resumableTotalChunks"`
+	ParentDir                 string                `json:"parent_dir" form:"parent_dir"`
+	MD5                       string                `json:"md5,omitempty" form:"md5"`
+	File                      *multipart.FileHeader `json:"file" form:"file" binding:"required"`
+}
 
 type FileInfoMgr struct {
 }
