@@ -102,7 +102,10 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 	if len(changedConfigs.Delete) > 0 {
 		for _, deleteServe := range changedConfigs.Delete {
 			if err := r.stopServe(deleteServe.ConfigName); err != nil {
-				klog.Errorf("[startHttp] stop serve error: %v", err)
+				klog.Errorf("[startHttp] stop serve, stop serve error: %v", err)
+			}
+			if err := r.deleteConfig(deleteServe.ConfigName); err != nil {
+				klog.Errorf("[startHttp] stop serve, delete config error: %v", err)
 			}
 		}
 	}
@@ -122,11 +125,6 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 			}
 		}
 	}
-
-	klog.Infof("[startHttp] complete, print begin =====")
-	r.config.Dump()
-	r.serve.List()
-	klog.Infof("[startHttp] complete, print end   =====")
 
 	return nil
 }
@@ -182,39 +180,12 @@ func (r *rclone) startServe(createConfig *config.Config) error {
 	return nil
 }
 
+func (r *rclone) deleteConfig(configName string) error {
+	return r.config.Delete(configName)
+}
+
 func (r *rclone) stopServe(configName string) error {
-	var wg sync.WaitGroup
-	var errCh = make(chan error, 2)
-
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		err := r.serve.Stop(configName)
-		errCh <- err
-	}()
-
-	go func() {
-		defer wg.Done()
-		err := r.config.Delete(configName)
-		errCh <- err
-	}()
-
-	wg.Wait()
-	close(errCh)
-
-	var errList []error
-	for err := range errCh {
-		if err != nil {
-			errList = append(errList, err)
-		}
-	}
-
-	if len(errList) == 0 {
-		return nil
-	}
-
-	return fmt.Errorf("%v, stop serve", errors.Join(errList...))
+	return r.serve.Stop(configName)
 }
 
 func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateConfigChanged {
@@ -278,6 +249,7 @@ func (r *rclone) GenerateS3EmptyDirectories(dstFileType string, srcConfigName, d
 		NoModTime:  true,
 		NoMimeType: true,
 		DirsOnly:   true,
+		Metadata:   false,
 	}
 
 	klog.Infof("[rclone] generate list src, fs: %s", fs)

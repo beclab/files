@@ -122,12 +122,9 @@ func (i *integration) GetIntegrations() error {
 		for _, acc := range accounts {
 			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)
 
-			klog.Infof("integration, check token expired, name: %s, accName: %s, flag: %v, err: %v", user.Name, acc.Name, flag, err)
-
-			// if err == nil && !flag {
-			// 	klog.Infof("integration, token not expired, skip, user: %s, account: %s, type: %s", user.Name, acc.Name, acc.Type)
-			// 	continue
-			// }
+			if flag {
+				klog.Infof("integration, check expired, name: %s, accName: %s, expired: %v, err: %v", user.Name, acc.Name, flag, err)
+			}
 
 			if err == nil && !flag {
 				var config = &config.Config{

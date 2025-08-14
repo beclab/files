@@ -49,7 +49,7 @@ func (c *config) SetConfigs(configs map[string]*Config) {
 }
 
 func (c *config) Create(param *Config) error {
-	var ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
+	var ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, CreateConfigPath)
 	var data = &CreateConfig{
