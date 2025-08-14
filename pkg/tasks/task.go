@@ -2,9 +2,9 @@ package tasks
 
 import (
 	"context"
+	"files/pkg/common"
 	"files/pkg/models"
 	"files/pkg/paste/handlers"
-	"files/pkg/utils"
 	"fmt"
 
 	"k8s.io/klog/v2"
@@ -42,7 +42,7 @@ func (t *Task) Run() error {
 
 	_, ok := t.manager.pool.TrySubmit(func() {
 		if t.canceled {
-			t.state = utils.Cancelled
+			t.state = common.Cancelled
 			return
 		}
 		var err error
@@ -52,7 +52,7 @@ func (t *Task) Run() error {
 		}()
 
 		klog.Infof("Task Id: %s", t.id)
-		t.state = utils.Running
+		t.state = common.Running
 		t.handler.UpdateProgress = t.updateProgress
 		t.handler.UpdateTotalSize = t.updateTotalSize
 		t.handler.GetProgress = t.GetProgress
@@ -60,15 +60,15 @@ func (t *Task) Run() error {
 		if err = t.handler.Exec(); err != nil {
 			klog.Errorf("Task Failed: %v", err)
 			if err.Error() == "context canceled" {
-				t.state = utils.Cancelled
+				t.state = common.Cancelled
 			} else {
-				t.state = utils.Failed
+				t.state = common.Failed
 			}
 			t.message = err.Error()
 			return
 		}
 
-		t.state = utils.Completed
+		t.state = common.Completed
 		t.progress = 100
 
 		return

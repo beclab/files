@@ -6,7 +6,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"k8s.io/klog/v2"
 	"net/http"
@@ -135,8 +134,8 @@ type CopyMoveReq struct {
 	Destination string `json:"destination"`
 }
 
-func BatchCopyHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
+func BatchCopyHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
 	if owner == "" {
 		klog.Error("user not found")
 		return http.StatusBadRequest, nil
@@ -244,8 +243,8 @@ func HandleBatchCopy(header http.Header, srcRepoId, srcParentDir string, srcDire
 	return jsonBytes, nil
 }
 
-func BatchMoveHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
-	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
+func BatchMoveHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
 	if owner == "" {
 		klog.Error("user not found")
 		return http.StatusBadRequest, nil

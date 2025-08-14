@@ -2,10 +2,10 @@ package http
 
 import (
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"net/http"
 )
 
@@ -36,7 +36,7 @@ func pasteHandle(prefix string) http.Handler {
 
 		w.WriteHeader(http.StatusOK)
 		var data = map[string]string{"task_id": task.Id()}
-		w.Write([]byte(utils.ToJson(data)))
+		w.Write([]byte(common.ToJson(data)))
 		return
 
 	})

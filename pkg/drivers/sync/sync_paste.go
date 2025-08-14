@@ -2,10 +2,10 @@ package sync
 
 import (
 	"errors"
+	"files/pkg/common"
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/tasks"
-	"files/pkg/utils"
 	"fmt"
 
 	"k8s.io/klog/v2"
@@ -16,21 +16,21 @@ func (s *SyncStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error) 
 
 	var dstType = s.paste.Dst.FileType
 
-	klog.Infof("Sync - Paste, dst: %s, param: %s", dstType, utils.ToJson(pasteParam))
+	klog.Infof("Sync - Paste, dst: %s, param: %s", dstType, common.ToJson(pasteParam))
 
-	if dstType == utils.Drive {
+	if dstType == common.Drive {
 		return s.copyToDrive()
 
-	} else if dstType == utils.External {
+	} else if dstType == common.External {
 		return s.copyToExternal()
 
-	} else if dstType == utils.Cache {
+	} else if dstType == common.Cache {
 		return s.copyToCache()
 
-	} else if dstType == utils.Sync {
+	} else if dstType == common.Sync {
 		return s.copyToSync()
 
-	} else if dstType == utils.Cloud {
+	} else if dstType == common.Cloud {
 		return s.copyToCloud()
 	}
 

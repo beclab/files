@@ -7,7 +7,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
@@ -113,11 +112,11 @@ func GetUploadLink(header http.Header, fileParam *models.FileParam, reqFrom stri
 	return url, nil
 }
 
-func HandleUploadLink(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func HandleUploadLink(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	MigrateSeahubUserToRedis(r.Header)
 
 	//owner, _, _, _, err := upload.GetPVC(r)
-	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
 	if owner == "" {
 		return http.StatusBadRequest, errors.New("bfl header missing or invalid")
 	}
@@ -162,10 +161,10 @@ func genFileUploadURL(token, op string, replace bool) string {
 	return baseURL
 }
 
-func HandleUploadedBytes(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func HandleUploadedBytes(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	MigrateSeahubUserToRedis(r.Header)
 
-	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
 	if owner == "" {
 		return http.StatusBadRequest, errors.New("bfl header missing or invalid")
 	}

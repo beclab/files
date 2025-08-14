@@ -11,5 +11,5 @@ type HandlerParam struct {
 	Owner          string `json:"owner"`
 	ResponseWriter http.ResponseWriter
 	Request        *http.Request
-	Data           *common.Data
+	Data           *common.HttpData
 }

@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"files/pkg/common"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -68,7 +68,7 @@ func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) 
 		return nil, err
 	}
 
-	return utils.ToBytes(filesData), nil
+	return common.ToBytes(filesData), nil
 }
 
 func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
@@ -76,7 +76,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	var queryParam = contextArgs.QueryParam
 	var owner = fileParam.Owner
 
-	klog.Infof("Sync preview, user: %s, args: %s", owner, utils.ToJson(contextArgs))
+	klog.Infof("Sync preview, user: %s, args: %s", owner, common.ToJson(contextArgs))
 
 	var seahubUrl string
 	var previewSize string
@@ -209,7 +209,7 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
-	klog.Infof("Sync create, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
+	klog.Infof("Sync create, owner: %s, args: %s", owner, common.ToJson(contextArgs))
 
 	res, err := seahub.HandleDirOperation(s.service.Request.Header.Clone(), fileParam.Extend, fileParam.Path, "", "mkdir")
 	if err != nil {
@@ -247,7 +247,7 @@ func (s *SyncStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, erro
 	}
 
 	if len(deleteFailedPaths) > 0 {
-		return utils.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
+		return common.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
 	}
 
 	return nil, nil
@@ -257,7 +257,7 @@ func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
-	klog.Infof("Sync rename, owner: %s, args: %s", owner, utils.ToJson(contextArgs))
+	klog.Infof("Sync rename, owner: %s, args: %s", owner, common.ToJson(contextArgs))
 
 	var respBody []byte
 	var err error
@@ -312,7 +312,7 @@ func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData
 
 			streamFiles = append(nestFilesData.Items, streamFiles[1:]...)
 		} else {
-			dataChan <- fmt.Sprintf("%s\n\n", utils.ToJson(firstItem))
+			dataChan <- fmt.Sprintf("%s\n\n", common.ToJson(firstItem))
 			streamFiles = streamFiles[1:]
 		}
 

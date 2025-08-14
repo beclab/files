@@ -1,4 +1,4 @@
-package utils
+package common
 
 import (
 	"fmt"
@@ -76,19 +76,6 @@ func GenerateDupCommonName(existsName []string, prefixName string, existSamePath
 	}
 
 	return newFileName
-}
-
-func UpdatePathName(oldPath string, newName string, isDir bool) string {
-	if isDir {
-		var tmp = strings.TrimSuffix(oldPath, "/")
-		var pos = strings.LastIndex(tmp, "/")
-		var p = tmp[:pos] + "/" + newName + "/"
-		return p
-	}
-
-	var pos = strings.LastIndex(oldPath, "/")
-	var p = oldPath[:pos] + "/" + newName
-	return p
 }
 
 func GetFileNameFromPath(s string) (string, bool) {

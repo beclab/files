@@ -13,7 +13,7 @@ import (
 
 var MIGRATED = false
 
-func SeahubUsersGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func SeahubUsersGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	MigrateSeahubUserToRedis(r.Header)
 	responseData, err := seaserv.ListAllUsers()
 	if err != nil {

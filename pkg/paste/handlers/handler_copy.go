@@ -1,9 +1,9 @@
 package handlers
 
 import (
+	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -13,7 +13,7 @@ import (
 )
 
 func (c *Handler) CloudCopy() error {
-	klog.Infof("CloudCopy - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
+	klog.Infof("CloudCopy - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, common.ToJson(c.src), common.ToJson(c.dst))
 
 	return c.cloudPaste()
 }

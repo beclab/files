@@ -1,6 +1,6 @@
 package common
 
-type Data struct {
+type HttpData struct {
 	Server *Server
 	Raw    interface{}
 }

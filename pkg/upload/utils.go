@@ -3,8 +3,8 @@ package upload
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"files/pkg/common"
 	"files/pkg/global"
-	"files/pkg/utils"
 	"net/http"
 	"os"
 	"strings"
@@ -19,7 +19,7 @@ const (
 )
 
 func GetPVC(r *http.Request) (string, string, string, string, error) {
-	var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
 	var userPvc = global.GlobalData.GetPvcUser(owner)
 	var cachePvc = global.GlobalData.GetPvcCache(owner)
 

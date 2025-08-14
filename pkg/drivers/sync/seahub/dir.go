@@ -60,7 +60,7 @@ func repoHasBeenSharedOut(repoId string) (bool, error) {
 }
 
 // repo meta data, used in the future
-func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	MigrateSeahubUserToRedis(r.Header)
 	vars := mux.Vars(r)
 	repoId := vars["repo_id"]

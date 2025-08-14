@@ -1,9 +1,9 @@
 package http
 
 import (
+	"files/pkg/common"
 	"files/pkg/models"
 	"files/pkg/tasks"
-	"files/pkg/utils"
 	"net/http"
 
 	"k8s.io/klog/v2"
@@ -37,7 +37,7 @@ func taskCancel(w http.ResponseWriter, taskId string, deleted string) {
 		"code": 0,
 		"msg":  "success",
 	}
-	w.Write([]byte(utils.ToJson(data)))
+	w.Write([]byte(common.ToJson(data)))
 }
 
 func taskQuery(w http.ResponseWriter, taskId string) {
@@ -56,9 +56,9 @@ func taskQuery(w http.ResponseWriter, taskId string) {
 		data["msg"] = "success"
 		data["task"] = task
 
-		klog.Infof("Task - data: %s", utils.ToJson(data))
+		klog.Infof("Task - data: %s", common.ToJson(data))
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(utils.ToJson(data)))
+		w.Write([]byte(common.ToJson(data)))
 	}
 }

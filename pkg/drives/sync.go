@@ -25,7 +25,7 @@ type SyncResourceService struct {
 
 // TODO：protected
 func (rc *SyncResourceService) PutHandler(fileParam *models.FileParam) handleFunc {
-	return func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+	return func(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 		// Only allow PUT for files.
 		var err error
 		if strings.HasSuffix(fileParam.Path, "/") {
