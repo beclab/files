@@ -5,15 +5,17 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"files/pkg/common"
-	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/global"
+	"fmt"
+	"github.com/spf13/afero"
 	"io"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -264,7 +266,7 @@ func MoveFileByInfo(fileInfo FileInfo, uploadsDir string) error {
 	filePath := filepath.Join(uploadsDir, fileInfo.ID)
 
 	// Construct target path
-	destinationPath := drives.AddVersionSuffix(fileInfo.FullPath, nil, false)
+	destinationPath := AddVersionSuffix(fileInfo.FullPath, nil, false)
 
 	// Move files to target path
 	err := files.MoveFileOs(filePath, destinationPath)
@@ -276,4 +278,32 @@ func MoveFileByInfo(fileInfo FileInfo, uploadsDir string) error {
 	removeInfoFile(fileInfo.ID, uploadsDir)
 
 	return nil
+}
+
+func AddVersionSuffix(source string, fs afero.Fs, isDir bool) string {
+	counter := 1
+	dir, name := path.Split(source)
+	ext := ""
+	base := name
+	if !isDir {
+		ext = filepath.Ext(name)
+		base = strings.TrimSuffix(name, ext)
+	}
+
+	for {
+		if fs == nil {
+			if _, err := os.Stat(source); err != nil {
+				break
+			}
+		} else {
+			if _, err := fs.Stat(source); err != nil {
+				break
+			}
+		}
+		renamed := fmt.Sprintf("%s(%d)%s", base, counter, ext)
+		source = path.Join(dir, renamed)
+		counter++
+	}
+
+	return source
 }
