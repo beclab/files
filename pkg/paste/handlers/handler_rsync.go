@@ -54,7 +54,7 @@ func (c *Handler) Rsync() error {
 	}
 
 	if pathMeta.Size > int64(dstFree) {
-		return fmt.Errorf("not enough free space on target disk, required: %s, available: %s", common.FormatBytes(uint64(pathMeta.Size)), common.FormatBytes(dstFree))
+		return fmt.Errorf("not enough free space on target disk, required: %s, available: %s", common.FormatBytes(pathMeta.Size), common.FormatBytes(int64(dstFree)))
 	}
 
 	klog.Infof("command - Rsync, srcPath: %s, dstUri: %s, dstFree: %d, dstUsed: %.2f%%", srcPath, dstUri, dstFree, dstUsedPercent)
