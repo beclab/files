@@ -2,7 +2,7 @@ package searpc
 
 import (
 	"encoding/binary"
-	"encoding/json"
+	"files/pkg/common"
 	"k8s.io/klog/v2"
 	"net"
 	"sync"
@@ -50,11 +50,7 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 		"request": fcallStr,
 	}
 
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		klog.Errorf("~~~Debug log: JSON marshal failed - service: %s, error: %v", service, err)
-		return "", err
-	}
+	jsonData := common.ToBytes(reqBody)
 	klog.Infof("~~~Debug log: Request JSON - service: %s, json: %s", service, string(jsonData))
 
 	header := make([]byte, 4)

@@ -21,4 +21,10 @@ type Execute interface {
 	Rename(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 	Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
+
+	UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error)
+
+	UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error)
+
+	UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error)
 }

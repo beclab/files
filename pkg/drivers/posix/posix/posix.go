@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/drivers/base"
+	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
@@ -439,4 +440,16 @@ func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content boo
 
 	return file, nil
 
+}
+
+func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
+}
+
+func (s *PosixStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
+}
+
+func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
 }

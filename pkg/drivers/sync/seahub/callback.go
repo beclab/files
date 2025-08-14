@@ -42,14 +42,9 @@ func createDefaultLibrary(newUsername string) (string, error) {
 
 	for _, e := range dirents {
 		objName := e["obj_name"]
-		objNameBytes, err := json.Marshal(objName)
-		if err != nil {
-			klog.Infof("Parse obj_name failed: %v", err)
-			return defaultRepo, err
-		}
 		_, err = seaserv.GlobalSeafileAPI.CopyFile(
-			sysRepoId, "/", string(objNameBytes),
-			defaultRepo, "/", string(objNameBytes),
+			sysRepoId, "/", string(common.ToBytes(objName)),
+			defaultRepo, "/", string(common.ToBytes(objName)),
 			username, 0, 0,
 		)
 		if err != nil {

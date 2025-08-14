@@ -1,7 +1,6 @@
 package seahub
 
 import (
-	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
@@ -209,11 +208,7 @@ func HandleGetRepoDir(header http.Header, fileParam *models.FileParam) ([]byte, 
 
 	response["dirent_list"] = append(allDirInfo, allFileInfo...)
 
-	jsonBytes, err := json.Marshal(response)
-	if err != nil {
-		return nil, err
-	}
-	return jsonBytes, nil
+	return common.ToBytes(response), nil
 }
 
 func normalizeDirPath(p string) string {
@@ -522,11 +517,7 @@ func HandleDirOperation(header http.Header, repoId, pathParam, destName, operati
 		newDirPath := path.Join(parentDir, newDirName)
 		dirInfo := getDirInfo(repoId, newDirPath)
 
-		jsonBytes, err := json.Marshal(dirInfo)
-		if err != nil {
-			return nil, err
-		}
-		return jsonBytes, nil
+		return common.ToBytes(dirInfo), nil
 
 	case "rename":
 		dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, pathParam)
@@ -563,11 +554,7 @@ func HandleDirOperation(header http.Header, repoId, pathParam, destName, operati
 
 		if newDirName == oldDirName {
 			dirInfo := getDirInfo(repoId, pathParam)
-			jsonBytes, err := json.Marshal(dirInfo)
-			if err != nil {
-				return nil, err
-			}
-			return jsonBytes, nil
+			return common.ToBytes(dirInfo), nil
 		}
 
 		newDirName = CheckFilenameWithRename(repoId, parentDir, newDirName)
@@ -578,11 +565,7 @@ func HandleDirOperation(header http.Header, repoId, pathParam, destName, operati
 
 		newDirPath := path.Join(parentDir, newDirName)
 		dirInfo := getDirInfo(repoId, newDirPath)
-		jsonBytes, err := json.Marshal(dirInfo)
-		if err != nil {
-			return nil, err
-		}
-		return jsonBytes, nil
+		return common.ToBytes(dirInfo), nil
 
 	case "revert":
 		// we don't use revert now

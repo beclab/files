@@ -2,6 +2,7 @@ package searpc
 
 import (
 	"encoding/json"
+	"files/pkg/common"
 	"fmt"
 	"k8s.io/klog/v2"
 	"strconv"
@@ -37,26 +38,6 @@ func _fret_int(retStr string) (int, error) {
 	}
 	return 0, &SearpcError{"Invalid response format"}
 }
-
-//func _fret_string(retStr string) (string, error) {
-//	var dicts map[string]interface{}
-//	if err := json.Unmarshal([]byte(retStr), &dicts); err != nil {
-//		return "", &SearpcError{"Invalid response format"}
-//	}
-//
-//	if errCode, ok := dicts["err_code"]; ok {
-//		klog.Infof("~~~Debug log: errCode: %s", errCode.(string))
-//		return "", &SearpcError{dicts["err_msg"].(string)}
-//	}
-//
-//	if ret, ok := dicts["ret"]; ok {
-//		if s, ok := ret.(string); ok {
-//			return s, nil
-//		}
-//		return "", &SearpcError{"Invalid response format"}
-//	}
-//	return "", &SearpcError{"Invalid response format"}
-//}
 
 func _fret_string(retStr string) (string, error) {
 	var dicts map[string]interface{}
@@ -96,7 +77,7 @@ func _fret_string(retStr string) (string, error) {
 				fmt.Sprintf("Invalid return type: %T, need string", v)}
 		}
 	}
-	
+
 	return "", &SearpcError{
 		fmt.Sprintf("Missing 'ret' field in response: %s", retStr)}
 }
@@ -296,11 +277,7 @@ func CreateRPCMethod(
 			}
 		}
 
-		data, err := json.Marshal(callArgs)
-		if err != nil {
-			klog.Infof("~~~Debug log: Failed to marshal arguments for %s: %v", methodName, err)
-			return nil, fmt.Errorf("failed to marshal arguments: %v", err)
-		}
+		data := common.ToBytes(callArgs)
 
 		client, ok := searpcClient.(SearpcClientInterface)
 		if !ok {
