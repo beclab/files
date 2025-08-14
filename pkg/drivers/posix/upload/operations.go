@@ -4,12 +4,15 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/drives"
 	"files/pkg/files"
+	"files/pkg/global"
 	"io"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,9 +23,94 @@ import (
 const (
 	expireTime         = time.Duration(24) * time.Hour
 	DefaultMaxFileSize = 4 * 1024 * 1024 * 1024 // 4G
+	CacheRequestPrefix = "/AppData"
+	CachePathPrefix    = "/appcache"
+	ExternalPathPrefix = "/data/External/"
 )
 
 var UploadsFiles map[string]string = map[string]string{}
+
+func CheckType(filetype string) bool {
+	if allowAllFileType {
+		return true
+	}
+
+	return supportedFileTypes[filetype]
+}
+
+func CheckSize(filesize int64) bool {
+	if filesize < 0 {
+		return false
+	}
+
+	if limitedSize <= 0 {
+		return true
+	}
+
+	return limitedSize >= filesize
+}
+
+func GetPVC(r *http.Request) (string, string, string, string, error) {
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
+	var userPvc = global.GlobalData.GetPvcUser(owner)
+	var cachePvc = global.GlobalData.GetPvcCache(owner)
+
+	var uploadsDir = CachePathPrefix + "/" + cachePvc + "/files/.uploadstemp"
+
+	return owner, userPvc, cachePvc, uploadsDir, nil
+}
+
+func ExtractPart(s string) string {
+	if !strings.HasPrefix(s, ExternalPathPrefix) {
+		return ""
+	}
+
+	s = s[len(ExternalPathPrefix):]
+
+	index := strings.Index(s, "/")
+
+	if index == -1 {
+		return s
+	} else {
+		return s[:index]
+	}
+}
+
+func CheckDirExist(dirPath string) bool {
+	fi, err := os.Stat(dirPath)
+	return (err == nil || os.IsExist(err)) && fi.IsDir()
+}
+
+func PathExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+
+	if os.IsNotExist(err) {
+		return false
+	}
+	return false
+}
+
+func MakeUid(filePath string) string {
+	hash := md5.Sum([]byte(filePath))
+	md5String := hex.EncodeToString(hash[:])
+	klog.Infof("filePath:%s, uid:%s", filePath, md5String)
+	return md5String
+}
+
+func PathExistsAndGetLen(path string) (bool, int64) {
+	info, err := os.Stat(path)
+	if err == nil {
+		return true, info.Size()
+	}
+
+	if os.IsNotExist(err) {
+		return false, 0
+	}
+	return false, 0
+}
 
 func removeTempFile(uid string, uploadsDir string) {
 	filePath := filepath.Join(uploadsDir, uid)
@@ -75,38 +163,6 @@ func ParseContentRange(ranges string) (int64, int64, bool) {
 	}
 
 	return firstByte, lastByte, true
-}
-
-func CalculateMD5(fileHeader *multipart.FileHeader) (string, error) {
-	start := time.Now()
-	klog.Infoln("Function CalculateMD5 starts at", start)
-	defer func() {
-		elapsed := time.Since(start)
-		klog.Infof("Function CalculateMD5 execution time: %v\n", elapsed)
-	}()
-
-	// Open the file
-	file, err := fileHeader.Open()
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// Create an MD5 hash object
-	hash := md5.New()
-
-	// Copy the file content to the hash object
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-
-	// Compute the hash and get the checksum
-	hashInBytes := hash.Sum(nil)[:16]
-
-	// Convert the byte array to a hexadecimal string
-	md5String := hex.EncodeToString(hashInBytes)
-
-	return md5String, nil
 }
 
 func SaveFile(fileHeader *multipart.FileHeader, filePath string, newFile bool, offset int64) (int64, error) {

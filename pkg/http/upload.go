@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	e "errors"
 	"files/pkg/common"
+	"files/pkg/drivers/posix/upload"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
 	"files/pkg/models"
-	"files/pkg/upload"
 	"fmt"
 	"net/http"
 	"os"
@@ -417,7 +417,7 @@ func uploadChunksHandler(w http.ResponseWriter, r *http.Request, d *common.HttpD
 
 		if info.Offset == offsetStart || (info.Offset-offsetEnd < 0 && info.Offset-offsetStart > 0) {
 			if resumableInfo.MD5 != "" {
-				md5, err := upload.CalculateMD5(fileHeader)
+				md5, err := common.MD5FileHeader(fileHeader)
 				if err != nil {
 					return http.StatusInternalServerError, err
 				}
