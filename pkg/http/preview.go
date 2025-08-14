@@ -9,6 +9,7 @@ import (
 	"files/pkg/drivers/base"
 	"files/pkg/models"
 	"fmt"
+	"io"
 	"net/http"
 
 	"k8s.io/klog/v2"
@@ -64,9 +65,19 @@ func previewHandle(fn previewHandlerFunc, prefix string) http.Handler {
 		}
 
 		w.Header().Set("Content-Disposition", "inline")
-		// w.Header().Set("Cache-Control", "private")
-		http.ServeContent(w, r, fileData.FileName, fileData.FileModified, bytes.NewReader(fileData.Data))
-		return
+
+		if !fileData.IsCloud {
+			http.ServeContent(w, r, fileData.FileName, fileData.FileModified, bytes.NewReader(fileData.Data))
+		} else {
+			for k, vs := range fileData.RespHeader {
+				for _, v := range vs {
+					w.Header().Add(k, v)
+				}
+			}
+			w.WriteHeader(fileData.StatusCode)
+			io.Copy(w, fileData.ReadCloser)
+		}
+
 	})
 
 	return handler

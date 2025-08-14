@@ -10,11 +10,11 @@ import (
 	"files/pkg/preview"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 )
 
@@ -53,31 +53,31 @@ func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	return common.ToBytes(fileData), nil
 }
 
-// + todo
 func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
 	var fileParam = contextArgs.FileParam
 	var queryParam = contextArgs.QueryParam
 	var owner = fileParam.Owner
+	var path, err = url.PathUnescape(fileParam.Path)
+	if err != nil {
+		return nil, fmt.Errorf("path %s urldecode error: %v", fileParam.Path, err)
+	}
+
+	var pathPrefix = common.GetPrefixPath(path)
+	var fileName, isFile = common.GetFileNameFromPath(path)
+
+	if !isFile {
+		return nil, fmt.Errorf("not a file")
+	}
 
 	klog.Infof("Cloud preview, user: %s, args: %s", owner, common.ToJson(contextArgs))
 
-	var path = fileParam.Path
-	if strings.HasSuffix(path, "/") {
-		return nil, fmt.Errorf("can't preview folder")
-	}
-
-	var data = &models.ListParam{
-		Drive: fileParam.FileType,
-		Name:  fileParam.Extend,
-		Path:  path,
-	}
-
-	res, err := s.service.FileStat(owner, data)
+	var configName = fmt.Sprintf("%s_%s_%s", owner, fileParam.FileType, fileParam.Extend)
+	res, err := s.service.FileStat(configName, pathPrefix, fileName)
 	if err != nil {
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
 	if res == nil { // file not found
-		return nil, nil
+		return nil, fmt.Errorf("file %s not exists", path)
 	}
 
 	var fileMeta *operations.OperationsStat
@@ -85,7 +85,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		return nil, err
 	}
 
-	klog.Infof("Cloud preview, query: %s, file meta: %s", common.ToJson(data), string(res))
+	klog.Infof("Cloud preview, file meta: %s", string(res))
 
 	fileType := common.MimeTypeByExtension(fileMeta.Item.Name)
 	if !strings.HasPrefix(fileType, "image") {
@@ -129,85 +129,77 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	}
 	var imagePath = filepath.Join(fileTargetPath, fileMeta.Item.Name)
 
-	klog.Infof("Cloud preview, download success, file path: %s", imagePath)
-
-	imageData, err := preview.OpenFile(s.handler.Ctx, imagePath, queryParam.PreviewSize)
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:       afero.NewBasePathFs(afero.NewOsFs(), imagePath),
+		FsType:   fileParam.FileType,
+		FsExtend: fileParam.Extend,
+		Expand:   true,
+		Content:  true,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	go func() {
-		if err := preview.SetCache(previewCacheKey, imageData); err != nil {
-			klog.Errorf("Cloud preview, set cache error: %v, file: %s", err, fileMeta.Item.Path)
-		}
-	}()
+	klog.Infof("Cloud preview, download success, file path: %s", imagePath)
 
-	var modTime, _ = time.Parse(time.RFC3339Nano, fileMeta.Item.ModTime)
-	return &models.PreviewHandlerResponse{
-		FileName:     fileMeta.Item.Name,
-		FileModified: modTime, // fileMeta.Item.ModTime,
-		Data:         imageData,
-	}, nil
+	switch file.Type {
+	case "image":
+		return preview.HandleImagePreview(file, queryParam)
+	default:
+		return nil, fmt.Errorf("can't create preview for %s type", file.Type)
+	}
 }
 
 func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
 	var fileParam = contextArgs.FileParam
 	var user = fileParam.Owner
-	var path = fileParam.Path
+	var pathPrefix = common.GetPrefixPath(fileParam.Path)
+	var fileName, isFile = common.GetFileNameFromPath(fileParam.Path)
 
-	klog.Infof("Cloud raw, user: %s, path: %s, args: %s", user, path, common.ToJson(contextArgs))
-
-	if strings.HasSuffix(path, "/") {
+	if !isFile {
 		return nil, fmt.Errorf("not a file")
 	}
 
-	var data = &models.ListParam{
-		Drive: fileParam.FileType,
-		Name:  fileParam.Extend,
-		Path:  path,
+	fileName, err := url.PathUnescape(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("file %s urldecode error: %v", fileName, err)
 	}
 
-	res, err := s.service.FileStat(user, data)
+	fileParam.Path = pathPrefix + fileName
+
+	fileName, _ = url.PathUnescape(fileName)
+	var path = pathPrefix + fileName
+
+	klog.Infof("Cloud raw, user: %s, path: %s, args: %s", user, path, common.ToJson(contextArgs))
+
+	var configName = fmt.Sprintf("%s_%s_%s", user, fileParam.FileType, fileParam.Extend)
+	res, err := s.service.FileStat(configName, pathPrefix, fileName)
 	if err != nil {
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
 
-	var fileMeta *models.CloudResponse
+	if res == nil {
+		return nil, fmt.Errorf("file %s not exists", path)
+	}
+
+	var fileMeta *operations.OperationsStat
 	if err := json.Unmarshal(res, &fileMeta); err != nil {
 		return nil, err
 	}
 
-	klog.Infof("Cloud raw, query: %s, file meta: %s", common.ToJson(data), string(res))
+	klog.Infof("Cloud raw, file meta: %s", string(res))
 
-	if !fileMeta.IsSuccess() {
-		return nil, fmt.Errorf(fileMeta.FailMessage())
-	}
+	var serve = s.service.command.GetServe().Get(configName, path, &contextArgs.QueryParam.Header)
 
-	fileTargetPath := CreateFileDownloadFolder(user, fileMeta.Data.Path)
-
-	if !files.FilePathExists(fileTargetPath) {
-		if err := files.MkdirAllWithChown(nil, fileTargetPath, 0755); err != nil {
-			klog.Errorln(err)
-			return nil, err
-		}
-	}
-
-	var downloader = NewDownloader(s.handler.Ctx, s.service, fileParam, fileMeta.Data.Name, fileMeta.Data.FileSize, fileTargetPath)
-	if err := downloader.download(); err != nil {
-		return nil, err
-	}
-
-	var downloadedFilePath = filepath.Join(fileTargetPath, fileMeta.Data.Name)
-
-	f, err := os.Open(downloadedFilePath)
-	if err != nil {
-		return nil, err
-	}
-
+	var modTime, _ = time.Parse(time.RFC3339Nano, fileMeta.Item.ModTime)
 	return &models.RawHandlerResponse{
-		Reader:       f,
-		FileName:     fileMeta.Data.Name,
-		FileModified: fileMeta.Data.Meta.ModifiedTime,
+		IsCloud:      true,
+		ReadCloser:   serve.Body,
+		StatusCode:   serve.StatusCode,
+		RespHeader:   serve.Header,
+		FileName:     fileMeta.Item.Name,
+		FileLength:   fileMeta.Item.Size,
+		FileModified: modTime,
 	}, nil
 }
 
@@ -244,9 +236,6 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	dstPrefixPath = strings.TrimPrefix(dstPrefixPath, "/")
 	dstFileExt := filepath.Ext(dstFileOrDirName)
-	// if fileParam.FileType == utils.GoogleDrive {
-	// 	parentPath = strings.Trim(parentPath, "/")
-	// }
 
 	var configName = fmt.Sprintf("%s_%s_%s", owner, fileParam.FileType, fileParam.Extend)
 	var config, err = s.service.command.GetConfig().GetConfig(configName)
@@ -254,7 +243,11 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, err
 	}
 	var fs = s.service.getFs(configName, config.Type, config.Bucket, dstPrefixPath)
-	var opts = &operations.OperationsOpt{}
+	var opts = &operations.OperationsOpt{
+		Metadata:   false,
+		NoModTime:  true,
+		NoMimeType: true,
+	}
 	if isFile {
 		opts.FilesOnly = true
 	} else {

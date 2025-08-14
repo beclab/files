@@ -7,10 +7,6 @@ var (
 	CopyfilePath   = "operations/copyfile"
 	Movefilepath   = "operations/movefile"
 	DeletefilePath = "operations/deletefile"
-	DeletePath     = "operations/delete"
-	DeletedirPath  = "operations/rmdir"
-	DeletedirsPath = "operations/rmdirs"
-	CleanupPath    = "operations/cleanup"
 	PurgePath      = "operations/purge"
 	StatPath       = "operations/stat"
 	SizePath       = "operations/size"
@@ -64,12 +60,12 @@ type OperationsReq struct {
 }
 
 type OperationsOpt struct {
-	Recurse    bool `json:"recurse,omitempty"`
-	NoModTime  bool `json:"noModTime,omitempty"`
-	NoMimeType bool `json:"noMimeType,omitempty"`
-	DirsOnly   bool `json:"dirsOnly,omitempty"`
-	FilesOnly  bool `json:"filesOnly,omitempty"`
-	Metadata   bool `json:"metadata,omitempty"`
+	Recurse    bool `json:"recurse"`
+	NoModTime  bool `json:"noModTime"`
+	NoMimeType bool `json:"noMimeType"`
+	DirsOnly   bool `json:"dirsOnly"`
+	FilesOnly  bool `json:"filesOnly"`
+	Metadata   bool `json:"metadata"`
 }
 
 type OperationsCopyFileResp struct {

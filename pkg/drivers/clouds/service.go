@@ -173,16 +173,16 @@ func (s *service) DownloadAsync(owner string, param *models.DownloadAsyncParam) 
 	return *resp.JobId, nil
 }
 
-func (s *service) FileStat(owner string, param *models.ListParam) ([]byte, error) {
-	var configName = fmt.Sprintf("%s_%s_%s", owner, param.Drive, param.Name)
+func (s *service) FileStat(configName string, filePrefixPath, fileName string) ([]byte, error) {
 	var config, err = s.command.GetConfig().GetConfig(configName)
 	if err != nil {
 		return nil, err
 	}
-	var fs = s.getFs(configName, config.Type, config.Bucket, filepath.Dir(param.Path))
-	var remote = strings.TrimPrefix(param.Path, "/")
 
-	klog.Infof("[service] file stat, param: %s, fs: %s, remote: %s", common.ToJson(param), fs, remote)
+	var fs = s.getFs(configName, config.Type, config.Bucket, filePrefixPath)
+	var remote = fileName
+
+	klog.Infof("[service] file stat, fs: %s, remote: %s", fs, remote)
 
 	var opts = &operations.OperationsOpt{
 		FilesOnly: true,
@@ -262,7 +262,9 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 
 	var fs string = s.getFs(configName, config.Type, config.Bucket, fileParam.Path)
 	var opts = &operations.OperationsOpt{
-		Metadata: true,
+		NoMimeType: true,
+		NoModTime:  true,
+		Metadata:   false,
 	}
 
 	klog.Infof("[service] list, configBucket: %s, fs: %s, param: %s", config.Bucket, fs, common.ToJson(fileParam))

@@ -7,6 +7,7 @@ import (
 	"files/pkg/drivers/base"
 	"files/pkg/models"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 
@@ -66,26 +67,29 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 		if rawInline == "true" {
 			if rawMeta == "true" {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				http.ServeContent(w, r, file.FileName, file.FileModified, file.Reader)
-				return
 			}
-			disp := mime.FormatMediaType("inline", map[string]string{
-				"filename": file.FileName,
-			})
-
 			w.Header().Set("Cache-Control", "private")
-			w.Header().Set("Content-Disposition", disp)
-			http.ServeContent(w, r, file.FileName, file.FileModified, file.Reader)
-		} else {
-			disp := mime.FormatMediaType("attachment", map[string]string{
+			w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
 				"filename": file.FileName,
-			})
-			w.Header().Set("Content-Disposition", disp)
-			http.ServeContent(w, r, file.FileName, file.FileModified, file.Reader)
+			}))
+
+		} else {
+			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{
+				"filename": file.FileName,
+			}))
 		}
 
-		return
-
+		if !file.IsCloud {
+			http.ServeContent(w, r, file.FileName, file.FileModified, file.Reader)
+		} else {
+			for k, vs := range file.RespHeader {
+				for _, v := range vs {
+					w.Header().Add(k, v)
+				}
+			}
+			w.WriteHeader(file.StatusCode)
+			io.Copy(w, file.ReadCloser)
+		}
 	})
 
 	return handler
