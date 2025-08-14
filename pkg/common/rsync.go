@@ -1,4 +1,4 @@
-package utils
+package common
 
 import (
 	"bufio"
@@ -20,6 +20,10 @@ import (
 var (
 	completeMsgs = []string{"sent", "received", "total size is", "speedup is"}
 )
+
+func GetCommand(c string) (string, error) {
+	return exec.LookPath(c)
+}
 
 func ExecRsync(ctx context.Context, name string, args []string, callbackup func(p int, t int64)) (string, error) {
 	var opts = CommandOptions{

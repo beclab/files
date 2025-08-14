@@ -4,15 +4,16 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"net/http"
+	"mime/multipart"
+	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -25,6 +26,38 @@ func init() {
 	if RootPrefix == "" {
 		RootPrefix = "/data"
 	}
+}
+
+func MD5FileHeader(fileHeader *multipart.FileHeader) (string, error) {
+	start := time.Now()
+	klog.Infoln("Function CalculateMD5 starts at", start)
+	defer func() {
+		elapsed := time.Since(start)
+		klog.Infof("Function CalculateMD5 execution time: %v\n", elapsed)
+	}()
+
+	// Open the file
+	file, err := fileHeader.Open()
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	// Create an MD5 hash object
+	hash := md5.New()
+
+	// Copy the file content to the hash object
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	// Compute the hash and get the checksum
+	hashInBytes := hash.Sum(nil)[:16]
+
+	// Convert the byte array to a hexadecimal string
+	md5String := hex.EncodeToString(hashInBytes)
+
+	return md5String, nil
 }
 
 func Md5File(filepath string) (string, error) {
@@ -61,98 +94,6 @@ func Md5String(s string) string {
 	hasher := md5.New()
 	hasher.Write([]byte(s))
 	return hex.EncodeToString(hasher.Sum(nil))
-}
-
-func ErrToStatus(err error) int {
-	switch {
-	case err == nil:
-		return http.StatusOK
-	case os.IsPermission(err):
-		return http.StatusForbidden
-	case os.IsNotExist(err), err == ErrNotExist:
-		return http.StatusNotFound
-	case os.IsExist(err), err == ErrExist:
-		return http.StatusConflict
-	case errors.Is(err, ErrPermissionDenied):
-		return http.StatusForbidden
-	case errors.Is(err, ErrInvalidRequestParams):
-		return http.StatusBadRequest
-	case errors.Is(err, ErrRootUserDeletion):
-		return http.StatusForbidden
-	case err.Error() == "file size exceeds 4GB":
-		return http.StatusRequestEntityTooLarge
-	default:
-		return http.StatusInternalServerError
-	}
-}
-
-func RenderSuccess(w http.ResponseWriter, _ *http.Request) (int, error) {
-	return 0, nil
-}
-
-func RenderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, error) {
-	marsh, err := json.Marshal(data)
-
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if _, err := w.Write(marsh); err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	return 0, nil
-}
-
-func GetHost(bflName string) string {
-	hostUrl := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
-
-	resp, err := http.Get(hostUrl)
-	if err != nil {
-		klog.Errorln("Error making GET request:", err)
-		return ""
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		klog.Errorln("Error reading response body:", err)
-		return ""
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		klog.Infof("Received non-200 response: %d\n", resp.StatusCode)
-		return ""
-	}
-
-	type BflResponse struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Data    struct {
-			TerminusName    string `json:"terminusName"`
-			WizardStatus    string `json:"wizardStatus"`
-			Selfhosted      bool   `json:"selfhosted"`
-			TailScaleEnable bool   `json:"tailScaleEnable"`
-			OsVersion       string `json:"osVersion"`
-			LoginBackground string `json:"loginBackground"`
-			Avatar          string `json:"avatar"`
-			TerminusId      string `json:"terminusId"`
-			Did             string `json:"did"`
-			ReverseProxy    string `json:"reverseProxy"`
-			Terminusd       string `json:"terminusd"`
-		} `json:"data"`
-	}
-
-	var responseObj BflResponse
-	err = json.Unmarshal(body, &responseObj)
-	if err != nil {
-		klog.Errorln("Error unmarshaling JSON:", err)
-		return ""
-	}
-
-	modifiedTerminusName := strings.Replace(responseObj.Data.TerminusName, "@", ".", 1)
-	return "https://files." + modifiedTerminusName
 }
 
 const (
@@ -230,4 +171,52 @@ func FormatBytes(bytes int64) string {
 func RemoveSlash(s string) string {
 	s = strings.TrimSuffix(s, "/")
 	return strings.ReplaceAll(s, "/", "_")
+}
+
+func ToJson(v any) string {
+	r, _ := json.Marshal(v)
+	return string(r)
+}
+
+func ToBytes(v any) []byte {
+	r, _ := json.Marshal(v)
+	return r
+}
+
+func IsURLEscaped(s string) bool {
+	escapePattern := `%[0-9A-Fa-f]{2}`
+	re := regexp.MustCompile(escapePattern)
+
+	if re.MatchString(s) {
+		decodedStr, err := url.QueryUnescape(s)
+		if err != nil {
+			return false
+		}
+		return decodedStr != s
+	}
+	return false
+}
+
+func UnescapeURLIfEscaped(s string) (string, error) {
+	var result = s
+	var err error
+	if IsURLEscaped(s) {
+		result, err = url.QueryUnescape(s)
+		if err != nil {
+			return "", err
+		}
+	}
+	return result, nil
+}
+
+func EscapeURLWithSpace(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+}
+
+func EscapeAndJoin(input string, delimiter string) string {
+	segments := strings.Split(input, delimiter)
+	for i, segment := range segments {
+		segments[i] = EscapeURLWithSpace(segment)
+	}
+	return strings.Join(segments, delimiter)
 }

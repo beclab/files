@@ -1,7 +1,7 @@
 package config
 
 import (
-	"files/pkg/utils"
+	"files/pkg/common"
 )
 
 var (
@@ -64,11 +64,11 @@ type Config struct {
 }
 
 func (c *Config) Equal(target *Config) bool {
-	if c.Type == utils.RcloneTypeS3 {
+	if c.Type == common.RcloneTypeS3 {
 		if c.Url != target.Url || c.Endpoint != target.Endpoint || c.Bucket != target.Bucket || c.SecretAccessKey != target.SecretAccessKey {
 			return false
 		}
-	} else if c.Type == utils.RcloneTypeDropbox || c.Type == utils.RcloneTypeDrive {
+	} else if c.Type == common.RcloneTypeDropbox || c.Type == common.RcloneTypeDrive {
 		if c.AccessToken != target.AccessToken || c.RefreshToken != target.RefreshToken || c.ExpiresAt != target.ExpiresAt {
 			return false
 		}

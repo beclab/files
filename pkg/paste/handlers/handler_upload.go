@@ -6,7 +6,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"io"
 	"mime"
@@ -24,7 +23,7 @@ import (
 
 // todo check file same name before
 func (c *Handler) UploadToCloud() error {
-	klog.Infof("UploadToCloud - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
+	klog.Infof("UploadToCloud - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, common.ToJson(c.src), common.ToJson(c.dst))
 
 	return c.cloudPaste()
 

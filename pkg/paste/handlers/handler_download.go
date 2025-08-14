@@ -4,10 +4,10 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"io"
 	"math"
@@ -27,7 +27,7 @@ func (c *Handler) DownloadFromFiles() error {
 }
 
 func (c *Handler) DownloadFromCloud() error {
-	klog.Infof("DownloadFromCloud - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, utils.ToJson(c.src), utils.ToJson(c.dst))
+	klog.Infof("DownloadFromCloud - owner: %s, action: %s, src: %s, dst: %s", c.owner, c.action, common.ToJson(c.src), common.ToJson(c.dst))
 
 	return c.cloudPaste()
 
@@ -299,7 +299,7 @@ func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool) st
 	for {
 		if fileParam.FileType == "sync" {
 			var header = http.Header{
-				utils.REQUEST_HEADER_OWNER: []string{fileParam.Owner},
+				common.REQUEST_HEADER_OWNER: []string{fileParam.Owner},
 			}
 			if isDir {
 				dirInfoRes, err := seahub.HandleGetRepoDir(header, fileParam)

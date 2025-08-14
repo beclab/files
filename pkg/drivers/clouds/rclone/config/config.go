@@ -3,9 +3,9 @@ package config
 import (
 	"context"
 	"encoding/json"
+	common2 "files/pkg/common"
 	"files/pkg/drivers/clouds/rclone/common"
 	"files/pkg/drivers/clouds/rclone/utils"
-	commonutils "files/pkg/utils"
 	"fmt"
 	"net/http"
 	"sync"
@@ -31,9 +31,9 @@ type config struct {
 }
 
 var localConfig = &Config{
-	ConfigName: commonutils.Local,
-	Name:       commonutils.Local,
-	Type:       commonutils.Local,
+	ConfigName: common2.Local,
+	Name:       common2.Local,
+	Type:       common2.Local,
 }
 
 var _ Interface = &config{}
@@ -58,8 +58,8 @@ func (c *config) Create(param *Config) error {
 		Parameters: c.parseCreateConfigParameters(param),
 	}
 
-	klog.Infof("[rclone] create config: %s, param: %s", param.Type, commonutils.ToJson(data))
-	_, err := utils.Request(ctx, url, http.MethodPost, nil, []byte(commonutils.ToJson(data)))
+	klog.Infof("[rclone] create config: %s, param: %s", param.Type, common2.ToJson(data))
+	_, err := utils.Request(ctx, url, http.MethodPost, nil, []byte(common2.ToJson(data)))
 	if err != nil {
 		klog.Warningf("[rclone] create config, result: %s", err.Error())
 	}
@@ -78,7 +78,7 @@ func (c *config) Delete(configName string) error {
 	var data = map[string]string{
 		"name": configName,
 	}
-	_, err := utils.Request(ctx, url, http.MethodPost, nil, commonutils.ToBytes(data))
+	_, err := utils.Request(ctx, url, http.MethodPost, nil, common2.ToBytes(data))
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (c *config) Dump() (map[string]*Config, error) {
 		for k, v := range configs {
 			v.ConfigName = k
 
-			if v.Type == commonutils.RcloneTypeDropbox || v.Type == commonutils.RcloneTypeDrive {
+			if v.Type == common2.RcloneTypeDropbox || v.Type == common2.RcloneTypeDrive {
 				token, err := c.formatToken(v)
 				if err != nil {
 					klog.Errorf("[rclone] dump config, format token error: %v, configName: %s", err, k)
@@ -161,11 +161,11 @@ func (c *config) GetFsPath(configName string) (string, error) {
 		return "", fmt.Errorf("config not found, configName: %s", configName)
 	}
 
-	if val.Type == commonutils.RcloneTypeS3 {
+	if val.Type == common2.RcloneTypeS3 {
 		return val.Bucket, nil
-	} else if val.Type == commonutils.RcloneTypeDropbox || val.Type == commonutils.RcloneTypeDrive {
+	} else if val.Type == common2.RcloneTypeDropbox || val.Type == common2.RcloneTypeDrive {
 		return "", nil
-	} else if val.Type == commonutils.RcloneTypeLocal {
+	} else if val.Type == common2.RcloneTypeLocal {
 		return "", nil
 	}
 
@@ -173,9 +173,9 @@ func (c *config) GetFsPath(configName string) (string, error) {
 }
 
 func (c *config) parseCreateConfigParameters(param *Config) *ConfigParameters {
-	if param.Type == commonutils.RcloneTypeS3 {
+	if param.Type == common2.RcloneTypeS3 {
 		return c.parseS3Params(param)
-	} else if param.Type == commonutils.RcloneTypeDropbox || param.Type == commonutils.RcloneTypeDrive {
+	} else if param.Type == common2.RcloneTypeDropbox || param.Type == common2.RcloneTypeDrive {
 		return c.parseDropboxParams(param)
 	}
 
@@ -202,7 +202,7 @@ func (c *config) parseDropboxParams(param *Config) *ConfigParameters {
 	return &ConfigParameters{
 		ConfigName: param.ConfigName,
 		Name:       param.Name,
-		Token:      commonutils.ToJson(dropboxToken),
+		Token:      common2.ToJson(dropboxToken),
 	}
 }
 

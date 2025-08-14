@@ -6,7 +6,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"path"
 	"strings"
@@ -55,7 +54,7 @@ func (d *Download) download() error {
 		LocalFileName: d.fileName,
 	}
 
-	klog.Infof("Cloud download, owner: %s, param: %s", owner, utils.ToJson(p))
+	klog.Infof("Cloud download, owner: %s, param: %s", owner, common.ToJson(p))
 
 	type asyncResult struct {
 		jobId int
@@ -100,7 +99,7 @@ func (d *Download) download() error {
 			return err
 		}
 
-		klog.Infof("Cloud download task status, user: %s, file: %s, id: %d, status:%s", owner, d.fileName, resp.jobId, utils.ToJson(res))
+		klog.Infof("Cloud download task status, user: %s, file: %s, id: %d, status:%s", owner, d.fileName, resp.jobId, common.ToJson(res))
 
 		if res.Finished {
 			return nil

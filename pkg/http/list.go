@@ -2,10 +2,10 @@ package http
 
 import (
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"fmt"
 	"net/http"
 
@@ -45,7 +45,7 @@ func fileHandle(fn fileHandlerFunc, prefix string) http.Handler {
 			return
 		}
 
-		klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, r.Method, utils.ToJson(contextArg))
+		klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, r.Method, common.ToJson(contextArg))
 
 		var handlerParam = &base.HandlerParam{
 			Ctx:            r.Context(),
@@ -101,7 +101,7 @@ func fileDeleteHandle(fn fileDeleteHandlerFunc, prefix string) http.Handler {
 			return
 		}
 
-		klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", deleteArg.FileParam.Owner, deleteArg.FileParam.FileType, r.Method, utils.ToJson(deleteArg))
+		klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", deleteArg.FileParam.Owner, deleteArg.FileParam.FileType, r.Method, common.ToJson(deleteArg))
 
 		var handlerParam = &base.HandlerParam{
 			Ctx:            r.Context(),

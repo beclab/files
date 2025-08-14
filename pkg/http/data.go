@@ -14,7 +14,7 @@ import (
 	"files/pkg/common"
 )
 
-type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error)
+type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error)
 
 func handle(fn handleFunc, prefix string, server *common.Server) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +25,7 @@ func handle(fn handleFunc, prefix string, server *common.Server) http.Handler {
 
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-		status, err := fn(w, r, &common.Data{
+		status, err := fn(w, r, &common.HttpData{
 			Server: server,
 		})
 

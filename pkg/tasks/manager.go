@@ -2,10 +2,10 @@ package tasks
 
 import (
 	"context"
+	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/paste/handlers"
-	"files/pkg/utils"
 	"fmt"
 	"sync"
 	"time"
@@ -56,7 +56,7 @@ func (t *taskManager) CreateTask(taskType TaskType, param *models.PasteParam) *T
 		taskType: taskType,
 		id:       t.generateTaskId(),
 		param:    param,
-		state:    utils.Pending,
+		state:    common.Pending,
 		ctx:      ctx,
 		cancel:   cancel,
 		manager:  t,

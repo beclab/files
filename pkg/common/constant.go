@@ -1,4 +1,4 @@
-package utils
+package common
 
 import "os"
 
@@ -50,11 +50,6 @@ const (
 
 	ProviderAWS        = "AWS"
 	ProviderTencentCOS = "TencentCOS"
-)
-
-const (
-	Text  = "text"
-	Image = "image"
 )
 
 const (

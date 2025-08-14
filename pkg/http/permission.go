@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	fileParam, _, err := UrlPrep(r, "")
 	if err != nil {
 		return http.StatusBadRequest, err
@@ -39,7 +39,7 @@ func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Data
 	return common.RenderJSON(w, r, responseData)
 }
 
-func permissionPutHandler(w http.ResponseWriter, r *http.Request, d *common.Data) (int, error) {
+func permissionPutHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	fileParam, _, err := UrlPrep(r, "")
 	if err != nil {
 		return http.StatusBadRequest, err

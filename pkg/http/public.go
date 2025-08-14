@@ -7,7 +7,6 @@ import (
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/global"
 	"files/pkg/models"
-	"files/pkg/utils"
 	"net/http"
 
 	"k8s.io/klog/v2"
@@ -18,7 +17,7 @@ type commonFunc func(contextQueryArgs *models.QueryParam) ([]byte, error)
 func commonHandle(fn commonFunc) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var path = r.URL.Path
-		var owner = r.Header.Get(utils.REQUEST_HEADER_OWNER)
+		var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
 		if owner == "" {
 			http.Error(w, "user not found", http.StatusBadRequest)
 			return
@@ -64,7 +63,7 @@ func reposGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var owner = contextQueryArgs.Owner
 
 	var header = &http.Header{
-		utils.REQUEST_HEADER_OWNER: []string{owner},
+		common.REQUEST_HEADER_OWNER: []string{owner},
 	}
 	repos, err := seahub.HandleReposGet(header, []string{"mine"})
 	if err != nil {
@@ -96,7 +95,7 @@ func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	//_ = writer.WriteField("passwd", "")
 	//
 	var header = &http.Header{
-		utils.REQUEST_HEADER_OWNER: []string{owner},
+		common.REQUEST_HEADER_OWNER: []string{owner},
 		//"Content-Type":                []string{writer.FormDataContentType()},
 	}
 
@@ -127,7 +126,7 @@ func deleteRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	//deleteUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoId + "/"
 
 	var header = &http.Header{
-		utils.REQUEST_HEADER_OWNER: []string{owner},
+		common.REQUEST_HEADER_OWNER: []string{owner},
 	}
 	var res, err = seahub.HandleRepoDelete(header, repoId)
 
@@ -171,7 +170,7 @@ func renameRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	//_ = writer.WriteField("repo_name", repoName)
 
 	header := &http.Header{
-		utils.REQUEST_HEADER_OWNER: []string{user},
+		common.REQUEST_HEADER_OWNER: []string{user},
 		//"Content-Type":                []string{writer.FormDataContentType()},
 	}
 
@@ -196,7 +195,7 @@ func nodesGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 
 	var data = make(map[string]interface{})
 	data["nodes"] = nodes
-	data["currentNode"] = utils.NodeName
+	data["currentNode"] = common.NodeName
 
 	var result = make(map[string]interface{})
 	result["code"] = http.StatusOK

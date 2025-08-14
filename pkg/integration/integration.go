@@ -1,9 +1,9 @@
 package integration
 
 import (
+	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/config"
-	"files/pkg/utils"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -117,7 +117,7 @@ func (i *integration) GetIntegrations() error {
 			continue
 		}
 
-		klog.Infof("integration get accounts, user: %s, data: %s", user.Name, utils.ToJson(accounts))
+		klog.Infof("integration get accounts, user: %s, data: %s", user.Name, common.ToJson(accounts))
 
 		for _, acc := range accounts {
 			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)
@@ -271,21 +271,21 @@ func (i *integration) parseBucket(s string) string {
 }
 
 func (i *integration) parseToRcloneType(s string) string {
-	if s == utils.AwsS3 || s == utils.TencentCos {
-		return utils.RcloneTypeS3
-	} else if s == utils.DropBox {
-		return utils.RcloneTypeDropbox
-	} else if s == utils.GoogleDrive {
-		return utils.RcloneTypeDrive
+	if s == common.AwsS3 || s == common.TencentCos {
+		return common.RcloneTypeS3
+	} else if s == common.DropBox {
+		return common.RcloneTypeDropbox
+	} else if s == common.GoogleDrive {
+		return common.RcloneTypeDrive
 	}
-	return utils.RcloneTypeLocal
+	return common.RcloneTypeLocal
 }
 
 func (i *integration) parseToRcloneProvider(s string) string {
-	if s == utils.AwsS3 {
-		return utils.ProviderAWS
-	} else if s == utils.TencentCos {
-		return utils.ProviderTencentCOS
+	if s == common.AwsS3 {
+		return common.ProviderAWS
+	} else if s == common.TencentCos {
+		return common.ProviderTencentCOS
 	}
 	return ""
 }

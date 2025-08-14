@@ -1,8 +1,8 @@
 package sync
 
 import (
+	"files/pkg/common"
 	"files/pkg/drivers/base"
-	"files/pkg/utils"
 	"net/http"
 )
 
@@ -20,5 +20,5 @@ func NewService(param *base.HandlerParam) *Service {
 
 func (s *Service) Get(u string, method string, data []byte) ([]byte, error) {
 	header := s.Request.Header.Clone()
-	return utils.RequestWithContext(u, method, &header, data)
+	return common.RequestWithContext(u, method, &header, data)
 }
