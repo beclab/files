@@ -176,10 +176,6 @@ func ListAllUsers() (map[string]map[string]interface{}, error) {
 
 	users, err := GlobalCcnetAPI.GetEmailusers("DB", 0, totalCount, nil)
 
-	for key, value := range users {
-		klog.Infof("~~~Debug log: Key: %v, Value: %v (Type: %T)\n", key, value, value)
-	}
-
 	data := make(map[string]map[string]interface{})
 
 	for _, user := range users {

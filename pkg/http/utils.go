@@ -185,7 +185,6 @@ func UrlPrep(r *http.Request, path string) (*models.FileParam, drives.ResourceSe
 		return nil, nil, err
 	}
 	srcType := fileParam.FileType
-	klog.Infof("~~~Debug log: fileParam=%v", fileParam)
 
 	handler, err := drives.GetResourceService(srcType)
 	if err != nil {

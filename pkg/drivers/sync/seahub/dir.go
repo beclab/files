@@ -60,14 +60,11 @@ func repoHasBeenSharedOut(repoId string) (bool, error) {
 
 // repo meta data, used in the future
 func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	MigrateSeahubUserToRedis(r.Header)
 	vars := mux.Vars(r)
 	repoId := vars["repo_id"]
-	klog.Infof("~~~Debug log: repoId: %s", repoId)
 
 	bflName := r.Header.Get("X-Bfl-User")
 	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
@@ -76,11 +73,7 @@ func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) 
 
 	permission, err := CheckFolderPermission(username, repoId, "/")
 	if err != nil || permission == "" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, "/") // temp compatible
-		if err != nil || permission == "" {
-			return http.StatusForbidden, err
-		}
-		// return http.StatusForbidden, err
+		return http.StatusForbidden, errors.New("permission denied")
 	}
 
 	libNeedDecrypt := false
@@ -92,11 +85,6 @@ func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) 
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
-	oldPasswordSet, err := seaserv.GlobalSeafileAPI.IsPasswordSet(repoId, oldUsername) // temp compatible
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	passwordSet = passwordSet || oldPasswordSet
 
 	if encrypted && passwordSet {
 		libNeedDecrypt = true
@@ -146,10 +134,8 @@ func RepoGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) 
 	return common.RenderJSON(w, r, response)
 }
 
-func HandleGetRepoDir(header http.Header, fileParam *models.FileParam) ([]byte, error) {
-	MigrateSeahubUserToRedis(header)
+func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	repoId := fileParam.Extend
-	klog.Infof("~~~Debug log: repoId: %s", repoId)
 
 	thumbnailSize := 48
 
@@ -164,19 +150,11 @@ func HandleGetRepoDir(header http.Header, fileParam *models.FileParam) ([]byte, 
 		return nil, errors.New("folder not found")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
+	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
 	if err != nil || permission == "" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-		if err != nil || permission == "" {
-			return nil, err
-		} else {
-			useUsername = oldUsername
-		}
+		return nil, errors.New("permission denied")
 	}
 
 	parentDirs := generateParentDirs(parentDir, false)
@@ -185,9 +163,8 @@ func HandleGetRepoDir(header http.Header, fileParam *models.FileParam) ([]byte, 
 	allFileInfo := []map[string]interface{}{}
 
 	for _, dir := range parentDirs {
-		klog.Infof("~~~Debug log: dir: %s", dir)
 		dirInfo, fileInfo, err := getDirFileInfoList(
-			useUsername, // username,
+			username,
 			repo,
 			dir,
 			true,
@@ -283,8 +260,6 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 	var dirInfoList []map[string]interface{}
 	var fileInfoList []map[string]interface{}
 
-	klog.Infof("~~~Debug log: username=%s, repoId=%s, parent_dir=%s", username, repoId, parentDir)
-
 	parentDirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
 	if err != nil {
 		return nil, nil, err
@@ -297,7 +272,6 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 
 	var dirList []map[string]interface{}
 	for _, dirent := range dirFileList {
-		klog.Infof("~~~Debug log: dirent.mode=%s", dirent["mode"])
 		isDir, err := IsDirectory(dirent["mode"])
 		if err != nil {
 			klog.Error(err)
@@ -328,7 +302,6 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 
 	var fileList []map[string]interface{}
 	for _, dirent := range dirFileList {
-		klog.Infof("~~~Debug log: dirent.mode=%s", dirent["mode"])
 		isDir, err := IsDirectory(dirent["mode"])
 		if err != nil {
 			klog.Error(err)
@@ -436,9 +409,7 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 	return dirInfoList, fileInfoList, nil
 }
 
-func HandleDirOperation(header http.Header, repoId, pathParam, destName, operation string) ([]byte, error) {
-	MigrateSeahubUserToRedis(header)
-
+func HandleDirOperation(owner, repoId, pathParam, destName, operation string) ([]byte, error) {
 	if pathParam == "" || pathParam[0] != '/' {
 		klog.Errorf("invalid path param: %s", pathParam)
 		return nil, errors.New("p invalid")
@@ -465,10 +436,7 @@ func HandleDirOperation(header http.Header, repoId, pathParam, destName, operati
 		return nil, errors.New("repo not found")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
+	username := owner + "@auth.local"
 
 	pathParam = strings.TrimRight(pathParam, "/")
 	parentDir := path.Dir(pathParam)
@@ -487,12 +455,7 @@ func HandleDirOperation(header http.Header, repoId, pathParam, destName, operati
 
 		permission, err := CheckFolderPermission(username, repoId, parentDir)
 		if err != nil || permission != "rw" {
-			permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-			if err != nil || permission != "rw" {
-				return nil, errors.New("permission denied")
-			} else {
-				useUsername = oldUsername
-			}
+			return nil, errors.New("permission denied")
 		}
 
 		newDirName := path.Base(pathParam)
@@ -503,7 +466,7 @@ func HandleDirOperation(header http.Header, repoId, pathParam, destName, operati
 		retryCount := 0
 		for retryCount < 10 {
 			newDirName = CheckFilenameWithRename(repoId, parentDir, newDirName)
-			if resultCode, err := seaserv.GlobalSeafileAPI.PostDir(repoId, parentDir, newDirName, useUsername); err == nil && resultCode == 0 {
+			if resultCode, err := seaserv.GlobalSeafileAPI.PostDir(repoId, parentDir, newDirName, username); err == nil && resultCode == 0 {
 				break
 			} else if err.Error() == "file already exists" {
 				retryCount++
@@ -532,12 +495,7 @@ func HandleDirOperation(header http.Header, repoId, pathParam, destName, operati
 
 		permission, err := CheckFolderPermission(username, repoId, parentDir)
 		if err != nil || permission != "rw" {
-			permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-			if err != nil || permission != "rw" {
-				return nil, errors.New("permission denied")
-			} else {
-				useUsername = oldUsername
-			}
+			return nil, errors.New("permission denied")
 		}
 
 		oldDirName := path.Base(pathParam)
@@ -558,7 +516,7 @@ func HandleDirOperation(header http.Header, repoId, pathParam, destName, operati
 		}
 
 		newDirName = CheckFilenameWithRename(repoId, parentDir, newDirName)
-		if resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldDirName, newDirName, useUsername); err != nil || resultCode != 0 {
+		if resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldDirName, newDirName, username); err != nil || resultCode != 0 {
 			klog.Errorf("Failed to rename: result_code: %d, err: %v", resultCode, err)
 			return nil, errors.New("failed to rename")
 		}

@@ -9,7 +9,6 @@ import (
 	"html/template"
 	"k8s.io/klog/v2"
 	"math"
-	"net/http"
 	"sort"
 	"strconv"
 	"sync"
@@ -33,8 +32,7 @@ func getSystemDefaultRepoId() string {
 	return defaultRepoID
 }
 
-func HandleReposGet(header *http.Header, types []string) ([]byte, error) {
-	MigrateSeahubUserToRedis(*header)
+func HandleReposGet(owner string, types []string) ([]byte, error) {
 	filterBy := map[string]bool{
 		"mine":   false,
 		"shared": false,
@@ -52,9 +50,7 @@ func HandleReposGet(header *http.Header, types []string) ([]byte, error) {
 		}
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
+	username := owner + "@auth.local"
 
 	usernameCache := make(map[string]string)
 	nicknameCache := make(map[string]string)
@@ -68,13 +64,6 @@ func HandleReposGet(header *http.Header, types []string) ([]byte, error) {
 		} else {
 			processRepos(ownedRepos, username, &repoInfoList, usernameCache, nicknameCache)
 		}
-
-		oldOwnedRepos, err := seaserv.GlobalSeafileAPI.GetOwnedRepoList(oldUsername, false, -1, -1)
-		if err != nil {
-			klog.Errorln(err)
-		} else {
-			processRepos(oldOwnedRepos, oldUsername, &repoInfoList, usernameCache, nicknameCache)
-		}
 	}
 
 	if filterBy["shared"] {
@@ -83,13 +72,6 @@ func HandleReposGet(header *http.Header, types []string) ([]byte, error) {
 			klog.Errorln(err)
 		} else {
 			processSharedRepos(sharedRepos, username, &repoInfoList, usernameCache, nicknameCache)
-		}
-
-		oldSharedRepos, err := seaserv.GlobalSeafileAPI.GetShareInRepoList(oldUsername, -1, -1)
-		if err != nil {
-			klog.Errorln(err)
-		} else {
-			processSharedRepos(oldSharedRepos, oldUsername, &repoInfoList, usernameCache, nicknameCache)
 		}
 	}
 
@@ -127,7 +109,6 @@ func processRepos(repos []map[string]string, username string,
 	})
 
 	for _, repo := range repos {
-		klog.Infof("~~~Debug log: repo = %v", repo)
 		isVirtual, err := strconv.ParseBool(repo["is_virtual"])
 		if err != nil {
 			klog.Errorf("Error parsing is_virtual flag: %v", err)
@@ -274,9 +255,7 @@ func NormalizeRepoStatusCode(status string) string {
 	return ""
 }
 
-func HandleRepoDelete(header *http.Header, repoId string) ([]byte, error) {
-	MigrateSeahubUserToRedis(*header)
-
+func HandleRepoDelete(owner, repoId string) ([]byte, error) {
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
 		klog.Infof("API error when getting repo: %v", err)
@@ -291,9 +270,7 @@ func HandleRepoDelete(header *http.Header, repoId string) ([]byte, error) {
 		return common.ToBytes(map[string]interface{}{"success": true}), nil
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
+	username := owner + "@auth.local"
 
 	repoOwner, err := seaserv.GlobalSeafileAPI.GetRepoOwner(repoId)
 	if err != nil {
@@ -301,7 +278,7 @@ func HandleRepoDelete(header *http.Header, repoId string) ([]byte, error) {
 		return nil, err
 	}
 
-	if username != repoOwner && oldUsername != repoOwner { // temp compatible
+	if username != repoOwner { // temp compatible
 		return nil, errors.New("Permission denied")
 	}
 
@@ -516,9 +493,7 @@ func repoDownloadInfo(repoId, username string, genSyncToken bool) (map[string]in
 	return info, nil
 }
 
-func HandleRepoPost(header *http.Header, repoName, passwd string) ([]byte, error) {
-	MigrateSeahubUserToRedis(*header)
-
+func HandleRepoPost(owner, repoName, passwd string) ([]byte, error) {
 	if repoName == "" {
 		return nil, errors.New("repository name is required")
 	}
@@ -526,8 +501,7 @@ func HandleRepoPost(header *http.Header, repoName, passwd string) ([]byte, error
 		return nil, errors.New("invalid repository name")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
+	username := owner + "@auth.local"
 
 	var repoId string
 	var err error
@@ -564,9 +538,7 @@ func isValidDirentName(name string) bool {
 	return true
 }
 
-func HandleRepoPatch(header *http.Header, repoId, repoName, repoDesc, op string) ([]byte, error) {
-	MigrateSeahubUserToRedis(*header)
-
+func HandleRepoPatch(owner, repoId, repoName, repoDesc, op string) ([]byte, error) {
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
 		klog.Errorf("Error getting repo: %v", err)
@@ -594,9 +566,7 @@ func HandleRepoPatch(header *http.Header, repoId, repoName, repoDesc, op string)
 			return nil, errors.New("invalid repo name")
 		}
 
-		bflName := header.Get("X-Bfl-User")
-		username := bflName + "@auth.local"
-		oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
+		username := owner + "@auth.local"
 
 		repoOwner, err := seaserv.GlobalSeafileAPI.GetRepoOwner(repo["id"])
 		if err != nil {
@@ -604,7 +574,7 @@ func HandleRepoPatch(header *http.Header, repoId, repoName, repoDesc, op string)
 			return nil, err
 		}
 
-		if username != repoOwner && oldUsername != repoOwner {
+		if username != repoOwner {
 			return nil, errors.New("You do not have permission to rename this library.")
 		}
 

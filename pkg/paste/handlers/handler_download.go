@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"mime"
 	"net/http"
 	"os"
 	"path"
@@ -36,32 +35,27 @@ func (c *Handler) DownloadFromCloud() error {
 }
 
 func (c *Handler) DownloadFromSync() error {
-	klog.Infof("~~~Copy Debug log: Download from sync begins!")
-	header := make(http.Header)
-	header.Add("X-Bfl-User", c.owner)
-
-	totalSize, err := c.GetFromSyncFileCount(header, "size") // file and dir can both use this
+	totalSize, err := c.GetFromSyncFileCount("size") // file and dir can both use this
 	if err != nil {
 		klog.Errorf("DownloadFromSync - GetFromSyncFileCount - %v", err)
 		return err
 	}
-	klog.Infof("~~~Copy Debug log: DownloadFromSync - GetFromSyncFileCount - totalSize: %d", totalSize)
 	c.UpdateTotalSize(totalSize)
 
 	_, isFile := c.src.IsFile()
 	if isFile {
-		err = c.DownloadFileFromSync(header, nil, nil)
+		err = c.DownloadFileFromSync(nil, nil)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = c.DownloadDirFromSync(header, nil, nil)
+		err = c.DownloadDirFromSync(nil, nil)
 		if err != nil {
 			return err
 		}
 	}
 	if c.action == "move" {
-		err = seahub.HandleDelete(header, c.src)
+		err = seahub.HandleDelete(c.src)
 		if err != nil {
 			return err
 		}
@@ -71,17 +65,13 @@ func (c *Handler) DownloadFromSync() error {
 	return nil
 }
 
-func (c *Handler) GetFromSyncFileCount(header http.Header, countType string) (int64, error) {
-	klog.Infof("～～～Copy Debug Log: Start GetFromSyncFileCount with repoId: %s, path: %s, countType: %s",
-		c.src.Extend, c.src.Path, countType)
-
+func (c *Handler) GetFromSyncFileCount(countType string) (int64, error) {
 	var count int64
 	repoId := c.src.Extend
 	parentDir, filename := filepath.Split(c.src.Path)
 	if !strings.HasSuffix(parentDir, "/") {
 		parentDir += "/"
 	}
-	klog.Infof("～～～Copy Debug Log: Process path - parentDir: %s, filename: %s", parentDir, filename)
 
 	firstFileParam := &models.FileParam{
 		Owner:    c.src.Owner,
@@ -95,23 +85,18 @@ func (c *Handler) GetFromSyncFileCount(header http.Header, countType string) (in
 	for len(queue) > 0 {
 		curFileParam := queue[0]
 		queue = queue[1:]
-		klog.Infof("～～～Copy Debug Log: Processing directory: %s", curFileParam.Path)
 
-		curDirInfoRes, err := seahub.HandleGetRepoDir(header, curFileParam)
+		curDirInfoRes, err := seahub.HandleGetRepoDir(curFileParam)
 		if err != nil || curDirInfoRes == nil {
-			klog.Errorf("～～～Copy Debug Log: Folder not found at path: %s, error: %v", curFileParam.Path, err)
 			return 0, errors.New("folder not found")
 		}
 
 		var curDirInfo map[string]interface{}
 		if err = json.Unmarshal(curDirInfoRes, &curDirInfo); err != nil {
-			klog.Errorf("～～～Copy Debug Log: JSON unmarshal failed for path: %s, error: %v", curFileParam.Path, err)
 			return 0, err
 		}
-		klog.Infof("~~~Copy Debug Log: curDirInfo: %v", curDirInfo)
 
 		direntInterfaceList, ok := curDirInfo["dirent_list"].([]interface{})
-		klog.Infof("~~~Copy Debug Log: direntInterfaceList: %v, ok: %v", direntInterfaceList, ok)
 		if !ok {
 			klog.Errorf("Invalid dirent_list format at path: %s", curFileParam.Path)
 			return 0, fmt.Errorf("invalid directory format")
@@ -120,31 +105,24 @@ func (c *Handler) GetFromSyncFileCount(header http.Header, countType string) (in
 		direntList := make([]map[string]interface{}, 0)
 		for _, item := range direntInterfaceList {
 			if dirent, ok := item.(map[string]interface{}); ok {
-				klog.Infof("~~~Copy Debug Log: dirent: %v, ok: %v", dirent, ok)
 				direntList = append(direntList, dirent)
 			} else {
 				klog.Errorf("Invalid dirent item type at path: %s", curFileParam.Path)
 				return 0, fmt.Errorf("invalid directory item type")
 			}
 		}
-		klog.Infof("~~~Copy Debug Log: len(direntList)=%d", len(direntList))
 
 		for _, dirent := range direntList {
-			klog.Infof("~~~Copy Debug Log: dirent: %v", dirent)
 			name, _ := dirent["name"].(string)
 			objType, _ := dirent["type"].(string)
-			klog.Infof("~~~Copy Debug Log: name: %s, objType: %s, size: %v", name, objType, dirent["size"])
 
 			if filename != "" && name == filename {
-				klog.Infof("～～～Copy Debug Log: Found target file: %s, type: %s", name, objType)
 				if countType == "size" {
 					size, _ := dirent["size"].(float64)
 					count += int64(size)
-					klog.Infof("～～～Copy Debug Log: Add file size: %d", size)
 				} else {
 					count++
 				}
-				klog.Infof("～～～Copy Debug Log: Returning early with count: %d", count)
 				return count, nil
 			} else if filename == "" {
 				if objType == "dir" {
@@ -152,7 +130,6 @@ func (c *Handler) GetFromSyncFileCount(header http.Header, countType string) (in
 					if dirPath != "/" {
 						dirPath += "/"
 					}
-					klog.Infof("～～～Copy Debug Log: Enqueue subdirectory: %s", dirPath)
 					appendFileParam := &models.FileParam{
 						Owner:    c.src.Owner,
 						FileType: c.src.FileType,
@@ -164,22 +141,18 @@ func (c *Handler) GetFromSyncFileCount(header http.Header, countType string) (in
 					if countType == "size" {
 						size, _ := dirent["size"].(float64)
 						count += int64(size)
-						klog.Infof("～～～Copy Debug Log: Add file size: %d for file: %s", size, name)
 					} else {
 						count++
-						klog.Infof("～～～Copy Debug Log: Increment file count for: %s", name)
 					}
 				}
 			}
 		}
 	}
 
-	klog.Infof("～～～Copy Debug Log: Final count result: %d", count)
 	return count, nil
 }
 
-func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileParam) error {
-	klog.Infof("~~~Copy Debug log: Download dir from sync begins!")
+func (c *Handler) DownloadDirFromSync(src, dst *models.FileParam) error {
 	select {
 	case <-c.ctx.Done():
 		return nil
@@ -199,7 +172,7 @@ func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileP
 	}
 	dstFullPath := dstUri + dst.Path
 
-	dirInfoRes, err := seahub.HandleGetRepoDir(header, src)
+	dirInfoRes, err := seahub.HandleGetRepoDir(src)
 	if err != nil || dirInfoRes == nil {
 		return errors.New("folder not found")
 	}
@@ -209,7 +182,6 @@ func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileP
 	}
 
 	dstFullPath = AddVersionSuffix(dstFullPath, dst, true)
-	klog.Infof("~~~Debug log: dstFullPath after addversionsuffix=%s", dstFullPath)
 
 	mode := seahub.SyncPermToMode(dirInfo["user_perm"].(string))
 	if err = files.MkdirAllWithChown(nil, dstFullPath, mode); err != nil {
@@ -245,14 +217,12 @@ func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileP
 		fsrc := filepath.Join(src.Path, item["name"].(string))
 		fdst := filepath.Join(fdstBase, item["name"].(string))
 
-		klog.Infof("~~~Debug log: fsrc=%s", fsrc)
 		fsrcFileParam := &models.FileParam{
 			Owner:    src.Owner,
 			FileType: src.FileType,
 			Extend:   src.Extend,
 			Path:     fsrc,
 		}
-		klog.Infof("~~~Debug log: fdst=%s", fdst)
 		fdstFileParam := &models.FileParam{
 			Owner:    dst.Owner,
 			FileType: dst.FileType,
@@ -261,12 +231,12 @@ func (c *Handler) DownloadDirFromSync(header http.Header, src, dst *models.FileP
 		}
 
 		if item["type"].(string) == "dir" {
-			err = c.DownloadDirFromSync(header, fsrcFileParam, fdstFileParam)
+			err = c.DownloadDirFromSync(fsrcFileParam, fdstFileParam)
 			if err != nil {
 				return err
 			}
 		} else {
-			err = c.DownloadFileFromSync(header, fsrcFileParam, fdstFileParam)
+			err = c.DownloadFileFromSync(fsrcFileParam, fdstFileParam)
 			if err != nil {
 				return err
 			}
@@ -298,11 +268,8 @@ func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool) st
 
 	for {
 		if fileParam.FileType == "sync" {
-			var header = http.Header{
-				common.REQUEST_HEADER_OWNER: []string{fileParam.Owner},
-			}
 			if isDir {
-				dirInfoRes, err := seahub.HandleGetRepoDir(header, fileParam)
+				dirInfoRes, err := seahub.HandleGetRepoDir(fileParam)
 				if err != nil || dirInfoRes == nil {
 					break
 				}
@@ -337,8 +304,7 @@ func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool) st
 	return source
 }
 
-func (c *Handler) DownloadFileFromSync(header http.Header, src, dst *models.FileParam) error {
-	klog.Infof("~~~Copy Debug log: Download file from sync begins!")
+func (c *Handler) DownloadFileFromSync(src, dst *models.FileParam) error {
 	select {
 	case <-c.ctx.Done():
 		return nil
@@ -363,19 +329,16 @@ func (c *Handler) DownloadFileFromSync(header http.Header, src, dst *models.File
 
 	left, _, right := c.CalculateSyncProgressRange(diskSize) // mid may used for sync <-> cloud, reserved but not used here
 
-	dlUrlRaw, err := seahub.ViewLibFile(header, src, "dl")
+	dlUrlRaw, err := seahub.ViewLibFile(src, "dl")
 	if err != nil {
 		return err
 	}
 	dlUrl := "http://127.0.0.1:80/" + string(dlUrlRaw)
-	klog.Infof("~~~Debug log: dlURL=%s", dlUrl)
 
 	request, err := http.NewRequestWithContext(c.ctx, "GET", dlUrl, nil)
 	if err != nil {
 		return err
 	}
-
-	request.Header = header.Clone()
 
 	client := http.Client{}
 
@@ -394,15 +357,7 @@ func (c *Handler) DownloadFileFromSync(header http.Header, src, dst *models.File
 		return fmt.Errorf("unrecognizable response format")
 	}
 
-	_, params, err := mime.ParseMediaType(contentDisposition)
-	if err != nil {
-		return err
-	}
-	filename := params["filename"]
-	klog.Infof("~~~Debug log: filename=%s", filename)
-
 	dstFullPath = AddVersionSuffix(dstFullPath, dst, false)
-	klog.Infof("~~~Debug log: dstFullPath after addversionsuffix=%s", dstFullPath)
 
 	if err = files.MkdirAllWithChown(nil, filepath.Dir(dstFullPath), 0755); err != nil {
 		klog.Errorln(err)
@@ -457,7 +412,7 @@ func (c *Handler) DownloadFileFromSync(header http.Header, src, dst *models.File
 			}
 
 			if lastProgress != progress {
-				klog.Info("~~~Debug log: [" + time.Now().Format("2006-01-02 15:04:05") + "]" + fmt.Sprintf("downloaded from seafile %d/%d with progress %d", totalRead, diskSize, progress))
+				klog.Info("[" + time.Now().Format("2006-01-02 15:04:05") + "]" + fmt.Sprintf("downloaded from seafile %d/%d with progress %d", totalRead, diskSize, progress))
 				lastProgress = progress
 			}
 			c.UpdateProgress(mappedProgress, transferred+int64(nr))

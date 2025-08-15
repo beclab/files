@@ -81,7 +81,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	var seahubUrl string
 	var previewSize string
 
-	filesData, err := seahub.ViewLibFile(s.service.Request.Header.Clone(), fileParam, "dict")
+	filesData, err := seahub.ViewLibFile(fileParam, "dict")
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	} else {
 		previewSize = "/128"
 	}
-	res, err := seahub.GetThumbnail(s.service.Request.Header.Clone(), fileParam, previewSize)
+	res, err := seahub.GetThumbnail(fileParam, previewSize)
 	if err != nil {
 		klog.Errorf("Sync preview, get file failed, user: %s, url: %s, err: %s", owner, seahubUrl, err.Error())
 		return nil, err
@@ -135,23 +135,20 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 	var data []byte
 	var err error
 
-	klog.Infof("~~~Charset Debug log: queryParam.RawMeta=%s", queryParam.RawMeta)
 	if queryParam.RawMeta == "true" {
-		data, err = seahub.ViewLibFile(s.service.Request.Header, fileParam, "dict")
-		klog.Infof("~~~Debug log: from seaserv, data = %s", string(data))
+		data, err = seahub.ViewLibFile(fileParam, "dict")
 		if err != nil {
 			return nil, err
 		}
 
 		var fileInfo *models.SyncFile
-		if err := json.Unmarshal(data, &fileInfo); err != nil {
-			klog.Errorf("~~~Debug log, unmarshal json failed, fileInfo = %s, err = %v", string(data), err)
+		if err = json.Unmarshal(data, &fileInfo); err != nil {
 			return nil, errors.New("file not found")
 		}
 	} else {
 		ext := strings.ToLower(filepath.Ext(fileName))
 		if queryParam.RawInline == "true" && (ext == ".txt" || ext == ".log" || ext == ".md") {
-			rawData, err := seahub.ViewLibFile(s.service.Request.Header, fileParam, "dict")
+			rawData, err := seahub.ViewLibFile(fileParam, "dict")
 			if err != nil {
 				return nil, err
 			}
@@ -169,12 +166,11 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 
 			if err == nil {
 				data = []byte(fileContent)
-				klog.Infof("~~~Debug log: get file content，length=%d", len(data))
 			} else {
 				data = rawData
 			}
 		} else {
-			data, err = seahub.ViewLibFile(s.service.Request.Header, fileParam, "dl")
+			data, err = seahub.ViewLibFile(fileParam, "dl")
 			if err != nil {
 				return nil, err
 			}
@@ -211,7 +207,7 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 
 	klog.Infof("Sync create, owner: %s, args: %s", owner, common.ToJson(contextArgs))
 
-	res, err := seahub.HandleDirOperation(s.service.Request.Header.Clone(), fileParam.Extend, fileParam.Path, "", "mkdir")
+	res, err := seahub.HandleDirOperation(owner, fileParam.Extend, fileParam.Path, "", "mkdir")
 	if err != nil {
 		klog.Errorf("Sync create error: %v, path: %s", err, fileParam.Path)
 		return nil, err
@@ -231,7 +227,7 @@ func (s *SyncStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, erro
 	klog.Infof("Sync delete, user: %s, param: %s, dirents: %v", owner, fileParam.Json(), dirents)
 
 	for _, dirent := range dirents {
-		res, err := seahub.HandleBatchDelete(s.service.Request.Header.Clone(), fileParam, []string{strings.Trim(dirent, "/")})
+		res, err := seahub.HandleBatchDelete(fileParam, []string{strings.Trim(dirent, "/")})
 		if err != nil {
 			klog.Errorf("Sync delete, delete files error: %v, user: %s", err, owner)
 			deleteFailedPaths = append(deleteFailedPaths, dirent)
@@ -261,7 +257,6 @@ func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error
 
 	var respBody []byte
 	var err error
-	header := s.service.Request.Header.Clone()
 	repoID := fileParam.Extend
 	newFilename, err := url.QueryUnescape(contextArgs.QueryParam.Destination)
 	if err != nil {
@@ -270,9 +265,9 @@ func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error
 	}
 	action := "rename"
 	if strings.HasSuffix(fileParam.Path, "/") {
-		respBody, err = seahub.HandleDirOperation(header, repoID, fileParam.Path, newFilename, action)
+		respBody, err = seahub.HandleDirOperation(owner, repoID, fileParam.Path, newFilename, action)
 	} else {
-		respBody, err = seahub.HandleFileOperation(header, repoID, fileParam.Path, newFilename, action)
+		respBody, err = seahub.HandleFileOperation(owner, repoID, fileParam.Path, newFilename, action)
 	}
 	if err != nil {
 		klog.Error(err)
@@ -325,7 +320,7 @@ func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData
 }
 
 func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
-	res, err := seahub.HandleGetRepoDir(s.service.Request.Header.Clone(), fileParam)
+	res, err := seahub.HandleGetRepoDir(fileParam)
 	if err != nil {
 		return nil, err
 	}
@@ -351,9 +346,7 @@ func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 }
 
 func (s *SyncStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	header := make(http.Header)
-	header.Add("X-Bfl-User", fileUploadArg.FileParam.Owner)
-	uploadLink, err := seahub.GetUploadLink(header, fileUploadArg.FileParam, fileUploadArg.From, false)
+	uploadLink, err := seahub.GetUploadLink(fileUploadArg.FileParam, fileUploadArg.From, false)
 	if err != nil {
 		return nil, err
 	}
@@ -362,9 +355,7 @@ func (s *SyncStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, 
 }
 
 func (s *SyncStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	header := make(http.Header)
-	header.Add("X-Bfl-User", fileUploadArg.FileParam.Owner)
-	res, err := seahub.GetUploadedBytes(header, fileUploadArg.FileParam, fileUploadArg.FileName)
+	res, err := seahub.GetUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
 	if err != nil {
 		return nil, err
 	}

@@ -42,7 +42,7 @@ func (rc *SyncResourceService) PutHandler(fileParam *models.FileParam) handleFun
 		//if err != nil {
 		//	return common.ErrToStatus(err), err
 		//}
-		getRespBody, err := seahub.HandleUpdateLink(r.Header, fileParam, "api")
+		getRespBody, err := seahub.HandleUpdateLink(fileParam, "api")
 		if err != nil {
 			return common.ErrToStatus(err), err
 		}

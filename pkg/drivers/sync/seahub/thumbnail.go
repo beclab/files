@@ -28,11 +28,7 @@ const (
 	THUMBNAIL_IMAGE_ORIGINAL_SIZE_LIMIT = 10.0 // MB
 )
 
-func GetThumbnail(header http.Header, fileParam *models.FileParam, previewSize string) ([]byte, error) {
-	MigrateSeahubUserToRedis(header)
-
-	klog.Infof("~~~Debug log: Get Thumbnail, PreviewSize: %s", previewSize)
-
+func GetThumbnail(fileParam *models.FileParam, previewSize string) ([]byte, error) {
 	repoId := fileParam.Extend
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
@@ -75,22 +71,14 @@ func GetThumbnail(header http.Header, fileParam *models.FileParam, previewSize s
 		return nil, errors.New("Permission denied.")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
+	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, path)
 	if err != nil || permission != "rw" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, path) // temp compatible
-		if err != nil || permission != "rw" {
-			return nil, errors.New("permission denied")
-		} else {
-			useUsername = oldUsername
-		}
+		return nil, errors.New("permission denied")
 	}
 
-	success, statusCode := generateThumbnail(useUsername, repoId, strconv.Itoa(size), path)
+	success, statusCode := generateThumbnail(username, repoId, strconv.Itoa(size), path)
 	if success {
 		thumbnailDir := filepath.Join(THUMBNAIL_ROOT, strconv.Itoa(size))
 		thumbext := strings.ToLower(filepath.Ext(fileParam.Path))
@@ -361,7 +349,6 @@ func createThumbnailCommon(srcFile, thumbnailFile string, size int) (bool, int) 
 		return false, http.StatusInternalServerError
 	}
 
-	klog.Infof("~~~Thumbnail Debug log: thumbnailFile=%s", thumbnailFile)
 	ext := strings.ToLower(filepath.Ext(thumbnailFile))
 	var saveErr error
 	switch ext {

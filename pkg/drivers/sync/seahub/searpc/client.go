@@ -26,7 +26,7 @@ func _fret_int(retStr string) (int, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Infof("~~~Debug log: errCode: %s", errCode.(string))
+		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
 		return 0, &SearpcError{dicts["err_msg"].(string)}
 	}
 
@@ -115,8 +115,7 @@ func (o *SearpcObj) MarshalJSON() ([]byte, error) {
 func (o *SearpcObj) MapString() (map[string]string, error) {
 	rawData := o.Data
 	if rawData == nil {
-		klog.Warningf("~~~Debug log: Empty data field")
-		return nil, fmt.Errorf("Empty data field")
+		return nil, fmt.Errorf("empty data field")
 	}
 
 	stringMap := make(map[string]string)
@@ -142,11 +141,9 @@ func ObjListMapString(objs []*SearpcObj) ([]map[string]string, error) {
 	errMsg := ""
 	var err error
 	for i, obj := range objs {
-		klog.Infof("~~~Debug log: Processing object %d/%d", i+1, len(objs))
 		var stringMap map[string]string
 		stringMap, err = obj.MapString()
 		if err != nil {
-			klog.Warningf("~~~Debug log: Processing object failed at index %d", i)
 			errMsg += fmt.Sprintf("Processing object failed at index %d. ", i)
 		}
 		stringMaps[i] = stringMap
@@ -166,7 +163,7 @@ func _fret_obj(retStr string) (*SearpcObj, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Infof("~~~Debug log: errCode: %s", errCode.(string))
+		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
 		return nil, &SearpcError{dicts["err_msg"].(string)}
 	}
 
@@ -183,7 +180,7 @@ func _fret_objlist(retStr string) ([]*SearpcObj, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Infof("~~~Debug log: errCode: %s", errCode.(string))
+		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
 		return nil, &SearpcError{dicts["err_msg"].(string)}
 	}
 
@@ -196,9 +193,6 @@ func _fret_objlist(retStr string) ([]*SearpcObj, error) {
 		}
 	}
 
-	for key, value := range list {
-		klog.Infof("~~~Debug log: Key: %v, Value: %v (Type: %T)\n", key, value, value)
-	}
 	return list, nil
 }
 
@@ -209,7 +203,7 @@ func _fret_json(retStr string) (interface{}, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Infof("~~~Debug log: errCode: %s", errCode.(string))
+		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
 		return nil, &SearpcError{dicts["err_msg"].(string)}
 	}
 
@@ -222,7 +216,6 @@ func CreateRPCMethod(
 	retType string,
 	paramTypes []string,
 ) func(...interface{}) (interface{}, error) {
-	klog.Infof("~~~Debug log: Creating RPC method %s with return type %s and %d parameters", methodName, retType, len(paramTypes))
 
 	return func(args ...interface{}) (interface{}, error) {
 		var fret func(string) (interface{}, error)
@@ -245,8 +238,6 @@ func CreateRPCMethod(
 		}
 
 		if len(args) != len(paramTypes) {
-			klog.Infof("~~~Debug log: Parameter mismatch for %s - expected %d, got %d",
-				methodName, len(paramTypes), len(args))
 			return nil, fmt.Errorf(
 				"parameter count mismatch: method %s requires %d parameters, but received %d instead",
 				methodName,
@@ -281,25 +272,19 @@ func CreateRPCMethod(
 
 		client, ok := searpcClient.(SearpcClientInterface)
 		if !ok {
-			klog.Infof("~~~Debug log: client does not implement SearpcClientInterface")
 			return nil, &SearpcError{"Invalid client type"}
 		}
 
-		klog.Infof("~~~Debug log: Calling remote function %s via named pipe", methodName)
 		resp, err := client.CallRemoteFuncSync(string(data))
 		if err != nil {
-			klog.Infof("~~~Debug log: RPC call failed for %s: %v", methodName, err)
 			return nil, fmt.Errorf("RPC call failed: %v", err)
 		}
 
-		klog.Infof("~~~Debug log: Raw response for %s: %s", methodName, resp)
 		result, err := fret(resp)
 		if err != nil {
-			klog.Infof("~~~Debug log: Result parsing failed for %s: %v", methodName, err)
 			return nil, fmt.Errorf("result parsing failed: %v", err)
 		}
 
-		klog.Infof("~~~Debug log: Successfully processed %s result: %+v (type: %T)", methodName, result, result)
 		return result, nil
 	}
 }
