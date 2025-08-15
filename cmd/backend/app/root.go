@@ -13,7 +13,6 @@ import (
 	"files/pkg/integration"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
-	"files/pkg/rpc"
 	"files/pkg/tasks"
 	"files/pkg/watchers"
 	"io"
@@ -170,14 +169,7 @@ user created with the credentials from options "username" and "password".`,
 		//		- CleanupOldFilesAndRedisEntries
 		InitCrontabs()
 
-		// step5: BackgroundTask
-		// 		- initRpcServer
-		//		- initWatcher
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		rpc.InitRpcService(ctx)
-
-		// step6: run http server
+		// step5: run http server
 		server := getRunParams(cmd.Flags())
 		setupLog(server.Log)
 
@@ -210,26 +202,26 @@ user created with the credentials from options "username" and "password".`,
 			checkErr(err)
 		}
 
-		// step7: init commands
+		// step6: init commands
 		rclone.NewCommandRclone()
 		rclone.Command.InitServes()
 
-		// step8: build driver handler
+		// step7: build driver handler
 		drivers.NewDriverHandler()
 
-		// step9: init global
+		// step8: init global
 		config := ctrl.GetConfigOrDie()
 		global.InitGlobalData(config)
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
 
-		// step10: init seahub (for test now)
+		// step9: init seahub (for test now)
 		seaserv.InitSeaRPC()
 
-		// step11: integration
+		// step10: integration
 		integration.NewIntegrationManager()
 
-		// step12: watcher
+		// step11: watcher
 		var w = watchers.NewWatchers(context.Background(), config)
 		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
