@@ -45,3 +45,15 @@ func (s *CacheStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 func (s *CacheStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	return s.posix.Rename(contextArgs)
 }
+
+func (s *CacheStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return s.posix.UploadLink(fileUploadArg)
+}
+
+func (s *CacheStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return s.posix.UploadedBytes(fileUploadArg)
+}
+
+func (s *CacheStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return s.posix.UploadChunks(fileUploadArg)
+}

@@ -349,3 +349,29 @@ func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 
 	return data, nil
 }
+
+func (s *SyncStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	header := make(http.Header)
+	header.Add("X-Bfl-User", fileUploadArg.FileParam.Owner)
+	uploadLink, err := seahub.GetUploadLink(header, fileUploadArg.FileParam, fileUploadArg.From, false)
+	if err != nil {
+		return nil, err
+	}
+	uploadLink = strings.Trim(uploadLink, "\"")
+	return []byte(uploadLink), nil
+}
+
+func (s *SyncStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	header := make(http.Header)
+	header.Add("X-Bfl-User", fileUploadArg.FileParam.Owner)
+	res, err := seahub.GetUploadedBytes(header, fileUploadArg.FileParam, fileUploadArg.FileName)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (s *SyncStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	// this handler of sync is implemented by seafile-server
+	return nil, nil
+}

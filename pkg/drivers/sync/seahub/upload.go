@@ -2,7 +2,6 @@ package seahub
 
 import (
 	"crypto/md5"
-	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
@@ -82,10 +81,10 @@ func GetUploadLink(header http.Header, fileParam *models.FileParam, reqFrom stri
 		return "", errors.New("quota exceeded") // original status_code=443 in seahub
 	}
 
-	objID, _ := json.Marshal(map[string]string{"parent_dir": parentDir})
-	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, string(objID), "upload", useUsername, false)
+	objId := common.ToBytes(map[string]string{"parent_dir": parentDir})
+	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, string(objId), "upload", useUsername, false)
 	if err != nil {
-		klog.Errorf("fail to get file server token %s, err=%s", string(objID), err)
+		klog.Errorf("fail to get file server token %s, err=%s", string(objId), err)
 		return "", err
 	}
 	if token == "" {
@@ -161,6 +160,51 @@ func genFileUploadURL(token, op string, replace bool) string {
 	return baseURL
 }
 
+func GetUploadedBytes(header http.Header, fileParam *models.FileParam, fileName string) ([]byte, error) {
+	repoId := fileParam.Extend
+
+	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
+	if err != nil {
+		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
+		return nil, err
+	}
+	if repo == nil {
+		klog.Errorf("fail to get repo id %s", repoId)
+		return nil, errors.New("library not found")
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return nil, err
+	}
+	path := uri + fileParam.Path
+	klog.Infof("~~~Debug log: parentDir=%s", path)
+
+	parentDir := fileParam.Path
+	if parentDir == "" {
+		parentDir = "/"
+	}
+
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	if dirId == "" || err != nil {
+		klog.Errorf("fail to check dir exists %s, err=%s", parentDir, err)
+		return nil, errors.New("folder not found")
+	}
+
+	filePath := filepath.Join(parentDir, fileName)
+
+	uploadedBytes, err := seaserv.GlobalSeafileAPI.GetUploadTmpFileOffset(repoId, filePath)
+	if err != nil {
+		klog.Errorf("Error getting upload offset: %v", err)
+		return nil, err
+	}
+
+	response := map[string]interface{}{
+		"uploadedBytes": uploadedBytes,
+	}
+	return common.ToBytes(response), nil
+}
+
 func HandleUploadedBytes(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
 	MigrateSeahubUserToRedis(r.Header)
 
@@ -182,52 +226,13 @@ func HandleUploadedBytes(w http.ResponseWriter, r *http.Request, d *common.HttpD
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-	path := uri + fileParam.Path
-	klog.Infof("~~~Debug log: parentDir=%s", path)
-
-	parentDir := fileParam.Path
-	if parentDir == "" {
-		parentDir = "/"
-	}
 
 	fileName := r.URL.Query().Get("file_name")
 	if fileName == "" {
 		return http.StatusBadRequest, errors.New("file_relative_path invalid")
 	}
 
-	repoId := fileParam.Extend
-
-	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
-	if err != nil {
-		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
-		return http.StatusBadRequest, err
-	}
-	if repo == nil {
-		klog.Errorf("fail to get repo id %s", repoId)
-		return http.StatusNotFound, errors.New("library not found")
-	}
-
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
-	if dirId == "" || err != nil {
-		klog.Errorf("fail to check dir exists %s, err=%s", parentDir, err)
-		return http.StatusBadRequest, errors.New("folder not found")
-	}
-
-	filePath := filepath.Join(parentDir, fileName)
-
-	uploadedBytes, err := seaserv.GlobalSeafileAPI.GetUploadTmpFileOffset(repoId, filePath)
-	if err != nil {
-		klog.Errorf("Error getting upload offset: %v", err)
-		return http.StatusBadRequest, err
-	}
-
-	response := map[string]interface{}{
-		"uploadedBytes": uploadedBytes,
-	}
+	response, err := GetUploadedBytes(r.Header, fileParam, fileName)
 
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Type", "application/json")

@@ -48,9 +48,13 @@ func NewHandler(
 
 	uploader := r.PathPrefix("/upload").Subrouter()
 
-	uploader.PathPrefix("/upload-link").Handler(monkey(uploadLinkHandler, "/upload/upload-link")).Methods("GET")                    // recons done
-	uploader.PathPrefix("/file-uploaded-bytes").Handler(monkey(uploadedBytesHandler, "/upload/file-uploaded-bytes")).Methods("GET") // recons done
-	uploader.PathPrefix("/upload-link/{uid}").Handler(monkey(uploadChunksHandler, "/upload/upload-link")).Methods("POST")           // recons done
+	uploader.PathPrefix("/upload-link").Handler(wrapperFilesUploadArgs(fileUploadLinkHandler)).Methods("GET")            // recons done
+	uploader.PathPrefix("/file-uploaded-bytes").Handler(wrapperFilesUploadArgs(fileUploadedBytesHandler)).Methods("GET") // recons done
+	uploader.PathPrefix("/upload-link/{uid}").Handler(wrapperFilesUploadArgs(fileUploadChunksHandler)).Methods("POST")
+
+	//uploader.PathPrefix("/upload-link").Handler(monkey(uploadLinkHandler, "/upload/upload-link")).Methods("GET")                    // recons done
+	//uploader.PathPrefix("/file-uploaded-bytes").Handler(monkey(uploadedBytesHandler, "/upload/file-uploaded-bytes")).Methods("GET") // recons done
+	//uploader.PathPrefix("/upload-link/{uid}").Handler(monkey(uploadChunksHandler, "/upload/upload-link")).Methods("POST")           // recons done
 
 	api := r.PathPrefix("/api").Subrouter()
 

@@ -4,16 +4,15 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/global"
+	"files/pkg/models"
 	"fmt"
 	"github.com/spf13/afero"
 	"io"
 	"io/ioutil"
 	"k8s.io/klog/v2"
 	"mime/multipart"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -52,8 +51,8 @@ func CheckSize(filesize int64) bool {
 	return limitedSize >= filesize
 }
 
-func GetPVC(r *http.Request) (string, string, string, string, error) {
-	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
+func GetPVC(fileParam *models.FileParam) (string, string, string, string, error) {
+	var owner = fileParam.Owner
 	var userPvc = global.GlobalData.GetPvcUser(owner)
 	var cachePvc = global.GlobalData.GetPvcCache(owner)
 

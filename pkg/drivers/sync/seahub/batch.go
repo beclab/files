@@ -84,8 +84,7 @@ func HandleBatchDelete(header http.Header, fileParam *models.FileParam, dirents 
 		}
 	}
 
-	direntsJSON, _ := json.Marshal(dirents)
-	if resultCode, err := seaserv.GlobalSeafileAPI.DelFile(repoId, parentDir, string(direntsJSON), useUsername); resultCode != 0 || err != nil {
+	if resultCode, err := seaserv.GlobalSeafileAPI.DelFile(repoId, parentDir, string(common.ToBytes(dirents)), useUsername); resultCode != 0 || err != nil {
 		klog.Errorf("Failed to delete: result_code: %d, err: %v", resultCode, err)
 		return nil, errors.New("failed to delete")
 	}
@@ -94,11 +93,7 @@ func HandleBatchDelete(header http.Header, fileParam *models.FileParam, dirents 
 		"success":   true,
 		"commit_id": repo["head_commit_id"],
 	}
-	jsonBytes, err := json.Marshal(response)
-	if err != nil {
-		return nil, err
-	}
-	return jsonBytes, nil
+	return common.ToBytes(response), nil
 }
 
 func GetSubFolderPermissionByDir(username, repoID, parentDir string) (map[string]string, error) {
@@ -220,11 +215,9 @@ func HandleBatchCopy(header http.Header, srcRepoId, srcParentDir string, srcDire
 		return nil, errors.New("permission denied")
 	}
 
-	direntsJSON, _ := json.Marshal(srcDirents)
-
 	_, err = seaserv.GlobalSeafileAPI.CopyFile(
-		srcRepoId, srcParentDir, string(direntsJSON),
-		dstRepoId, dstParentDir, string(direntsJSON),
+		srcRepoId, srcParentDir, string(common.ToBytes(srcDirents)),
+		dstRepoId, dstParentDir, string(common.ToBytes(srcDirents)),
 		username, 0, 1,
 	)
 
@@ -236,11 +229,7 @@ func HandleBatchCopy(header http.Header, srcRepoId, srcParentDir string, srcDire
 	response := map[string]interface{}{
 		"success": true,
 	}
-	jsonBytes, err := json.Marshal(response)
-	if err != nil {
-		return nil, err
-	}
-	return jsonBytes, nil
+	return common.ToBytes(response), nil
 }
 
 func BatchMoveHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
@@ -339,10 +328,9 @@ func HandleBatchMove(header http.Header, srcRepoId, srcParentDir string, srcDire
 		}
 	}
 
-	direntsJSON, _ := json.Marshal(srcDirents)
 	_, err = seaserv.GlobalSeafileAPI.MoveFile(
-		srcRepoId, srcParentDir, string(direntsJSON),
-		dstRepoId, dstParentDir, string(direntsJSON),
+		srcRepoId, srcParentDir, string(common.ToBytes(srcDirents)),
+		dstRepoId, dstParentDir, string(common.ToBytes(srcDirents)),
 		false, username, 0, 1,
 	)
 	if err != nil {
@@ -353,9 +341,5 @@ func HandleBatchMove(header http.Header, srcRepoId, srcParentDir string, srcDire
 	response := map[string]interface{}{
 		"success": true,
 	}
-	jsonBytes, err := json.Marshal(response)
-	if err != nil {
-		return nil, err
-	}
-	return jsonBytes, nil
+	return common.ToBytes(response), nil
 }

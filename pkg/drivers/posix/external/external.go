@@ -45,3 +45,15 @@ func (s *ExternalStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawH
 func (s *ExternalStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	return s.posix.Rename(contextArgs)
 }
+
+func (s *ExternalStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return s.posix.UploadLink(fileUploadArg)
+}
+
+func (s *ExternalStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return s.posix.UploadedBytes(fileUploadArg)
+}
+
+func (s *ExternalStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return s.posix.UploadChunks(fileUploadArg)
+}
