@@ -5,17 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/global"
+	"files/pkg/models"
 	"files/pkg/redisutils"
 	"fmt"
-	"github.com/go-redis/redis"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/go-redis/redis"
+	"k8s.io/klog/v2"
 )
 
 type MountRequestData struct {
@@ -25,11 +26,11 @@ type MountRequestData struct {
 }
 
 func resourceMountedHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	drives.GetMountedData(r.Context())
+	global.GlobalMounted.Updated()
 	return common.RenderJSON(w, r, map[string]interface{}{
 		"code":         0,
 		"message":      "success",
-		"mounted_data": drives.MountedData,
+		"mounted_data": global.GlobalMounted.GetMountedData(),
 	})
 }
 
@@ -65,18 +66,27 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Http
 		}
 	}
 
-	drives.GetMountedData(r.Context())
 	global.GlobalMounted.Updated()
 	return common.RenderJSON(w, r, respJson)
 }
 
 func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	fileParam, _, err := UrlPrep(r, "")
+	var p = r.URL.Path
+	var path = strings.TrimPrefix(p, "/api/unmount")
+	if path == "" {
+		return http.StatusBadRequest, errors.New("path invalid")
+	}
+
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
+	if owner == "" {
+		return http.StatusBadRequest, errors.New("user not found")
+	}
+	var fileParam, err = models.CreateFileParam(owner, path)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	if fileParam.FileType == drives.SrcTypeSync {
+	if fileParam.FileType == common.Sync {
 		return md5Sync(fileParam, w, r)
 	}
 
@@ -102,7 +112,6 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Ht
 		return common.ErrToStatus(err), err
 	}
 
-	drives.GetMountedData(r.Context())
 	global.GlobalMounted.Updated()
 	return common.RenderJSON(w, r, respJson)
 }

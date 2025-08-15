@@ -1,17 +1,32 @@
 package http
 
 import (
+	"errors"
 	"files/pkg/common"
 	"files/pkg/files"
+	"files/pkg/models"
 	"fmt"
-	"github.com/spf13/afero"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/spf13/afero"
 )
 
+var permissionPrefix = "/api/permission"
+
 func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	fileParam, _, err := UrlPrep(r, "")
+	var p = r.URL.Path
+	var path = strings.TrimPrefix(p, permissionPrefix)
+	if path == "" {
+		return http.StatusBadRequest, errors.New("path invalid")
+	}
+
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
+	if owner == "" {
+		return http.StatusBadRequest, errors.New("user not found")
+	}
+	var fileParam, err = models.CreateFileParam(owner, path)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -40,7 +55,17 @@ func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Http
 }
 
 func permissionPutHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	fileParam, _, err := UrlPrep(r, "")
+	var p = r.URL.Path
+	var path = strings.TrimPrefix(p, permissionPrefix)
+	if path == "" {
+		return http.StatusBadRequest, errors.New("path invalid")
+	}
+
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
+	if owner == "" {
+		return http.StatusBadRequest, errors.New("user not found")
+	}
+	var fileParam, err = models.CreateFileParam(owner, path)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}

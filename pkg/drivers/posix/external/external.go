@@ -46,6 +46,10 @@ func (s *ExternalStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, e
 	return s.posix.Rename(contextArgs)
 }
 
+func (s *ExternalStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
+	return s.posix.Edit(contextArgs)
+}
+
 func (s *ExternalStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	return s.posix.UploadLink(fileUploadArg)
 }

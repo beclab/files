@@ -46,6 +46,10 @@ func (s *CacheStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	return s.posix.Rename(contextArgs)
 }
 
+func (s *CacheStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
+	return s.posix.Edit(contextArgs)
+}
+
 func (s *CacheStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	return s.posix.UploadLink(fileUploadArg)
 }

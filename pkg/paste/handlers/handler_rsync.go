@@ -171,7 +171,7 @@ func (c *Handler) generateNewName(srcFileInfo *files.PathMeta) (string, string, 
 		targetName = strings.Trim(targetName, "/")
 	}
 
-	dupNames, err := common.CollectDupNames(targetPath, targetName, ext, isDir)
+	dupNames, err := files.CollectDupNames(targetPath, targetName, ext, isDir)
 	if err != nil {
 		return "", "", err
 	}
@@ -180,7 +180,7 @@ func (c *Handler) generateNewName(srcFileInfo *files.PathMeta) (string, string, 
 		return "", "", nil
 	}
 
-	newPrefixName := files.GenerateDupCommonName(dupNames, targetName)
+	newPrefixName := files.GenerateDupCommonName(dupNames, targetName, targetName)
 	var newName string
 	if isDir {
 		newName = newPrefixName

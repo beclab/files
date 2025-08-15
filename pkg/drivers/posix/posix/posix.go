@@ -142,8 +142,8 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Posix create, user: %s, param: %s", user, common.ToJson(contextArgs))
 
-	dstFileOrDirName, isFile := common.GetFileNameFromPath(fileParam.Path)
-	dstPrefixPath := common.GetPrefixPath(fileParam.Path)
+	dstFileOrDirName, isFile := files.GetFileNameFromPath(fileParam.Path)
+	dstPrefixPath := files.GetPrefixPath(fileParam.Path)
 	dstFileExt := filepath.Ext(dstFileOrDirName)
 
 	resourceUri, err := contextArgs.FileParam.GetResourceUri()
@@ -184,7 +184,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Posix create, dupNames: %d", len(dupNames))
 
-	newName := common.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
+	newName := files.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
 
 	if newName != "" {
 		if isFile {
@@ -291,7 +291,7 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, common.ToJson(contextArgs))
 
-	var srcName, isSrcFile = common.GetFileNameFromPath(fileParam.Path)
+	var srcName, isSrcFile = files.GetFileNameFromPath(fileParam.Path)
 	srcName, err = url.PathUnescape(srcName)
 	if err != nil {
 		return nil, err
@@ -320,7 +320,7 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	var afs = afero.NewOsFs()
-	var srcPrefixPath = common.GetPrefixPath(fileParam.Path)
+	var srcPrefixPath = files.GetPrefixPath(fileParam.Path)
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:       afero.NewBasePathFs(afs, uri),
 		FsType:   fileParam.FileType,
@@ -359,6 +359,44 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	return nil, nil
+}
+
+func (s *PosixStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
+	var fileParam = contextArgs.FileParam
+	var user = fileParam.Owner
+	klog.Infof("Posix edit, user: %s, path: %s", user, fileParam.Path)
+
+	fileName, isFile := files.GetFileNameFromPath(fileParam.Path)
+	if !isFile {
+		return nil, fmt.Errorf("path %s is not file", fileParam.Path)
+	}
+
+	var fileExt = filepath.Ext(fileName)
+	if fileExt != ".txt" {
+		return nil, fmt.Errorf("file %s not supported", fileName)
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return nil, err
+	}
+
+	filePath := uri + fileParam.Path
+
+	exists, err := afero.Exists(files.DefaultFs, filePath)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
+	}
+
+	info, err := files.WriteFile(files.DefaultFs, filePath, contextArgs.QueryParam.Body)
+	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
+
+	return &models.EditHandlerResponse{
+		Etag: etag,
+	}, nil
 }
 
 func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FileParam, listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string) {

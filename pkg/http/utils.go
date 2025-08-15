@@ -2,9 +2,6 @@ package http
 
 import (
 	"encoding/json"
-	"files/pkg/common"
-	"files/pkg/drives"
-	"files/pkg/models"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -173,22 +170,4 @@ func ParseFormData(r *http.Request, v interface{}) error {
 	}
 
 	return nil
-}
-
-func UrlPrep(r *http.Request, path string) (*models.FileParam, drives.ResourceService, error) {
-	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
-	if path == "" {
-		path = r.URL.Path
-	}
-	fileParam, err := models.CreateFileParam(owner, path)
-	if err != nil {
-		return nil, nil, err
-	}
-	srcType := fileParam.FileType
-
-	handler, err := drives.GetResourceService(srcType)
-	if err != nil {
-		return nil, nil, err
-	}
-	return fileParam, handler, nil
 }

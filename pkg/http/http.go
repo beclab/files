@@ -67,19 +67,17 @@ func NewHandler(
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(listHandler, "/api/resources/")).Methods("GET")    // list files
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(createHandler, "/api/resources/")).Methods("POST") // create directory
 	api.PathPrefix("/resources").Handler(wrapperFilesResourcesArgs(renameHandler, "/api/resources")).Methods("PATCH") // rename
+	api.PathPrefix("/resources").Handler(wrapperFilesEditArgs(editHandler, "/api/resources/")).Methods("PUT")         // edit
 	api.PathPrefix("/resources").Handler(wrapperFilesDeleteArgs(deleteHandler, "/api/resources/")).Methods("DELETE")  // delete
 
-	api.PathPrefix("/tree").Handler(wrapWithTreeParm(treeHandler, "/api/tree/")).Methods("GET")                      // walk through files
+	api.PathPrefix("/tree").Handler(wrapWithTreeParm(treeHandler, "/api/tree/")).Methods("GET") // walk through files
+
 	api.PathPrefix("/preview/{path:.*}").Handler(wrapperPreviewArgs(previewHandler, "/api/preview/")).Methods("GET") // preview image
 	api.PathPrefix("/raw").Handler(wrapperRawArgs(rawHandler, "/api/raw")).Methods("GET")
-	// + paste+task todo
-	api.PathPrefix("/paste").Handler(wrapperPasteArgs("/api/paste")).Methods("PATCH") // todo paste
-	api.PathPrefix("/task").Handler(wrapperTaskArgs("/api/task")).Methods("GET")      // todo task
-	api.PathPrefix("/task").Handler(wrapperTaskArgs("/api/task")).Methods("DELETE")   // todo task
 
-	// ~
-
-	api.PathPrefix("/resources").Handler(monkey(resourcePutHandler, "/api/resources")).Methods("PUT") // edit txt // recons done
+	api.PathPrefix("/paste").Handler(wrapperPasteArgs("/api/paste")).Methods("PATCH")
+	api.PathPrefix("/task").Handler(wrapperTaskArgs("/api/task")).Methods("GET")
+	api.PathPrefix("/task").Handler(wrapperTaskArgs("/api/task")).Methods("DELETE")
 
 	api.PathPrefix("/mounted").Handler(monkey(resourceMountedHandler, "/api/mounted")).Methods("GET")  // no need to recons
 	api.PathPrefix("/mount").Handler(monkey(resourceMountHandler, "/api/mount")).Methods("POST")       // no need to recons
