@@ -2,8 +2,8 @@ package seahub
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
+	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
 	"fmt"
@@ -132,12 +132,7 @@ func handleRename(repoId, pathParam, bflName, newName string) ([]byte, error) {
 	}
 
 	fileInfo := GetFileInfo(repoId, path.Join(parentDir, newName))
-
-	jsonBytes, err := json.Marshal(fileInfo)
-	if err != nil {
-		return nil, err
-	}
-	return jsonBytes, nil
+	return common.ToBytes(fileInfo), nil
 }
 
 func GetFileInfo(repoId, filePath string) map[string]interface{} {
@@ -343,11 +338,7 @@ func ViewLibFile(header http.Header, fileParam *models.FileParam, op string) ([]
 
 	handleFileType(repo, filePath, fileId, useUsername, returnDict)
 
-	jsonBytes, err := json.Marshal(returnDict)
-	if err != nil {
-		return nil, err
-	}
-	return jsonBytes, nil
+	return common.ToBytes(returnDict), nil
 }
 
 func GenFileGetURL(token, filename string) string {

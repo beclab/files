@@ -1,8 +1,8 @@
 package seahub
 
 import (
-	"encoding/json"
 	"errors"
+	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/searpc"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"fmt"
@@ -103,11 +103,7 @@ func HandleReposGet(header *http.Header, types []string) ([]byte, error) {
 		"repos": repoInfoList,
 	}
 
-	jsonBytes, err := json.Marshal(wrappedData)
-	if err != nil {
-		return nil, err
-	}
-	return jsonBytes, nil
+	return common.ToBytes(wrappedData), nil
 }
 
 func processRepos(repos []map[string]string, username string,
@@ -292,12 +288,7 @@ func HandleRepoDelete(header *http.Header, repoId string) ([]byte, error) {
 			klog.Errorf("Failed to remove repo: result_code: %d, err: %v", resultCode, err)
 			return nil, errors.New("failed to remove repo")
 		}
-		ret, err := json.Marshal(map[string]interface{}{"success": true})
-		if err != nil {
-			klog.Errorf("Error marshalling ret: %v", err)
-			return nil, err
-		}
-		return ret, nil
+		return common.ToBytes(map[string]interface{}{"success": true}), nil
 	}
 
 	bflName := header.Get("X-Bfl-User")
@@ -327,13 +318,7 @@ func HandleRepoDelete(header *http.Header, repoId string) ([]byte, error) {
 		klog.Errorf("Error removing repo: %v", err)
 		return nil, err
 	}
-
-	ret, err := json.Marshal(map[string]interface{}{"success": true})
-	if err != nil {
-		klog.Errorf("Error marshalling ret: %v", err)
-		return nil, err
-	}
-	return ret, nil
+	return common.ToBytes(map[string]interface{}{"success": true}), nil
 }
 
 var units = []string{"B", "KB", "MB", "GB", "TB", "PB"}
@@ -555,11 +540,7 @@ func HandleRepoPost(header *http.Header, repoName, passwd string) ([]byte, error
 
 	resp, err := repoDownloadInfo(repoId, username, true)
 
-	jsonBytes, err := json.Marshal(resp)
-	if err != nil {
-		return nil, err
-	}
-	return jsonBytes, nil
+	return common.ToBytes(resp), nil
 }
 
 func createRepo(name, desc, username string, passwd *string) (string, error) {

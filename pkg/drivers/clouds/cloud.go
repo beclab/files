@@ -504,3 +504,15 @@ func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListR
 
 	return res, nil
 }
+
+func (s *CloudStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	return nil, nil
+}
