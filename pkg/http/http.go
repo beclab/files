@@ -5,11 +5,7 @@ import (
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
 	"files/pkg/preview"
-	"files/pkg/rpc"
 	"net/http"
-
-	"github.com/gin-gonic/gin"
-	"k8s.io/klog/v2"
 
 	"github.com/gorilla/mux"
 )
@@ -51,10 +47,6 @@ func NewHandler(
 	uploader.PathPrefix("/upload-link").Handler(wrapperFilesUploadArgs(fileUploadLinkHandler)).Methods("GET")            // recons done
 	uploader.PathPrefix("/file-uploaded-bytes").Handler(wrapperFilesUploadArgs(fileUploadedBytesHandler)).Methods("GET") // recons done
 	uploader.PathPrefix("/upload-link/{uid}").Handler(wrapperFilesUploadArgs(fileUploadChunksHandler)).Methods("POST")
-
-	//uploader.PathPrefix("/upload-link").Handler(monkey(uploadLinkHandler, "/upload/upload-link")).Methods("GET")                    // recons done
-	//uploader.PathPrefix("/file-uploaded-bytes").Handler(monkey(uploadedBytesHandler, "/upload/file-uploaded-bytes")).Methods("GET") // recons done
-	//uploader.PathPrefix("/upload-link/{uid}").Handler(monkey(uploadChunksHandler, "/upload/upload-link")).Methods("POST")           // recons done
 
 	api := r.PathPrefix("/api").Subrouter()
 
@@ -98,24 +90,10 @@ func NewHandler(
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryGetHandler, "/api/smb_history")).Methods("GET")       // no need to recons
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryPutHandler, "/api/smb_history")).Methods("PUT")       // no need to recons
 	api.PathPrefix("/smb_history").Handler(monkey(smbHistoryDeleteHandler, "/api/smb_history")).Methods("DELETE") // no need to recons
-	//api.PathPrefix("/smb_history").Handler(monkey(smbHistoryDeleteHandler, "/api/smb_history")).Methods("PATCH")	// recons delete this
-
-	files := r.PathPrefix("/files").Subrouter()
-	files.HandleFunc("/healthcheck", ginHandlerAdapter(rpc.RpcEngine))
 
 	callback := r.PathPrefix("/callback").Subrouter()
 	callback.Path("/create").Handler(monkey(seahub.CallbackCreateHandler, "/callback/create")).Methods("POST")
 	callback.Path("/delete").Handler(monkey(seahub.CallbackDeleteHandler, "/callback/delete")).Methods("POST")
 
 	return stripPrefix(server.BaseURL, r), nil
-}
-
-func ginHandlerAdapter(ginEngine *gin.Engine) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		klog.Infoln("You see me~")
-		klog.Infoln("request: ", r)
-		klog.Infoln("request header: ", r.Header)
-		klog.Infoln("request body: ", r.Body)
-		ginEngine.ServeHTTP(w, r)
-	}
 }
