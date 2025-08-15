@@ -30,26 +30,21 @@ func (c *Handler) UploadToCloud() error {
 }
 
 func (c *Handler) UploadToSync() error {
-	klog.Infof("~~~Copy Debug log: Upload to sync begins!")
-	header := make(http.Header)
-	header.Add("X-Bfl-User", c.owner)
-
-	totalSize, err := c.GetToSyncFileCount(header, "size") // file and dir can both use this
+	totalSize, err := c.GetToSyncFileCount("size") // file and dir can both use this
 	if err != nil {
 		klog.Errorf("UploadToSync - GetFromSyncFileCount - %v", err)
 		return err
 	}
-	klog.Infof("~~~Copy Debug log: UploadToSync - GetFromSyncFileCount - totalSize: %d", totalSize)
 	c.UpdateTotalSize(totalSize)
 
 	_, isFile := c.src.IsFile()
 	if isFile {
-		err = c.UploadFileToSync(header, nil, nil)
+		err = c.UploadFileToSync(nil, nil)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = c.UploadDirToSync(header, nil, nil)
+		err = c.UploadDirToSync(nil, nil)
 		if err != nil {
 			return err
 		}
@@ -63,7 +58,6 @@ func (c *Handler) UploadToSync() error {
 		srcFullPath := srcUri + c.src.Path
 		err = os.RemoveAll(srcFullPath)
 		if err != nil {
-			klog.Errorf("~~~Copy Debug Log: UploadToSync - RemoveAll - %v", err)
 			return err
 		}
 	}
@@ -72,7 +66,7 @@ func (c *Handler) UploadToSync() error {
 	return nil
 }
 
-func (c *Handler) GetToSyncFileCount(header http.Header, countType string) (int64, error) {
+func (c *Handler) GetToSyncFileCount(countType string) (int64, error) {
 	uri, err := c.src.GetResourceUri()
 	if err != nil {
 		return 0, err
@@ -117,7 +111,7 @@ func (c *Handler) GetToSyncFileCount(header http.Header, countType string) (int6
 	return count, nil
 }
 
-func (c *Handler) UploadDirToSync(header http.Header, src, dst *models.FileParam) error {
+func (c *Handler) UploadDirToSync(src, dst *models.FileParam) error {
 	select {
 	case <-c.ctx.Done():
 		return nil
@@ -144,11 +138,10 @@ func (c *Handler) UploadDirToSync(header http.Header, src, dst *models.FileParam
 	dstFullPath := dstUri + dst.Path
 
 	dstFullPath = AddVersionSuffix(dstFullPath, dst, true)
-	klog.Infof("~~~Debug log: dstFullPath after addversionsuffix=%s", dstFullPath)
 
 	var fdstBase string = strings.TrimPrefix(dstFullPath, dstUri)
 
-	res, err := seahub.HandleDirOperation(header, dst.Extend, fdstBase, "", "mkdir")
+	res, err := seahub.HandleDirOperation(src.Owner, dst.Extend, fdstBase, "", "mkdir")
 	if err != nil {
 		klog.Errorf("Sync create error: %v, path: %s", err, dst.Path)
 		return err
@@ -188,13 +181,13 @@ func (c *Handler) UploadDirToSync(header http.Header, src, dst *models.FileParam
 
 		if obj.IsDir() {
 			// Create sub-directories, recursively.
-			err = c.UploadDirToSync(header, fsrcFileParam, fdstFileParam)
+			err = c.UploadDirToSync(fsrcFileParam, fdstFileParam)
 			if err != nil {
 				errs = append(errs, err)
 			}
 		} else {
 			// Perform the file copy.
-			err = c.UploadFileToSync(header, fsrcFileParam, fdstFileParam)
+			err = c.UploadFileToSync(fsrcFileParam, fdstFileParam)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -211,8 +204,7 @@ func (c *Handler) UploadDirToSync(header http.Header, src, dst *models.FileParam
 	return nil
 }
 
-func (c *Handler) UploadFileToSync(header http.Header, src, dst *models.FileParam) error {
-	klog.Infof("~~~Copy Debug log: Download file from sync begins!")
+func (c *Handler) UploadFileToSync(src, dst *models.FileParam) error {
 	select {
 	case <-c.ctx.Done():
 		return nil
@@ -255,7 +247,7 @@ func (c *Handler) UploadFileToSync(header http.Header, src, dst *models.FilePara
 		Extend:   dst.Extend,
 		Path:     filepath.Dir(dst.Path),
 	}
-	uploadLink, err := seahub.GetUploadLink(header, uploadParam, "api", false)
+	uploadLink, err := seahub.GetUploadLink(uploadParam, "api", false)
 	if err != nil {
 		return err
 	}
@@ -343,7 +335,7 @@ func (c *Handler) UploadFileToSync(header http.Header, src, dst *models.FilePara
 			return err
 		}
 
-		request.Header = header.Clone()
+		request.Header = make(http.Header)
 		request.Header.Set("Content-Type", writer.FormDataContentType())
 		request.Header.Set("Content-Disposition", "attachment; filename=\""+common.EscapeAndJoin(filename, "/")+"\"")
 		request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(diskSize, 10))

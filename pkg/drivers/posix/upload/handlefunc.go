@@ -24,7 +24,6 @@ func HandleUploadLink(fileParam *models.FileParam, from string) ([]byte, error) 
 		return nil, err
 	}
 	path := uri + fileParam.Path
-	klog.Infof("~~~Debug log: path=%s", path)
 
 	// change temp file location
 	extracted := ExtractPart(path)
@@ -63,7 +62,6 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 		return nil, err
 	}
 	parentDir := uri + fileParam.Path
-	klog.Infof("~~~Debug log: parentDir=%s", parentDir)
 
 	if !CheckDirExist(parentDir) {
 		klog.Warningf("Storage path %s is not exist or is not a dir", parentDir)
@@ -163,14 +161,13 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		return nil, err
 	}
 	parentDir := uri + fileParam.Path
-	klog.Infof("~~~Debug log: parentDir=%s", parentDir)
 
 	extracted := ExtractPart(parentDir)
 	if extracted != "" {
 		uploadsDir = ExternalPathPrefix + extracted + "/.uploadstemp"
 	}
 	if !PathExists(uploadsDir) {
-		if err := os.MkdirAll(uploadsDir, os.ModePerm); err != nil {
+		if err = os.MkdirAll(uploadsDir, os.ModePerm); err != nil {
 			klog.Warningf("uploadId:%s, err:%v", uploadId, err)
 			return nil, err
 		}
@@ -200,7 +197,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 
 		dirPath := filepath.Dir(fullPath)
 		if !CheckDirExist(dirPath) {
-			if err := files.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
+			if err = files.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
 				klog.Error("err:", err)
 				return nil, err
 			}
