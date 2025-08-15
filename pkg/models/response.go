@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+type EditHandlerResponse struct {
+	Etag string `json:"etag"`
+}
+
 type PreviewHandlerResponse struct {
 	FileName     string    `json:"file_name"`
 	FileModified time.Time `json:"file_modified"`

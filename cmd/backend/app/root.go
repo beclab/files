@@ -8,7 +8,6 @@ import (
 	"files/pkg/drivers"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub/seaserv"
-	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/integration"
@@ -39,6 +38,7 @@ import (
 
 	fbhttp "files/pkg/http"
 	"files/pkg/img"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -176,7 +176,6 @@ user created with the credentials from options "username" and "password".`,
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		rpc.InitRpcService(ctx)
-		drives.GetMountedData(ctx)
 
 		// step6: run http server
 		server := getRunParams(cmd.Flags())

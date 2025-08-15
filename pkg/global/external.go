@@ -45,6 +45,22 @@ func (m *Mount) Updated() {
 	GlobalMounted.getMounted()
 }
 
+func (m *Mount) GetMountedData() []files.DiskInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.Mounted == nil || len(m.Mounted) == 0 {
+		return []files.DiskInfo{}
+	}
+
+	var res []files.DiskInfo
+	for _, v := range m.Mounted {
+		res = append(res, *v)
+	}
+
+	return res
+}
+
 func (m *Mount) watchMounted() {
 	var err error
 	if externalWatcher == nil {

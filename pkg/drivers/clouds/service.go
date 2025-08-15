@@ -274,8 +274,13 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 		return nil, err
 	}
 
+	var result = &models.CloudListResponse{
+		StatusCode: "SUCCESS",
+	}
+
 	if data == nil || data.List == nil || len(data.List) == 0 {
-		return nil, nil
+		result.Data = []*models.CloudResponseData{}
+		return result, nil
 	}
 
 	var files []*models.CloudResponseData
@@ -285,7 +290,7 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 			FsType:   fileParam.FileType,
 			FsExtend: fileParam.Extend,
 			FsPath:   fileParam.Path,
-			Path:     item.Path,
+			Path:     fileParam.Path + item.Name, //item.Path,
 			Name:     item.Name,
 			Size:     item.Size,
 			FileSize: item.Size,
@@ -301,10 +306,7 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 		files = append(files, f)
 	}
 
-	var result = &models.CloudListResponse{
-		StatusCode: "SUCCESS",
-		Data:       files,
-	}
+	result.Data = files
 
 	return result, nil
 }

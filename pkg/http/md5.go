@@ -5,15 +5,15 @@ import (
 	"crypto/md5"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
 	"io"
-	"k8s.io/klog/v2"
 	"net/http"
 	"path/filepath"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 func downloadAndComputeMD5(r *http.Request, url string) (string, error) {
@@ -98,12 +98,24 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 }
 
 func md5Handler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	fileParam, _, err := UrlPrep(r, "")
+	var prefix = "/api/md5"
+
+	var p = r.URL.Path
+	var path = strings.TrimPrefix(p, prefix)
+	if path == "" {
+		return http.StatusBadRequest, errors.New("path invalid")
+	}
+
+	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
+	if owner == "" {
+		return http.StatusBadRequest, errors.New("user not found")
+	}
+	var fileParam, err = models.CreateFileParam(owner, path)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	if fileParam.FileType == drives.SrcTypeSync {
+	if fileParam.FileType == common.Sync {
 		return md5Sync(fileParam, w, r)
 	}
 

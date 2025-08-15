@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -22,6 +23,7 @@ type QueryParam struct {
 	Destination             string          `json:"destination,omitempty"`
 	ShareType               string          `json:"shareType,omitempty"`
 	Header                  http.Header     `json:"-"`
+	Body                    io.ReadCloser   `json:"-"`
 }
 
 func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {
@@ -47,6 +49,7 @@ func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resi
 		Destination:             strings.TrimSpace(r.URL.Query().Get("destination")),
 		ShareType:               strings.TrimSpace(r.URL.Query().Get("type")), // "mine", "shared", "share_to_me"
 		Header:                  r.Header,
+		Body:                    r.Body,
 	}
 }
 

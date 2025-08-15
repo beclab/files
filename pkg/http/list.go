@@ -12,17 +12,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
+/**
+ * list
+ * create
+ * rename
+ */
 var wrapperFilesResourcesArgs = func(fn fileHandlerFunc, prefix string) http.Handler {
 	return fileHandle(fn, prefix)
 }
 
 type fileHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error)
 
-/**
- * list
- * create
- * rename
- */
 func listHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
 	return handler.List(contextArgs)
 }
@@ -72,7 +72,63 @@ func fileHandle(fn fileHandlerFunc, prefix string) http.Handler {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(res)
+
 		return
+	})
+
+	return handler
+}
+
+/**
+ * edit
+ */
+var wrapperFilesEditArgs = func(fn fileEditHandlerFunc, prefix string) http.Handler {
+	return fileEditHandle(fn, prefix)
+}
+
+type fileEditHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error)
+
+func editHandler(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
+	return handler.Edit(contextArgs)
+}
+
+func fileEditHandle(fn fileEditHandlerFunc, prefix string) http.Handler {
+	var handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		contextArg, err := models.NewHttpContextArgs(r, prefix, false, false)
+		if err != nil {
+			klog.Errorf("context args error: %v, path: %s", err, r.URL.Path)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, r.Method, common.ToJson(contextArg))
+
+		var handlerParam = &base.HandlerParam{
+			Ctx:            r.Context(),
+			Owner:          contextArg.FileParam.Owner,
+			ResponseWriter: w,
+			Request:        r,
+		}
+
+		var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
+		if handler == nil {
+			http.Error(w, fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType), http.StatusBadRequest)
+			return
+		}
+
+		res, err := fn(handler, contextArg)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"code":    1,
+				"message": err.Error(),
+			})
+			return
+		}
+
+		w.Header().Set("Etag", res.Etag)
+
 	})
 
 	return handler

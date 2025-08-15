@@ -7,6 +7,7 @@ import (
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
+	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
 	"path/filepath"
@@ -107,10 +108,10 @@ func (c *Handler) cloudTransfer() error {
 
 	cmd := rclone.Command
 
-	srcFileOrDirName, isFile := common.GetFileNameFromPath(c.src.Path)
-	srcPrefix := common.GetPrefixPath(c.src.Path)
-	dstFileOrDirName, _ := common.GetFileNameFromPath(c.dst.Path)
-	dstPrefix := common.GetPrefixPath(c.dst.Path)
+	srcFileOrDirName, isFile := files.GetFileNameFromPath(c.src.Path)
+	srcPrefix := files.GetPrefixPath(c.src.Path)
+	dstFileOrDirName, _ := files.GetFileNameFromPath(c.dst.Path)
+	dstPrefix := files.GetPrefixPath(c.dst.Path)
 
 	var srcFileExt string
 	if isFile {
@@ -187,13 +188,13 @@ func (c *Handler) cloudTransfer() error {
 			}
 		}
 
-		dstPrefixPath := common.GetPrefixPath(c.dst.Path)
+		dstPrefixPath := files.GetPrefixPath(c.dst.Path)
 
 		klog.Infof("cloudTransfer - check name exists, dstPath: %s, dstPrefixPath: %s, dupNames: %v", c.dst.Path, dstPrefixPath, dupNames)
 
 		var newName string
 		if len(dupNames) > 0 {
-			newName = common.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, srcFileExt), dstFileOrDirName)
+			newName = files.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, srcFileExt), dstFileOrDirName)
 		}
 
 		if newName != "" {
@@ -220,7 +221,7 @@ func (c *Handler) cloudTransfer() error {
 		srcFs = srcFsPrefix + srcPrefix
 		srcRemote = srcFileOrDirName
 		dstFs = dstFsPrefix + dstPrefix
-		dstRemote, _ = common.GetFileNameFromPath(c.dst.Path) // strings.Trim(newName, "/")
+		dstRemote, _ = files.GetFileNameFromPath(c.dst.Path) // strings.Trim(newName, "/")
 
 		klog.Infof("cloudTransfer - copyFile, srcFs: %s, dstFs: %s, srcRemote: %s, dstRemote: %s", srcFs, dstFs, srcRemote, dstRemote)
 
@@ -228,7 +229,7 @@ func (c *Handler) cloudTransfer() error {
 		copyResp, err = cmd.GetOperation().Copyfile(srcFs, srcRemote, dstFs, dstRemote, &async)
 	} else {
 		// dir
-		dstName, _ := common.GetFileNameFromPath(c.dst.Path)
+		dstName, _ := files.GetFileNameFromPath(c.dst.Path)
 		srcFs = srcFsPrefix + c.src.Path
 		dstFs = dstFsPrefix + dstPrefix + dstName
 
@@ -237,31 +238,31 @@ func (c *Handler) cloudTransfer() error {
 		// if c.dst.FileType == utils.AwsS3 || c.dst.FileType == utils.TencentCos || c.dst.FileType == utils.DropBox || c.dst.FileType == utils.GoogleDrive {
 		var srcConfigName, srcPrefixPath string
 
-		var srcName, _ = common.GetFileNameFromPath(c.src.Path)
+		var srcName, _ = files.GetFileNameFromPath(c.src.Path)
 		if c.src.FileType == common.Drive || c.src.FileType == common.Cache || c.src.FileType == common.External {
 			srcUri, err := c.src.GetResourceUri()
 			if err != nil {
 				return err
 			}
 			srcConfigName = common.Local
-			srcPrefixPath = srcUri + common.GetPrefixPath(c.src.Path)
+			srcPrefixPath = srcUri + files.GetPrefixPath(c.src.Path)
 		} else {
 			srcConfigName = fmt.Sprintf("%s_%s_%s", c.owner, c.src.FileType, c.src.Extend)
-			srcPrefixPath = common.GetPrefixPath(c.src.Path)
+			srcPrefixPath = files.GetPrefixPath(c.src.Path)
 		}
 
 		var dstConfigName, dstPrefixPath string
-		dstName, _ = common.GetFileNameFromPath(c.dst.Path) // +
+		dstName, _ = files.GetFileNameFromPath(c.dst.Path) // +
 		if c.dst.FileType == common.Drive || c.dst.FileType == common.Cache || c.dst.FileType == common.External {
 			dstUri, err := c.dst.GetResourceUri()
 			if err != nil {
 				return err
 			}
 			dstConfigName = common.Local
-			dstPrefixPath = dstUri + common.GetPrefixPath(c.dst.Path)
+			dstPrefixPath = dstUri + files.GetPrefixPath(c.dst.Path)
 		} else {
 			dstConfigName = fmt.Sprintf("%s_%s_%s", c.owner, c.dst.FileType, c.dst.Extend)
-			dstPrefixPath = common.GetPrefixPath(c.dst.Path)
+			dstPrefixPath = files.GetPrefixPath(c.dst.Path)
 		}
 
 		klog.Infof("cloudTransfer - generate mk empty dir, srcConfig: %s, dstConfig: %s, srcPath: %s, dstPath: %s, srcName: %s, dstName: %s", srcConfigName, dstConfigName, srcPrefixPath, dstPrefixPath, srcName, dstName)
@@ -360,8 +361,8 @@ func (c *Handler) clearTarget(isSrc bool) error {
 		target = c.dst
 	}
 
-	srcFileOrDirName, isFile := common.GetFileNameFromPath(target.Path)
-	srcPrefixPath := common.GetPrefixPath(target.Path)
+	srcFileOrDirName, isFile := files.GetFileNameFromPath(target.Path)
+	srcPrefixPath := files.GetPrefixPath(target.Path)
 
 	if target.FileType == common.Drive || target.FileType == common.Cache || target.FileType == common.External {
 		isSrcLocal = true

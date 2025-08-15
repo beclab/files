@@ -2,6 +2,7 @@ package clouds
 
 import (
 	"encoding/json"
+	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/clouds/rclone/operations"
@@ -62,8 +63,8 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		return nil, fmt.Errorf("path %s urldecode error: %v", fileParam.Path, err)
 	}
 
-	var pathPrefix = common.GetPrefixPath(path)
-	var fileName, isFile = common.GetFileNameFromPath(path)
+	var pathPrefix = files.GetPrefixPath(path)
+	var fileName, isFile = files.GetFileNameFromPath(path)
 
 	if !isFile {
 		return nil, fmt.Errorf("not a file")
@@ -153,8 +154,8 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
 	var fileParam = contextArgs.FileParam
 	var user = fileParam.Owner
-	var pathPrefix = common.GetPrefixPath(fileParam.Path)
-	var fileName, isFile = common.GetFileNameFromPath(fileParam.Path)
+	var pathPrefix = files.GetPrefixPath(fileParam.Path)
+	var fileName, isFile = files.GetFileNameFromPath(fileParam.Path)
 
 	if !isFile {
 		return nil, fmt.Errorf("not a file")
@@ -167,7 +168,6 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 
 	fileParam.Path = pathPrefix + fileName
 
-	fileName, _ = url.PathUnescape(fileName)
 	var path = pathPrefix + fileName
 
 	klog.Infof("Cloud raw, user: %s, path: %s, args: %s", user, path, common.ToJson(contextArgs))
@@ -229,8 +229,8 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
-	dstPrefixPath := common.GetPrefixPath(fileParam.Path)
-	dstFileOrDirName, isFile := common.GetFileNameFromPath(fileParam.Path)
+	dstPrefixPath := files.GetPrefixPath(fileParam.Path)
+	dstFileOrDirName, isFile := files.GetFileNameFromPath(fileParam.Path)
 
 	klog.Infof("Cloud create, user: %s, param: %s, prefixPath: %s, name: %s, isFile: %v", owner, fileParam.Json(), dstPrefixPath, dstFileOrDirName, isFile)
 
@@ -278,7 +278,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		}
 	}
 
-	newName := common.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
+	newName := files.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
 	if newName != "" {
 		newName = newName + dstFileExt
 	} else {
@@ -442,6 +442,10 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	klog.Infof("Cloud rename, user: %s, resp: %s", owner, string(resp))
 
 	return nil, nil
+}
+
+func (s *CloudStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
+	return nil, errors.New("not supported")
 }
 
 func (s *CloudStorage) generateListingData(fileParam *models.FileParam,

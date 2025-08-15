@@ -7,8 +7,11 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/sync/seahub"
+	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -280,6 +283,63 @@ func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error
 	}
 
 	return respBody, nil
+}
+
+func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
+	var fileParam = contextArgs.FileParam
+	var user = fileParam.Owner
+	klog.Infof("Sync edit, user: %s, path: %s", user, fileParam.Path)
+
+	filePrefix := files.GetPrefixPath(fileParam.Path)
+	fileName, isFile := files.GetFileNameFromPath(fileParam.Path)
+	if !isFile {
+		return nil, fmt.Errorf("path %s is not file", fileParam.Path)
+	}
+
+	getRespBody, err := seahub.HandleUpdateLink(contextArgs.QueryParam.Header, fileParam, "api")
+	if err != nil {
+		return nil, err
+	}
+
+	updateLink := string(getRespBody)
+	updateLink = strings.Trim(updateLink, "\"")
+
+	updateUrl := "http://127.0.0.1:80/" + updateLink
+	klog.Infoln(updateUrl)
+
+	bodyBytes, err := io.ReadAll(contextArgs.QueryParam.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	_ = writer.WriteField("target_file", filepath.Join(filePrefix, fileName))
+	_ = writer.WriteField("filename", fileName)
+	klog.Infoln("target_file", filepath.Join(filePrefix, fileName))
+
+	fileWriter, err := writer.CreateFormFile("files_content", fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err = fileWriter.Write(bodyBytes); err != nil {
+		return nil, err
+	}
+
+	if err = writer.Close(); err != nil {
+		return nil, err
+	}
+
+	postBody, err := s.service.Get(updateUrl, "POST", body.Bytes())
+	if err != nil {
+		klog.Errorf("Sync edit, path: %s, error: %v", fileParam.Path, err)
+		return nil, err
+	}
+	klog.Infof("Sync edit, path: %s, resp: %s", fileParam.Path, string(postBody))
+
+	return nil, nil
 }
 
 func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData *Files, stopChan <-chan struct{}, dataChan chan<- string) {

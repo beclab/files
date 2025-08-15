@@ -1,11 +1,12 @@
 package rpc
 
 import (
-	"files/pkg/drives"
-	"github.com/fsnotify/fsnotify"
-	"k8s.io/klog/v2"
+	"files/pkg/global"
 	"sync"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
+	"k8s.io/klog/v2"
 )
 
 var externalWatcher *fsnotify.Watcher = nil
@@ -112,14 +113,14 @@ func dedupExternalLoop(w *fsnotify.Watcher) {
 func handleExternalEvent(e fsnotify.Event) error {
 	if e.Has(fsnotify.Remove) || e.Has(fsnotify.Rename) {
 		klog.Infof("external delete %s", e.Name)
-		drives.GetMountedData(nil)
+		global.GlobalMounted.Updated()
 		//next line must be commented for rename
 		//return nil
 	}
 
 	if e.Has(fsnotify.Create) {
 		klog.Infof("external create %s", e.Name)
-		drives.GetMountedData(nil)
+		global.GlobalMounted.Updated()
 		return nil
 	}
 

@@ -20,5 +20,7 @@ type Execute interface {
 
 	Rename(contextArgs *models.HttpContextArgs) ([]byte, error)
 
+	Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error)
+
 	Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 }

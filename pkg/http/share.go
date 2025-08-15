@@ -4,17 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/drives"
 	"files/pkg/files"
 	"files/pkg/postgres"
 	"fmt"
-	"github.com/spf13/afero"
-	"gorm.io/gorm"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/spf13/afero"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type ShareablePutRequestBody struct {
@@ -119,7 +119,7 @@ func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.HttpD
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			newPathInfo := postgres.PathInfo{
 				Path:       path,
-				SrcType:    drives.SrcTypeDrive,
+				SrcType:    common.Drive,
 				MD5:        common.Md5String(path),
 				OwnerID:    ownerID,
 				OwnerName:  ownerName,

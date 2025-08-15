@@ -2,12 +2,13 @@ package app
 
 import (
 	"files/pkg/drivers/posix/upload"
-	"files/pkg/drives"
+	"files/pkg/global"
 	"files/pkg/redisutils"
-	"github.com/robfig/cron/v3"
-	"k8s.io/klog/v2"
 	"sync"
 	"time"
+
+	"github.com/robfig/cron/v3"
+	"k8s.io/klog/v2"
 )
 
 var cleanupMux sync.Mutex
@@ -29,7 +30,8 @@ func InitCrontabs() {
 	_, err = c.AddFunc("*/5 * * * *", func() {
 		cleanupMux.Lock()
 		defer cleanupMux.Unlock()
-		drives.GetMountedData(nil)
+
+		global.GlobalMounted.Updated()
 	})
 	if err != nil {
 		klog.Fatalf("AddFunc GetMountedData err:%v", err)
