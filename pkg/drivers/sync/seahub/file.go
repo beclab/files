@@ -26,9 +26,7 @@ import (
 
 var MAX_UPLOAD_FILE_NAME_LEN = 255
 
-func HandleFileOperation(header http.Header, repoId, pathParam, destName, operation string) ([]byte, error) {
-	MigrateSeahubUserToRedis(header)
-
+func HandleFileOperation(owner, repoId, pathParam, destName, operation string) ([]byte, error) {
 	pathParam = path.Clean(path.Clean(strings.ReplaceAll(pathParam, "\\", "/")))
 	if pathParam == "" || pathParam[0] != '/' {
 		klog.Errorf("invalid path param: %s", pathParam)
@@ -59,14 +57,12 @@ func HandleFileOperation(header http.Header, repoId, pathParam, destName, operat
 		return nil, errors.New("repo not found")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-
 	// we only use rename now
 	switch operation {
 	case "create":
 		return nil, errors.New("operation not supported yet")
 	case "rename":
-		return handleRename(repoId, pathParam, bflName, destName)
+		return handleRename(repoId, pathParam, owner, destName)
 	case "move":
 		return nil, errors.New("operation not supported yet")
 	case "copy":
@@ -78,7 +74,7 @@ func HandleFileOperation(header http.Header, repoId, pathParam, destName, operat
 	}
 }
 
-func handleRename(repoId, pathParam, bflName, newName string) ([]byte, error) {
+func handleRename(repoId, pathParam, owner, newName string) ([]byte, error) {
 	newName = strings.TrimSpace(newName)
 	if newName == "" {
 		return nil, errors.New("newname invalid")
@@ -93,9 +89,7 @@ func handleRename(repoId, pathParam, bflName, newName string) ([]byte, error) {
 		return nil, errors.New("newname is too long.")
 	}
 
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
+	username := owner + "@auth.local"
 
 	pathParam = strings.TrimRight(pathParam, "/")
 	parentDir := path.Dir(pathParam)
@@ -117,16 +111,11 @@ func handleRename(repoId, pathParam, bflName, newName string) ([]byte, error) {
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
 	if err != nil || permission != "rw" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-		if err != nil || permission != "rw" {
-			return nil, errors.New("permission denied")
-		} else {
-			useUsername = oldUsername
-		}
+		return nil, errors.New("permission denied")
 	}
 
 	newName = CheckFilenameWithRename(repoId, parentDir, newName)
-	if resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldName, newName, useUsername); err != nil || resultCode != 0 {
+	if resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldName, newName, username); err != nil || resultCode != 0 {
 		klog.Errorf("Failed to rename: result_code: %d, err: %v", resultCode, err)
 		return nil, errors.New("failed to rename")
 	}
@@ -186,9 +175,7 @@ func GetFileInfo(repoId, filePath string) map[string]interface{} {
 	return fileInfo
 }
 
-func HandleUpdateLink(header http.Header, fileParam *models.FileParam, from string) ([]byte, error) {
-	MigrateSeahubUserToRedis(header)
-
+func HandleUpdateLink(fileParam *models.FileParam, from string) ([]byte, error) {
 	repoId := fileParam.Extend
 	parentDir := filepath.Dir(fileParam.Path)
 	if parentDir == "" {
@@ -215,19 +202,11 @@ func HandleUpdateLink(header http.Header, fileParam *models.FileParam, from stri
 		return nil, errors.New(fmt.Sprintf("dir %s not exist", parentDir))
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
+	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
 	if err != nil || permission != "rw" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-		if err != nil || permission != "rw" {
-			return nil, errors.New("permission denied")
-		} else {
-			useUsername = oldUsername
-		}
+		return nil, errors.New("permission denied")
 	}
 
 	quota, err := seaserv.GlobalSeafileAPI.CheckQuota(repoId, 0)
@@ -239,7 +218,7 @@ func HandleUpdateLink(header http.Header, fileParam *models.FileParam, from stri
 		return nil, errors.New("quota exceeded") // original status_code=443 in seahub
 	}
 
-	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, "dummy", "update", useUsername, false)
+	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, "dummy", "update", username, false)
 	if err != nil {
 		klog.Errorf("fail to get file server token err=%s", err)
 		return nil, err
@@ -259,8 +238,6 @@ func HandleUpdateLink(header http.Header, fileParam *models.FileParam, from stri
 		return nil, errors.New("invalid 'from' parameter")
 	}
 
-	klog.Infof("~~~Debug log: url=%s", updateUrl)
-
 	return []byte(updateUrl), nil
 }
 
@@ -274,9 +251,7 @@ const (
 
 var FILE_ENCODING_TRY_LIST = []string{"utf-8", "gbk", "iso-8859-1"}
 
-func ViewLibFile(header http.Header, fileParam *models.FileParam, op string) ([]byte, error) {
-	MigrateSeahubUserToRedis(header)
-
+func ViewLibFile(fileParam *models.FileParam, op string) ([]byte, error) {
 	repoId := fileParam.Extend
 	filePath := fileParam.Path
 
@@ -300,31 +275,23 @@ func ViewLibFile(header http.Header, fileParam *models.FileParam, op string) ([]
 		return nil, errors.New("file not found")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
+	username := fileParam.Owner + "@auth.local"
 
 	parentDir := filepath.Dir(filePath)
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
 	if err != nil || permission != "rw" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-		if err != nil || permission != "rw" {
-			return nil, errors.New("permission denied")
-		} else {
-			useUsername = oldUsername
-		}
+		return nil, errors.New("permission denied")
 	}
 
 	if op == "dl" {
-		ret, err := handleFileDownload(repo, fileId, filePath, useUsername, "download")
+		ret, err := handleFileDownload(repo, fileId, filePath, username, "download")
 		if err != nil {
 			return nil, err
 		}
 		return ret, nil
 	} else if op == "raw" {
-		ret, err := handleFileDownload(repo, fileId, filePath, useUsername, "view")
+		ret, err := handleFileDownload(repo, fileId, filePath, username, "view")
 		if err != nil {
 			return nil, err
 		}
@@ -332,11 +299,11 @@ func ViewLibFile(header http.Header, fileParam *models.FileParam, op string) ([]
 	}
 
 	// "dict" below
-	returnDict := buildBaseResponse(repo, fileId, filePath, useUsername, permission)
+	returnDict := buildBaseResponse(repo, fileId, filePath, username, permission)
 
 	getContributorInfo(repo, filePath, returnDict)
 
-	handleFileType(repo, filePath, fileId, useUsername, returnDict)
+	handleFileType(repo, filePath, fileId, username, returnDict)
 
 	return common.ToBytes(returnDict), nil
 }
@@ -444,8 +411,6 @@ func handleFileType(repo map[string]string, filePath, fileId, username string, r
 		useOnetime = false
 	}
 
-	klog.Infof("~~~Charset Debug log: view lib file, will get file server access token")
-
 	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repo["id"], fileId, "view", username, useOnetime)
 	if err != nil {
 		klog.Error(err)
@@ -453,8 +418,6 @@ func handleFileType(repo map[string]string, filePath, fileId, username string, r
 	if token != "" {
 		returnDict["raw_path"] = GenFileGetURL(token, filename) // for all type
 	}
-
-	klog.Infof("~~~Charset Debug log: view lib file, will get file size")
 
 	version, err := strconv.Atoi(repo["version"])
 	if err != nil {
@@ -467,8 +430,6 @@ func handleFileType(repo map[string]string, filePath, fileId, username string, r
 		klog.Error(err)
 		return
 	}
-
-	klog.Infof("~~~Charset Debug log: fileType=%v, fileExt=%v, fileSize=%d, returnDict['filetype']=%s", fileType, fileExt, fileSize, returnDict["filetype"])
 
 	switch fileType {
 	case TEXT, MARKDOWN:
@@ -485,8 +446,6 @@ func handleFileType(repo map[string]string, filePath, fileId, username string, r
 }
 
 func handleTextFile(fileSize int64, returnDict map[string]interface{}) {
-	klog.Infof("~~~Charset Debug log: view lib file, will handle text file")
-
 	if fileSize > FILE_PREVIEW_MAX_SIZE {
 		returnDict["err"] = fmt.Sprintf("File size surpasses %s", FileSizeFormat(FILE_PREVIEW_MAX_SIZE))
 		return

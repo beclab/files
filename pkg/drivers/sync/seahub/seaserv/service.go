@@ -17,9 +17,6 @@ func InitSeaRPC() {
 	initRpcConfig()
 	GlobalSeafileAPI = NewSeafileAPI(SeafservThreadedRpc)
 	GlobalCcnetAPI = NewCcnetAPI(SeafservThreadedRpc)
-
-	klog.Infof("~~~Debug log: SeafservThreadedRpc: %+v", SeafservThreadedRpc)
-	klog.Infof("~~~Debug log: SeafservThreadedRpc.NamedPipeClient: %+v", SeafservThreadedRpc.NamedPipeClient)
 }
 
 func initRpcConfig() {
@@ -31,14 +28,13 @@ func initRpcConfig() {
 
 func initRpcClient(pipePath string) {
 	if pipePath == "" {
-		klog.Infof("~~~Debug log: Using custom RPC pipe path: %s", pipePath)
+		klog.Infof("Using custom RPC pipe path: %s", pipePath)
 	}
 
 	socketPath := filepath.Join(pipePath, "seafile.sock")
-	klog.Infof("~~~Debug log: Creating RPC client with socket path: %s", socketPath)
+	klog.Infof("Creating RPC client with socket path: %s", socketPath)
 	SeafservThreadedRpc = searpc.NewSeafServerClient(socketPath)
-	klog.Infof("~~~Debug log: Successfully created SeafservThreadedRpc client")
 
 	CcnetThreadedRpc = SeafservThreadedRpc
-	klog.Infof("~~~Debug log: RPC client initialization completed")
+	klog.Infof("RPC client initialization completed")
 }

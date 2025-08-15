@@ -62,10 +62,7 @@ func reposGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 
 	var owner = contextQueryArgs.Owner
 
-	var header = &http.Header{
-		common.REQUEST_HEADER_OWNER: []string{owner},
-	}
-	repos, err := seahub.HandleReposGet(header, []string{"mine"})
+	repos, err := seahub.HandleReposGet(owner, []string{"mine"})
 	if err != nil {
 		klog.Errorf("get repos error: %v", err)
 		return nil, err
@@ -81,7 +78,6 @@ func reposGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var owner = contextQueryArgs.Owner
 	var repoName = contextQueryArgs.RepoName
-	//var url = "http://127.0.0.1:80/seahub/api2/repos/?from=web"
 
 	if repoName == "" {
 		return nil, errors.New("repo name is empty")
@@ -89,18 +85,7 @@ func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 
 	klog.Infof("Repo create repo, user: %s, name: %s", owner, repoName)
 
-	//body := &bytes.Buffer{}
-	//writer := multipart.NewWriter(body)
-	//_ = writer.WriteField("name", repoName)
-	//_ = writer.WriteField("passwd", "")
-	//
-	var header = &http.Header{
-		common.REQUEST_HEADER_OWNER: []string{owner},
-		//"Content-Type":                []string{writer.FormDataContentType()},
-	}
-
-	//var res, err = utils.RequestWithContext(url, http.MethodPost, header, body.Bytes())
-	var res, err = seahub.HandleRepoPost(header, repoName, "")
+	var res, err = seahub.HandleRepoPost(owner, repoName, "")
 	if err != nil {
 		klog.Errorf("create repo error: %v, name: %s", err, repoName)
 		return nil, err
@@ -123,14 +108,7 @@ func deleteRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 
 	klog.Infof("Repo delete repo, user: %s, id: %s", owner, repoId)
 
-	//deleteUrl := "http://127.0.0.1:80/seahub/api/v2.1/repos/" + repoId + "/"
-
-	var header = &http.Header{
-		common.REQUEST_HEADER_OWNER: []string{owner},
-	}
-	var res, err = seahub.HandleRepoDelete(header, repoId)
-
-	//var res, err = utils.RequestWithContext(deleteUrl, http.MethodDelete, header, nil)
+	var res, err = seahub.HandleRepoDelete(owner, repoId)
 	if err != nil {
 		klog.Errorf("delete repo error: %v, name: %s", err, repoId)
 		return nil, err
@@ -164,18 +142,7 @@ func renameRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 
 	klog.Infof("Repo rename repo, user: %s, id: %s, name: %s", user, repoId, repoName)
 
-	//renameUrl := "http://127.0.0.1:80/seahub/api2/repos/" + repoId + "/?op=rename"
-	//body := &bytes.Buffer{}
-	//writer := multipart.NewWriter(body)
-	//_ = writer.WriteField("repo_name", repoName)
-
-	header := &http.Header{
-		common.REQUEST_HEADER_OWNER: []string{user},
-		//"Content-Type":                []string{writer.FormDataContentType()},
-	}
-
-	res, err := seahub.HandleRepoPatch(header, repoId, repoName, "", "rename")
-	//res, err := utils.RequestWithContext(renameUrl, http.MethodPost, header, body.Bytes())
+	res, err := seahub.HandleRepoPatch(user, repoId, repoName, "", "rename")
 	if err != nil {
 		klog.Errorf("rename repo error: %v, id: %s, name: %s", err, repoId, repoName)
 		return nil, err

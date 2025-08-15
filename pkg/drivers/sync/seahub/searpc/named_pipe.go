@@ -43,7 +43,7 @@ func (t *NamedPipeTransport) Stop() {
 }
 
 func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
-	klog.Infof("~~~Debug log: Send called - service: %s, fcallStr: %s", service, fcallStr)
+	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
 
 	reqBody := map[string]string{
 		"service": service,
@@ -51,44 +51,30 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 	}
 
 	jsonData := common.ToBytes(reqBody)
-	klog.Infof("~~~Debug log: Request JSON - service: %s, json: %s", service, string(jsonData))
 
 	header := make([]byte, 4)
 	binary.LittleEndian.PutUint32(header, uint32(len(jsonData)))
-	klog.Infof("~~~Debug log: Header created - service: %s, header: %x, data length: %d",
-		service, header, len(jsonData))
 
 	sendData := append(header, jsonData...)
-	klog.Infof("~~~Debug log: Sending data - service: %s, total length: %d, data: %x",
-		service, len(sendData), sendData)
 
 	if _, err := t.conn.Write(sendData); err != nil {
-		klog.Errorf("~~~Debug log: Write failed - service: %s, error: %v", service, err)
 		return "", err
 	}
 
 	respHeader := make([]byte, 4)
-	n, err := t.conn.Read(respHeader)
+	_, err := t.conn.Read(respHeader)
 	if err != nil {
-		klog.Errorf("~~~Debug log: Read header failed - service: %s, read bytes: %d, error: %v",
-			service, n, err)
 		return "", err
 	}
 	respSize := binary.LittleEndian.Uint32(respHeader)
-	klog.Infof("~~~Debug log: Received header - service: %s, header: %x, respSize: %d",
-		service, respHeader, respSize)
 
 	respBody := make([]byte, respSize)
-	n, err = t.conn.Read(respBody)
+	_, err = t.conn.Read(respBody)
 	if err != nil {
-		klog.Errorf("~~~Debug log: Read body failed - service: %s, expected: %d, read: %d, error: %v",
-			service, respSize, n, err)
 		return "", err
 	}
 
 	respStr := string(respBody)
-	klog.Infof("~~~Debug log: Received response - service: %s, length: %d, content: %s",
-		service, len(respStr), respStr)
 
 	return respStr, nil
 }
@@ -118,10 +104,8 @@ func (c *NamedPipeClient) getTransport() (*NamedPipeTransport, error) {
 	default:
 		transport := &NamedPipeTransport{socketPath: c.socketPath}
 		if err := transport.Connect(); err != nil {
-			klog.Errorf("~~~Debug log: Failed to connect to socket: %v", err)
 			return nil, err
 		}
-		klog.Infof("~~~Debug log: Success to connect to socket: %v", transport)
 		return transport, nil
 	}
 }
@@ -135,10 +119,8 @@ func (c *NamedPipeClient) returnTransport(t *NamedPipeTransport) {
 }
 
 func (c *NamedPipeClient) CallRemoteFuncSync(fcallStr string) (string, error) {
-	klog.Infof("~~~Debug log: Call remote function sync - fcallStr: %s", fcallStr)
 	transport, err := c.getTransport()
 	if err != nil {
-		klog.Errorf("~~~Debug log: Failed to connect to socket: %v", err)
 		return "", err
 	}
 	defer c.returnTransport(transport)

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
-	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,14 +22,7 @@ func GenerateUniqueIdentifier(relativePath string) string {
 	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
 }
 
-func GetUploadLink(header http.Header, fileParam *models.FileParam, reqFrom string, replace bool) (string, error) {
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		return "", err
-	}
-	path := uri + fileParam.Path
-	klog.Infof("~~~Debug log: path=%s", path)
-
+func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool) (string, error) {
 	repoId := fileParam.Extend
 	parentDir := fileParam.Path
 	if parentDir == "" {
@@ -57,19 +49,11 @@ func GetUploadLink(header http.Header, fileParam *models.FileParam, reqFrom stri
 		return "", errors.New("folder not found")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
+	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
 	if err != nil || permission != "rw" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-		if err != nil || permission != "rw" {
-			return "", errors.New("permission denied")
-		} else {
-			useUsername = oldUsername
-		}
+		return "", errors.New("permission denied")
 	}
 
 	quota, err := seaserv.GlobalSeafileAPI.CheckQuota(repoId, 0)
@@ -82,7 +66,7 @@ func GetUploadLink(header http.Header, fileParam *models.FileParam, reqFrom stri
 	}
 
 	objId := common.ToBytes(map[string]string{"parent_dir": parentDir})
-	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, string(objId), "upload", useUsername, false)
+	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, string(objId), "upload", username, false)
 	if err != nil {
 		klog.Errorf("fail to get file server token %s, err=%s", string(objId), err)
 		return "", err
@@ -90,8 +74,6 @@ func GetUploadLink(header http.Header, fileParam *models.FileParam, reqFrom stri
 	if token == "" {
 		return "", errors.New("internal server error")
 	}
-
-	klog.Infof("~~~Debug log: token=%s", token)
 
 	var url string
 
@@ -107,44 +89,7 @@ func GetUploadLink(header http.Header, fileParam *models.FileParam, reqFrom stri
 		return "", errors.New("invalid 'from' parameter")
 	}
 
-	klog.Infof("~~~Debug log: url=%s", url)
 	return url, nil
-}
-
-func HandleUploadLink(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	MigrateSeahubUserToRedis(r.Header)
-
-	//owner, _, _, _, err := upload.GetPVC(r)
-	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
-	if owner == "" {
-		return http.StatusBadRequest, errors.New("bfl header missing or invalid")
-	}
-
-	p := r.URL.Query().Get("file_path")
-	if p == "" {
-		return http.StatusBadRequest, errors.New("missing path query parameter")
-	}
-
-	if !strings.HasSuffix(p, "/") {
-		p = p + "/"
-	}
-
-	fileParam, err := models.CreateFileParam(owner, p)
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-
-	reqFrom := r.URL.Query().Get("from")
-	replace := strings.ToLower(r.URL.Query().Get("replace")) == "true"
-
-	url, err := GetUploadLink(r.Header.Clone(), fileParam, reqFrom, replace)
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(url))
-	return 0, nil
 }
 
 func genFileUploadURL(token, op string, replace bool) string {
@@ -160,7 +105,7 @@ func genFileUploadURL(token, op string, replace bool) string {
 	return baseURL
 }
 
-func GetUploadedBytes(header http.Header, fileParam *models.FileParam, fileName string) ([]byte, error) {
+func GetUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, error) {
 	repoId := fileParam.Extend
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
@@ -172,13 +117,6 @@ func GetUploadedBytes(header http.Header, fileParam *models.FileParam, fileName 
 		klog.Errorf("fail to get repo id %s", repoId)
 		return nil, errors.New("library not found")
 	}
-
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		return nil, err
-	}
-	path := uri + fileParam.Path
-	klog.Infof("~~~Debug log: parentDir=%s", path)
 
 	parentDir := fileParam.Path
 	if parentDir == "" {
@@ -203,38 +141,4 @@ func GetUploadedBytes(header http.Header, fileParam *models.FileParam, fileName 
 		"uploadedBytes": uploadedBytes,
 	}
 	return common.ToBytes(response), nil
-}
-
-func HandleUploadedBytes(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	MigrateSeahubUserToRedis(r.Header)
-
-	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
-	if owner == "" {
-		return http.StatusBadRequest, errors.New("bfl header missing or invalid")
-	}
-
-	p := r.URL.Query().Get("parent_dir")
-	if p == "" {
-		return http.StatusBadRequest, errors.New("missing parent_dir query parameter")
-	}
-
-	if !strings.HasSuffix(p, "/") {
-		p = p + "/"
-	}
-
-	fileParam, err := models.CreateFileParam(owner, p)
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-
-	fileName := r.URL.Query().Get("file_name")
-	if fileName == "" {
-		return http.StatusBadRequest, errors.New("file_relative_path invalid")
-	}
-
-	response, err := GetUploadedBytes(r.Header, fileParam, fileName)
-
-	w.Header().Set("Accept-Ranges", "bytes")
-	w.Header().Set("Content-Type", "application/json")
-	return common.RenderJSON(w, r, response)
 }

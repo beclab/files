@@ -1,19 +1,17 @@
 package seahub
 
 import (
-	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
 	"fmt"
 	"k8s.io/klog/v2"
-	"net/http"
 	"path/filepath"
 	"strings"
 )
 
-func HandleDelete(header http.Header, fileParam *models.FileParam) error {
+func HandleDelete(fileParam *models.FileParam) error {
 	parentDir, filename := filepath.Split(strings.TrimSuffix(fileParam.Path, "/"))
 	if filename == "" {
 		return errors.New("filename is empty")
@@ -25,16 +23,14 @@ func HandleDelete(header http.Header, fileParam *models.FileParam) error {
 		Path:     parentDir,
 	}
 	dirents := []string{filename}
-	_, err := HandleBatchDelete(header, newFileParam, dirents)
+	_, err := HandleBatchDelete(newFileParam, dirents)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func HandleBatchDelete(header http.Header, fileParam *models.FileParam, dirents []string) ([]byte, error) {
-	MigrateSeahubUserToRedis(header)
-
+func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, error) {
 	repoId := fileParam.Extend
 	parentDir := fileParam.Path
 
@@ -62,29 +58,21 @@ func HandleBatchDelete(header http.Header, fileParam *models.FileParam, dirents 
 		return nil, errors.New("folder not found")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
-	oldUsername := seaserv.GetOldUsername(bflName + "@seafile.com") // temp compatible
-	useUsername := username
+	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
 	if err != nil || permission != "rw" {
-		permission, err = CheckFolderPermission(oldUsername, repoId, parentDir) // temp compatible
-		if err != nil || permission != "rw" {
-			return nil, errors.New("permission denied")
-		} else {
-			useUsername = oldUsername
-		}
+		return nil, errors.New("permission denied")
 	}
 
-	folderPerms, err := GetSubFolderPermissionByDir(useUsername, repoId, parentDir)
+	folderPerms, err := GetSubFolderPermissionByDir(username, repoId, parentDir)
 	for _, dirent := range dirents {
 		if perm, exists := folderPerms[dirent]; exists && perm != "rw" {
 			return nil, errors.New(fmt.Sprintf("Can't delete folder %s, please check its permission", dirent))
 		}
 	}
 
-	if resultCode, err := seaserv.GlobalSeafileAPI.DelFile(repoId, parentDir, string(common.ToBytes(dirents)), useUsername); resultCode != 0 || err != nil {
+	if resultCode, err := seaserv.GlobalSeafileAPI.DelFile(repoId, parentDir, string(common.ToBytes(dirents)), username); resultCode != 0 || err != nil {
 		klog.Errorf("Failed to delete: result_code: %d, err: %v", resultCode, err)
 		return nil, errors.New("failed to delete")
 	}
@@ -129,53 +117,7 @@ type CopyMoveReq struct {
 	Destination string `json:"destination"`
 }
 
-func BatchCopyHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
-	if owner == "" {
-		klog.Error("user not found")
-		return http.StatusBadRequest, nil
-	}
-
-	var reqBody = &CopyMoveReq{}
-	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-		klog.Errorf("failed to decode request body: %v", err)
-		return http.StatusBadRequest, fmt.Errorf("failed to decode request body: %v", err)
-	}
-	defer r.Body.Close()
-
-	src := reqBody.Source
-	dst := reqBody.Destination
-	klog.Infof("~~~Debug log: src=%s, dst=%s", src, dst)
-
-	srcFileParam, err := models.CreateFileParam(owner, src)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	dstFileParam, err := models.CreateFileParam(owner, dst)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	klog.Infof("~~~Debug log: srcFileParam=%v, dstFileParam=%v", srcFileParam, dstFileParam)
-
-	srcRepoId := srcFileParam.Extend
-	srcParentDir := filepath.Dir(strings.TrimSuffix(srcFileParam.Path, "/"))
-	srcDirents := []string{filepath.Base(strings.TrimSuffix(srcFileParam.Path, "/"))}
-	dstRepoId := dstFileParam.Extend
-	dstParentDir := filepath.Dir(strings.TrimSuffix(dstFileParam.Path, "/"))
-	klog.Infof("~~~Debug log: srcRepoId=%s, dstRepoId=%s", srcRepoId, dstRepoId)
-	klog.Infof("~~~Debug log: srcParentDir=%s, dstRarentDir=%s", srcParentDir, dstParentDir)
-	klog.Infof("~~~Debug log: srcDirents=%v", srcDirents)
-
-	resp, err := HandleBatchCopy(r.Header.Clone(), srcRepoId, srcParentDir, srcDirents, dstRepoId, dstParentDir)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	klog.Infof("~~~Debug log: resp=%v", resp)
-	return 0, nil
-}
-
-func HandleBatchCopy(header http.Header, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string) ([]byte, error) {
+func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string) ([]byte, error) {
 	srcRepo, err := seaserv.GlobalSeafileAPI.GetRepo(srcRepoId)
 	if err != nil || srcRepo == nil {
 		klog.Error(fmt.Sprintf("Library %s not found, err: %v", srcRepoId, err))
@@ -200,8 +142,7 @@ func HandleBatchCopy(header http.Header, srcRepoId, srcParentDir string, srcDire
 		return nil, errors.New("folder not found")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
+	username := owner + "@auth.local"
 
 	srcPerm, err := CheckFolderPermission(username, srcRepoId, srcParentDir)
 	if err != nil || !strings.Contains(srcPerm, "r") {
@@ -232,53 +173,7 @@ func HandleBatchCopy(header http.Header, srcRepoId, srcParentDir string, srcDire
 	return common.ToBytes(response), nil
 }
 
-func BatchMoveHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
-	var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
-	if owner == "" {
-		klog.Error("user not found")
-		return http.StatusBadRequest, nil
-	}
-
-	var reqBody = &CopyMoveReq{}
-	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-		klog.Errorf("failed to decode request body: %v", err)
-		return http.StatusBadRequest, fmt.Errorf("failed to decode request body: %v", err)
-	}
-	defer r.Body.Close()
-
-	src := reqBody.Source
-	dst := reqBody.Destination
-	klog.Infof("~~~Debug log: src=%s, dst=%s", src, dst)
-
-	srcFileParam, err := models.CreateFileParam(owner, src)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	dstFileParam, err := models.CreateFileParam(owner, dst)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	klog.Infof("~~~Debug log: srcFileParam=%v, dstFileParam=%v", srcFileParam, dstFileParam)
-
-	srcRepoId := srcFileParam.Extend
-	srcParentDir := filepath.Dir(strings.TrimSuffix(srcFileParam.Path, "/"))
-	srcDirents := []string{filepath.Base(strings.TrimSuffix(srcFileParam.Path, "/"))}
-	dstRepoId := dstFileParam.Extend
-	dstParentDir := filepath.Dir(strings.TrimSuffix(dstFileParam.Path, "/"))
-	klog.Infof("~~~Debug log: srcRepoId=%s, dstRepoId=%s", srcRepoId, dstRepoId)
-	klog.Infof("~~~Debug log: srcParentDir=%s, dstRarentDir=%s", srcParentDir, dstParentDir)
-	klog.Infof("~~~Debug log: srcDirents=%v", srcDirents)
-
-	resp, err := HandleBatchMove(r.Header.Clone(), srcRepoId, srcParentDir, srcDirents, dstRepoId, dstParentDir)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	klog.Infof("~~~Debug log: resp=%v", resp)
-	return 0, nil
-}
-
-func HandleBatchMove(header http.Header, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string) ([]byte, error) {
+func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string) ([]byte, error) {
 	srcRepo, err := seaserv.GlobalSeafileAPI.GetRepo(srcRepoId)
 	if err != nil || srcRepo == nil {
 		klog.Error(fmt.Sprintf("Library %s not found, err: %v", srcRepoId, err))
@@ -303,8 +198,7 @@ func HandleBatchMove(header http.Header, srcRepoId, srcParentDir string, srcDire
 		return nil, errors.New("folder not found")
 	}
 
-	bflName := header.Get("X-Bfl-User")
-	username := bflName + "@auth.local"
+	username := owner + "@auth.local"
 
 	srcPerm, err := CheckFolderPermission(username, srcRepoId, srcParentDir)
 	if err != nil || srcPerm != "rw" {

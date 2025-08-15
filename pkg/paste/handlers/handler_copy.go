@@ -4,7 +4,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/models"
-	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,19 +18,14 @@ func (c *Handler) CloudCopy() error {
 }
 
 func (c *Handler) SyncCopy() error {
-	klog.Infof("~~~Copy Debug log: Sync  copy begins!")
-	header := make(http.Header)
-	header.Add("X-Bfl-User", c.owner)
-
-	totalSize, err := c.GetFromSyncFileCount(header, "size") // file and dir can both use this
+	totalSize, err := c.GetFromSyncFileCount("size") // file and dir can both use this
 	if err != nil {
 		klog.Errorf("DownloadFromSync - GetFromSyncFileCount - %v", err)
 		return err
 	}
-	klog.Infof("~~~Copy Debug log: DownloadFromSync - GetFromSyncFileCount - totalSize: %d", totalSize)
 	c.UpdateTotalSize(totalSize)
 
-	err = c.DoSyncCopy(header, nil, nil)
+	err = c.DoSyncCopy(nil, nil)
 	if err != nil {
 		klog.Errorf("DownloadFromSync - DoSyncCopy - %v", err)
 		return err
@@ -88,7 +82,7 @@ func (c *Handler) SimulateProgress(left, right int, speed int64) {
 	}
 }
 
-func (c *Handler) DoSyncCopy(header http.Header, src, dst *models.FileParam) error {
+func (c *Handler) DoSyncCopy(src, dst *models.FileParam) error {
 	select {
 	case <-c.ctx.Done():
 		return nil
@@ -109,12 +103,12 @@ func (c *Handler) DoSyncCopy(header http.Header, src, dst *models.FileParam) err
 	srcDirents := []string{filepath.Base(strings.TrimSuffix(src.Path, "/"))}
 	dstParentDir := filepath.Dir(strings.TrimSuffix(dst.Path, "/"))
 	if c.action == "copy" {
-		_, err = seahub.HandleBatchCopy(header, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
+		_, err = seahub.HandleBatchCopy(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
 		if err != nil {
 			return err
 		}
 	} else {
-		_, err = seahub.HandleBatchMove(header, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
+		_, err = seahub.HandleBatchMove(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
 		if err != nil {
 			return err
 		}
