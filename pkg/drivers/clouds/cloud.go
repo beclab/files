@@ -32,6 +32,9 @@ func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
 	}
 }
 
+/**
+ * ~ List
+ */
 func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
@@ -54,6 +57,9 @@ func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	return common.ToBytes(fileData), nil
 }
 
+/**
+ * ~ Preview
+ */
 func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
 	var fileParam = contextArgs.FileParam
 	var queryParam = contextArgs.QueryParam
@@ -63,8 +69,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		return nil, fmt.Errorf("path %s urldecode error: %v", fileParam.Path, err)
 	}
 
-	var pathPrefix = files.GetPrefixPath(path)
-	var fileName, isFile = files.GetFileNameFromPath(path)
+	var _, isFile = files.GetFileNameFromPath(path)
 
 	if !isFile {
 		return nil, fmt.Errorf("not a file")
@@ -72,8 +77,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 
 	klog.Infof("Cloud preview, user: %s, args: %s", owner, common.ToJson(contextArgs))
 
-	var configName = fmt.Sprintf("%s_%s_%s", owner, fileParam.FileType, fileParam.Extend)
-	res, err := s.service.FileStat(configName, pathPrefix, fileName)
+	res, err := s.service.FileStat(fileParam)
 	if err != nil {
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
@@ -151,6 +155,9 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	}
 }
 
+/**
+ * ~ Raw
+ */
 func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
 	var fileParam = contextArgs.FileParam
 	var user = fileParam.Owner
@@ -173,7 +180,7 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 	klog.Infof("Cloud raw, user: %s, path: %s, args: %s", user, path, common.ToJson(contextArgs))
 
 	var configName = fmt.Sprintf("%s_%s_%s", user, fileParam.FileType, fileParam.Extend)
-	res, err := s.service.FileStat(configName, pathPrefix, fileName)
+	res, err := s.service.FileStat(fileParam)
 	if err != nil {
 		return nil, fmt.Errorf("service get file meta error: %v", err)
 	}
@@ -203,6 +210,9 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 	}, nil
 }
 
+/**
+ * ~ Tree
+ */
 func (s *CloudStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
 	var owner = fileParam.Owner
 	klog.Infof("Cloud tree, user: %s, param: %s", owner, fileParam.Json())
@@ -225,24 +235,27 @@ func (s *CloudStorage) Tree(fileParam *models.FileParam, stopChan chan struct{},
 	return nil
 }
 
+/**
+ * ~ Create
+ */
 func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
-	dstPrefixPath := files.GetPrefixPath(fileParam.Path)
-	dstFileOrDirName, isFile := files.GetFileNameFromPath(fileParam.Path)
+	prefixPath := files.GetPrefixPath(fileParam.Path)
+	fileName, isFile := files.GetFileNameFromPath(fileParam.Path)
 
-	klog.Infof("Cloud create, user: %s, param: %s, prefixPath: %s, name: %s, isFile: %v", owner, fileParam.Json(), dstPrefixPath, dstFileOrDirName, isFile)
+	klog.Infof("Cloud create, user: %s, param: %s, prefixPath: %s, name: %s, isFile: %v", owner, fileParam.Json(), prefixPath, fileName, isFile)
 
-	dstPrefixPath = strings.TrimPrefix(dstPrefixPath, "/")
-	dstFileExt := filepath.Ext(dstFileOrDirName)
+	prefixPath = strings.TrimPrefix(prefixPath, "/")
+	dstFileExt := filepath.Ext(fileName)
 
-	var configName = fmt.Sprintf("%s_%s_%s", owner, fileParam.FileType, fileParam.Extend)
-	var config, err = s.service.command.GetConfig().GetConfig(configName)
+	fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
 	if err != nil {
 		return nil, err
 	}
-	var fs = s.service.getFs(configName, config.Type, config.Bucket, dstPrefixPath)
+
+	var fs = fsPrefix + prefixPath
 	var opts = &operations.OperationsOpt{
 		Metadata:   false,
 		NoModTime:  true,
@@ -253,6 +266,8 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	} else {
 		opts.DirsOnly = true
 	}
+
+	klog.Infof("Cloud create, user: %s, list fs: %s, isFile: %v", owner, fs, isFile)
 	lists, err := s.service.command.GetOperation().List(fs, opts)
 	if err != nil {
 		return nil, err
@@ -266,11 +281,11 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 				continue
 			}
 			if isFile {
-				if strings.Contains(strings.TrimSuffix(item.Name, tmpExt), strings.TrimSuffix(dstFileOrDirName, dstFileExt)) {
+				if strings.Contains(strings.TrimSuffix(item.Name, tmpExt), strings.TrimSuffix(fileName, dstFileExt)) {
 					dupNames = append(dupNames, strings.TrimSuffix(item.Name, tmpExt))
 				}
 			} else {
-				if strings.Contains(item.Name, dstFileOrDirName) {
+				if strings.Contains(item.Name, fileName) {
 					dupNames = append(dupNames, item.Name)
 				}
 			}
@@ -278,11 +293,11 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		}
 	}
 
-	newName := files.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
+	newName := files.GenerateDupName(dupNames, fileName, isFile)
 	if newName != "" {
 		newName = newName + dstFileExt
 	} else {
-		newName = dstFileOrDirName
+		newName = fileName
 	}
 
 	klog.Infof("Cloud create, dupNames: %d, newName: %s", len(dupNames), newName)
@@ -291,7 +306,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		var p = &models.PostParam{
 			Drive:      fileParam.FileType,
 			Name:       fileParam.Extend,
-			ParentPath: dstPrefixPath,
+			ParentPath: prefixPath,
 			FolderName: newName,
 		}
 
@@ -305,17 +320,20 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		klog.Infof("Cloud create, dir done! result: %s, user: %s, path: %s", string(res), owner, fileParam.Path)
 		return nil, nil
 	} else {
-		if _, err := s.service.CopyFile(configName, dstPrefixPath, newName); err != nil {
-			klog.Errorf("Cloud create, file error: %v, dstPrefixPath: %s, newName: %s", err, dstPrefixPath, newName)
+		if _, err := s.service.CopyFile(fileParam, prefixPath, newName); err != nil {
+			klog.Errorf("Cloud create, file error: %v, dstPrefixPath: %s, newName: %s", err, prefixPath, newName)
 			return nil, err
 		}
 
-		klog.Errorf("Cloud create, file done! dstPrefixPath: %s, newName: %s", dstPrefixPath, newName)
+		klog.Errorf("Cloud create, file done! dstPrefixPath: %s, newName: %s", prefixPath, newName)
 	}
 
 	return nil, nil
 }
 
+/**
+ * ~ Delete
+ */
 func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, error) {
 	var owner = fileDeleteArg.FileParam.Owner
 	var fileParam = fileDeleteArg.FileParam
@@ -380,14 +398,22 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	return nil, nil
 }
 
+/**
+ * ~ Rename
+ */
 func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var owner = contextArgs.FileParam.Owner
 	var fileParam = contextArgs.FileParam
+
 	klog.Infof("Cloud rename, user: %s, param: %s", owner, common.ToJson(contextArgs))
 
-	var srcName, isSrcFile = getRenamedSrcName(fileParam.Path) // srcName have no /
-	var dstName, _ = url.PathUnescape(contextArgs.QueryParam.Destination)
-	var srcPrefixPath = getRenamedSrcPrefixPath(fileParam.Path)
+	var srcName, isSrcFile = files.GetFileNameFromPath(fileParam.Path)
+	var srcPrefixPath = files.GetPrefixPath(fileParam.Path)
+	var dstName, err = url.PathUnescape(contextArgs.QueryParam.Destination)
+	if err != nil {
+		klog.Errorf("Cloud rename, path unescape error: %v", err)
+		return nil, err
+	}
 
 	if srcName == dstName {
 		klog.Infof("Cloud rename, name not changed, user: %s, srcName: %s, dstName: %s", owner, srcName, dstName)
@@ -444,6 +470,9 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	return nil, nil
 }
 
+/**
+ * ~ Edit
+ */
 func (s *CloudStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
 	return nil, errors.New("not supported")
 }

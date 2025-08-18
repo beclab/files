@@ -16,11 +16,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var (
-	DefaultLocalRootPath = "/data/"
-	DefaultKeepFileName  = ".keep"
-)
-
 type service struct {
 	command rclone.Interface
 }
@@ -58,17 +53,22 @@ func (s *service) Stat(configName, fs, remote string, isFile bool) (*operations.
 
 }
 
-func (s *service) CopyFile(configName string, fsPrefix, dstR string) ([]byte, error) {
-	var config, err = s.command.GetConfig().GetConfig(configName)
+func (s *service) CopyFile(fileParam *models.FileParam, prefixPath, dstR string) ([]byte, error) {
+	var keepFilePath = common.DefaultLocalRootPath + common.DefaultKeepFileName
+	if err := files.CheckKeepFile(keepFilePath); err != nil {
+		return nil, err
+	}
+
+	fsPrefix, err := s.command.GetFsPrefix(fileParam)
 	if err != nil {
 		return nil, err
 	}
 
-	var srcFs = fmt.Sprintf("local:%s", DefaultLocalRootPath)
-	var srcR = DefaultKeepFileName
-	var dstFs = fmt.Sprintf("%s:%s/%s", configName, config.Bucket, fsPrefix)
+	var srcFs = fmt.Sprintf("local:%s", common.DefaultLocalRootPath)
+	var srcR = common.DefaultKeepFileName
+	var dstFs = fsPrefix
 
-	s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
+	s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR)
 	return nil, nil
 }
 
@@ -81,23 +81,24 @@ func (s *service) CreateFolder(owner string, param *models.PostParam) ([]byte, e
 		return nil, err
 	}
 
-	if config.Type == "s3" {
-		if err := s.generateKeepFile(); err != nil {
+	if config.Type == common.RcloneTypeS3 {
+		var keepFilePath = common.DefaultLocalRootPath + common.DefaultKeepFileName
+		if err := files.CheckKeepFile(keepFilePath); err != nil {
 			return nil, err
 		}
 
-		var srcFs = fmt.Sprintf("local:%s", DefaultLocalRootPath) // "local:/data/"
-		var srcR = DefaultKeepFileName
+		var srcFs = fmt.Sprintf("local:%s", common.DefaultLocalRootPath)
+		var srcR = common.DefaultKeepFileName
 		var dstFs = s.getFs(configName, config.Type, config.Bucket, param.ParentPath)
-		var dstR = param.FolderName + "/" // like subfolder/
+		var dstR = param.FolderName + "/"
 
-		copyResp, err := s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
+		err := s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR)
 		if err != nil {
 			klog.Errorf("[service] createfolder, type: %s, dstFs: %s, dstR: %s, error: %v", config.Type, dstFs, dstR, err)
 			return nil, err
 		}
 
-		klog.Infof("[service] createfolder success, data: %s", common.ToJson(copyResp))
+		klog.Infof("[service] createfolder done!")
 
 		return nil, nil
 	}
@@ -160,8 +161,7 @@ func (s *service) DownloadAsync(owner string, param *models.DownloadAsyncParam) 
 	dstFs = "local:" + param.LocalFolder
 	dstRemote = param.LocalFileName
 
-	var async = true
-	resp, err := s.command.GetOperation().Copyfile(srcFs, srcRmote, dstFs, dstRemote, &async)
+	resp, err := s.command.GetOperation().CopyfileAsync(srcFs, srcRmote, dstFs, dstRemote)
 	if err != nil {
 		return 0, err
 	}
@@ -173,14 +173,15 @@ func (s *service) DownloadAsync(owner string, param *models.DownloadAsyncParam) 
 	return *resp.JobId, nil
 }
 
-func (s *service) FileStat(configName string, filePrefixPath, fileName string) ([]byte, error) {
-	var config, err = s.command.GetConfig().GetConfig(configName)
+func (s *service) FileStat(fileParam *models.FileParam) ([]byte, error) {
+	var fsPrefix, err = s.command.GetFsPrefix(fileParam)
 	if err != nil {
 		return nil, err
 	}
 
-	var fs = s.getFs(configName, config.Type, config.Bucket, filePrefixPath)
-	var remote = fileName
+	var fs, remote string
+	fs = fsPrefix
+	remote = fileParam.Path
 
 	klog.Infof("[service] file stat, fs: %s, remote: %s", fs, remote)
 
@@ -224,9 +225,15 @@ func (s *service) Rename(owner string, param *models.FileParam, srcName string, 
 		return nil, nil
 	}
 
-	var dstPrefixPath = srcPrefixPath
-	if err := s.command.GenerateS3EmptyDirectories(param.FileType, configName, configName, srcPrefixPath, dstPrefixPath, srcName, dstName); err != nil {
-		klog.Errorf("[service] rename, generate s3 empty directories error: %v", err)
+	var dst = &models.FileParam{
+		Owner:    param.Owner,
+		FileType: param.FileType,
+		Extend:   param.Extend,
+		Path:     srcPrefixPath + dstName,
+	}
+
+	if err := s.command.CreateEmptyDirectories(param, dst); err != nil {
+		klog.Errorf("[service] rename, generate empty directories error: %v", err)
 		return nil, err
 	}
 
@@ -333,7 +340,7 @@ func (s *service) getFs(configName, configType string, configBucket string, file
 }
 
 func (s *service) generateKeepFile() error {
-	var keepfile = fmt.Sprintf("%s%s", DefaultLocalRootPath, DefaultKeepFileName)
+	var keepfile = fmt.Sprintf("%s%s", common.DefaultLocalRootPath, common.DefaultKeepFileName)
 	if f := files.FilePathExists(keepfile); f {
 		return nil
 	}
@@ -357,13 +364,13 @@ func (s *service) renameFile(configName string, srcPrefixPath string, srcRemote,
 	srcFs = s.getFs(configName, config.Type, config.Bucket, srcPrefixPath)
 	dstFs = s.getFs(configName, config.Type, config.Bucket, srcPrefixPath)
 
-	resp, err := s.command.GetOperation().MoveFile(srcFs, srcRemote, dstFs, dstRemote, nil)
+	err = s.command.GetOperation().MoveFile(srcFs, srcRemote, dstFs, dstRemote)
 	if err != nil {
 		klog.Errorf("[service] rename file, configName: %s, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s, error: %v", configName, srcFs, srcRemote, dstFs, dstRemote, err)
 		return err
 	}
 
-	klog.Infof("[service] rename file, configName: %s, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s, result: %s", configName, srcFs, srcRemote, dstFs, dstRemote, common.ToJson(resp))
+	klog.Infof("[service] rename file, configName: %s, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s", configName, srcFs, srcRemote, dstFs, dstRemote)
 
 	return err
 }
@@ -380,13 +387,13 @@ func (s *service) renameDirectory(owner string, param *models.FileParam, srcPref
 	srcFs = s.getFs(configName, config.Type, config.Bucket, param.Path)
 	dstFs = s.getFs(configName, config.Type, config.Bucket, filepath.Join(srcPrefixPath, dstName))
 
-	resp, err := s.command.GetOperation().Move(srcFs, dstFs)
+	err = s.command.GetOperation().Move(srcFs, dstFs)
 	if err != nil {
 		klog.Errorf("[service] rename dir, owner: %s, srcFs: %s, dstFs: %s, error: %v", owner, srcFs, dstFs, err)
 		return err
 	}
 
-	klog.Infof("[service] rename dir done! owner: %s, srcFs: %s, dstFs: %s, result: %s", owner, srcFs, dstFs, common.ToJson(resp))
+	klog.Infof("[service] rename dir done! owner: %s, srcFs: %s, dstFs: %s", owner, srcFs, dstFs)
 
 	var purgeSrcFs = s.getFs(configName, config.Type, config.Bucket, srcPrefixPath)
 	if err = s.command.GetOperation().Purge(purgeSrcFs, srcName); err != nil {

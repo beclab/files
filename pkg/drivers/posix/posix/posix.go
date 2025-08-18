@@ -184,8 +184,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Posix create, dupNames: %d", len(dupNames))
 
-	newName := files.GenerateDupCommonName(dupNames, strings.TrimSuffix(dstFileOrDirName, dstFileExt), dstFileOrDirName)
-
+	newName := files.GenerateDupName(dupNames, dstFileOrDirName, isFile)
 	if newName != "" {
 		if isFile {
 			newName = newName + dstFileExt

@@ -5,7 +5,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/models"
-	"files/pkg/paste/handlers"
 	"fmt"
 	"sync"
 	"time"
@@ -18,17 +17,17 @@ var TaskManager *taskManager
 type TaskType int
 
 const (
-	Rsync TaskType = iota
+	TypeRsync TaskType = iota
 
-	DownloadFromFiles
-	DownloadFromSync
-	DownloadFromCloud
+	TypeDownloadFromFiles
+	TypeDownloadFromSync
+	TypeDownloadFromCloud
 
-	UploadToSync
-	UploadToCloud
+	TypeUploadToSync
+	TypeUploadToCloud
 
-	SyncCopy
-	CloudCopy
+	TypeSyncCopy
+	TypeCloudCopy
 )
 
 type TaskManagerInterface interface {
@@ -47,22 +46,23 @@ func NewTaskManager() {
 	}
 }
 
-func (t *taskManager) CreateTask(taskType TaskType, param *models.PasteParam) *Task {
+func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 
 	var ctx, cancel = context.WithCancel(context.Background())
 	var _, isFile = param.Src.IsFile()
 
-	return &Task{
-		taskType: taskType,
-		id:       t.generateTaskId(),
-		param:    param,
-		state:    common.Pending,
-		ctx:      ctx,
-		cancel:   cancel,
-		manager:  t,
-		isFile:   isFile,
-		handler:  t.buildHandler(ctx, taskType, param),
+	var task = &Task{
+		id:      t.generateTaskId(),
+		param:   param,
+		state:   common.Pending,
+		ctx:     ctx,
+		cancel:  cancel,
+		manager: t,
+		isFile:  isFile,
 	}
+
+	return task
+
 }
 
 func (t *taskManager) CancelTask(taskId string) {
@@ -110,36 +110,6 @@ func (t *taskManager) GetTask(taskId string) *TaskInfo {
 	}
 
 	return res
-}
-
-func (t *taskManager) buildHandler(ctx context.Context, taskType TaskType, param *models.PasteParam) *handlers.Handler {
-	var handler = handlers.NewHandler(ctx, param)
-
-	var f func() error
-
-	switch taskType {
-
-	case Rsync:
-		f = handler.Rsync
-	case DownloadFromFiles:
-		f = handler.DownloadFromFiles
-	case DownloadFromSync:
-		f = handler.DownloadFromSync
-	case DownloadFromCloud:
-		f = handler.DownloadFromCloud
-	case UploadToSync:
-		f = handler.UploadToSync
-	case UploadToCloud:
-		f = handler.UploadToCloud
-	case SyncCopy:
-		f = handler.SyncCopy
-	case CloudCopy:
-		f = handler.CloudCopy
-	}
-
-	handler.Exec = f
-
-	return handler
 }
 
 func (t *taskManager) generateTaskId() string {

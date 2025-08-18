@@ -37,91 +37,115 @@ func (s *SyncStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error) 
 	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
 }
 
+/**
+ * ~ copyToDrive
+ */
 func (s *SyncStorage) copyToDrive() (task *tasks.Task, err error) {
+	klog.Info("Sync copyToDrive")
 
 	var currentNodeName = global.CurrentNodeName
 	var isCurrentNodeMaster = global.GlobalNode.IsMasterNode(currentNodeName)
 
 	if !isCurrentNodeMaster {
 		klog.Error("not master node")
-		err = errors.New("copySyncToDrive: not master node")
+		err = errors.New("Sync copyToDrive, not master node")
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.DownloadFromSync, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.DownloadFromSync); err != nil {
+		klog.Errorf("Sync copyToDrive error: %v", err)
 	}
+
 	return
 }
 
+/**
+ * ~ copyToExternal
+ */
 func (s *SyncStorage) copyToExternal() (task *tasks.Task, err error) {
+	klog.Info("Sync copyToExternal")
 
 	var dstNode = s.paste.Dst.Extend
 
 	if dstNode != global.CurrentNodeName {
 		klog.Errorf("not dst node")
-		err = errors.New("copySyncToExternal: not dst node")
+		err = errors.New("Sync copyToExternal, not master node")
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.DownloadFromSync, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.DownloadFromSync); err != nil {
+		klog.Errorf("Sync copyToExternal error: %v", err)
 	}
+
 	return
 }
 
+/**
+ * ~ copyToCache
+ */
 func (s *SyncStorage) copyToCache() (task *tasks.Task, err error) {
+	klog.Info("Sync copyToCache")
 
 	var dstNode = s.paste.Dst.Extend
 	if dstNode != global.CurrentNodeName {
 		klog.Errorf("not dst node")
-		err = errors.New("copySyncToCache: not dst node")
+		err = errors.New("Sync copyToCache, not master node")
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.DownloadFromSync, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.DownloadFromSync); err != nil {
+		klog.Errorf("Sync copyToCache error: %v", err)
 	}
+
 	return
 }
 
+/**
+ * ~ copyToSync
+ */
 func (s *SyncStorage) copyToSync() (task *tasks.Task, err error) {
+	klog.Info("Sync copyToSync")
 
 	var currentNodeName = global.CurrentNodeName
 	var isCurrentNodeMaster = global.GlobalNode.IsMasterNode(currentNodeName)
 
 	if !isCurrentNodeMaster {
 		klog.Error("not master node")
-		err = errors.New("copySyncToSync: not master node")
+		err = errors.New("Sync copyToSync, not master node")
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.SyncCopy, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.SyncCopy); err != nil {
+		klog.Errorf("Sync copyToSync error: %v", err)
 	}
+
 	return
 }
 
+/**
+ * ~ copyToCloud
+ */
 func (s *SyncStorage) copyToCloud() (task *tasks.Task, err error) {
+	klog.Info("Sync copyToCloud")
 
 	var currentNodeName = global.CurrentNodeName
 	var isCurrentNodeMaster = global.GlobalNode.IsMasterNode(currentNodeName)
 
 	if !isCurrentNodeMaster {
 		klog.Error("not master node")
-		err = errors.New("copySyncToCloud: not master node")
+		err = errors.New("Sync copyToCloud, not master node")
 		return
 	}
 
-	// DownloadFromSync + UploadToCloud
-	task = tasks.TaskManager.CreateTask(tasks.DownloadFromSync, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.DownloadFromSync, task.UploadToCloud); err != nil { // ! todo
+		klog.Errorf("Sync copyToCloud error: %v", err)
 	}
+
 	return
 
 }
