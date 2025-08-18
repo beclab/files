@@ -72,6 +72,10 @@ type OperationsCopyFileResp struct {
 	JobId *int `json:"jobid,omitempty"`
 }
 
+type OperationsAsyncJobResp struct {
+	JobId *int `json:"jobid,omitempty"`
+}
+
 /*
 *
   - {

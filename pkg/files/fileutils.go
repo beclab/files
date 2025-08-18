@@ -614,21 +614,49 @@ func CollectDupNames(p string, prefixName string, ext string, isDir bool) ([]str
 	return result, nil
 }
 
-func GenerateDupCommonName(existsName []string, prefixName string, existSamePathName string) string {
-	if existSamePathName == "" {
-		return prefixName
+func GenerateDupName(existNames []string, targetName string, isFile bool) string {
+	if existNames == nil || len(existNames) == 0 {
+		return targetName
 	}
-	var filePrefixName = prefixName
+
+	var targetExt string
+	if isFile {
+		targetExt = filepath.Ext(targetName)
+	}
+
+	var targetPrefix = strings.TrimSuffix(targetName, targetExt)
+
+	var dupNames []string
+	for _, name := range existNames {
+		if isFile {
+			var tmpExt = filepath.Ext(name)
+			if tmpExt != targetExt {
+				continue
+			}
+
+			var tmp = strings.TrimSuffix(name, tmpExt)
+			if strings.Contains(tmp, strings.Trim(targetName, targetExt)) {
+				dupNames = append(dupNames, tmp)
+			}
+		} else {
+			if strings.Contains(name, targetName) {
+				dupNames = append(dupNames, name)
+			}
+		}
+	}
+
+	if len(dupNames) == 0 {
+		return targetName
+	}
 
 	var count = 0
-	var matchedCount int
-
-	var searchName = prefixName
+	var matchedCount = 0
+	var searchName = targetPrefix
 
 	for {
 		var find bool
-		for _, name := range existsName {
-			if strings.TrimSpace(name) == searchName {
+		for _, name := range dupNames {
+			if name == searchName {
 				find = true
 				break
 			}
@@ -636,23 +664,22 @@ func GenerateDupCommonName(existsName []string, prefixName string, existSamePath
 
 		if find {
 			count++
-			searchName = fmt.Sprintf("%s(%d)", prefixName, count)
+			searchName = fmt.Sprintf("%s(%d)", targetPrefix, count)
 			continue
 		} else {
 			matchedCount = count
 			break
 		}
-
 	}
 
 	var newFileName string
 	if matchedCount == 0 {
-		newFileName = filePrefixName
+		newFileName = targetPrefix
 	} else {
-		newFileName = fmt.Sprintf("%s(%d)", filePrefixName, matchedCount)
+		newFileName = fmt.Sprintf("%s(%d)", targetPrefix, matchedCount)
 	}
 
-	return newFileName
+	return newFileName + targetExt
 }
 
 func GetFileNameFromPath(s string) (string, bool) {
@@ -676,4 +703,16 @@ func GetPrefixPath(s string) string {
 	var r = strings.TrimSuffix(s, "/")
 	var p = strings.LastIndex(r, "/")
 	return r[:p+1]
+}
+
+func CheckKeepFile(p string) error {
+	if f := FilePathExists(p); f {
+		return nil
+	}
+
+	if err := os.WriteFile(p, []byte{}, 0o644); err != nil {
+		return err
+	}
+
+	return nil
 }

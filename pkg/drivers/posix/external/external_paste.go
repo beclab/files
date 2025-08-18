@@ -38,25 +38,34 @@ func (s *ExternalStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, err
 	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
 }
 
+/**
+ * ~ copyToDrive
+ */
 func (s *ExternalStorage) copyToDrive() (task *tasks.Task, err error) {
+	klog.Info("External copyToDrive")
 
 	var srcNode = s.paste.Src.Extend
 
 	// Route to the src node
 	if srcNode != global.CurrentNodeName {
 		klog.Error("not src node")
-		err = errors.New("copyExternalToDrive: not src node")
+		err = errors.New("External copyToDrive, not master node")
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.Rsync); err != nil {
+		klog.Errorf("External copyToDrive error: %v", err)
 	}
+
 	return
 }
 
+/**
+ * ~ copyToExternal
+ */
 func (s *ExternalStorage) copyToExternal() (task *tasks.Task, err error) {
+	klog.Info("External copyToExternal")
 
 	var srcNode = s.paste.Src.Extend
 	var dstNode = s.paste.Dst.Extend
@@ -64,27 +73,33 @@ func (s *ExternalStorage) copyToExternal() (task *tasks.Task, err error) {
 	// Route to the dst node
 	if dstNode != global.CurrentNodeName {
 		klog.Errorf("not dst node")
-		err = errors.New("copyExternalToExternal: not dst node")
+		err = errors.New("External copyToExternal, not master node")
 		return
 	}
 
 	if srcNode == dstNode {
-		task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
-		if err = task.Run(); err != nil {
-			return
+		task = tasks.TaskManager.CreateTask(s.paste)
+		if err = task.Execute(task.Rsync); err != nil {
+			klog.Errorf("External copyToExternal error: %v", err)
 		}
+
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.DownloadFromFiles, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	// ! todo cross node
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.DownloadFromFiles); err != nil {
+		klog.Errorf("External copyToExternal error: %v", err)
 	}
 
 	return
 }
 
+/**
+ * ~ copyToCache
+ */
 func (s *ExternalStorage) copyToCache() (task *tasks.Task, err error) {
+	klog.Info("External copyToCache")
 
 	var srcNode = s.paste.Src.Extend
 	var dstNode = s.paste.Dst.Extend
@@ -92,59 +107,70 @@ func (s *ExternalStorage) copyToCache() (task *tasks.Task, err error) {
 	// Route to the dst node
 	if dstNode != global.CurrentNodeName {
 		klog.Errorf("not dst node")
-		err = errors.New("copyExternalToCache: not dst node")
+		err = errors.New("External copyToCache, not master node")
 		return
 	}
 
 	if srcNode == dstNode {
-		task = tasks.TaskManager.CreateTask(tasks.Rsync, s.paste)
-		if err = task.Run(); err != nil {
-			return
+		task = tasks.TaskManager.CreateTask(s.paste)
+		if err = task.Execute(task.Rsync); err != nil {
+			klog.Errorf("External copyToCache error: %v", err)
 		}
+
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.DownloadFromFiles, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	// ! todo cross node
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.DownloadFromFiles); err != nil {
+		klog.Errorf("External copyToCache error: %v", err)
 	}
 
 	return
 }
 
+/**
+ * ~ copyToSync
+ */
 func (s *ExternalStorage) copyToSync() (task *tasks.Task, err error) {
+	klog.Info("External copyToSync")
 
 	var srcNode = s.paste.Src.Extend
 
 	// Route to the src node
 	if srcNode != global.CurrentNodeName {
 		klog.Errorf("not src node")
-		err = errors.New("copyExternalToSync: not src node")
+		err = errors.New("External copyToSync, not master node")
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.UploadToSync, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.UploadToSync); err != nil {
+		klog.Errorf("External copyToCloud error: %v", err)
 	}
 
 	return
 }
 
+/**
+ * ~ copyToCloud
+ */
 func (s *ExternalStorage) copyToCloud() (task *tasks.Task, err error) {
+	klog.Info("External copyToCloud")
 
 	var srcNode = s.paste.Src.Extend
 
 	// Route to the src node
 	if srcNode != global.CurrentNodeName {
 		klog.Errorf("not src node")
-		err = errors.New("copyExternalToCloud: not src node")
+		err = errors.New("External copyToCloud, not master node")
 		return
 	}
 
-	task = tasks.TaskManager.CreateTask(tasks.UploadToCloud, s.paste)
-	if err = task.Run(); err != nil {
-		return
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.UploadToCloud); err != nil {
+		klog.Errorf("External copyToCloud error: %v", err)
 	}
+
 	return
 }

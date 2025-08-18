@@ -7,6 +7,7 @@ import (
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/drivers/clouds/rclone/serve"
+	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
 	"path/filepath"
@@ -15,11 +16,6 @@ import (
 	"sync"
 
 	"k8s.io/klog/v2"
-)
-
-var (
-	DefaultLocalRootPath = "/data/"
-	DefaultKeepFileName  = ".keep"
 )
 
 var localConfig = &config.Config{
@@ -230,92 +226,268 @@ func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateCon
 	return changed
 }
 
-func (r *rclone) GenerateS3EmptyDirectories(dstFileType string, srcConfigName, dstConfigName string, srcPath, dstPath, srcName, dstName string) error {
-	var srcConfig, err = r.GetConfig().GetConfig(srcConfigName)
+func (r *rclone) GetFilesSize(fileParam *models.FileParam) (int64, error) {
+	var fsPrefix, err = r.GetFsPrefix(fileParam)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	dstConfig, err := r.GetConfig().GetConfig(dstConfigName)
-	if err != nil {
-		return err
+	filesName, isFile := files.GetFileNameFromPath(fileParam.Path)
+	prefixPath := files.GetPrefixPath(fileParam.Path)
+
+	if !isFile {
+		var fs string = fsPrefix + fileParam.Path
+		resp, err := r.GetOperation().Size(fs)
+		if err != nil {
+			return 0, err
+		}
+		return resp.Bytes, nil
 	}
 
-	var fs = fmt.Sprintf("%s:%s/%s", srcConfigName, srcConfig.Bucket, strings.TrimPrefix(srcPath, "/")+srcName)
-	klog.Infof("[rclone] generate, configName: %s, srcPath: %s, srcName: %s, dstName: %s, fs: %s", srcConfigName, srcPath, srcName, dstName, fs)
-
+	var fs = fsPrefix + prefixPath
+	var remote = filesName
 	var opts = &operations.OperationsOpt{
-		Recurse:    true,
+		FilesOnly: true,
+	}
+	resp, err := r.GetOperation().Stat(fs, remote, opts)
+	if err != nil {
+		return 0, err
+	}
+
+	return resp.Item.Size, nil
+
+}
+
+func (r *rclone) GetFilesList(param *models.FileParam) (*operations.OperationsList, error) {
+
+	var fsPrefix, err = r.GetFsPrefix(param)
+	if err != nil {
+		return nil, err
+	}
+	var pathPrefix = files.GetPrefixPath(param.Path)
+	var opt = &operations.OperationsOpt{
 		NoModTime:  true,
 		NoMimeType: true,
-		DirsOnly:   true,
 		Metadata:   false,
 	}
 
-	klog.Infof("[rclone] generate list src, fs: %s", fs)
-	items, err := r.GetOperation().List(fs, opts)
+	var fs = fsPrefix + pathPrefix
+	lists, err := r.operation.List(fs, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	return lists, nil
+}
+
+func (r *rclone) CreateEmptyDirectories(src, target *models.FileParam) error {
+	var srcFsPrefix, err = r.GetFsPrefix(src)
 	if err != nil {
 		return err
 	}
+	dstFsPrefix, err := r.GetFsPrefix(target)
+	if err != nil {
+		return err
+	}
+	dstPrefix := files.GetPrefixPath(target.Path)
+	dstName, _ := files.GetFileNameFromPath(target.Path)
 
-	var pathItems []string
-
-	if items != nil && items.List != nil && len(items.List) > 0 {
-		for _, item := range items.List {
-			pathItems = append(pathItems, item.Path)
+	var srcOpt = &operations.OperationsOpt{
+		Recurse:    true,
+		DirsOnly:   true,
+		NoModTime:  true,
+		NoMimeType: true,
+		Metadata:   false,
+	}
+	var srcFs = srcFsPrefix + src.Path
+	srcDirItems, err := r.GetOperation().List(srcFs, srcOpt)
+	if err != nil {
+		return err
+	}
+	var srcPathItems []string
+	if srcDirItems != nil && srcDirItems.List != nil && len(srcDirItems.List) > 0 {
+		for _, item := range srcDirItems.List {
+			srcPathItems = append(srcPathItems, item.Path)
 		}
 	} else {
-		pathItems = append(pathItems, "") //
+		srcPathItems = append(srcPathItems, "")
 	}
 
-	sort.Strings(pathItems)
+	sort.Strings(srcPathItems)
 
-	var pathResult []string
-	for i, path := range pathItems {
+	// tidy
+	var srcPathFormated []string
+	for i, path := range srcPathItems {
 		isPrefix := false
-		for j := i + 1; j < len(pathItems); j++ {
-			if strings.HasPrefix(pathItems[j], path) &&
-				len(pathItems[j]) > len(path) &&
-				pathItems[j][len(path)] == '/' {
+		for j := i + 1; j < len(srcPathItems); j++ {
+			if strings.HasPrefix(srcPathItems[j], path) &&
+				len(srcPathItems[j]) > len(path) &&
+				srcPathItems[j][len(path)] == '/' {
 				isPrefix = true
 				break
 			}
 		}
 		if !isPrefix {
-			pathResult = append(pathResult, path)
+			srcPathFormated = append(srcPathFormated, path)
 		}
 	}
 
-	var srcFs, srcR string
-	var dstFs, dstR string
+	klog.Infof("[rclone] get dirs: %v", srcPathFormated)
 
-	srcFs = fmt.Sprintf("local:%s", DefaultLocalRootPath)
-	srcR = DefaultKeepFileName
-	dstFs = fmt.Sprintf("%s:%s", dstConfigName, dstConfig.Bucket)
+	// create
+	var localFs, localRemote string = fmt.Sprintf("%s:%s", common.Local, common.DefaultLocalRootPath), common.DefaultKeepFileName
+	var dstFs, dstRemote string = dstFsPrefix, ""
 
-	klog.Infof("[rclone] generate mk empty dir, count: %d, data: %v", len(pathResult), pathResult)
+	for _, item := range srcPathFormated {
+		dstRemote = dstPrefix + filepath.Join(dstName, item) + "/"
 
-	for _, item := range pathResult {
-		dstR = dstPath + filepath.Join(dstName, item) + "/"
-		dstR = strings.TrimPrefix(dstR, "/")
-		klog.Infof("[rclone] generate mk empty dir >>> dstFs: %s, dstR: %s", dstFs, dstR)
-
-		if dstFileType == common.AwsS3 || dstFileType == common.TencentCos {
-			_, err := r.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR, nil)
-			if err != nil {
-				klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)
-				return err
+		if target.FileType == common.AwsS3 || target.FileType == common.TencentCos {
+			dstRemote = strings.TrimPrefix(dstRemote, "/")
+			if err = r.GetOperation().Copyfile(localFs, localRemote, dstFs, dstRemote); err != nil {
+				return fmt.Errorf("copyfile failed, dstFs: %s, dstRemote: %s, error: %v", dstFs, dstRemote, err)
 			}
-		} else { // if dstFileType == utils.DropBox || dstFileType == utils.GoogleDrive
-			if err := r.GetOperation().Mkdir(dstFs, strings.Trim(dstR, "/")); err != nil {
-				klog.Errorf("[rclone] generate mk empty dir, dstFs: %s, dstR: %s, error: %v", dstFs, dstR, err)
-				return err
+		} else {
+			dstRemote = strings.Trim(dstRemote, "/")
+			if err = r.GetOperation().Mkdir(dstFs, dstRemote); err != nil {
+				return fmt.Errorf("mkdir failed, dstFs: %s, dstRemote: %s, error: %v", dstFs, dstRemote, err)
 			}
 		}
 
-		klog.Infof("[rclone] generate mk empty dir done <<< dstFs: %s, dstR: %s", dstFs, dstR)
+		klog.Infof("[rclone] create empty dir done! <<< dstFs: %s, dstRemote: %s", dstFs, dstRemote)
 	}
 
 	return nil
+}
 
+func (r *rclone) Copy(src, dst *models.FileParam) (*operations.OperationsAsyncJobResp, error) {
+	_, isFile := files.GetFileNameFromPath(src.Path)
+	srcFsPrefix, err := r.GetFsPrefix(src)
+	if err != nil {
+		return nil, fmt.Errorf("get src fs prefix failed, err: %v", err)
+	}
+
+	srcPrefix := files.GetPrefixPath(src.Path)
+	srcFileName, _ := files.GetFileNameFromPath(src.Path)
+
+	dstFsPrefix, err := r.GetFsPrefix(dst)
+	if err != nil {
+		return nil, fmt.Errorf("get dst fs prefix failed, err: %v", err)
+	}
+
+	dstPrefix := files.GetPrefixPath(dst.Path)
+	dstFileName, _ := files.GetFileNameFromPath(dst.Path)
+
+	var jobResp *operations.OperationsAsyncJobResp
+
+	if isFile {
+
+		// copy file
+		var srcFs, srcRemote string
+		var dstFs, dstRemote string
+
+		srcFs = srcFsPrefix + srcPrefix
+		srcRemote = srcFileName
+
+		dstFs = dstFsPrefix + dstPrefix
+		dstRemote = dstFileName
+
+		klog.Infof("[rclone] copy file, srcFs: %s, srcRemote: %s, dstFs: %s, dstRemote: %s", srcFs, srcRemote, dstFs, dstRemote)
+
+		jobResp, err = r.GetOperation().CopyfileAsync(srcFs, srcRemote, dstFs, dstRemote)
+		if err != nil {
+			return nil, fmt.Errorf("[rclone] copy file failed, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s, error: %v", srcFs, srcRemote, dstFs, dstRemote, err)
+		}
+
+		klog.Infof("[rclone] cope file done! job: %d", *jobResp.JobId)
+
+	} else {
+
+		// copy dir
+		srcFs := srcFsPrefix + src.Path
+		dstFs := dstFsPrefix + dstPrefix + dstFileName
+
+		klog.Infof("[rclone] copy dir, srcFs: %s, dstFs: %s", srcFs, dstFs)
+
+		jobResp, err = r.GetOperation().CopyAsync(srcFs, dstFs)
+		if err != nil {
+			return nil, fmt.Errorf("[rclone] copy dir failed, srcFs: %s, dstFs: %s, error: %v", srcFs, dstFs, err)
+		}
+
+		klog.Infof("[rclone] copy dir done! job: %d", *jobResp.JobId)
+
+	}
+
+	if jobResp.JobId == nil {
+		return nil, err // todo log
+	}
+
+	return jobResp, nil
+}
+
+func (r *rclone) Clear(param *models.FileParam) error {
+	var err error
+	var configName string
+	var isSrcLocal bool
+	var owner = param.Owner
+
+	fileName, isFile := files.GetFileNameFromPath(param.Path)
+	prefixPath := files.GetPrefixPath(param.Path)
+
+	if param.FileType == common.Drive || param.FileType == common.Cache || param.FileType == common.External {
+		isSrcLocal = true
+	}
+
+	if isSrcLocal {
+		configName = common.Local
+	} else {
+		configName = fmt.Sprintf("%s_%s_%s", param.Owner, param.FileType, param.Extend)
+	}
+
+	config, err := r.GetConfig().GetConfig(configName)
+	if err != nil {
+		return err
+	}
+
+	var fsPrefix string
+	if isSrcLocal {
+		srcUri, err := param.GetResourceUri()
+		if err != nil {
+			return err
+		}
+		fsPrefix = fmt.Sprintf("%s:%s", configName, srcUri)
+	} else {
+		fsPrefix = fmt.Sprintf("%s:%s", configName, config.Bucket)
+	}
+
+	if isFile {
+		var fs, remote string
+		fs = fsPrefix + prefixPath
+		remote = fileName
+
+		if err = r.GetOperation().Deletefile(fs, remote); err != nil {
+			klog.Errorf("[rclone] clear file error: %v, user: %s, fs: %s, remote: %s", err, owner, fs, remote)
+			return err
+		}
+
+		r.GetOperation().FsCacheClear()
+
+		klog.Infof("[rclone] clear file done! user: %s, fs: %s, remote: %s", owner, fs, remote)
+
+		return nil
+	}
+
+	// purge
+	var fs = fsPrefix + prefixPath
+	var remote = fileName
+
+	if err = r.GetOperation().Purge(fs, remote); err != nil {
+		klog.Errorf("[rclone] clear directory error: %v, user: %s, fs: %s, remote: %s", err, owner, fs, remote)
+		return err
+	}
+
+	r.GetOperation().FsCacheClear()
+
+	klog.Infof("[rclone] clear directory done! user: %s, fs: %s, remote: %s", owner, fs, remote)
+
+	return nil
 }

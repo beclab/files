@@ -18,15 +18,21 @@ type Interface interface {
 	Stat(fs string, remote string, opts *OperationsOpt) (*OperationsStat, error)
 	Mkdir(fs string, dirName string) error
 	Uploadfile(fs string, dirName string) error
-	Copyfile(srcFs string, srcR string, dstFs string, dstR string, async *bool) (*OperationsCopyFileResp, error)
-	MoveFile(srcFs string, srcR string, dstFs string, dstR string, async *bool) (*OperationsCopyFileResp, error)
+	Copyfile(srcFs string, srcR string, dstFs string, dstR string) error
+	MoveFile(srcFs string, srcR string, dstFs string, dstR string) error
+
+	Copy(srcFs, dstFs string) error // copy a directory,no suit for files
+	Move(srcFs, dstFs string) error // move a directory, no suit for files
+
 	Deletefile(fs string, remote string) error
 	Purge(fs string, remote string) error
 
 	Size(fs string) (*OperationsSizeResp, error)
 
-	Copy(srcFs, dstFs string, async *bool) (*OperationsCopyFileResp, error) // copy a directory,no suit for files
-	Move(srcFs, dstFs string) (*OperationsCopyFileResp, error)              // move a directory, no suit for files
+	CopyfileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error)
+	MovefileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error)
+	CopyAsync(srcFs, dstFs string) (*OperationsAsyncJobResp, error) // copy a directory,no suit for files
+	MoveAsync(srcFs, dstFs string) (*OperationsAsyncJobResp, error) // move a directory, no suit for files
 
 	FsCacheClear() error
 }
@@ -63,6 +69,7 @@ func (o *operations) Size(fs string) (*OperationsSizeResp, error) {
 }
 
 func (o *operations) Stat(fs string, remote string, opts *OperationsOpt) (*OperationsStat, error) {
+	// Give information about the supplied file or directory
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, StatPath)
 
 	var param = OperationsReq{
@@ -90,17 +97,15 @@ func (o *operations) Stat(fs string, remote string, opts *OperationsOpt) (*Opera
 	return data, nil
 }
 
-func (o *operations) Copyfile(srcFs string, srcR string, dstFs string, dstR string, async *bool) (*OperationsCopyFileResp, error) {
+func (o *operations) Copyfile(srcFs string, srcR string, dstFs string, dstR string) error {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, CopyfilePath)
+	var async = false
 	var param = OperationsReq{
 		SrcFs:     srcFs,
 		SrcRemote: srcR,
 		DstFs:     dstFs,
 		DstRemote: dstR,
-	}
-
-	if async != nil {
-		param.Async = async
+		Async:     &async,
 	}
 
 	klog.Infof("[rclone] operations copyfile, data: %s", commonutils.ToJson(param))
@@ -108,30 +113,23 @@ func (o *operations) Copyfile(srcFs string, srcR string, dstFs string, dstR stri
 	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
 	if err != nil {
 		klog.Errorf("[rclone] operations mkdir error: %v", err)
-		return nil, err
+		return err
 	}
 
-	var job *OperationsCopyFileResp
-	if err := json.Unmarshal(resp, &job); err != nil {
-		return nil, err
-	}
+	klog.Infof("[rclone] operations copyfile done! resp: %s", string(resp))
 
-	klog.Infof("[rclone] operations copyfile done! resp: %s", commonutils.ToJson(job))
-
-	return job, nil
+	return nil
 }
 
-func (o *operations) MoveFile(srcFs string, srcR string, dstFs string, dstR string, async *bool) (*OperationsCopyFileResp, error) {
+func (o *operations) MoveFile(srcFs string, srcR string, dstFs string, dstR string) error {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, Movefilepath)
+	var async = false
 	var param = OperationsReq{
 		SrcFs:     srcFs,
 		SrcRemote: srcR,
 		DstFs:     dstFs,
 		DstRemote: dstR,
-	}
-
-	if async != nil {
-		param.Async = async
+		Async:     &async,
 	}
 
 	klog.Infof("[rclone] operations movefile, data: %s", commonutils.ToJson(param))
@@ -139,17 +137,12 @@ func (o *operations) MoveFile(srcFs string, srcR string, dstFs string, dstR stri
 	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
 	if err != nil {
 		klog.Errorf("[rclone] operations movefile error: %v", err)
-		return nil, err
+		return err
 	}
 
-	var job *OperationsCopyFileResp
-	if err := json.Unmarshal(resp, &job); err != nil {
-		return nil, err
-	}
+	klog.Infof("[rclone] operations movefile done! resp: %s", string(resp))
 
-	klog.Infof("[rclone] operations movefile done! resp: %s", commonutils.ToJson(job))
-
-	return job, nil
+	return nil
 }
 
 func (o *operations) Uploadfile(fs string, dirName string) error {
@@ -201,15 +194,14 @@ func (o *operations) List(fs string, opts *OperationsOpt) (*OperationsList, erro
 	return data, nil
 }
 
-func (o *operations) Copy(srcFs, dstFs string, async *bool) (*OperationsCopyFileResp, error) {
+func (o *operations) Copy(srcFs, dstFs string) error {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, SyncCopyPath)
+	var async = false
 	var param = SyncCopyReq{
 		SrcFs:              srcFs,
 		DstFs:              dstFs,
 		CreateEmptySrcDirs: true,
-	}
-	if async != nil {
-		param.Async = async
+		Async:              &async,
 	}
 
 	klog.Infof("[rclone] operations copy, srcFs: %s, dstFs: %s", srcFs, dstFs)
@@ -217,26 +209,23 @@ func (o *operations) Copy(srcFs, dstFs string, async *bool) (*OperationsCopyFile
 	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
 	if err != nil {
 		klog.Errorf("[rclone] operations copy error: %v", err)
-		return nil, err
+		return err
 	}
 
-	var job *OperationsCopyFileResp
-	if err := json.Unmarshal(resp, &job); err != nil {
-		return nil, err
-	}
+	klog.Infof("[rclone] operations copy done! resp: %s", string(resp))
 
-	klog.Infof("[rclone] operations copy done! resp: %s", commonutils.ToJson(job))
-
-	return job, nil
+	return nil
 }
 
-func (o *operations) Move(srcFs, dstFs string) (*OperationsCopyFileResp, error) {
+func (o *operations) Move(srcFs, dstFs string) error {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, SyncMovePath)
+	var async = false
 	var param = SyncCopyReq{
 		SrcFs:              srcFs,
 		DstFs:              dstFs,
 		CreateEmptySrcDirs: true,
 		DeleteEmptySrcDirs: true,
+		Async:              &async,
 	}
 
 	klog.Infof("[rclone] operations move, srcFs: %s, dstFs: %s, param: %s", srcFs, dstFs, commonutils.ToJson(param))
@@ -244,17 +233,12 @@ func (o *operations) Move(srcFs, dstFs string) (*OperationsCopyFileResp, error) 
 	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
 	if err != nil {
 		klog.Errorf("[rclone] operations move error: %v", err)
-		return nil, err
+		return err
 	}
 
-	var job *OperationsCopyFileResp
-	if err := json.Unmarshal(resp, &job); err != nil {
-		return nil, err
-	}
+	klog.Infof("[rclone] operations move done! resp: %s", string(resp))
 
-	klog.Infof("[rclone] operations move done! resp: %s", commonutils.ToJson(job))
-
-	return job, nil
+	return nil
 
 }
 
@@ -317,4 +301,119 @@ func (o *operations) FsCacheClear() error {
 	klog.Info("[rclone] operations fscacheClear done!")
 
 	return nil
+}
+
+func (o *operations) CopyfileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error) {
+	var async = true
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, CopyfilePath)
+	var param = OperationsReq{
+		SrcFs:     srcFs,
+		SrcRemote: srcR,
+		DstFs:     dstFs,
+		DstRemote: dstR,
+		Async:     &async,
+	}
+
+	klog.Infof("[rclone] operations copyfileasync, data: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations copyfileasync error: %v", err)
+		return nil, err
+	}
+
+	var job *OperationsAsyncJobResp
+	if err := json.Unmarshal(resp, &job); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations copyfileasync done! resp: %s", commonutils.ToJson(job))
+
+	return job, nil
+}
+
+func (o *operations) MovefileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error) {
+	var async = true
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, Movefilepath)
+	var param = OperationsReq{
+		SrcFs:     srcFs,
+		SrcRemote: srcR,
+		DstFs:     dstFs,
+		DstRemote: dstR,
+		Async:     &async,
+	}
+
+	klog.Infof("[rclone] operations movefileasync, data: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations movefileasync error: %v", err)
+		return nil, err
+	}
+
+	var job *OperationsAsyncJobResp
+	if err := json.Unmarshal(resp, &job); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations movefileasync done! resp: %s", commonutils.ToJson(job))
+
+	return job, nil
+}
+
+func (o *operations) CopyAsync(srcFs, dstFs string) (*OperationsAsyncJobResp, error) {
+	var async = true
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, SyncCopyPath)
+	var param = SyncCopyReq{
+		SrcFs:              srcFs,
+		DstFs:              dstFs,
+		CreateEmptySrcDirs: true,
+		Async:              &async,
+	}
+
+	klog.Infof("[rclone] operations copyasync, srcFs: %s, dstFs: %s", srcFs, dstFs)
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations copyasync error: %v", err)
+		return nil, err
+	}
+
+	var job *OperationsAsyncJobResp
+	if err := json.Unmarshal(resp, &job); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations copyasync done! resp: %s", commonutils.ToJson(job))
+
+	return job, nil
+}
+
+func (o *operations) MoveAsync(srcFs, dstFs string) (*OperationsAsyncJobResp, error) {
+	var async = true
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, SyncMovePath)
+	var param = SyncCopyReq{
+		SrcFs:              srcFs,
+		DstFs:              dstFs,
+		CreateEmptySrcDirs: true,
+		DeleteEmptySrcDirs: true,
+		Async:              &async,
+	}
+
+	klog.Infof("[rclone] operations moveasync, srcFs: %s, dstFs: %s, param: %s", srcFs, dstFs, commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations moveasync error: %v", err)
+		return nil, err
+	}
+
+	var job *OperationsAsyncJobResp
+	if err := json.Unmarshal(resp, &job); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations moveasync done! resp: %s", commonutils.ToJson(job))
+
+	return job, nil
 }

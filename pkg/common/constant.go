@@ -59,3 +59,8 @@ const (
 	Cancelled = "cancelled"
 	Completed = "completed"
 )
+
+var (
+	DefaultLocalRootPath = "/data/"
+	DefaultKeepFileName  = ".keep"
+)

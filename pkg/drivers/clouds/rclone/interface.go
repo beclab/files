@@ -12,10 +12,22 @@ type Interface interface {
 	InitServes()
 	StartHttp(configs []*config.Config) error
 	GetFsPrefix(param *models.FileParam) (string, error)
-	GenerateS3EmptyDirectories(dstFileType string, srcConfigName, dstConfigName string, srcPath, dstPath, srcName, dstName string) error
 
 	GetConfig() config.Interface
 	GetOperation() operations.Interface
 	GetServe() serve.Interface
 	GetJob() job.Interface
+
+	GetFilesSize(fileParam *models.FileParam) (int64, error)
+	GetFilesList(param *models.FileParam) (*operations.OperationsList, error)
+	CreateEmptyDirectories(src, target *models.FileParam) error
+
+	Copy(src, dst *models.FileParam) (*operations.OperationsAsyncJobResp, error)
+	Clear(param *models.FileParam) error
 }
+
+const (
+	ListAll   = 0
+	FilesOnly = 1
+	DirsOnly  = 2
+)
