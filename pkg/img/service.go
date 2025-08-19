@@ -7,14 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/png"
 	_ "image/png"
 	"io"
 
 	"github.com/disintegration/imaging"
 	"github.com/dsoprea/go-exif/v3"
 	"github.com/marusama/semaphore/v2"
-	"github.com/nfnt/resize"
 	"k8s.io/klog/v2"
 
 	exifcommon "github.com/dsoprea/go-exif/v3/common"
@@ -144,51 +142,6 @@ func WithQuality(quality Quality) Option {
 	return func(config *resizeConfig) {
 		config.quality = quality
 	}
-}
-
-func (s *Service) Resize2(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...Option) error {
-	if err := s.sem.Acquire(ctx, 1); err != nil {
-		return err
-	}
-	defer s.sem.Release(1)
-
-	format, wrappedReader, err := s.detectFormat(in)
-	if err != nil {
-		klog.Errorln("Detect format:", err)
-		return err
-	}
-
-	config := resizeConfig{
-		format:     format,
-		resizeMode: ResizeModeFit,
-		quality:    QualityMedium,
-	}
-	klog.Infoln("format: ", format)
-	for _, option := range options {
-		option(&config)
-	}
-
-	if config.quality == QualityLow && format == FormatJpeg {
-		thm, newWrappedReader, errThm := getEmbeddedThumbnail(wrappedReader)
-		wrappedReader = newWrappedReader
-		if errThm == nil {
-			klog.Errorln("Get Embedded Thumbnail: ", err)
-			_, err = out.Write(thm)
-			if err == nil {
-				return nil
-			}
-		}
-	}
-
-	img, _, err := image.Decode(wrappedReader)
-	if err != nil {
-		klog.Errorln("Decode:", err)
-		return err
-	}
-
-	resizedImg := resize.Resize(uint(width), uint(height), img, resize.Lanczos3)
-
-	return png.Encode(out, resizedImg)
 }
 
 func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...Option) error {

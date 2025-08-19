@@ -87,6 +87,15 @@ func rawHandle(fn rawHandlerFunc, prefix string) http.Handler {
 					w.Header().Add(k, v)
 				}
 			}
+
+			if rawInline == "true" {
+				w.Header().Set("Cache-Control", "private")
+				w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
+					"filename": file.FileName,
+				}))
+				w.Header().Set("Content-Type", common.MimeTypeByExtension(file.FileName))
+			}
+
 			w.WriteHeader(file.StatusCode)
 			io.Copy(w, file.ReadCloser)
 		}

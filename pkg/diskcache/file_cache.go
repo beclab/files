@@ -2,10 +2,9 @@ package diskcache
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"files/pkg/files"
+	"files/pkg/global"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,7 +16,7 @@ import (
 
 var fileCache *FileCache
 
-var CacheDir = os.Getenv("FILE_CACHE_DIR") // "/data/file_cache"
+// var CacheDir = os.Getenv("FILE_CACHE_DIR") // "/data/file_cache"
 
 type FileCache struct {
 	fs afero.Fs
@@ -41,13 +40,14 @@ func GetFileCache() *FileCache {
 	return fileCache
 }
 
-func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
-	mu := f.getScopedLocks(key)
+func (f *FileCache) Store(ctx context.Context, owner string, key string, tag string, value []byte) error {
+	mu := f.getScopedLocks(owner + key)
 	mu.Lock()
 	defer mu.Unlock()
 
-	fileName := f.getFileName(key)
-	klog.Infoln("key: ", key, " fileName: ", fileName, " filePath: ", filepath.Dir(fileName))
+	prefixPath := f.formatPath(owner, tag)
+	fileName := prefixPath + key
+	klog.Infof("discache store, fileName: %s", fileName)
 	// forced 1000
 	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil {
 		return err
@@ -64,8 +64,9 @@ func (f *FileCache) Store(ctx context.Context, key string, value []byte) error {
 	return nil
 }
 
-func (f *FileCache) Load(ctx context.Context, key string) (value []byte, exist bool, err error) {
-	r, ok, err := f.open(key)
+func (f *FileCache) Load(ctx context.Context, owner string, key string, tag string) (value []byte, exist bool, err error) {
+	prefixPath := f.formatPath(owner, tag)
+	r, ok, err := f.open(prefixPath, key)
 	if err != nil || !ok {
 		return nil, ok, err
 	}
@@ -78,21 +79,26 @@ func (f *FileCache) Load(ctx context.Context, key string) (value []byte, exist b
 	return value, true, nil
 }
 
-func (f *FileCache) Delete(ctx context.Context, key string) error {
-	mu := f.getScopedLocks(key)
+func (f *FileCache) Delete(ctx context.Context, owner string, key string, tag string) error {
+	mu := f.getScopedLocks(owner + key)
 	mu.Lock()
 	defer mu.Unlock()
 
-	fileName := f.getFileName(key)
-	if err := f.fs.Remove(fileName); err != nil && !errors.Is(err, os.ErrNotExist) {
+	prefixPath := f.formatPath(owner, tag)
+	if err := f.fs.Remove(prefixPath + key); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
 }
 
-func (f *FileCache) open(key string) (afero.File, bool, error) {
-	fileName := f.getFileName(key)
-	file, err := f.fs.Open(fileName)
+func (f *FileCache) formatPath(owner string, tag string) string {
+	var p = filepath.Join(global.GlobalData.GetPvcCache(owner), DefaultRootPath, tag)
+	return p + "/"
+}
+
+func (f *FileCache) open(prefixPath string, key string) (afero.File, bool, error) {
+	p := prefixPath + key
+	file, err := f.fs.Open(p)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, false, nil
@@ -116,11 +122,4 @@ func (f *FileCache) getScopedLocks(key string) (lock sync.Locker) {
 	f.scopedLocks.Unlock()
 
 	return lock
-}
-
-func (f *FileCache) getFileName(key string) string {
-	hasher := sha1.New()
-	_, _ = hasher.Write([]byte(key))
-	hash := hex.EncodeToString(hasher.Sum(nil))
-	return hash
 }

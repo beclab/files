@@ -3,6 +3,7 @@ package posix
 import (
 	"encoding/json"
 	"files/pkg/common"
+	"files/pkg/diskcache"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
@@ -74,11 +75,40 @@ func (s *PosixStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		return nil, err
 	}
 
+	var previewFileName = fileParam.FileType + fileParam.Extend + fileData.Path + fileData.ModTime.String() + queryParam.PreviewSize
+	var key = diskcache.GenerateCacheKey(previewFileName)
+
 	klog.Infof("Posix preview, user: %s, fileType: %s, ext: %s, name: %s", owner, fileData.Type, fileData.Extension, fileData.Name)
+
+	// get cache
+	cachedData, ok, err := preview.GetPreviewCache(owner, key, diskcache.CacheThumb)
+	if err != nil {
+		klog.Errorf("Posix preview, get cache failed, user: %s, error: %v", owner, err)
+
+	} else if ok {
+
+		klog.Infof("Posix preview, get cache, file: %s, cache name: %s, exists: %v", fileData.Path, previewFileName, ok)
+
+		if cachedData != nil {
+			return &models.PreviewHandlerResponse{
+				FileName:     fileData.Name,
+				FileModified: fileData.ModTime,
+				Data:         cachedData,
+			}, nil
+		}
+	}
 
 	switch fileData.Type {
 	case "image":
-		return preview.HandleImagePreview(fileData, queryParam)
+		data, err := preview.CreatePreview(owner, key, fileData, queryParam)
+		if err != nil {
+			return nil, err
+		}
+		return &models.PreviewHandlerResponse{
+			FileName:     fileData.Name,
+			FileModified: fileData.ModTime,
+			Data:         data,
+		}, nil
 	default:
 		return nil, fmt.Errorf("can't create preview for %s type", fileData.Type)
 	}

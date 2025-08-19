@@ -3,18 +3,19 @@ package redisutils
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"files/pkg/diskcache"
-	"github.com/go-redis/redis"
-	"k8s.io/klog/v2"
+	"files/pkg/common"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis"
+	"k8s.io/klog/v2"
 )
 
 var (
-	folderPath = diskcache.CacheDir
+	folderPath = common.CACHE_PREFIX //diskcache.CacheDir
 	zsetKey    = "file_cache_access_times"
 	cleanupMux sync.Mutex
 )
@@ -32,9 +33,9 @@ func DelThumbRedisKey(key string) error {
 }
 
 func CleanupOldFilesAndRedisEntries(duration time.Duration) {
-	if diskcache.CacheDir == "" {
-		return
-	}
+	// if diskcache.CacheDir == "" {
+	// 	return
+	// }
 
 	klog.Infof("Cleaning up old files at %d\n", time.Now().Unix())
 	cutoffTime := time.Now().Add(-duration).Unix()

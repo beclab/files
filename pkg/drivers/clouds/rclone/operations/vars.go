@@ -65,6 +65,7 @@ type OperationsOpt struct {
 	NoMimeType bool `json:"noMimeType"`
 	DirsOnly   bool `json:"dirsOnly"`
 	FilesOnly  bool `json:"filesOnly"`
+	ShowHash   bool `json:"showHash"`
 	Metadata   bool `json:"metadata"`
 }
 

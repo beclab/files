@@ -6,11 +6,8 @@ import (
 	"files/pkg/diskcache"
 	"files/pkg/files"
 	"files/pkg/img"
-	"files/pkg/redisutils"
-	"fmt"
+	"files/pkg/models"
 	"io"
-	"net/http"
-	"net/url"
 
 	"k8s.io/klog/v2"
 )
@@ -26,25 +23,58 @@ type PreviewSize int
 type ImgService interface {
 	FormatFromExtension(ext string) (img.Format, error)
 	Resize(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...img.Option) error
-	Resize2(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...img.Option) error
 }
 
-func SetContentDisposition(w http.ResponseWriter, r *http.Request, file *files.FileInfo) {
-	if r.URL.Query().Get("inline") == "true" {
-		w.Header().Set("Content-Disposition", "inline")
-	} else {
-		// As per RFC6266 section 4.3
-		w.Header().Set("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(file.Name))
-	}
+var (
+	W1000 = 1000
+	H1000 = 1000
+
+	W256 = 256
+	H256 = 256
+)
+
+func GetPreviewCache(owner string, key string, tag string) ([]byte, bool, error) {
+	var fileCache = diskcache.GetFileCache()
+
+	return fileCache.Load(context.Background(), owner, key, tag)
 }
 
-func CreatePreview(imgSvc ImgService, fileCache files.FileCache,
-	file *files.FileInfo, previewSize PreviewSize, method int) ([]byte, error) {
-	klog.Infoln("!!!!CreatePreview:", previewSize)
-	fd, err := file.Fs.Open(file.Path)
+func CreatePreview(owner string, key string,
+	bufferFile *files.FileInfo,
+	queryParam *models.QueryParam) ([]byte, error) {
+	var fileCache = diskcache.GetFileCache()
+	var imgSvc = img.GetImageService()
+	var size = queryParam.PreviewSize
+
+	klog.Infof("[preview] file: %s, key: %s, size: %s", bufferFile.Path, key, size)
+
+	var previewSize, err = ParsePreviewSize(size)
 	if err != nil {
 		return nil, err
 	}
+
+	fileFormat, err := imgSvc.FormatFromExtension(bufferFile.Extension)
+	klog.Infof("[preview] fileFormat: %s", fileFormat)
+	if err == img.ErrUnsupportedFormat || fileFormat == img.FormatGif {
+		fd, err := bufferFile.Fs.Open(bufferFile.Path)
+		if err != nil {
+			return nil, err
+		}
+		defer fd.Close()
+
+		data, err := io.ReadAll(fd)
+		if err != nil {
+			return nil, err
+		}
+
+		return data, err
+	}
+
+	fd, err := bufferFile.Fs.Open(bufferFile.Path)
+	if err != nil {
+		return nil, err
+	}
+
 	fd.Seek(0, 0)
 	defer fd.Close()
 
@@ -56,58 +86,27 @@ func CreatePreview(imgSvc ImgService, fileCache files.FileCache,
 
 	switch {
 	case previewSize == PreviewSizeBig:
-		width = 1080
-		height = 1080
+		width = W1000
+		height = H1000
 		options = append(options, img.WithMode(img.ResizeModeFit), img.WithQuality(img.QualityMedium))
 	case previewSize == PreviewSizeThumb:
-		width = 256
-		height = 256
+		width = W256
+		height = H256
 		options = append(options, img.WithMode(img.ResizeModeFill), img.WithQuality(img.QualityLow), img.WithFormat(img.FormatJpeg))
 	default:
 		return nil, img.ErrUnsupportedFormat
 	}
 
 	buf := &bytes.Buffer{}
-	if method == 1 {
-		if err := imgSvc.Resize(context.Background(), fd, width, height, buf, options...); err != nil {
-			klog.Error(err)
-			return nil, err
-		}
-	} else if method == 2 {
-		if err := imgSvc.Resize2(context.Background(), fd, width, height, buf, options...); err != nil {
-			klog.Error(err)
-			return nil, err
-		}
+	if err := imgSvc.Resize(context.TODO(), fd, width, height, buf, options...); err != nil {
+		return nil, err
 	}
 
-	go func() {
-		cacheKey := PreviewCacheKey(file, previewSize)
-		if err := fileCache.Store(context.Background(), cacheKey, buf.Bytes()); err != nil {
-			klog.Errorf("failed to cache resized image: %v", err)
-		}
-	}()
+	// store
+	if err = fileCache.Store(context.TODO(), owner, key, diskcache.CacheThumb, buf.Bytes()); err != nil {
+		klog.Errorf("preview store failed, user: %s, error: %v", owner, err)
+	}
 
 	return buf.Bytes(), nil
-}
 
-func PreviewCacheKey(f *files.FileInfo, previewSize PreviewSize) string {
-	return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
-}
-
-func DelThumbs(ctx context.Context, fileCache files.FileCache, file *files.FileInfo) error {
-	for _, previewSizeName := range PreviewSizeNames() {
-		size, _ := ParsePreviewSize(previewSizeName)
-		cacheKey := PreviewCacheKey(file, size)
-		if err := fileCache.Delete(ctx, cacheKey); err != nil {
-			return err
-		}
-		if diskcache.CacheDir != "" {
-			err := redisutils.DelThumbRedisKey(redisutils.GetFileName(cacheKey))
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
