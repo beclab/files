@@ -21,7 +21,7 @@ type ShareablePutRequestBody struct {
 	Status int `json:"status"`
 }
 
-func shareableGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func shareableGetHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -75,7 +75,7 @@ func shareableGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpD
 	return common.RenderJSON(w, r, pathInfos)
 }
 
-func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func shareablePutHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -146,7 +146,7 @@ func shareablePutHandler(w http.ResponseWriter, r *http.Request, d *common.HttpD
 	return common.ErrToStatus(err), err
 }
 
-func shareLinkGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func shareLinkGetHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	if r.URL.Path != "" {
 		exists, err := afero.Exists(files.DefaultFs, r.URL.Path)
 		if err != nil {
@@ -227,7 +227,7 @@ func checkPathAndConvertToPathID(path, ownerID string) (uint64, error) {
 	}
 }
 
-func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func shareLinkPostHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	host := common.GetHost(r.Header.Get("X-Bfl-User"))
 	ownerID, ownerName := getOwner(r)
 
@@ -301,7 +301,7 @@ func shareLinkPostHandler(w http.ResponseWriter, r *http.Request, d *common.Http
 	return http.StatusOK, nil
 }
 
-func shareLinkDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func shareLinkDeleteHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	linkIDStr := r.URL.Query().Get("link_id")
 	if linkIDStr == "" {
 		return http.StatusBadRequest, nil

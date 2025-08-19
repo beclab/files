@@ -14,20 +14,13 @@ import (
 	"files/pkg/common"
 )
 
-type handleFunc func(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error)
+type handleFunc func(w http.ResponseWriter, r *http.Request) (int, error)
 
-func handle(fn handleFunc, prefix string, server *common.Server) http.Handler {
+func MonkeyHandle(fn handleFunc, prefix string) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//checked := CheckPathOwner(r, prefix)
-		//if !checked {
-		//	http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-		//}
-
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-		status, err := fn(w, r, &common.HttpData{
-			Server: server,
-		})
+		status, err := fn(w, r)
 
 		if status >= 400 || err != nil {
 			clientIP := realip.FromRequest(r)

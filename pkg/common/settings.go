@@ -4,11 +4,6 @@ import (
 	"strings"
 )
 
-type HttpData struct {
-	Server *Server
-	Raw    interface{}
-}
-
 // Server specific settings.
 type Server struct {
 	Root                  string `json:"root"`

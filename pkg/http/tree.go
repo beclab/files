@@ -13,13 +13,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var wrapWithTreeParm = func(fn treeHandlerFunc, prefix string) http.Handler {
+var WrapWithTreeParm = func(fn treeHandlerFunc, prefix string) http.Handler {
 	return treeHandle(fn, prefix)
 }
 
 type treeHandlerFunc func(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
 
-func treeHandler(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+func TreeHandler(handler base.Execute, fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
 	return handler.Tree(fileParam, stopChan, dataChan)
 }
 

@@ -25,7 +25,7 @@ type MountRequestData struct {
 	Password string `json:"password"`
 }
 
-func resourceMountedHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func ResourceMountedHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	global.GlobalMounted.Updated()
 	return common.RenderJSON(w, r, map[string]interface{}{
 		"code":         0,
@@ -34,7 +34,7 @@ func resourceMountedHandler(w http.ResponseWriter, r *http.Request, d *common.Ht
 	})
 }
 
-func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func ResourceMountHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return common.ErrToStatus(err), err
@@ -70,7 +70,7 @@ func resourceMountHandler(w http.ResponseWriter, r *http.Request, d *common.Http
 	return common.RenderJSON(w, r, respJson)
 }
 
-func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func ResourceUnmountHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	var p = r.URL.Path
 	var path = strings.TrimPrefix(p, "/api/unmount")
 	if path == "" {
@@ -101,7 +101,7 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Ht
 		Path:       strings.TrimPrefix(urlPath, "/data"),
 		Modify:     true,
 		Expand:     false,
-		ReadHeader: d.Server.TypeDetectionByHeader,
+		ReadHeader: true,
 	})
 	if err != nil {
 		return common.ErrToStatus(err), err
@@ -116,7 +116,7 @@ func resourceUnmountHandler(w http.ResponseWriter, r *http.Request, d *common.Ht
 	return common.RenderJSON(w, r, respJson)
 }
 
-func smbHistoryGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func SmbHistoryGetHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")
@@ -161,7 +161,7 @@ type SMBHistoryData struct {
 	Password string `json:"password,omitempty"`
 }
 
-func smbHistoryPutHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func SmbHistoryPutHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")
@@ -201,7 +201,7 @@ func smbHistoryPutHandler(w http.ResponseWriter, r *http.Request, d *common.Http
 	return common.RenderJSON(w, r, "Successfully added/updated SMB history and hash")
 }
 
-func smbHistoryDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func SmbHistoryDeleteHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	bflName := r.Header.Get("X-Bfl-User")
 	if bflName == "" {
 		return http.StatusBadRequest, errors.New("missing X-Bfl-User header")

@@ -15,21 +15,21 @@ import (
 /**
  * upload
  */
-var wrapperFilesUploadArgs = func(fn fileUploadHandlerFunc) http.Handler {
+var WrapperFilesUploadArgs = func(fn fileUploadHandlerFunc) http.Handler {
 	return fileUploadHandle(fn)
 }
 
 type fileUploadHandlerFunc func(handler base.Execute, fileUploadArgs *models.FileUploadArgs) ([]byte, error)
 
-func fileUploadLinkHandler(handler base.Execute, fileUploadArgs *models.FileUploadArgs) ([]byte, error) {
+func FileUploadLinkHandler(handler base.Execute, fileUploadArgs *models.FileUploadArgs) ([]byte, error) {
 	return handler.UploadLink(fileUploadArgs)
 }
 
-func fileUploadedBytesHandler(handler base.Execute, fileUploadArgs *models.FileUploadArgs) ([]byte, error) {
+func FileUploadedBytesHandler(handler base.Execute, fileUploadArgs *models.FileUploadArgs) ([]byte, error) {
 	return handler.UploadedBytes(fileUploadArgs)
 }
 
-func fileUploadChunksHandler(handler base.Execute, fileUploadArgs *models.FileUploadArgs) ([]byte, error) {
+func FileUploadChunksHandler(handler base.Execute, fileUploadArgs *models.FileUploadArgs) ([]byte, error) {
 	return handler.UploadChunks(fileUploadArgs)
 }
 
