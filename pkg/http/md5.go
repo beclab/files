@@ -97,7 +97,7 @@ func md5FileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 	return common.RenderJSON(w, r, responseData)
 }
 
-func md5Handler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func Md5Handler(w http.ResponseWriter, r *http.Request) (int, error) {
 	var prefix = "/api/md5"
 
 	var p = r.URL.Path
@@ -129,7 +129,7 @@ func md5Handler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int
 		Path:       strings.TrimPrefix(urlPath, "/data"),
 		Modify:     true,
 		Expand:     false,
-		ReadHeader: d.Server.TypeDetectionByHeader,
+		ReadHeader: true,
 	})
 	if err != nil {
 		return common.ErrToStatus(err), err

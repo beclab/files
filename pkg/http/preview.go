@@ -15,14 +15,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// wrapperPreviewArgs
-var wrapperPreviewArgs = func(fn previewHandlerFunc, prefix string) http.Handler {
+// WrapperPreviewArgs
+var WrapperPreviewArgs = func(fn previewHandlerFunc, prefix string) http.Handler {
 	return previewHandle(fn, prefix)
 }
 
 type previewHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error)
 
-func previewHandler(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
+func PreviewHandler(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
 	return handler.Preview(contextArgs)
 }
 

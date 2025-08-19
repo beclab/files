@@ -15,7 +15,7 @@ import (
 
 var permissionPrefix = "/api/permission"
 
-func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func PermissionGetHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	var p = r.URL.Path
 	var path = strings.TrimPrefix(p, permissionPrefix)
 	if path == "" {
@@ -54,7 +54,7 @@ func permissionGetHandler(w http.ResponseWriter, r *http.Request, d *common.Http
 	return common.RenderJSON(w, r, responseData)
 }
 
-func permissionPutHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func PermissionPutHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	var p = r.URL.Path
 	var path = strings.TrimPrefix(p, permissionPrefix)
 	if path == "" {

@@ -502,7 +502,7 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 			firstItem.FsType = fileParam.FileType
 			firstItem.FsExtend = fileParam.Extend
 			firstItem.FsPath = firstItem.Path
-			dataChan <- fmt.Sprintf("%s\n\n", common.ToJson(firstItem))
+			dataChan <- fmt.Sprintf("data: %s\n\n", common.ToJson(firstItem))
 			streamFiles = streamFiles[1:]
 		}
 

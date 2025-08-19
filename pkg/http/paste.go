@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-var wrapperPasteArgs = func(prefix string) http.Handler {
+var WrapperPasteArgs = func(prefix string) http.Handler {
 	return pasteHandle(prefix)
 }
 

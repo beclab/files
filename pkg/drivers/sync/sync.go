@@ -356,6 +356,7 @@ func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData
 			}
 			var nestFileParam = &models.FileParam{
 				FileType: fileParam.FileType,
+				Owner:    fileParam.Owner,
 				Extend:   fileParam.Extend,
 				Path:     path,
 			}
@@ -367,7 +368,7 @@ func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData
 
 			streamFiles = append(nestFilesData.Items, streamFiles[1:]...)
 		} else {
-			dataChan <- fmt.Sprintf("%s\n\n", common.ToJson(firstItem))
+			dataChan <- fmt.Sprintf("data: %s\n\n", common.ToJson(firstItem))
 			streamFiles = streamFiles[1:]
 		}
 

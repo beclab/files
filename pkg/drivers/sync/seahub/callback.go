@@ -55,7 +55,7 @@ func createDefaultLibrary(newUsername string) (string, error) {
 	return defaultRepo, nil
 }
 
-func CallbackCreateHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func CallbackCreateHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	var data map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		klog.Infof("Error parsing request body: %v", err)
@@ -119,7 +119,7 @@ func createUser(username string) (bool, error) {
 	return true, nil
 }
 
-func CallbackDeleteHandler(w http.ResponseWriter, r *http.Request, d *common.HttpData) (int, error) {
+func CallbackDeleteHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	var requestData map[string]string
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		return http.StatusBadRequest, err

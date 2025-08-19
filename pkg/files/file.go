@@ -106,39 +106,6 @@ type DiskInfo struct {
 	PartitionUUID     string  `json:"partition_uuid,omitempty"`
 }
 
-func FetchDiskInfo(url string, header http.Header) ([]DiskInfo, error) {
-
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header = header
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var response Response
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return nil, err
-	}
-
-	if response.Code != 200 {
-		return nil, fmt.Errorf("error code received: %d", response.Code)
-	}
-	return response.Data, nil
-}
-
 func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 	externalType := r.URL.Query().Get("external_type")
 	var urls []string
