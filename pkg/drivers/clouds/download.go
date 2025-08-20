@@ -19,17 +19,19 @@ type Download struct {
 	service        *service
 	fileParam      *models.FileParam
 	fileName       string
+	filePath       string
 	fileSize       int64
 	fileTargetPath string
 }
 
-func NewDownloader(ctx context.Context, service *service, fileParam *models.FileParam, fileName string, fileSize int64, fileTargetPath string) *Download {
+func NewDownloader(ctx context.Context, service *service, fileParam *models.FileParam, fileName string, filePath string, fileSize int64, fileTargetPath string) *Download {
 
 	return &Download{
 		ctx:            ctx,
 		service:        service,
 		fileParam:      fileParam,
 		fileName:       fileName,
+		filePath:       filePath,
 		fileSize:       fileSize,
 		fileTargetPath: fileTargetPath,
 	}
@@ -46,15 +48,7 @@ func (d *Download) download() error {
 		return err
 	}
 
-	var p = &models.DownloadAsyncParam{
-		Drive:         d.fileParam.FileType,
-		Name:          d.fileParam.Extend,
-		CloudFilePath: d.fileParam.Path,
-		LocalFolder:   d.fileTargetPath,
-		LocalFileName: d.fileName,
-	}
-
-	klog.Infof("Cloud download, owner: %s, param: %s", owner, common.ToJson(p))
+	klog.Infof("Cloud download, owner: %s, param: %s, folder: %s, file: %s", owner, common.ToJson(d.fileParam), d.fileTargetPath, d.fileName)
 
 	type asyncResult struct {
 		jobId int
@@ -64,7 +58,7 @@ func (d *Download) download() error {
 	ch := make(chan asyncResult, 1)
 	defer close(ch)
 	go func() {
-		res, err := d.service.DownloadAsync(owner, p)
+		res, err := d.service.DownloadAsync(d.fileParam, d.fileTargetPath, d.fileName)
 		ch <- asyncResult{jobId: res, err: err}
 	}()
 

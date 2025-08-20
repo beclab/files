@@ -53,6 +53,15 @@ func previewHandle(fn previewHandlerFunc, prefix string) http.Handler {
 			return
 		}
 
+		if contextArg.FileParam.FileType == common.AwsS3 ||
+			contextArg.FileParam.FileType == common.DropBox ||
+			contextArg.FileParam.FileType == common.GoogleDrive {
+			if contextArg.QueryParam.PreviewSize == "thumb" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+
 		fileData, err := fn(handler, contextArg)
 		if err != nil {
 			klog.Errorf("preview error: %v, user: %s, url: %s", err, contextArg.FileParam.Owner, r.URL.Path)

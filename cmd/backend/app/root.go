@@ -8,7 +8,6 @@ import (
 	"files/pkg/drivers"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub/seaserv"
-	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/integration"
 	"files/pkg/postgres"
@@ -134,9 +133,7 @@ user created with the credentials from options "username" and "password".`,
 		// Step2: Init redis
 		// For watcher, preview, smb and other features in the future
 		redisutils.InitRedis()
-		if diskcache.CacheDir != "" {
-			redisutils.InitFolderAndRedis()
-		}
+		// redisutils.InitFolderAndRedis() // todo
 
 		// step3-0: clean buffer
 		err := os.RemoveAll("/data/buffer")
@@ -154,16 +151,7 @@ user created with the credentials from options "username" and "password".`,
 
 		// Step3-2: Build file cache
 		var fileCache diskcache.Interface = diskcache.NewNoOp()
-		if diskcache.CacheDir != "" {
-			// forced 1000
-			if err := os.MkdirAll(diskcache.CacheDir, 0700); err != nil {
-				klog.Fatalf("can't make directory %s: %s", diskcache.CacheDir, err)
-			}
-			if err := files.Chown(nil, diskcache.CacheDir, 1000, 1000); err != nil {
-				klog.Fatalf("can't chown directory %s to user %d: %s", diskcache.CacheDir, 1000, err)
-			}
-			fileCache = diskcache.New(afero.NewOsFs(), diskcache.CacheDir)
-		}
+		fileCache = diskcache.New(afero.NewOsFs(), common.CACHE_PREFIX)
 
 		// step4: Crontab
 		//		- CleanupOldFilesAndRedisEntries

@@ -2,8 +2,8 @@ package http
 
 import (
 	"files/pkg/common"
+	"files/pkg/diskcache"
 	"files/pkg/drivers/sync/seahub"
-	"files/pkg/files"
 	"files/pkg/preview"
 	"net/http"
 
@@ -12,7 +12,7 @@ import (
 
 func NewHandler(
 	imgSvc preview.ImgService,
-	fileCache files.FileCache,
+	fileCache diskcache.Interface,
 	server *common.Server,
 ) (http.Handler, error) {
 	server.Clean()
