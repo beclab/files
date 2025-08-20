@@ -17,10 +17,11 @@ type PasteReq struct {
 }
 
 type PasteParam struct {
-	Owner  string `json:"owner"`
-	Action string `json:"action"`
-	Src    *FileParam
-	Dst    *FileParam
+	Owner         string `json:"owner"`
+	Action        string `json:"action"`
+	UploadToCloud bool   `json:"uploadToCloud"`
+	Src           *FileParam
+	Dst           *FileParam
 }
 
 func NewPasteParam(r *http.Request) (*PasteParam, error) {

@@ -265,10 +265,11 @@ func (o *operations) Deletefile(fs string, remote string) error {
 
 func (o *operations) Purge(fs string, remote string) error {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, PurgePath)
-
+	var leaveRoot = true
 	var param = OperationsReq{
-		Fs:     fs,     // xxx:yyy/parent
-		Remote: remote, // dir/
+		Fs:        fs,     // xxx:yyy/parent
+		Remote:    remote, // dir/
+		LeaveRoot: &leaveRoot,
 	}
 
 	klog.Infof("[rclone] operations purge, param: %s", commonutils.ToJson(param))
@@ -285,20 +286,20 @@ func (o *operations) Purge(fs string, remote string) error {
 }
 
 func (o *operations) FsCacheClear() error {
-	var url = fmt.Sprintf("%s/%s", common.ServeAddr, FsCacheClearPath)
+	// var url = fmt.Sprintf("%s/%s", common.ServeAddr, FsCacheClearPath)
 
-	klog.Info("[rclone] operations fscacheClear")
+	// klog.Info("[rclone] operations fscacheClear")
 
-	var header = make(http.Header)
-	header.Add("Content-Type", "application/octet-stream")
+	// var header = make(http.Header)
+	// header.Add("Content-Type", "application/octet-stream")
 
-	_, err := utils.Request(context.Background(), url, http.MethodPost, &header, nil)
-	if err != nil {
-		klog.Errorf("[rclone] operations fscacheClear error: %v", err)
-		return err
-	}
+	// _, err := utils.Request(context.Background(), url, http.MethodPost, &header, nil)
+	// if err != nil {
+	// 	klog.Errorf("[rclone] operations fscacheClear error: %v", err)
+	// 	return err
+	// }
 
-	klog.Info("[rclone] operations fscacheClear done!")
+	// klog.Info("[rclone] operations fscacheClear done!")
 
 	return nil
 }

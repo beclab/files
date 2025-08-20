@@ -10,6 +10,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -258,7 +259,7 @@ func (r *rclone) GetFilesSize(fileParam *models.FileParam) (int64, error) {
 
 }
 
-func (r *rclone) GetFilesList(param *models.FileParam) (*operations.OperationsList, error) {
+func (r *rclone) GetFilesList(param *models.FileParam, getPrefix bool) (*operations.OperationsList, error) {
 
 	var fsPrefix, err = r.GetFsPrefix(param)
 	if err != nil {
@@ -271,7 +272,13 @@ func (r *rclone) GetFilesList(param *models.FileParam) (*operations.OperationsLi
 		Metadata:   false,
 	}
 
-	var fs = fsPrefix + pathPrefix
+	var fs string
+	if getPrefix {
+		fs = fsPrefix + pathPrefix
+	} else {
+		fs = fsPrefix + param.Path
+	}
+
 	lists, err := r.operation.List(fs, opt)
 	if err != nil {
 		return nil, err
@@ -430,6 +437,7 @@ func (r *rclone) Clear(param *models.FileParam) error {
 	var isSrcLocal bool
 	var owner = param.Owner
 
+	klog.Infof("[rclone] clear, param: %s", common.ToJson(param))
 	fileName, isFile := files.GetFileNameFromPath(param.Path)
 	prefixPath := files.GetPrefixPath(param.Path)
 
@@ -465,13 +473,13 @@ func (r *rclone) Clear(param *models.FileParam) error {
 		remote = fileName
 
 		if err = r.GetOperation().Deletefile(fs, remote); err != nil {
-			klog.Errorf("[rclone] clear file error: %v, user: %s, fs: %s, remote: %s", err, owner, fs, remote)
+			klog.Errorf("[rclone] clear, delete file error: %v, user: %s, isFile: %v, fs: %s, remote: %s", err, owner, isFile, fs, remote)
 			return err
 		}
 
 		r.GetOperation().FsCacheClear()
 
-		klog.Infof("[rclone] clear file done! user: %s, fs: %s, remote: %s", owner, fs, remote)
+		klog.Infof("[rclone] clear, file done! user: %s, fs: %s, remote: %s", owner, fs, remote)
 
 		return nil
 	}
@@ -481,13 +489,60 @@ func (r *rclone) Clear(param *models.FileParam) error {
 	var remote = fileName
 
 	if err = r.GetOperation().Purge(fs, remote); err != nil {
-		klog.Errorf("[rclone] clear directory error: %v, user: %s, fs: %s, remote: %s", err, owner, fs, remote)
+		klog.Errorf("[rclone] clear, purge error: %v, user: %s, fs: %s, remote: %s", err, owner, fs, remote)
 		return err
 	}
 
 	r.GetOperation().FsCacheClear()
 
-	klog.Infof("[rclone] clear directory done! user: %s, fs: %s, remote: %s", owner, fs, remote)
+	klog.Infof("[rclone] clear, purge done! user: %s, fs: %s, remote: %s", owner, fs, remote)
 
 	return nil
+}
+
+func (r *rclone) Delete(param *models.FileParam, dirents []string) ([]string, error) {
+	var user = param.Owner
+	var deleteFailedPaths []string
+	var total = len(dirents)
+
+	for current, dp := range dirents {
+		dp = strings.TrimSpace(dp) //  /path/ or /file
+
+		dpd, err := url.PathUnescape(dp)
+		if err != nil {
+			klog.Errorf("[rclone] delete, path unescape error: %v, path: %s", err, dp)
+			deleteFailedPaths = append(deleteFailedPaths, dp)
+			continue
+		}
+
+		klog.Infof("[rclone] delete, delete (%d/%d), user: %s, file: %s", current+1, total, user, dpd)
+
+		fsPrefix, err := r.GetFsPrefix(param)
+		_, isFile := files.GetFileNameFromPath(dpd)
+
+		var fs, remote string
+
+		if isFile {
+			fs = fsPrefix + param.Path
+			remote = strings.TrimPrefix(dpd, "/")
+			if err = r.GetOperation().Deletefile(fs, remote); err != nil {
+				deleteFailedPaths = append(deleteFailedPaths, dp)
+			}
+
+		} else {
+			fs = fsPrefix + param.Path
+			remote = strings.TrimPrefix(dpd, "/")
+
+			if err = r.GetOperation().Purge(fs, remote); err != nil {
+				deleteFailedPaths = append(deleteFailedPaths, dp)
+			}
+		}
+	}
+
+	if len(deleteFailedPaths) > 0 {
+		return deleteFailedPaths, fmt.Errorf("delete failed paths")
+	}
+
+	return nil, nil
+
 }

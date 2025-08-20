@@ -8,10 +8,8 @@ import (
 	"files/pkg/global"
 	"files/pkg/models"
 	"fmt"
-	"github.com/spf13/afero"
 	"io"
 	"io/ioutil"
-	"k8s.io/klog/v2"
 	"mime/multipart"
 	"os"
 	"path"
@@ -19,6 +17,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -80,18 +81,6 @@ func ExtractPart(s string) string {
 func CheckDirExist(dirPath string) bool {
 	fi, err := os.Stat(dirPath)
 	return (err == nil || os.IsExist(err)) && fi.IsDir()
-}
-
-func PathExists(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-
-	if os.IsNotExist(err) {
-		return false
-	}
-	return false
 }
 
 func MakeUid(filePath string) string {

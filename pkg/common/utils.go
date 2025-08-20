@@ -220,3 +220,29 @@ func EscapeAndJoin(input string, delimiter string) string {
 	}
 	return strings.Join(segments, delimiter)
 }
+
+func PathExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+
+	if os.IsNotExist(err) {
+		return false
+	}
+	return false
+}
+
+// ListContains returns a boolean that v is in items
+func ListContains[T comparable](items []T, v T) bool {
+	if items == nil {
+		return false
+	}
+
+	for _, item := range items {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}

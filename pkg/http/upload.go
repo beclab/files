@@ -7,8 +7,9 @@ import (
 	"files/pkg/drivers/base"
 	"files/pkg/models"
 	"fmt"
-	"k8s.io/klog/v2"
 	"net/http"
+
+	"k8s.io/klog/v2"
 )
 
 /**
@@ -50,6 +51,7 @@ func fileUploadHandle(fn fileUploadHandlerFunc) http.Handler {
 			ResponseWriter: w,
 			Request:        r,
 		}
+
 		var handler = drivers.Adaptor.NewFileHandler(uploadArg.FileParam.FileType, handlerParam)
 		if handler == nil {
 			http.Error(w, fmt.Sprintf("handler not found, type: %s", uploadArg.FileParam.FileType), http.StatusBadRequest)

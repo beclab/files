@@ -19,10 +19,11 @@ type Interface interface {
 	GetJob() job.Interface
 
 	GetFilesSize(fileParam *models.FileParam) (int64, error)
-	GetFilesList(param *models.FileParam) (*operations.OperationsList, error)
+	GetFilesList(param *models.FileParam, getPrefix bool) (*operations.OperationsList, error)
 	CreateEmptyDirectories(src, target *models.FileParam) error
 
 	Copy(src, dst *models.FileParam) (*operations.OperationsAsyncJobResp, error)
+	Delete(param *models.FileParam, dirents []string) ([]string, error)
 	Clear(param *models.FileParam) error
 }
 
