@@ -227,6 +227,23 @@ func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateCon
 	return changed
 }
 
+func (r *rclone) GetSpaceSize(fileParam *models.FileParam) (int64, error) {
+	var fsPrefix, err = r.GetFsPrefix(fileParam)
+	if err != nil {
+		return 0, err
+	}
+
+	var fs string
+	fs = fsPrefix
+
+	resp, err := r.operation.About(fs)
+	if err != nil {
+		return 0, err
+	}
+
+	return resp.Free, nil
+}
+
 func (r *rclone) GetFilesSize(fileParam *models.FileParam) (int64, error) {
 	var fsPrefix, err = r.GetFsPrefix(fileParam)
 	if err != nil {

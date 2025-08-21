@@ -10,6 +10,7 @@ var (
 	PurgePath      = "operations/purge"
 	StatPath       = "operations/stat"
 	SizePath       = "operations/size"
+	AboutPath      = "operations/about"
 
 	SyncCopyPath = "sync/copy"
 	SyncMovePath = "sync/move"
@@ -98,4 +99,10 @@ type SyncCopyReq struct {
 	CreateEmptySrcDirs bool   `json:"createEmptySrcDirs"`
 	DeleteEmptySrcDirs bool   `json:"deleteEmptySrcDirs"`
 	Async              *bool  `json:"_async,omitempty"`
+}
+
+type OperationsAboutResp struct {
+	Free  int64 `json:"free"`
+	Total int64 `json:"total"`
+	Used  int64 `json:"used"`
 }

@@ -16,6 +16,7 @@ import (
 type Interface interface {
 	List(fs string, opts *OperationsOpt) (*OperationsList, error)
 	Stat(fs string, remote string, opts *OperationsOpt) (*OperationsStat, error)
+	About(fs string) (*OperationsAboutResp, error)
 	Mkdir(fs string, dirName string) error
 	Uploadfile(fs string, dirName string) error
 	Copyfile(srcFs string, srcR string, dstFs string, dstR string) error
@@ -93,6 +94,32 @@ func (o *operations) Stat(fs string, remote string, opts *OperationsOpt) (*Opera
 	}
 
 	klog.Infof("[rclone] operations stat done! fs: %s, data: %s", fs, commonutils.ToJson(data))
+
+	return data, nil
+}
+
+func (o *operations) About(fs string) (*OperationsAboutResp, error) {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, AboutPath)
+
+	var param = OperationsReq{
+		Fs: fs, // xxx:yyy
+	}
+
+	klog.Infof("[rclone] operations about, param: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations about error: %v, fs: %s", err, fs)
+		return nil, err
+	}
+
+	var data *OperationsAboutResp
+	if err := json.Unmarshal(resp, &data); err != nil {
+		klog.Errorf("[rclone] operations about unmarshal error: %v, fs: %s", err, fs)
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations about done! fs: %s, data: %s", fs, commonutils.ToJson(data))
 
 	return data, nil
 }
