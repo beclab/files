@@ -31,13 +31,15 @@ func (t *Task) DownloadFromCloud() error {
 		return err
 	}
 
-	posixSize, err := cmd.GetFilesSize(posixParam)
+	posixSize, err := cmd.GetSpaceSize(posixParam)
 	if err != nil {
 		klog.Errorf("get posix free space size error: %v", err)
 		return err
 	}
 
 	klog.Infof("[Task] Id: %s, check posix space, cloudSize: %d, posixSize: %d", t.id, cloudSize, posixSize)
+
+	t.updateTotalSize(cloudSize)
 
 	requiredSpace := int64(float64(cloudSize) * 1.05)
 	if posixSize < requiredSpace {
