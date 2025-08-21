@@ -2,12 +2,13 @@ package upload
 
 import (
 	"fmt"
-	"github.com/robfig/cron/v3"
-	"k8s.io/klog/v2"
 	"path/filepath"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/robfig/cron/v3"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -27,6 +28,25 @@ type FileInfo struct {
 	Offset         int64     `json:"offset"`
 	LastUpdateTime time.Time `json:"-"`
 	FileMetaData
+}
+
+type FileUploadSucced struct {
+	Success   bool   `json:"success"`
+	IsCloud   bool   `json:"isCloud,omitempty"`
+	TaskId    string `json:"taskId,omitempty"`
+	Progress  int64  `json:"progress,omitempty"`
+	Transfers int64  `json:"transfers,omitempty"`
+	Size      int64  `json:"totalSize,omitempty"`
+	State     string `json:"state,omitempty"`
+}
+
+type FileUploadState struct {
+	Name           string    `json:"name,omitempty"`
+	Id             string    `json:"id"`
+	Size           int64     `json:"size"`
+	State          string    `json:"state"`
+	UploadTempPath string    `json:"-"`
+	FileInfo       *FileInfo `json:"-"`
 }
 
 type FileInfoMgr struct {

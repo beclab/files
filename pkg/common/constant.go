@@ -56,7 +56,7 @@ const (
 	Pending   = "pending"
 	Running   = "running"
 	Failed    = "failed"
-	Cancelled = "cancelled"
+	Canceled  = "canceled"
 	Completed = "completed"
 )
 

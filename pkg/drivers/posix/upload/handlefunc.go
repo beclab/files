@@ -4,87 +4,111 @@ import (
 	"errors"
 	"files/pkg/common"
 	"files/pkg/files"
+	"files/pkg/global"
 	"files/pkg/models"
 	"fmt"
-	"k8s.io/klog/v2"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"k8s.io/klog/v2"
 )
 
+/**
+ * ~ HandleUploadLink
+ */
 func HandleUploadLink(fileParam *models.FileParam, from string) ([]byte, error) {
-	_, _, _, uploadsDir, err := GetPVC(fileParam)
-	if err != nil {
-		return nil, errors.New("bfl header missing or invalid")
+	var user = fileParam.Owner
+	var uploadPath string
+	var uploadTempPath string
+
+	klog.Infof("[upload] uploadLink, user: %s, from: %s, param: %s", user, from, common.ToJson(fileParam))
+
+	var cachePvcPath = global.GlobalData.GetPvcCache(user)
+	if cachePvcPath == "" {
+		return nil, fmt.Errorf("cache dir not found")
 	}
 
 	uri, err := fileParam.GetResourceUri()
 	if err != nil {
 		return nil, err
 	}
-	path := uri + fileParam.Path
 
-	// change temp file location
-	extracted := ExtractPart(path)
-	if extracted != "" {
-		uploadsDir = ExternalPathPrefix + extracted + "/.uploadstemp"
+	uploadPath = uri + fileParam.Path
+
+	if fileParam.FileType == common.External {
+		uploadTempPath = filepath.Join(uri, fileParam.Path, ".uploadstemp")
+	} else {
+		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, "files", ".uploadstemp")
 	}
 
-	if !PathExists(uploadsDir) {
-		if err = os.MkdirAll(uploadsDir, os.ModePerm); err != nil {
-			klog.Warning("err:", err)
-			return nil, err
+	if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
+		if !CheckDirExist(uploadPath) {
+			if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm); err != nil {
+				klog.Error("err:", err)
+				return nil, err
+			}
 		}
 	}
 
-	if !CheckDirExist(path) {
-		if err = files.MkdirAllWithChown(nil, path, os.ModePerm); err != nil {
-			klog.Error("err:", err)
-			return nil, err
-		}
-	}
+	klog.Infof("[upload] uploadLink, uploadPath: %s, uploadTempPath: %s", uploadPath, uploadTempPath)
 
-	uploadID := MakeUid(path)
+	uploadID := MakeUid(uploadPath)
 	uploadLink := fmt.Sprintf("/upload/upload-link/%s/%s", common.NodeName, uploadID)
 
 	return []byte(uploadLink), nil
 }
 
+/**
+ * ~ HandleUploadedBytes
+ */
 func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, error) {
-	_, _, _, uploadsDir, err := GetPVC(fileParam)
-	if err != nil {
-		return nil, errors.New("bfl header missing or invalid")
+	var user = fileParam.Owner
+	klog.Infof("[upload] uploadedBytes, user: %s, fileName: %s, param: %s", user, fileName, common.ToJson(fileParam))
+
+	var uploadPath string
+	var uploadTempPath string
+
+	var cachePvcPath = global.GlobalData.GetPvcCache(user)
+	if cachePvcPath == "" {
+		return nil, fmt.Errorf("cache dir not found")
 	}
 
 	uri, err := fileParam.GetResourceUri()
 	if err != nil {
 		return nil, err
 	}
-	parentDir := uri + fileParam.Path
 
-	if !CheckDirExist(parentDir) {
-		klog.Warningf("Storage path %s is not exist or is not a dir", parentDir)
-		return nil, errors.New("storage path is not exist or is not a dir")
+	uploadPath = uri + fileParam.Path
+
+	if fileParam.FileType == common.External {
+		uploadTempPath = filepath.Join(uri, fileParam.Path, ".uploadstemp")
+	} else {
+		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, "files", ".uploadstemp")
+	}
+
+	if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
+		if !common.PathExists(uploadPath) {
+			if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm); err != nil {
+				klog.Error("err:", err)
+				return nil, err
+			}
+		}
 	}
 
 	responseData := make(map[string]interface{})
 	responseData["uploadedBytes"] = 0
 
-	extracted := ExtractPart(parentDir)
-	if extracted != "" {
-		uploadsDir = ExternalPathPrefix + extracted + "/.uploadstemp"
-	}
-
-	if !PathExists(uploadsDir) {
-		return common.ToBytes(responseData), errors.New("uploads path is not exist or is not a dir")
-	}
-
-	fullPath := filepath.Join(parentDir, fileName)
+	fullPath := filepath.Join(uploadPath, fileName)
 	dirPath := filepath.Dir(fullPath)
 
-	if !CheckDirExist(dirPath) {
-		return common.ToBytes(responseData), errors.New("storage path is not exist or is not a dir")
+	klog.Infof("[upload] uploadedBytes, fullPath: %s, dirPath: %s", fullPath, dirPath)
+
+	if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
+		if !common.PathExists(dirPath) {
+			return common.ToBytes(responseData), errors.New("storage path is not exist or is not a dir")
+		}
 	}
 
 	if strings.HasSuffix(fileName, "/") {
@@ -93,7 +117,7 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 
 	innerIdentifier := MakeUid(fullPath)
 	tmpName := innerIdentifier
-	UploadsFiles[innerIdentifier] = filepath.Join(uploadsDir, tmpName)
+	UploadsFiles[innerIdentifier] = filepath.Join(uploadTempPath, tmpName)
 
 	exist, info := FileInfoManager.ExistFileInfo(innerIdentifier)
 
@@ -113,7 +137,7 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 		exist = true
 	}
 
-	fileExist, fileLen := FileInfoManager.CheckTempFile(innerIdentifier, uploadsDir)
+	fileExist, fileLen := FileInfoManager.CheckTempFile(innerIdentifier, uploadTempPath)
 	klog.Info("***exist: ", exist, " , fileExist: ", fileExist, " , fileLen: ", fileLen)
 
 	if exist {
@@ -127,28 +151,53 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 		} else if info.Offset == 0 {
 			klog.Warningf("innerIdentifier:%s, info.Offset:%d", innerIdentifier, info.Offset)
 		} else {
-			FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadsDir)
+			FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath)
 		}
 	}
 
 	return common.ToBytes(responseData), nil
 }
 
-func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableInfo models.ResumableInfo, ranges string) ([]byte, error) {
-	startTime := time.Now()
-	klog.Infof("Function UploadChunks started at: %s\n", startTime)
-	defer func() {
-		endTime := time.Now()
-		klog.Infof("Function UploadChunks ended at: %s\n", endTime)
-	}()
+/**
+ * ~ HandleUploadChunks
+ */
+func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableInfo models.ResumableInfo, ranges string) (bool, *FileUploadState, error) {
+	var user = fileParam.Owner
+	var uploadPath string
+	var uploadTempPath string
 
-	_, _, _, uploadsDir, err := GetPVC(fileParam)
-	if err != nil {
-		return nil, errors.New("bfl header missing or invalid")
+	klog.Infof("[upload] uploadedChunks, user: %s, uploadId: %s, param: %s", user, uploadId, common.ToJson(fileParam))
+
+	var cachePvcPath = global.GlobalData.GetPvcCache(user)
+	if cachePvcPath == "" {
+		return false, nil, fmt.Errorf("cache dir not found")
 	}
 
-	responseData := map[string]interface{}{
-		"success": true,
+	startTime := time.Now()
+	klog.Infof("[upload] uploadId: %s, started at: %s\n", uploadId, startTime)
+	defer func() {
+		endTime := time.Now()
+		klog.Infof("[upload] uploadId: %s, ended at: %s\n", uploadId, endTime)
+	}()
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return false, nil, err
+	}
+
+	uploadPath = uri + fileParam.Path
+
+	if fileParam.FileType == common.External {
+		uploadTempPath = filepath.Join(uri, fileParam.Path, ".uploadstemp")
+	} else {
+		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, "files", ".uploadstemp")
+	}
+
+	if !common.PathExists(uploadTempPath) {
+		if err = os.MkdirAll(uploadTempPath, os.ModePerm); err != nil {
+			klog.Errorf("[upload] uploadId: %s, mkdir uploadTempPath %s err: %v", uploadId, uploadTempPath, err)
+			return false, nil, err
+		}
 	}
 
 	p := resumableInfo.ParentDir
@@ -156,88 +205,84 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		p = p + "/"
 	}
 
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		return nil, err
-	}
-	parentDir := uri + fileParam.Path
-
-	extracted := ExtractPart(parentDir)
-	if extracted != "" {
-		uploadsDir = ExternalPathPrefix + extracted + "/.uploadstemp"
-	}
-	if !PathExists(uploadsDir) {
-		if err = os.MkdirAll(uploadsDir, os.ModePerm); err != nil {
-			klog.Warningf("uploadId:%s, err:%v", uploadId, err)
-			return nil, err
-		}
-	}
-
-	fullPath := filepath.Join(parentDir, resumableInfo.ResumableRelativePath)
+	fullPath := filepath.Join(uploadPath, resumableInfo.ResumableRelativePath)
 	innerIdentifier := MakeUid(fullPath)
 	tmpName := innerIdentifier
-	UploadsFiles[innerIdentifier] = filepath.Join(uploadsDir, tmpName)
+	UploadsFiles[innerIdentifier] = filepath.Join(uploadTempPath, tmpName)
+
+	klog.Infof("[upload] uploadId: %s, fullPath: %s", uploadId, fullPath)
 
 	exist, info := FileInfoManager.ExistFileInfo(innerIdentifier)
 	if !exist {
-		klog.Warningf("innerIdentifier %s not exist", innerIdentifier)
+		klog.Warningf("[upload] uploadId: %s, innerIdentifier %s not exist", uploadId, innerIdentifier)
 	}
 
 	if !exist || innerIdentifier != info.ID {
-		RemoveTempFileAndInfoFile(tmpName, uploadsDir)
+		RemoveTempFileAndInfoFile(tmpName, uploadTempPath)
+
+		dirPath := filepath.Dir(fullPath)
+
 		if info.Offset != 0 {
 			info.Offset = 0
 			FileInfoManager.UpdateInfo(innerIdentifier, info)
 		}
 
-		if !CheckDirExist(parentDir) {
-			klog.Warningf("Parent dir %s is not exist or is not a dir", resumableInfo.ParentDir)
-			return nil, errors.New("parent dir is not exist or is not a dir")
-		}
+		if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
+			if !CheckDirExist(uploadPath) {
+				klog.Warningf("[upload] uploadId: %s, Parent dir %s is not exist or is not a dir", uploadId, resumableInfo.ParentDir)
+				return false, nil, errors.New("parent dir is not exist or is not a dir")
+			}
 
-		dirPath := filepath.Dir(fullPath)
-		if !CheckDirExist(dirPath) {
-			if err = files.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
-				klog.Error("err:", err)
-				return nil, err
+			if !CheckDirExist(dirPath) {
+				if err = files.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
+					klog.Error("err:", err)
+					return false, nil, err
+				}
 			}
 		}
 
 		if resumableInfo.ResumableRelativePath == "" {
-			return nil, errors.New("file_relative_path invalid")
+			return false, nil, errors.New("file_relative_path invalid")
 		}
 
 		if strings.HasSuffix(resumableInfo.ResumableRelativePath, "/") {
-			klog.Warningf("full path %s is a dir", fullPath)
-			return nil, errors.New(fmt.Sprintf("full path %s is a dir", fullPath))
+			klog.Warningf("[upload] uploadId: %s, full path %s is a dir", uploadId, fullPath)
+			return false, nil, errors.New(fmt.Sprintf("full path %s is a dir", fullPath))
 		}
 
 		if !CheckType(resumableInfo.ResumableType) {
-			klog.Warningf("unsupported filetype:%s", resumableInfo.ResumableType)
-			return nil, errors.New(fmt.Sprintf("unsupported filetype:%s", resumableInfo.ResumableType))
+			klog.Warningf("[upload] uploadId: %s, unsupported filetype:%s", uploadId, resumableInfo.ResumableType)
+			return false, nil, errors.New(fmt.Sprintf("unsupported filetype:%s", resumableInfo.ResumableType))
 		}
 
 		if !CheckSize(resumableInfo.ResumableTotalSize) {
 			if info.Offset == info.FileSize {
-				klog.Warningf("All file chunks have been uploaded, skip upload")
-				finishData := []map[string]interface{}{
-					{
-						"name": resumableInfo.ResumableFilename,
-						"id":   MakeUid(info.FullPath),
-						"size": info.FileSize,
-					},
+				klog.Warningf("[upload] uploadId: %s, All file chunks have been uploaded, skip upload", uploadId)
+				// finishData := []map[string]interface{}{
+				// 	{
+				// 		"name": resumableInfo.ResumableFilename,
+				// 		"id":   MakeUid(info.FullPath),
+				// 		"size": info.FileSize,
+				// 	},
+				// }
+
+				var data = &FileUploadState{
+					Name:           resumableInfo.ResumableFilename,
+					Id:             MakeUid(info.FullPath),
+					UploadTempPath: uploadTempPath,
+					FileInfo:       &info,
 				}
-				return common.ToBytes(finishData), nil
+				return false, data, nil
 			}
-			klog.Warningf("Unsupported file size uploadSize:%d", resumableInfo.ResumableTotalSize)
-			return nil, errors.New("unsupported file size")
+			klog.Warningf("[upload] uploadId: %s, Unsupported file size uploadSize:%d", uploadId, resumableInfo.ResumableTotalSize)
+			return false, nil, errors.New("unsupported file size")
 		}
 
 		info.FileSize = resumableInfo.ResumableTotalSize
 		FileInfoManager.UpdateInfo(innerIdentifier, info)
 
 		oExist, oInfo := FileInfoManager.ExistFileInfo(innerIdentifier)
-		oFileExist, oFileLen := FileInfoManager.CheckTempFile(innerIdentifier, uploadsDir)
+		oFileExist, oFileLen := FileInfoManager.CheckTempFile(innerIdentifier, uploadTempPath)
 		if oExist {
 			if oFileExist {
 				if oInfo.Offset != oFileLen {
@@ -246,7 +291,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 				}
 			} else if oInfo.Offset == 0 {
 			} else {
-				FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadsDir)
+				FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath)
 			}
 		}
 
@@ -257,7 +302,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 				FileRelativePath: resumableInfo.ResumableRelativePath,
 				FileType:         resumableInfo.ResumableType,
 				FileSize:         resumableInfo.ResumableTotalSize,
-				StoragePath:      parentDir,
+				StoragePath:      uploadPath,
 				FullPath:         fullPath,
 			},
 		}
@@ -267,8 +312,8 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		}
 
 		if err = FileInfoManager.AddFileInfo(innerIdentifier, fileInfo); err != nil {
-			klog.Warningf("innerIdentifier:%s, err:%v", innerIdentifier, err)
-			return nil, errors.New("error save file info")
+			klog.Warningf("[upload] uploadId: %s, innerIdentifier:%s, err:%v", uploadId, innerIdentifier, err)
+			return false, nil, errors.New("error save file info")
 		}
 
 		info = fileInfo
@@ -280,21 +325,21 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 				FileRelativePath: resumableInfo.ResumableRelativePath,
 				FileType:         resumableInfo.ResumableType,
 				FileSize:         resumableInfo.ResumableTotalSize,
-				StoragePath:      parentDir,
+				StoragePath:      uploadPath,
 				FullPath:         fullPath,
 			},
 		}
 
 		FileInfoManager.UpdateInfo(innerIdentifier, fileInfo)
 		if err != nil {
-			klog.Warningf("innerIdentifier:%s, err:%v", innerIdentifier, err)
-			return nil, errors.New("error save file info")
+			klog.Warningf("[upload] uploadId: %s, innerIdentifier:%s, err:%v", uploadId, innerIdentifier, err)
+			return false, nil, errors.New("error save file info")
 		}
 
 		info = fileInfo
 	}
 
-	fileExist, fileLen := FileInfoManager.CheckTempFile(innerIdentifier, uploadsDir)
+	fileExist, fileLen := FileInfoManager.CheckTempFile(innerIdentifier, uploadTempPath)
 	if fileExist {
 		if info.Offset != fileLen {
 			info.Offset = fileLen
@@ -310,7 +355,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 	if ranges != "" {
 		offsetStart, offsetEnd, parsed = ParseContentRange(ranges)
 		if !parsed {
-			return nil, errors.New(fmt.Sprintf("Invalid content range:%s", ranges))
+			return false, nil, errors.New(fmt.Sprintf("Invalid content range:%s", ranges))
 		}
 	}
 
@@ -323,40 +368,39 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 
 	if !CheckSize(size) || offsetEnd >= info.FileSize {
 		if info.Offset == info.FileSize {
-			finishData := []map[string]interface{}{
-				{
-					"name": resumableInfo.ResumableFilename,
-					"id":   MakeUid(info.FullPath),
-					"size": info.FileSize,
-				},
+			var data = &FileUploadState{
+				Name:     resumableInfo.ResumableFilename,
+				Id:       MakeUid(info.FullPath),
+				Size:     info.FileSize,
+				FileInfo: &info,
 			}
-			return common.ToBytes(finishData), nil
+			return true, data, nil
 		}
-		return nil, errors.New("Unsupported file size")
+		return false, nil, errors.New("Unsupported file size")
 	}
 
 	const maxRetries = 100
 	for retry := 0; retry < maxRetries; retry++ {
 		if info.Offset-offsetEnd > 0 {
-			return common.ToBytes(responseData), nil
+			return true, nil, nil
 		}
 
 		if info.Offset == offsetStart || (info.Offset-offsetEnd < 0 && info.Offset-offsetStart > 0) {
 			if resumableInfo.MD5 != "" {
 				md5, err := common.MD5FileHeader(fileHeader)
 				if err != nil {
-					return nil, err
+					return false, nil, err
 				}
 				if md5 != resumableInfo.MD5 {
 					msg := fmt.Sprintf("Invalid MD5, accepted %s, calculated %s", resumableInfo.MD5, md5)
-					return nil, errors.New(msg)
+					return false, nil, errors.New(msg)
 				}
 			}
 
-			fileSize, err := SaveFile(fileHeader, filepath.Join(uploadsDir, tmpName), newFile, offsetStart)
+			fileSize, err := SaveFile(fileHeader, filepath.Join(uploadTempPath, tmpName), newFile, offsetStart)
 			if err != nil {
-				klog.Warningf("innerIdentifier:%s, info:%+v, err:%v", innerIdentifier, info, err)
-				return nil, err
+				klog.Warningf("[upload] uploadId: %s, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, err)
+				return false, nil, err
 			}
 			info.Offset = fileSize
 			FileInfoManager.UpdateInfo(innerIdentifier, info)
@@ -368,35 +412,43 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		if retry < maxRetries-1 {
 			exist, info = FileInfoManager.ExistFileInfo(innerIdentifier)
 			if !exist {
-				return nil, errors.New("invalid innerIdentifier")
+				return false, nil, errors.New("invalid innerIdentifier")
 			}
 			continue
 		}
 
-		return nil, errors.New("Failed to match offset after multiple retries")
+		return false, nil, errors.New("Failed to match offset after multiple retries")
 	}
 
-	if err = UpdateFileInfo(info, uploadsDir); err != nil {
-		klog.Warningf("innerIdentifier:%s, info:%+v, err:%v", innerIdentifier, info, err)
-		return nil, err
+	if err = UpdateFileInfo(info, uploadTempPath); err != nil {
+		klog.Warningf("[upload] uploadId: %s, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, err)
+		return false, nil, err
 	}
 
-	klog.Info("offsetStart:", offsetStart, ", offsetEnd:", offsetEnd, ", info.Offset:", info.Offset, ", info.FileSize:", info.FileSize)
+	klog.Infof("[upload] uploadId: %s, offsetStart: %d, offsetEnd: %d, info.Offset: %d, info.FileSize:: %d", uploadId, offsetStart, offsetEnd, info.Offset, info.FileSize)
+
 	if offsetEnd == info.FileSize-1 {
-		if err = MoveFileByInfo(info, uploadsDir); err != nil {
-			klog.Warningf("innerIdentifier:%s, info:%+v, err:%v", innerIdentifier, info, err)
-			return nil, err
+		var data = &FileUploadState{
+			Name:           resumableInfo.ResumableFilename,
+			Id:             MakeUid(info.FullPath),
+			Size:           info.FileSize,
+			State:          common.Completed,
+			UploadTempPath: uploadTempPath,
+			FileInfo:       &info,
 		}
-		FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadsDir)
 
-		finishData := []map[string]interface{}{
-			{
-				"name": resumableInfo.ResumableFilename,
-				"id":   MakeUid(info.FullPath),
-				"size": info.FileSize,
-			},
+		if common.ListContains([]string{common.AwsS3, common.TencentCos, common.DropBox, common.GoogleDrive}, fileParam.FileType) {
+			return true, data, nil
 		}
-		return common.ToBytes(finishData), nil
+
+		if err = MoveFileByInfo(info, uploadTempPath); err != nil {
+			klog.Warningf("[upload] uploadId: %s, move by, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, err)
+			return false, nil, err
+		}
+
+		FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath)
+
+		return true, data, nil
 	}
-	return common.ToBytes(responseData), nil
+	return true, nil, nil
 }

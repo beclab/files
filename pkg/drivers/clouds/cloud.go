@@ -7,9 +7,11 @@ import (
 	"files/pkg/diskcache"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/clouds/rclone/operations"
+	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/preview"
+	"files/pkg/tasks"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -356,6 +358,8 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 
 	klog.Infof("Cloud delete, user: %s, param: %s", user, common.ToJson(fileParam))
 
+	// todo need to copy .keep file in fileParam.Path first
+
 	var invalidPaths []string
 
 	for _, dirent := range dirents {
@@ -370,27 +374,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 		return common.ToBytes(invalidPaths), fmt.Errorf("invalid path")
 	}
 
-	for _, dp := range dirents {
-		dp = strings.TrimSpace(dp) //  /path/ or /file
-
-		klog.Infof("Cloud delete, user: %s, dirent: %s", user, dp)
-
-		dpd, err := url.PathUnescape(dp)
-		if err != nil {
-			klog.Errorf("Cloud delete, path unescape error: %v, path: %s", err, dp)
-			deleteFailedPaths = append(deleteFailedPaths, dp)
-			continue
-		}
-
-		_, err = s.service.Delete(fileParam, dpd)
-		if err != nil {
-			klog.Errorf("Cloud delete, delete files error: %v, user: %s", err, user)
-			deleteFailedPaths = append(deleteFailedPaths, dp)
-			continue
-		}
-
-		klog.Infof("Cloud delete, delete success, user: %s, file: %s", user, dpd)
-	}
+	deleteFailedPaths, _ = s.service.command.Delete(fileParam, dirents)
 
 	if err := s.service.command.GetOperation().FsCacheClear(); err != nil {
 		klog.Errorf("Cloud delete, fscache clear error: %v", err)
@@ -539,14 +523,101 @@ func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListR
 	return res, nil
 }
 
+/**
+ * UploadLink
+ */
 func (s *CloudStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	return nil, nil
+	var user = fileUploadArg.FileParam.Owner
+
+	klog.Infof("Cloud uploadLink, user: %s, param: %s", user, common.ToJson(fileUploadArg.FileParam))
+
+	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
+
+	klog.Infof("Cloud uploadLink, done! data: %s", string(data))
+
+	return data, err
 }
 
+/**
+ * UploadedBytes
+ */
 func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	return nil, nil
+	var user = fileUploadArg.FileParam.Owner
+	klog.Infof("Cloud uploadBytes, user: %s, param: %s", user, common.ToJson(fileUploadArg))
+
+	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
+
+	klog.Infof("Cloud uploadBytes, done! data: %s", string(data))
+
+	return data, err
 }
 
+/**
+ * UploadChunks
+ */
 func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	return nil, nil
+	var user = fileUploadArg.FileParam.Owner
+	var uploadId = fileUploadArg.UploadId
+	var chunkInfo = fileUploadArg.ChunkInfo
+	var taskId = chunkInfo.UploadToCloudTaskId
+	// var canceled = chunkInfo.UploadToCloudTaskCancel
+
+	if taskId != "" { // ~ query task status
+		// todo cancel
+		return s.service.checkUploadTaskState(user, uploadId, taskId, chunkInfo)
+	}
+
+	klog.Infof("Cloud uploadChunks, user: %s, uploadId: %s, param: %s", user, fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
+
+	ok, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if fileInfo == nil {
+		return common.ToBytes(&upload.FileUploadSucced{Success: true}), nil
+	}
+
+	if !ok {
+		return common.ToBytes(fileInfo), nil // frontend ignored
+	}
+
+	klog.Infof("Cloud uploadChunks, phase done, tempPath: %s, data: %s", fileInfo.UploadTempPath, common.ToJson(fileInfo))
+
+	var uploadTempPath = fileInfo.UploadTempPath
+	if !strings.HasSuffix(uploadTempPath, "/") {
+		uploadTempPath = uploadTempPath + "/"
+	}
+	var srcParam = &models.FileParam{}
+	srcParam.GetFileParam(uploadTempPath)
+	srcParam.Path = srcParam.Path + fileInfo.Id
+
+	var dstParam = fileUploadArg.FileParam
+
+	uploadCopyParam, err := s.service.CreateUploadParam(srcParam, dstParam, fileInfo.Name, fileInfo.FileInfo.FileRelativePath)
+	if err != nil {
+		return nil, err
+	}
+
+	klog.Infof("Cloud uploadChunks, uploadToCloud param: %s", common.ToJson(uploadCopyParam))
+
+	var task = tasks.TaskManager.CreateTask(uploadCopyParam)
+	if err = task.Execute(task.UploadToCloud); err != nil {
+		klog.Errorf("Cloud uploadChunks, execute uploadToCloud error: %v", err)
+		return nil, err
+	}
+
+	taskId = task.Id()
+
+	klog.Infof("Cloud uploadChunks, uploadToCloud waiting for execute, taskId: %s", taskId)
+
+	return common.ToBytes(
+		&upload.FileUploadSucced{
+			Success: true,
+			IsCloud: true,
+			TaskId:  taskId,
+			Size:    fileInfo.Size,
+			State:   common.Pending,
+		}), nil
 }

@@ -693,6 +693,30 @@ func GetFileNameFromPath(s string) (string, bool) {
 	return r, !isFile
 }
 
+func UpdateFirstLevelDirToPath(oldPath string, newFirstLevelDirName string) string {
+	var tmp = strings.TrimPrefix(oldPath, "/")
+	var pos = strings.Index(tmp, "/")
+	var newPath = tmp[pos:]
+	newPath = newFirstLevelDirName + newPath
+
+	if !strings.HasPrefix(newPath, "/") {
+		newPath = "/" + newPath
+	}
+
+	return newPath
+}
+
+func GetFirstLevelDir(s string) string {
+	// /a/b/c/hello.txt    > a
+	// /a/b/c/             > a
+	if s == "/" || s == "" {
+		return ""
+	}
+	var dir = strings.Trim(filepath.Dir(s), "/")
+	var dirs = strings.Split(dir, "/")
+	return dirs[0]
+}
+
 func GetPrefixPath(s string) string {
 	// /a/b/hello.txt   > /a/b/
 	// /a/b/c/          > /a/b/

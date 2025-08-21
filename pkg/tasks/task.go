@@ -22,6 +22,7 @@ type TaskInfo struct {
 	Progress      int    `json:"progress"`
 	Transferred   int64  `json:"transferred"`
 	TotalFileSize int64  `json:"total_file_size"`
+	TidyDirs      bool   `json:"tidy_dirs"`
 	Status        string `json:"status"`
 	ErrorMessage  string `json:"failed_reason"`
 }
@@ -37,6 +38,7 @@ type Task struct {
 	progress     int
 	transfer     int64
 	totalSize    int64
+	tidyDirs     bool
 	isFile       bool
 
 	ctx      context.Context
@@ -58,7 +60,7 @@ func (t *Task) Execute(fs ...func() error) error {
 
 	_, ok := t.manager.pool.TrySubmit(func() {
 		if t.canceled {
-			t.state = common.Cancelled
+			t.state = common.Canceled
 			return
 		}
 
@@ -81,7 +83,7 @@ func (t *Task) Execute(fs ...func() error) error {
 			if err != nil {
 				klog.Errorf("[Task] Id: %s, exec error: %v", t.id, err)
 				if err.Error() == "context canceled" {
-					t.state = common.Cancelled
+					t.state = common.Canceled
 				} else {
 					t.state = common.Failed
 				}

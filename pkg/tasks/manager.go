@@ -105,6 +105,7 @@ func (t *taskManager) GetTask(taskId string) *TaskInfo {
 		Progress:      task.progress,
 		Transferred:   task.transfer,
 		TotalFileSize: task.totalSize,
+		TidyDirs:      task.tidyDirs,
 		Status:        task.state,
 		ErrorMessage:  task.message,
 	}

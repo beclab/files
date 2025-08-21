@@ -509,14 +509,56 @@ func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content boo
 
 }
 
+/**
+ * UploadLink
+ */
 func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	return upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
+	var user = fileUploadArg.FileParam.Owner
+
+	klog.Infof("Posix uploadLink, user: %s, param: %s", user, common.ToJson(fileUploadArg.FileParam))
+
+	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
+
+	klog.Infof("Posix uploadLink, done! data: %s", string(data))
+
+	return data, err
 }
 
+/**
+ * UploadedBytes
+ */
 func (s *PosixStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	return upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
+	var user = fileUploadArg.FileParam.Owner
+	klog.Infof("Posix uploadBytes, user: %s, param: %s", user, common.ToJson(fileUploadArg.FileParam))
+
+	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
+
+	klog.Infof("Posix uploadBytes, done! data: %s", string(data))
+
+	return data, err
 }
 
+/**
+ * UploadChunks
+ */
 func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	return upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
+	var user = fileUploadArg.FileParam.Owner
+
+	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, param: %s", user, fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
+
+	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if fileInfo == nil {
+		return common.ToBytes(&upload.FileUploadSucced{Success: true, State: common.Running}), nil
+	} else {
+		fileInfo.State = common.Completed
+	}
+
+	klog.Infof("Posix uploadChunks, done! data: %s", common.ToJson(fileInfo))
+
+	return common.ToBytes(fileInfo), err
 }

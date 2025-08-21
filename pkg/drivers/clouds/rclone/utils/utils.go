@@ -3,9 +3,12 @@ package utils
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"files/pkg/drivers/clouds/rclone/common"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -15,10 +18,10 @@ import (
 
 func Request(ctx context.Context, u string, method string, header *http.Header, requestParams []byte) ([]byte, error) {
 	var backoff = wait.Backoff{
-		Duration: 2 * time.Second,
+		Duration: 1 * time.Second,
 		Factor:   2,
 		Jitter:   0.1,
-		Steps:    3,
+		Steps:    2,
 	}
 
 	var result []byte
@@ -55,28 +58,48 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 		client := &http.Client{}
 		start := time.Now()
 		resp, err := client.Do(newRequest)
-		klog.Infof("[request] url: %s, elapsed: %s", u, time.Since(start))
 		if err != nil {
+			klog.Errorf("[request] do error: %v", err)
 			return err
 		}
 		defer resp.Body.Close()
 
+		klog.Infof("[request] url: %s, code: %d, elapsed: %s", u, resp.StatusCode, time.Since(start))
+
 		body, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
-			klog.Errorln("Error reading response body:", err)
+			klog.Errorln("[request] error reading response body:", err)
 			return err
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("%s", string(body))
+			return FormatError(body)
 		}
 
 		result = body
 		return nil
 	}); err != nil {
-		return nil, err
+		return result, err
 	}
 
 	return result, nil
 
+}
+
+func FormatError(resp []byte) error {
+	var errMsg *common.ErrorMessage
+	if err := json.Unmarshal(resp, &errMsg); err != nil {
+		return fmt.Errorf("%s", string(resp))
+	}
+
+	switch errMsg.Path {
+	case "operations/purge":
+		if strings.Contains(errMsg.Error, "directory not found") {
+			return nil
+		}
+	case "config/create":
+		return fmt.Errorf("%s", errMsg.Error)
+	}
+
+	return fmt.Errorf("%s", string(resp))
 }

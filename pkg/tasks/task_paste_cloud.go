@@ -44,11 +44,11 @@ func (t *Task) DownloadFromCloud() error {
 		return fmt.Errorf("not enough free space on disk, required: %s, available: %s", common.FormatBytes(requiredSpace), common.FormatBytes(posixSize))
 	}
 
-	cloudFileName, _ := files.GetFileNameFromPath(cloudParam.Path)
+	cloudFileName, isFile := files.GetFileNameFromPath(cloudParam.Path)
 	posixPrefixPath := files.GetPrefixPath(posixParam.Path)
 
 	// check duplicated names and generate new name
-	localItems, err := cmd.GetFilesList(posixParam)
+	localItems, err := cmd.GetFilesList(posixParam, true)
 	if err != nil {
 		return fmt.Errorf("get local files list error: %v", err)
 	}
@@ -63,12 +63,8 @@ func (t *Task) DownloadFromCloud() error {
 	klog.Infof("[Task] Id: %s, newPosixName: %s", t.id, newPosixName)
 
 	posixParam.Path = posixPrefixPath + newPosixName
-
-	// create empty dirs
-	if !t.isFile {
-		if err := cmd.CreateEmptyDirectories(cloudParam, posixParam); err != nil {
-			return fmt.Errorf("create empty dirs error: %v", err)
-		}
+	if !isFile {
+		posixParam.Path += "/"
 	}
 
 	// create download job
@@ -86,24 +82,12 @@ func (t *Task) DownloadFromCloud() error {
 	var done bool
 	var jobId = *jobResp.JobId
 
-	defer func() error {
-		cmd.GetOperation().FsCacheClear()
-
-		if !done && jobId > 0 {
-			_, stopErr := cmd.GetJob().Stop(jobId)
-			if stopErr != nil {
-				return fmt.Errorf("stop job failed: %v, error: %v", stopErr, err)
-			}
-		}
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
-
 	// check job stats
 	done, err = t.checkJobStats(jobId)
+
+	if err != nil && jobId > 0 {
+		_, _ = cmd.GetJob().Stop(jobId)
+	}
 
 	// clear files
 	if t.isLastPhase() {
@@ -118,6 +102,7 @@ func (t *Task) DownloadFromCloud() error {
 		}
 	}
 
+	klog.Infof("[Task] Id: %s done! done: %v, error: %v", t.id, done, err)
 	return err
 }
 
@@ -133,11 +118,14 @@ func (t *Task) UploadToCloud() error {
 
 	klog.Infof("[Task] Id: %s, start, uploadToCloud, user: %s, action: %s, src: %s, dst: %s", t.id, user, action, common.ToJson(cloudParam), common.ToJson(posixParam))
 
+	posixPathPrefix := files.GetPrefixPath(posixParam.Path)
 	posixFileName, _ := files.GetFileNameFromPath(posixParam.Path)
+	_, _ = posixPathPrefix, posixFileName
+	cloudFileName, isFile := files.GetFileNameFromPath(cloudParam.Path)
 	cloudPrefixPath := files.GetPrefixPath(cloudParam.Path)
 
 	// check duplicated names and generate new name
-	cloudItems, err := cmd.GetFilesList(cloudParam)
+	cloudItems, err := cmd.GetFilesList(cloudParam, true)
 	if err != nil {
 		return fmt.Errorf("get local files list error: %v", err)
 	}
@@ -148,21 +136,22 @@ func (t *Task) UploadToCloud() error {
 		}
 	}
 
-	newCloudName := files.GenerateDupName(dupNames, posixFileName, t.isFile)
+	newCloudName := files.GenerateDupName(dupNames, cloudFileName, t.isFile) // posixFileName
 	klog.Infof("[Task] Id: %s, newCloudName: %s", t.id, newCloudName)
 
 	cloudParam.Path = cloudPrefixPath + newCloudName
 
-	// create empty dirs
-	if !t.isFile {
-		var keepFilePath = common.DefaultLocalRootPath + common.DefaultKeepFileName
-		if err = files.CheckKeepFile(keepFilePath); err != nil {
-			return fmt.Errorf("check keep file error: %v", err)
-		}
-		if err := cmd.CreateEmptyDirectories(posixParam, cloudParam); err != nil {
-			return fmt.Errorf("create empty dirs error: %v", err)
-		}
+	if !isFile {
+		cloudParam.Path += "/"
 	}
+
+	// get src size
+	posizeSize, err := cmd.GetFilesSize(posixParam)
+	if err != nil {
+		klog.Errorf("get posix size error: %v", err)
+		return err
+	}
+	t.updateTotalSize(posizeSize)
 
 	// upload to cloud job
 	jobResp, err := cmd.Copy(posixParam, cloudParam)
@@ -179,37 +168,28 @@ func (t *Task) UploadToCloud() error {
 	var done bool
 	var jobId = *jobResp.JobId
 
-	defer func() error {
-		cmd.GetOperation().FsCacheClear()
-
-		if !done && jobId > 0 {
-			_, stopErr := cmd.GetJob().Stop(jobId)
-			if stopErr != nil {
-				return fmt.Errorf("stop job failed: %v, error: %v", stopErr, err)
-			}
-		}
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
-
 	// check job stats
-	done, err = t.checkJobStats(jobId)
+	done, err = t.checkJobStats(jobId) // uploadToCloud
+
+	if err != nil && jobId > 0 {
+		_, _ = cmd.GetJob().Stop(jobId)
+	}
 
 	// clear files
 	if t.isLastPhase() {
 		if err == nil {
-			if t.param.Action == "copy" {
+			if t.param.Action == "copy" && !t.param.UploadToCloud {
 				return err
 			}
 			err = cmd.Clear(t.param.Src)
 
 		} else {
+
 			err = cmd.Clear(t.param.Dst)
 		}
 	}
+
+	klog.Infof("[Task] Id: %s done! done: %v, error: %v", t.id, done, err)
 
 	return err
 }
@@ -226,11 +206,11 @@ func (t *Task) CopyToCloud() error {
 
 	klog.Infof("[Task] Id: %s, start, copyToCloud, user: %s, action: %s, src: %s, dst: %s", t.id, user, action, common.ToJson(cloudSrcParam), common.ToJson(cloudDstParam))
 
-	cloudSrcFileName, _ := files.GetFileNameFromPath(cloudSrcParam.Path)
+	cloudSrcFileName, isFile := files.GetFileNameFromPath(cloudSrcParam.Path)
 	cloudDstPrefixPath := files.GetPrefixPath(cloudDstParam.Path)
 
 	// check duplicated names and generate new name
-	cloudDstItems, err := cmd.GetFilesList(cloudDstParam)
+	cloudDstItems, err := cmd.GetFilesList(cloudDstParam, true)
 	if err != nil {
 		return fmt.Errorf("get local files list error: %v", err)
 	}
@@ -245,18 +225,17 @@ func (t *Task) CopyToCloud() error {
 	klog.Infof("[Task] Id: %s, newCloudDstName: %s", t.id, newCloudDstName)
 
 	cloudDstParam.Path = cloudDstPrefixPath + newCloudDstName
-
-	// create empty dirs
-	if !t.isFile {
-		var keepFilePath = common.DefaultLocalRootPath + common.DefaultKeepFileName
-		if err = files.CheckKeepFile(keepFilePath); err != nil {
-			return fmt.Errorf("check keep file error: %v", err)
-		}
-
-		if err := cmd.CreateEmptyDirectories(cloudSrcParam, cloudDstParam); err != nil {
-			return fmt.Errorf("create empty dirs error: %v", err)
-		}
+	if !isFile {
+		cloudDstParam.Path += "/"
 	}
+
+	// get src size
+	srcSize, err := cmd.GetFilesSize(cloudSrcParam)
+	if err != nil {
+		klog.Errorf("get posix size error: %v", err)
+		return err
+	}
+	t.updateTotalSize(srcSize)
 
 	// create download job
 	jobResp, err := cmd.Copy(cloudSrcParam, cloudDstParam)
@@ -273,24 +252,12 @@ func (t *Task) CopyToCloud() error {
 	var done bool
 	var jobId = *jobResp.JobId
 
-	defer func() error {
-		cmd.GetOperation().FsCacheClear()
-
-		if !done && jobId > 0 {
-			_, stopErr := cmd.GetJob().Stop(jobId)
-			if stopErr != nil {
-				return fmt.Errorf("stop job failed: %v, error: %v", stopErr, err)
-			}
-		}
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
-
 	// check job stats
 	done, err = t.checkJobStats(jobId)
+
+	if err != nil && jobId > 0 {
+		_, _ = cmd.GetJob().Stop(jobId)
+	}
 
 	// clear files
 	if t.isLastPhase() {
@@ -305,14 +272,18 @@ func (t *Task) CopyToCloud() error {
 		}
 	}
 
+	klog.Infof("[Task] Id: %s done! done: %v, error: %v", t.id, done, err)
+
 	return err
 
 }
 
 func (t *Task) checkJobStats(jobId int) (bool, error) {
 	var cmd = rclone.Command
-	var jobStatsResp []byte
+	var jobCoreStatsResp []byte
+	var jobStatusResp []byte
 	var err error
+	var transferFinished bool
 	var done bool
 	var ticker = time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -320,19 +291,31 @@ func (t *Task) checkJobStats(jobId int) (bool, error) {
 	for {
 		select {
 		case <-ticker.C:
-			jobStatsResp, err = cmd.GetJob().Stats(jobId)
+			jobCoreStatsResp, err = cmd.GetJob().Stats(jobId)
 			if err != nil {
-				err = fmt.Errorf("get job stats error: %v", err)
+				err = fmt.Errorf("get job core stats error: %v", err)
 				break
 			}
 
 			var data *job.CoreStatsResp
-			if err = json.Unmarshal(jobStatsResp, &data); err != nil {
-				err = fmt.Errorf("unmarshal job stats error: %v", err)
+			if err = json.Unmarshal(jobCoreStatsResp, &data); err != nil {
+				err = fmt.Errorf("unmarshal job core stats error: %v", err)
 				break
 			}
 
-			klog.Infof("[Task] Id: %s, get job data: %s", t.id, common.ToJson(data))
+			jobStatusResp, err = cmd.GetJob().Status(jobId)
+			if err != nil {
+				err = fmt.Errorf("get job status error: %v", err)
+				break
+			}
+
+			var jobStatusData *job.JobStatusResp
+			if err = json.Unmarshal(jobStatusResp, &jobStatusData); err != nil {
+				err = fmt.Errorf("unmarshal job status error: %v", err)
+				break
+			}
+
+			klog.Infof("[Task] Id: %s, get job core stats: %s, status: %s", t.id, common.ToJson(data), common.ToJson(jobStatusData))
 
 			var totalTransfers = data.TotalBytes //data.TotalTransfers
 			var transfers = data.Bytes           //data.Transfers
@@ -347,10 +330,21 @@ func (t *Task) checkJobStats(jobId int) (bool, error) {
 			if transfers == totalTransfers && data.Transferring == nil && data.Bytes == data.TotalBytes {
 				klog.Infof("[Task] Id: %s, upload success, jobId: %d", t.id, jobId)
 				var progress = 100 / int64(t.totalPhases)
+				transferFinished = true
 				t.updateProgress(int(progress), data.TotalBytes)
+			}
+
+			if !jobStatusData.Finished {
+				if transferFinished {
+					t.tidyDirs = true
+				}
+				continue
+			} else {
+				klog.Infof("[Task] Id: %s, job finished: %v", t.id, jobStatusData.Finished)
 				done = true
 				err = nil
 			}
+
 			break
 		case <-t.ctx.Done():
 			klog.Infof("[Task] Id: %s, context cancel, jobId: %d", t.id, jobId)

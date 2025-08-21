@@ -4,13 +4,14 @@ import (
 	"errors"
 	"files/pkg/common"
 	"fmt"
-	"github.com/gorilla/mux"
-	"k8s.io/klog/v2"
 	"mime/multipart"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/gorilla/mux"
+	"k8s.io/klog/v2"
 )
 
 type ResumableInfo struct {
@@ -23,12 +24,16 @@ type ResumableInfo struct {
 	ResumableFilename         string                `json:"resumableFilename" form:"resumableFilename"`
 	ResumableRelativePath     string                `json:"resumableRelativePath" form:"resumableRelativePath"`
 	ResumableTotalChunks      int                   `json:"resumableTotalChunks" form:"resumableTotalChunks"`
+	UploadToCloud             int                   `json:"uploadToCloud" form:"uploadToCloud"`                     // if cloud, val = 1
+	UploadToCloudTaskId       string                `json:"uploadToCloudTaskId" form:"uploadToCloudTaskId"`         // task id from serve
+	UploadToCloudTaskCancel   int                   `json:"uploadToCloudTaskCancel" from:"uploadToCloudTaskCancel"` // if canceled, val = 1
 	ParentDir                 string                `json:"parent_dir" form:"parent_dir"`
 	MD5                       string                `json:"md5,omitempty" form:"md5"`
 	File                      *multipart.FileHeader `json:"file" form:"file" binding:"required"`
 }
 
 type FileUploadArgs struct {
+	Node      string         `json:"node"` // node name
 	FileParam *FileParam     `json:"fileParam"`
 	FileName  string         `json:"fileName,omitempty"`
 	From      string         `json:"from,omitempty"`
@@ -43,11 +48,13 @@ func NewFileUploadArgs(r *http.Request) (*FileUploadArgs, error) {
 	}
 	var err error
 
+	vars := mux.Vars(r)
+	fileUploadArgs.Node = vars["node"]
+
 	p := r.URL.Query().Get("file_path")
 	if p == "" {
 		p = r.URL.Query().Get("parent_dir")
 		if p == "" {
-			vars := mux.Vars(r)
 			fileUploadArgs.UploadId = vars["uid"]
 
 			fileUploadArgs.ChunkInfo = &ResumableInfo{}

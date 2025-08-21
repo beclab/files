@@ -6,8 +6,10 @@ import (
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
+	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
 	"files/pkg/models"
+	"files/pkg/tasks"
 	"fmt"
 	"strings"
 
@@ -112,31 +114,6 @@ func (s *service) CreateFolder(param *models.FileParam) ([]byte, error) {
 	return nil, nil
 }
 
-func (s *service) Delete(param *models.FileParam, dirent string) ([]byte, error) {
-	fsPrefix, err := s.command.GetFsPrefix(param)
-	_, isFile := files.GetFileNameFromPath(dirent)
-
-	var fs, remote string
-
-	if isFile {
-		fs = fsPrefix + param.Path
-		remote = strings.TrimPrefix(dirent, "/")
-		if err = s.command.GetOperation().Deletefile(fs, remote); err != nil {
-			return nil, err
-		}
-
-	} else {
-		fs = fsPrefix + param.Path
-		remote = strings.Trim(dirent, "/")
-
-		if err = s.command.GetOperation().Purge(fs, remote); err != nil {
-			return nil, err
-		}
-	}
-
-	return nil, nil
-}
-
 func (s *service) DownloadAsync(param *models.FileParam, localFolder, localFileName string) (int, error) {
 	var srcFs, srcRemote string
 	var dstFs, dstRemote string
@@ -195,18 +172,6 @@ func (s *service) FileStat(fileParam *models.FileParam) ([]byte, error) {
 	return common.ToBytes(data), nil
 }
 
-func (s *service) MoveFile(param *models.MoveFileParam) ([]byte, error) {
-	return nil, nil
-}
-
-func (s *service) PauseTask(taskId string) ([]byte, error) {
-	return nil, nil
-}
-
-func (s *service) QueryAccount() ([]byte, error) {
-	return nil, nil
-}
-
 func (s *service) Rename(srcParam, dstParam *models.FileParam) ([]byte, error) {
 	srcFsPrefix, err := s.command.GetFsPrefix(srcParam)
 	if err != nil {
@@ -243,11 +208,6 @@ func (s *service) Rename(srcParam, dstParam *models.FileParam) ([]byte, error) {
 
 	} else {
 
-		if err := s.command.CreateEmptyDirectories(srcParam, dstParam); err != nil {
-			klog.Errorf("[service] rename, generate empty directories error: %v", err)
-			return nil, err
-		}
-
 		var srcFs, dstFs string
 		srcFs = srcFsPrefix + srcParam.Path
 		dstFs = dstFsPrefix + dstParam.Path
@@ -272,6 +232,20 @@ func (s *service) Rename(srcParam, dstParam *models.FileParam) ([]byte, error) {
 	}
 
 	return nil, nil
+}
+
+func (s *service) QueryJobCoreStat(jobId int) (*job.CoreStatsResp, error) {
+	resp, err := s.command.GetJob().Stats(jobId)
+	if err != nil {
+		return nil, err
+	}
+
+	var data *job.CoreStatsResp
+	if err = json.Unmarshal(resp, &data); err != nil {
+		return nil, fmt.Errorf("unmarshal job stats error: %v", err)
+	}
+
+	return data, nil
 }
 
 func (s *service) QueryJob(jobId int) (*job.JobStatusResp, error) {
@@ -343,4 +317,145 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 	result.Data = files
 
 	return result, nil
+}
+
+func (s *service) CreateUploadParam(src, dst *models.FileParam, uploadFileName string, newFileRelativePath string) (*models.PasteParam, error) {
+	var cmd = rclone.Command
+
+	klog.Infof("[service] upload, start, uploadFileName: %s, relativePath: %s, src: %s, dst: %s", uploadFileName, newFileRelativePath, common.ToJson(src), common.ToJson(dst))
+
+	if !strings.HasPrefix(newFileRelativePath, "/") {
+		newFileRelativePath = "/" + newFileRelativePath // /xxx.yyy  /f1/f2/xxx.yyy
+	}
+
+	// dst.FileType
+	// dst.Extend
+	// dst.Path       /hello1/sub1/
+	// real dst.Path  /hello1/sub1/one file/a/b/1.jpg     // 11.jpg
+
+	var srcFsPrefix, err = cmd.GetFsPrefix(src)
+	_ = srcFsPrefix
+	if err != nil {
+		return nil, err
+	}
+	dstFsPrefix, err := cmd.GetFsPrefix(dst)
+	_ = dstFsPrefix
+	if err != nil {
+		return nil, err
+	}
+
+	dstFirstLevelDir := files.GetFirstLevelDir(newFileRelativePath) // ~ dstFirstLevelDir may be nil
+	var dstFirstPathTmp = dst.Path
+	if dstFirstLevelDir != "" {
+		dstFirstPathTmp += dstFirstLevelDir + "/"
+	}
+
+	var dstFirstLevelPathParam = &models.FileParam{
+		Owner:    dst.Owner,
+		FileType: dst.FileType,
+		Extend:   dst.Extend,
+		Path:     dstFirstPathTmp,
+	}
+
+	dstItems, err := cmd.GetFilesList(dstFirstLevelPathParam, false)
+	if err != nil {
+		klog.Errorf("[service] upload, get lists failed, path: %s, error: %v", dst.Path, err)
+		return nil, fmt.Errorf("get dst files list error: %v", err)
+	}
+
+	var dupNames []string
+	if dstItems != nil && dstItems.List != nil && len(dstItems.List) > 0 {
+		for _, item := range dstItems.List {
+			dupNames = append(dupNames, item.Name)
+		}
+	}
+
+	var isFile bool
+	var compareTargetName string
+	if dstFirstLevelDir == "" {
+		isFile = true
+		compareTargetName = uploadFileName
+	} else {
+		isFile = false
+		compareTargetName = dstFirstLevelDir
+	}
+
+	klog.Infof("[service] upload, dupNames: %d, dstFirstLevelDir: %s, compareTargetName: %s, isFile: %v", len(dupNames), dstFirstLevelDir, compareTargetName, isFile)
+
+	// newFileOrFirstLevelDirName
+	newFileOrFirstLevelDirName := files.GenerateDupName(dupNames, compareTargetName, isFile)
+
+	klog.Infof("[service] upload, newDirName: %s", newFileOrFirstLevelDirName)
+
+	// generate new first level dir
+	// update dst path
+	var newFirstLevelPath string
+	if !isFile {
+		newFirstLevelPath = files.UpdateFirstLevelDirToPath(newFileRelativePath, newFileOrFirstLevelDirName)
+		dst.Path = dst.Path + strings.TrimPrefix(newFirstLevelPath, "/")
+	} else {
+		dst.Path = dst.Path + newFileOrFirstLevelDirName
+	}
+
+	var data = &models.PasteParam{
+		Owner:         src.Owner,
+		Action:        "copy",
+		UploadToCloud: true,
+		Src: &models.FileParam{
+			Owner:    src.Owner,
+			FileType: src.FileType,
+			Extend:   src.Extend,
+			Path:     src.Path,
+		},
+		Dst: &models.FileParam{
+			Owner:    dst.Owner,
+			FileType: dst.FileType,
+			Extend:   dst.Extend,
+			Path:     dst.Path,
+		},
+	}
+
+	return data, nil
+}
+
+func (s *service) checkUploadTaskState(user string, uploadId string, taskId string, chunkInfo *models.ResumableInfo) ([]byte, error) {
+	var result []*upload.FileUploadState
+
+	taskInfo := tasks.TaskManager.GetTask(taskId)
+	if taskInfo == nil {
+		var item = &upload.FileUploadState{
+			Id:    "",
+			Name:  chunkInfo.ResumableFilename,
+			Size:  chunkInfo.ResumableTotalSize,
+			State: common.Completed,
+		}
+
+		result = append(result, item)
+		return common.ToBytes(result), nil
+	}
+
+	klog.Infof("Cloud uploadChunks, user: %s, uploadId: %s, taskId: %s, taskInfo: %s", user, uploadId, taskId, common.ToJson(taskInfo))
+
+	if taskInfo.Status == common.Completed || taskInfo.Status == common.Failed || taskInfo.Status == common.Canceled {
+		var item = &upload.FileUploadState{
+			Id:    "",
+			Name:  chunkInfo.ResumableFilename,
+			Size:  chunkInfo.ResumableTotalSize,
+			State: taskInfo.Status,
+		}
+
+		result = append(result, item)
+		return common.ToBytes(result), nil
+
+	} else {
+		var result = &upload.FileUploadSucced{
+			Success:   true,
+			IsCloud:   true,
+			TaskId:    taskId,
+			Size:      chunkInfo.ResumableTotalSize,
+			Transfers: taskInfo.Transferred,
+		}
+
+		return common.ToBytes(result), nil
+	}
 }
