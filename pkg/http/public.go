@@ -14,7 +14,7 @@ import (
 
 type commonFunc func(contextQueryArgs *models.QueryParam) ([]byte, error)
 
-func commonHandle(fn commonFunc) http.Handler {
+func CommonHandle(fn commonFunc) http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var path = r.URL.Path
 		var owner = r.Header.Get(common.REQUEST_HEADER_OWNER)
@@ -55,9 +55,12 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 /**
  * get repos
  */
-func reposGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+func ReposGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	if contextQueryArgs.ShareType == "shared" || contextQueryArgs.ShareType == "share_to_me" {
-		return nil, nil
+		repos := map[string][]string{
+			"repos": {},
+		}
+		return common.ToBytes(repos), nil
 	}
 
 	var owner = contextQueryArgs.Owner
@@ -75,7 +78,7 @@ func reposGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
  * create new repo
  */
 
-func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+func CreateRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var owner = contextQueryArgs.Owner
 	var repoName = contextQueryArgs.RepoName
 
@@ -99,7 +102,7 @@ func createRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 /**
  * delete repo
  */
-func deleteRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+func DeleteRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var owner = contextQueryArgs.Owner
 	var repoId = contextQueryArgs.RepoId
 	if repoId == "" {
@@ -122,7 +125,7 @@ func deleteRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 /**
  * rename repo
  */
-func renameRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+func RenameRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var user = contextQueryArgs.Owner
 	var repoId = contextQueryArgs.RepoId
 	var repoName = contextQueryArgs.Destination
@@ -157,7 +160,7 @@ func renameRepoHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 /**
  * get nodes
  */
-func nodesGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+func NodesGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var nodes = global.GlobalNode.GetNodes()
 
 	var data = make(map[string]interface{})

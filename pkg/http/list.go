@@ -17,21 +17,21 @@ import (
  * create
  * rename
  */
-var wrapperFilesResourcesArgs = func(fn fileHandlerFunc, prefix string) http.Handler {
+var WrapperFilesResourcesArgs = func(fn fileHandlerFunc, prefix string) http.Handler {
 	return fileHandle(fn, prefix)
 }
 
 type fileHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error)
 
-func listHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
+func ListHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
 	return handler.List(contextArgs)
 }
 
-func createHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
+func CreateHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
 	return handler.Create(contextArgs)
 }
 
-func renameHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
+func RenameHandler(handler base.Execute, contextArgs *models.HttpContextArgs) ([]byte, error) {
 	return handler.Rename(contextArgs)
 }
 
@@ -82,13 +82,13 @@ func fileHandle(fn fileHandlerFunc, prefix string) http.Handler {
 /**
  * edit
  */
-var wrapperFilesEditArgs = func(fn fileEditHandlerFunc, prefix string) http.Handler {
+var WrapperFilesEditArgs = func(fn fileEditHandlerFunc, prefix string) http.Handler {
 	return fileEditHandle(fn, prefix)
 }
 
 type fileEditHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error)
 
-func editHandler(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
+func EditHandler(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
 	return handler.Edit(contextArgs)
 }
 
@@ -137,13 +137,13 @@ func fileEditHandle(fn fileEditHandlerFunc, prefix string) http.Handler {
 /**
  * delete
  */
-var wrapperFilesDeleteArgs = func(fn fileDeleteHandlerFunc, prefix string) http.Handler {
+var WrapperFilesDeleteArgs = func(fn fileDeleteHandlerFunc, prefix string) http.Handler {
 	return fileDeleteHandle(fn, prefix)
 }
 
 type fileDeleteHandlerFunc func(handler base.Execute, fileDeleteArgs *models.FileDeleteArgs) ([]byte, error)
 
-func deleteHandler(handler base.Execute, fileDeleteArgs *models.FileDeleteArgs) ([]byte, error) {
+func DeleteHandler(handler base.Execute, fileDeleteArgs *models.FileDeleteArgs) ([]byte, error) {
 	return handler.Delete(fileDeleteArgs)
 }
 

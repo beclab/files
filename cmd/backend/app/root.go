@@ -2,40 +2,32 @@ package app
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/diskcache"
 	"files/pkg/drivers"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/global"
+	"files/pkg/hertz"
+	"files/pkg/img"
 	"files/pkg/integration"
 	"files/pkg/postgres"
 	"files/pkg/redisutils"
 	"files/pkg/tasks"
 	"files/pkg/watchers"
-	"io"
-	"net"
-	"net/http"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"strings"
-	"syscall"
-
+	"github.com/spf13/afero"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"io"
 	"k8s.io/klog/v2"
-
-	"files/pkg/diskcache"
+	"net"
+	"os"
+	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	v "github.com/spf13/viper"
-
-	fbhttp "files/pkg/http"
-	"files/pkg/img"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -147,69 +139,35 @@ user created with the credentials from options "username" and "password".`,
 		if workersCount < 1 {
 			klog.Fatal("Image resize workers count could not be < 1")
 		}
-		imgSvc := img.New(workersCount) // init global image service
+		img.New(workersCount) // init global image service
 
 		// Step3-2: Build file cache
-		var fileCache diskcache.Interface = diskcache.NewNoOp()
-		fileCache = diskcache.New(afero.NewOsFs(), common.CACHE_PREFIX)
+		diskcache.New(afero.NewOsFs(), common.CACHE_PREFIX)
 
 		// step4: Crontab
 		//		- CleanupOldFilesAndRedisEntries
 		InitCrontabs()
 
-		// step5: run http server
-		server := getRunParams(cmd.Flags())
-		setupLog(server.Log)
-
-		root, err := filepath.Abs(server.Root)
-		checkErr(err)
-		server.Root = root
-
-		adr := server.Address + ":" + server.Port
-
-		var listener net.Listener
-
-		switch {
-		case server.Socket != "":
-			listener, err = net.Listen("unix", server.Socket)
-			checkErr(err)
-			socketPerm, err := cmd.Flags().GetUint32("socket-perm")
-			checkErr(err)
-			err = os.Chmod(server.Socket, os.FileMode(socketPerm))
-			checkErr(err)
-		case server.TLSKey != "" && server.TLSCert != "":
-			cer, err := tls.LoadX509KeyPair(server.TLSCert, server.TLSKey)
-			checkErr(err)
-			listener, err = tls.Listen("tcp", adr, &tls.Config{
-				MinVersion:   tls.VersionTLS12,
-				Certificates: []tls.Certificate{cer}},
-			)
-			checkErr(err)
-		default:
-			listener, err = net.Listen("tcp", adr)
-			checkErr(err)
-		}
-
-		// step6: init commands
+		// step5: init commands
 		rclone.NewCommandRclone()
 		rclone.Command.InitServes()
 
-		// step7: build driver handler
+		// step6: build driver handler
 		drivers.NewDriverHandler()
 
-		// step8: init global
+		// step7: init global
 		config := ctrl.GetConfigOrDie()
 		global.InitGlobalData(config)
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
 
-		// step9: init seahub (for test now)
+		// step8: init seahub (for test now)
 		seaserv.InitSeaRPC()
 
-		// step10: integration
+		// step9: integration
 		integration.NewIntegrationManager()
 
-		// step11: watcher
+		// step10: watcher
 		var w = watchers.NewWatchers(context.Background(), config)
 		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
@@ -217,22 +175,11 @@ user created with the credentials from options "username" and "password".`,
 
 		go w.Run(1)
 
-		// step12: task manager
+		// step11: task manager
 		tasks.NewTaskManager()
 
-		sigc := make(chan os.Signal, 1)
-		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
-		go cleanupHandler(listener, sigc)
-
-		handler, err := fbhttp.NewHandler(imgSvc, fileCache, server)
-		checkErr(err)
-
-		defer listener.Close()
-
-		klog.Infoln("Listening on", listener.Addr().String())
-		if err := http.Serve(listener, handler); err != nil {
-			klog.Fatal(err)
-		}
+		// step12: run hertz server
+		hertz.HertzServer()
 	}, pythonConfig{allowNoDB: true}),
 }
 

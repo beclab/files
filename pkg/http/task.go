@@ -9,7 +9,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var wrapperTaskArgs = func(prefix string) http.Handler {
+var WrapperTaskArgs = func(prefix string) http.Handler {
 	return taskHandle(prefix)
 }
 

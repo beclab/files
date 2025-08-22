@@ -14,13 +14,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var wrapperRawArgs = func(fn rawHandlerFunc, prefix string) http.Handler {
+var WrapperRawArgs = func(fn rawHandlerFunc, prefix string) http.Handler {
 	return rawHandle(fn, prefix)
 }
 
 type rawHandlerFunc func(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error)
 
-func rawHandler(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
+func RawHandler(handler base.Execute, contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
 	return handler.Raw(contextArgs)
 }
 

@@ -62,14 +62,45 @@ jobs:
       - name: Build
         run: |
           go mod tidy
-          cd cmd/backend
           for GOOS in linux; do
             for GOARCH in amd64 arm64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
+          
+              export GOPATH=~/go
+              export PATH=$GOPATH/bin:$PATH
+              go install github.com/cloudwego/hertz/cmd/hz@latest
+              hz -v
+              GO111MODULE=on go install github.com/cloudwego/thriftgo@latest
+          
+              go mod tidy
+              go mod edit -replace github.com/apache/thrift=github.com/apache/thrift@v0.13.0
+              go mod tidy
+
+              cd pkg/hertz
+              echo "callback.thrift"
+              hz update -idl idl/callback.thrift
+              echo "api thrifts"
+              hz update -idl idl/external.thrift
+              hz update -idl idl/md5.thrift
+              hz update -idl idl/nodes.thrift
+              hz update -idl idl/paste.thrift
+              hz update -idl idl/permission.thrift
+              hz update -idl idl/preview.thrift
+              hz update -idl idl/raw.thrift
+              hz update -idl idl/repos.thrift
+              hz update -idl idl/resources.thrift
+              hz update -idl idl/tree.thrift
+              echo "upload.thrift"
+              hz update -idl idl/upload.thrift
+          
+              cd ../..
+              go mod tidy
+              cd cmd/backend
               go build -o filebrowser main.go
               mkdir -p dist/$GOOS-$GOARCH
               mv filebrowser dist/$GOOS-$GOARCH/
+              cd ../..
             done
           done
 
