@@ -1,23 +1,21 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"reflect"
+	"strings"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"net/http"
-	"net/http/httptest"
-	"reflect"
-)
-
-import (
-	"bytes"
-	"io"
-	"mime/multipart"
-	"net/url"
-	"strings"
 )
 
 func ConvertHertzRequest(hertzReq *protocol.Request) (*http.Request, error) {
@@ -148,6 +146,7 @@ func CommonConvert(c *app.RequestContext, originalHandler http.Handler, resp int
 	originalHandler.ServeHTTP(recorder, stdReq)
 	CopyHeaders(&c.Response.Header, recorder.Header())
 
+	// klog.Infof("~~~Debug log: recorder.Body.Bytes()=%v", recorder.Body.Bytes())
 	bodyBytes := recorder.Body.Bytes()
 	if direct {
 		if len(bodyBytes) > 0 {

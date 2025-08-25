@@ -207,6 +207,10 @@ func (r *FileParam) GetFileParam(uri string) error {
 	return nil
 }
 
+func (r *FileParam) IsCloud() bool {
+	return common.ListContains([]string{common.AwsS3, common.TencentCos, common.DropBox, common.GoogleDrive}, r.FileType)
+}
+
 func (r *FileParam) IsFile() (string, bool) {
 	if r.Path == "" || r.Path == "/" || strings.HasSuffix(r.Path, "/") {
 		return "", false

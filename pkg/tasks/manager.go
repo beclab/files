@@ -102,6 +102,8 @@ func (t *taskManager) GetTask(taskId string) *TaskInfo {
 		DstFileType:   dst.FileType,
 		Src:           srcUri,
 		SrcFileType:   src.FileType,
+		CurrentPhase:  task.currentPhase,
+		TotalPhases:   task.totalPhases,
 		Progress:      task.progress,
 		Transferred:   task.transfer,
 		TotalFileSize: task.totalSize,

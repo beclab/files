@@ -560,10 +560,13 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	var uploadId = fileUploadArg.UploadId
 	var chunkInfo = fileUploadArg.ChunkInfo
 	var taskId = chunkInfo.UploadToCloudTaskId
-	// var canceled = chunkInfo.UploadToCloudTaskCancel
+	var canceled = chunkInfo.UploadToCloudTaskCancel
 
 	if taskId != "" { // ~ query task status
-		// todo cancel
+		if canceled == 1 { // todo cancel
+			// 	tasks.TaskManager.CancelTask(taskId)
+			// 	return nil, nil
+		}
 		return s.service.checkUploadTaskState(user, uploadId, taskId, chunkInfo)
 	}
 
