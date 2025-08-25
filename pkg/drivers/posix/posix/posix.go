@@ -141,6 +141,7 @@ func (s *PosixStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 		FileName:     fileData.Name,
 		FileModified: fileData.ModTime,
 		Reader:       r,
+		FileLength:   fileData.Size,
 	}, nil
 }
 
@@ -457,7 +458,7 @@ func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FilePa
 			}
 			streamFiles = append(nestedItems, streamFiles[1:]...)
 		} else {
-			dataChan <- fmt.Sprintf("data: %s\n\n", common.ToJson(firstItem))
+			dataChan <- common.ToJson(firstItem)
 			streamFiles = streamFiles[1:]
 		}
 

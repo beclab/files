@@ -19,9 +19,12 @@ func Register(r *server.Hertz) {
 	root := r.Group("/", rootMw()...)
 	{
 		_api := root.Group("/api", _apiMw()...)
-		_api.DELETE("/repos", append(_deletereposmethodMw(), repos.DeleteReposMethod)...)
-		_api.GET("/repos", append(_getreposmethodMw(), repos.GetReposMethod)...)
-		_api.PATCH("/repos", append(_patchreposmethodMw(), repos.PatchReposMethod)...)
-		_api.POST("/repos", append(_postreposmethodMw(), repos.PostReposMethod)...)
+		{
+			_repos := _api.Group("/repos", _reposMw()...)
+			_repos.DELETE("/", append(_deletereposmethodMw(), repos.DeleteReposMethod)...)
+			_repos.GET("/", append(_getreposmethodMw(), repos.GetReposMethod)...)
+			_repos.PATCH("/", append(_patchreposmethodMw(), repos.PatchReposMethod)...)
+			_repos.POST("/", append(_postreposmethodMw(), repos.PostReposMethod)...)
+		}
 	}
 }

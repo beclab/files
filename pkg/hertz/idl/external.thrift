@@ -22,18 +22,23 @@ struct MountedInfo {
 struct MountedResp {
     1: required i32 code;
     2: required string message;
-    3: optional list<MountedInfo> mountedData;
+    3: required list<MountedInfo> mountedData;
 }
 
 struct MountReq {
     1: required string smbPath (api.body="smbPath");
     2: required string user (api.body="user");
     3: required string password (api.body="password");
+    4: required string externalType (api.query="external_type");
 }
 
 struct MountResp {
     1: i32 code;
     2: string message;
+}
+
+struct UnmountReq {
+    1: required string externalType (api.query="external_type");
 }
 
 struct UnmountResp {
@@ -49,28 +54,21 @@ struct SmbInfo {
 }
 
 struct GetSmbHistoryResp {
-    // only an array now, should change api
     1: optional list<SmbInfo> data;
 }
 
-struct PutSmbHistoryReq {
+struct SmbHistoryInfo {
     1: required string url (api.data="url");
     2: optional string username (api.data="username");
     3: optional string password (api.data="password");
 }
 
-struct PutSmbHistoryResp {
-    // only a string now, should change api
+struct PutSmbHistoryReq {
+    1: required list<SmbHistoryInfo> data;
 }
 
 struct DeleteSmbHistoryReq {
-    1: required string url (api.data="url");
-    2: optional string username (api.data="username");
-    3: optional string password (api.data="password");
-}
-
-struct DeleteSmbHistoryResp {
-    // only a string now, should change api
+    1: required list<SmbHistoryInfo> data;
 }
 
 struct AccountInfo {
@@ -88,11 +86,11 @@ struct AccountsResp {
 }
 
 service ExternalService {
-    MountedResp MountedMethod() (api.get="/api/mounted/*node");
-    MountResp MountMethod(1: MountReq request) (api.post="/api/mount/*node");
-    UnmountResp UnmountMethod() (api.post="/api/unmount/*path");
-    GetSmbHistoryResp GetSmbHistoryMethod() (api.get="/api/smb_history/*node");
-    PutSmbHistoryResp PutSmbHistoryMethod(1: PutSmbHistoryReq request) (api.put="/api/smb_history/*node");
-    DeleteSmbHistoryResp DeleteSmbHistoryMethod(1: DeleteSmbHistoryReq request) (api.delete="/api/smb_history/*node");
+    MountedResp MountedMethod() (api.get="/api/mounted/:node/");
+    MountResp MountMethod(1: MountReq request) (api.post="/api/mount/:node/");
+    UnmountResp UnmountMethod(1: UnmountReq request) (api.post="/api/unmount/*path");
+    GetSmbHistoryResp GetSmbHistoryMethod() (api.get="/api/smb_history/:node/");
+    string PutSmbHistoryMethod(1: PutSmbHistoryReq request) (api.put="/api/smb_history/:node/");
+    string DeleteSmbHistoryMethod(1: DeleteSmbHistoryReq request) (api.delete="/api/smb_history/:node/");
     AccountsResp AccountsMethod() (api.get="/api/accounts");
 }

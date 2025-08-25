@@ -51,6 +51,16 @@ func _gettaskmethodMw() []app.HandlerFunc {
 	return nil
 }
 
+func _nodeMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _node0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
 func _pauseresumetaskmethodMw() []app.HandlerFunc {
 	// your code...
 	return nil

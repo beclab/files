@@ -4,8 +4,16 @@ package paste
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
+	"encoding/json"
+	"files/pkg/common"
+	"files/pkg/drivers"
+	"files/pkg/drivers/base"
+	"files/pkg/models"
+	"files/pkg/tasks"
+	"fmt"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"k8s.io/klog/v2"
+	"strconv"
 
 	paste "files/pkg/hertz/biz/model/api/paste"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -13,62 +21,183 @@ import (
 )
 
 // PasteMethod .
-// @router /api/paste/*node [PATCH]
+// @router /api/paste/:node/ [PATCH]
 func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req paste.PasteReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	src, err := models.CreateFileParam(owner, req.Source)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	dst, err := models.CreateFileParam(owner, req.Destination)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	var pasteParam = &models.PasteParam{
+		Owner:  owner,
+		Action: req.Action,
+		Src:    src,
+		Dst:    dst,
+	}
+
+	handler := drivers.Adaptor.NewFileHandler(pasteParam.Src.FileType, &base.HandlerParam{})
+
+	task, err := handler.Paste(pasteParam)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.SetStatusCode(consts.StatusOK)
+	var res = map[string]string{"task_id": task.Id()}
+
 	resp := new(paste.PasteResp)
-	handler.CommonConvert(c, http2.WrapperPasteArgs("/api/paste"), resp, false)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // GetTaskMethod .
-// @router /api/task/*node [GET]
+// @router /api/task/:node/ [GET]
 func GetTaskMethod(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req paste.GetTaskReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	status := ""
+	if req.Status != nil {
+		status = *req.Status
+	}
+	tasks := tasks.TaskManager.GetTask(owner, req.TaskId, status)
+	var res = make(map[string]interface{})
+	res["code"] = 0
+	res["msg"] = "success"
+
+	if req.TaskId == "" {
+		res["tasks"] = tasks
+	} else {
+		if tasks != nil && len(tasks) > 0 {
+			res["task"] = tasks[0]
+		} else {
+			res["task"] = tasks
+		}
+	}
+
+	klog.Infof("Task - id: %s, status: %s, res: %s", req.TaskId, status, common.ToJson(res))
+
 	resp := new(paste.GetTaskResp)
-	handler.CommonConvert(c, http2.WrapperTaskArgs("/api/task"), resp, false)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // DeleteTaskMethod .
-// @router /api/task/*node [DELETE]
+// @router /api/task/:node/ [DELETE]
 func DeleteTaskMethod(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req paste.DeleteTaskReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	all := ""
+	if req.All != nil {
+		all = strconv.Itoa(int(*req.All))
+	}
+
+	tasks.TaskManager.CancelTask(owner, req.TaskId, all)
+
+	var res = map[string]interface{}{
+		"code": 0,
+		"msg":  "success",
+	}
+
 	resp := new(paste.DeleteTaskResp)
-	handler.CommonConvert(c, http2.WrapperTaskArgs("/api/task"), resp, false)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // PauseResumeTaskMethod .
-// @router /api/task/*node [POST]
+// @router /api/task/:node/ [POST]
 func PauseResumeTaskMethod(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req paste.PauseResumeTaskReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(paste.PauseResumeTaskResp)
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	if req.Op == "pause" {
+		tasks.TaskManager.PauseTask(owner, req.TaskId)
+	} else {
+		tasks.TaskManager.ResumeTask(owner, req.TaskId)
+	}
 
+	var res = map[string]interface{}{
+		"code": 0,
+		"msg":  "success",
+	}
+
+	resp := new(paste.PauseResumeTaskResp)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
 	c.JSON(consts.StatusOK, resp)
 }

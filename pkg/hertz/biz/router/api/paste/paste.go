@@ -21,13 +21,19 @@ func Register(r *server.Hertz) {
 		_api := root.Group("/api", _apiMw()...)
 		{
 			_paste := _api.Group("/paste", _pasteMw()...)
-			_paste.PATCH("/*node", append(_pastemethodMw(), paste.PasteMethod)...)
+			{
+				_node := _paste.Group("/:node", _nodeMw()...)
+				_node.PATCH("/", append(_pastemethodMw(), paste.PasteMethod)...)
+			}
 		}
 		{
 			_task := _api.Group("/task", _taskMw()...)
-			_task.DELETE("/*node", append(_deletetaskmethodMw(), paste.DeleteTaskMethod)...)
-			_task.GET("/*node", append(_gettaskmethodMw(), paste.GetTaskMethod)...)
-			_task.POST("/*node", append(_pauseresumetaskmethodMw(), paste.PauseResumeTaskMethod)...)
+			{
+				_node0 := _task.Group("/:node", _node0Mw()...)
+				_node0.DELETE("/", append(_deletetaskmethodMw(), paste.DeleteTaskMethod)...)
+				_node0.GET("/", append(_gettaskmethodMw(), paste.GetTaskMethod)...)
+				_node0.POST("/", append(_pauseresumetaskmethodMw(), paste.PauseResumeTaskMethod)...)
+			}
 		}
 	}
 }

@@ -4,15 +4,35 @@ package nodes
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/common"
+	"files/pkg/global"
 	nodes "files/pkg/hertz/biz/model/api/nodes"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 )
 
 // NodesMethod .
 // @router /api/nodes [GET]
 func NodesMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(nodes.NodesResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.NodesGetHandler), resp, false)
+
+	var globalNodes = global.GlobalNode.GetNodes()
+
+	var data = make(map[string]interface{})
+	data["nodes"] = globalNodes
+	data["currentNode"] = common.NodeName
+
+	var result = make(map[string]interface{})
+	result["code"] = consts.StatusOK
+	result["data"] = data
+
+	if err := json.Unmarshal(common.ToBytes(result), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }

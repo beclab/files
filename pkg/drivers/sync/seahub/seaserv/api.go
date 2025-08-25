@@ -183,7 +183,7 @@ func (s *SeafileAPI) GetOwnedRepoList(username string, retCorrupted bool, start 
 }
 
 func (s *SeafileAPI) GenerateRepoToken(repoId, username string) (string, error) {
-	ret, err := s.rpcClient.SeafileGanarateRepoToken(repoId, username)
+	ret, err := s.rpcClient.SeafileGenerateRepoToken(repoId, username)
 	if err != nil {
 		return "", fmt.Errorf("generate repo token failed: %v", err)
 	}

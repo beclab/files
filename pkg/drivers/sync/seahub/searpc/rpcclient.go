@@ -62,8 +62,8 @@ func (c *SeafServerThreadedRpcClient) SeafileGetCommitList(repoId string, offset
 		repoId, offset, limit)
 }
 
-func (c *SeafServerThreadedRpcClient) SeafileGanarateRepoToken(repoId, email string) (interface{}, error) {
-	return CreateRPCMethod(c, "seafile_ganarate_repo_token", "string", []string{"string", "string"})(repoId, email)
+func (c *SeafServerThreadedRpcClient) SeafileGenerateRepoToken(repoId, email string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_generate_repo_token", "string", []string{"string", "string"})(repoId, email)
 }
 
 func (c *SeafServerThreadedRpcClient) DeleteRepoTokensByEmail(email string) (interface{}, error) {

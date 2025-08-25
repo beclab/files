@@ -11,6 +11,7 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -23,7 +24,6 @@ import (
 
 type SyncStorage struct {
 	handler *base.HandlerParam
-	service *Service
 	paste   *models.PasteParam
 }
 
@@ -55,7 +55,6 @@ type File struct {
 func NewSyncStorage(handler *base.HandlerParam) *SyncStorage {
 	return &SyncStorage{
 		handler: handler,
-		service: NewService(handler),
 	}
 }
 
@@ -177,7 +176,10 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 			if err != nil {
 				return nil, err
 			}
-			http.Redirect(s.service.ResponseWriter, s.service.Request, string(data), http.StatusFound)
+			return &models.RawHandlerResponse{
+				FileName: string(data),
+				Redirect: true,
+			}, nil
 		}
 	}
 
@@ -185,6 +187,7 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 		FileName:     fileName,
 		FileModified: time.Time{},
 		Reader:       bytes.NewReader(data),
+		FileLength:   int64(len(data)),
 	}, nil
 }
 
@@ -327,12 +330,40 @@ func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHan
 		return nil, err
 	}
 
-	postBody, err := s.service.Get(updateUrl, "POST", body.Bytes())
+	client := &http.Client{}
+	req, err := http.NewRequest("POST", updateUrl, bytes.NewReader(body.Bytes()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header = contextArgs.QueryParam.Header.Clone()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp == nil {
+		klog.Errorf("not get response from %s", updateUrl)
+		return nil, err
+	}
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var responseMap map[string]interface{}
+	err = json.Unmarshal(respBody, &responseMap)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
 	if err != nil {
 		klog.Errorf("Sync edit, path: %s, error: %v", fileParam.Path, err)
 		return nil, err
 	}
-	klog.Infof("Sync edit, path: %s, resp: %s", fileParam.Path, string(postBody))
+	klog.Infof("Sync edit, path: %s, resp: %s", fileParam.Path, string(respBody))
 
 	return nil, nil
 }
@@ -368,7 +399,7 @@ func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData
 
 			streamFiles = append(nestFilesData.Items, streamFiles[1:]...)
 		} else {
-			dataChan <- fmt.Sprintf("data: %s\n\n", common.ToJson(firstItem))
+			dataChan <- common.ToJson(firstItem)
 			streamFiles = streamFiles[1:]
 		}
 

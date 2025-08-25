@@ -16,5 +16,5 @@ struct NodesResp {
 }
 
 service NodesService {
-    NodesResp NodesMethod() (api.get="/api/nodes");
+    NodesResp NodesMethod() (api.get="/api/nodes/");
 }

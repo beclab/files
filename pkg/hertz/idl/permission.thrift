@@ -6,7 +6,7 @@ struct GetPermissionResp {
 
 struct PutPermissionReq {
     1: required i32 Uid (api.query="uid");
-    2: optional bool Recursive (api.query="recursive");
+    2: optional i32 Recursive (api.query="recursive");
 }
 
 struct PutPermissionResp {
