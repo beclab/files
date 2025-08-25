@@ -4,11 +4,13 @@ package repos
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
 	repos "files/pkg/hertz/biz/model/api/repos"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 )
 
 // GetReposMethod .
@@ -23,7 +25,15 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(repos.GetReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.ReposGetHandler), resp, false)
+	respBytes := handle_func.CommonHandle(ctx, c, resp, handle_func.ReposGetHandler)
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // PostReposMethod .
@@ -38,7 +48,15 @@ func PostReposMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(repos.PostReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.CreateRepoHandler), resp, false)
+	respBytes := handle_func.CommonHandle(ctx, c, resp, handle_func.CreateRepoHandler)
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // DeleteReposMethod .
@@ -53,7 +71,15 @@ func DeleteReposMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(repos.DeleteReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.DeleteRepoHandler), resp, false)
+	respBytes := handle_func.CommonHandle(ctx, c, resp, handle_func.DeleteRepoHandler)
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // PatchReposMethod .
@@ -68,5 +94,13 @@ func PatchReposMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(repos.PatchReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.RenameRepoHandler), resp, false)
+	respBytes := handle_func.CommonHandle(ctx, c, resp, handle_func.RenameRepoHandler)
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

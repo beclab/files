@@ -50,9 +50,9 @@ struct PatchReposResp {
 }
 
 service ReposService {
-    GetReposResp GetReposMethod(1: GetReposReq request) (api.get="/api/repos");
-    PostReposResp PostReposMethod(1: PostReposReq request) (api.post="/api/repos");
-    DeleteReposResp DeleteReposMethod(1: DeleteReposReq request) (api.delete="/api/repos");
-    PatchReposResp PatchReposMethod(1: PatchReposReq request) (api.patch="/api/repos");
+    GetReposResp GetReposMethod(1: GetReposReq request) (api.get="/api/repos/");
+    PostReposResp PostReposMethod(1: PostReposReq request) (api.post="/api/repos/");
+    DeleteReposResp DeleteReposMethod(1: DeleteReposReq request) (api.delete="/api/repos/");
+    PatchReposResp PatchReposMethod(1: PatchReposReq request) (api.patch="/api/repos/");
 }
 

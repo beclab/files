@@ -1,4 +1,4 @@
-package http
+package handle_func
 
 import (
 	"encoding/json"
@@ -16,6 +16,60 @@ import (
 	"gorm.io/gorm"
 	"k8s.io/klog/v2"
 )
+
+// TODO: just move in here, will be changed when developing share
+
+func getOwner(r *http.Request) (ownerID, ownerName string) {
+	bflName := r.Header.Get("X-Bfl-User")
+	url := "http://bfl.user-space-" + bflName + "/bfl/info/v1/terminus-info"
+
+	resp, err := http.Get(url)
+	if err != nil {
+		klog.Errorln("Error making GET request:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		klog.Errorln("Error reading response body:", err)
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		klog.Infof("Received non-200 response: %d\n", resp.StatusCode)
+		return
+	}
+
+	type BflResponse struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			TerminusName    string `json:"terminusName"`
+			WizardStatus    string `json:"wizardStatus"`
+			Selfhosted      bool   `json:"selfhosted"`
+			TailScaleEnable bool   `json:"tailScaleEnable"`
+			OsVersion       string `json:"osVersion"`
+			LoginBackground string `json:"loginBackground"`
+			Avatar          string `json:"avatar"`
+			TerminusId      string `json:"terminusId"`
+			Did             string `json:"did"`
+			ReverseProxy    string `json:"reverseProxy"`
+			Terminusd       string `json:"terminusd"`
+		} `json:"data"`
+	}
+
+	var responseObj BflResponse
+	err = json.Unmarshal(body, &responseObj)
+	if err != nil {
+		klog.Errorln("Error unmarshaling JSON:", err)
+		return
+	}
+
+	ownerID = responseObj.Data.TerminusId
+	ownerName = responseObj.Data.TerminusName
+	return
+}
 
 type ShareablePutRequestBody struct {
 	Status int `json:"status"`

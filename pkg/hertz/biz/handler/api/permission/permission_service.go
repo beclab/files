@@ -4,18 +4,28 @@ package permission
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
 	permission "files/pkg/hertz/biz/model/api/permission"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 )
 
 // GetPermissionMethod .
 // @router /api/permission/*path [GET]
 func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(permission.GetPermissionResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.PermissionGetHandler, "/api/permission"), resp, false)
+	respBytes := handle_func.MonkeyHandle(ctx, c, nil, handle_func.PermissionGetHandler, "/api/permission")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // PutPermissionMethod .
@@ -30,5 +40,13 @@ func PutPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(permission.PutPermissionResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.PermissionPutHandler, "/api/permission"), resp, true)
+	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.PermissionPutHandler, "/api/permission")
+	if respBytes != nil {
+		if err = json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

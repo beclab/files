@@ -4,15 +4,26 @@ package nodes
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
 	nodes "files/pkg/hertz/biz/model/api/nodes"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 )
 
 // NodesMethod .
 // @router /api/nodes [GET]
 func NodesMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(nodes.NodesResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.NodesGetHandler), resp, false)
+	respBytes := handle_func.CommonHandle(ctx, c, nil, handle_func.NodesGetHandler)
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

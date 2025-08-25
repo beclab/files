@@ -4,15 +4,26 @@ package raw
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
 	raw "files/pkg/hertz/biz/model/api/raw"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 )
 
 // RawMethod .
 // @router /api/raw/*path [GET]
 func RawMethod(ctx context.Context, c *app.RequestContext) {
-	_ = new(raw.RawResp)
-	handler.StraightForward(c, http2.WrapperRawArgs(http2.RawHandler, "/api/raw/"))
+	resp := new(raw.RawResp)
+	respBytes := handle_func.RawHandle(ctx, c, nil, handle_func.RawHandler, "/api/raw")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

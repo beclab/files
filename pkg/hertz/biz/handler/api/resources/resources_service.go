@@ -4,10 +4,11 @@ package resources
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
 	resources "files/pkg/hertz/biz/model/api/resources"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
 )
@@ -17,8 +18,16 @@ import (
 func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("~~~Debug log: path=%s", c.Param("path"))
 
-	resp := new(resources.GetResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.ListHandler, "/api/resources/"), resp, true)
+	resp := new(map[string]interface{}) // different disk type with different responses
+	respBytes := handle_func.FileHandle(ctx, c, nil, handle_func.ListHandler, "/api/resources")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // PostResourcesMethod .
@@ -27,7 +36,15 @@ func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("~~~Debug log: path=%s", c.Param("path"))
 
 	resp := new(resources.PostResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.CreateHandler, "/api/resources/"), resp, false)
+	respBytes := handle_func.FileHandle(ctx, c, nil, handle_func.CreateHandler, "/api/resources")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // PatchResourcesMethod .
@@ -42,7 +59,15 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.PatchResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.RenameHandler, "/api/resources/"), resp, false)
+	respBytes := handle_func.FileHandle(ctx, c, req, handle_func.RenameHandler, "/api/resources")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // PutResourcesMethod .
@@ -57,7 +82,15 @@ func PutResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.PutResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesEditArgs(http2.EditHandler, "/api/resources/"), resp, false)
+	respBytes := handle_func.FileEditHandle(ctx, c, req, handle_func.EditHandler, "/api/resources")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // DeleteResourcesMethod .
@@ -72,5 +105,13 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.DeleteResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesDeleteArgs(http2.DeleteHandler, "/api/resources/"), resp, false)
+	respBytes := handle_func.FileDeleteHandle(ctx, c, req, handle_func.DeleteHandler, "/api/resources")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

@@ -5,28 +5,13 @@ struct UploadLinkReq {
     2: required string From (api.query="from");
 }
 
-struct UploadLinkResp {
-    1: string RespBody;
-}
-
 struct UploadedBytesReq {
     1: required string ParentDir (api.query="parent_dir");
     2: required string FileName (api.query="file_name");
 }
 
-struct UploadedBytesSuccessResp {
+struct UploadedBytesResp {
     1: i64 uploadedBytes
-}
-
-struct UploadedBytesErrorResp {
-    1: i32 code
-    2: string message
-    3: optional binary data
-}
-
-union UploadedBytesResp {
-    1: UploadedBytesSuccessResp success
-    2: UploadedBytesErrorResp error
 }
 
 struct UploadChunksReq {
@@ -64,11 +49,12 @@ struct UploadChunksFileItem {
     1: string id
     2: string name
     3: i64 size
-    4: optional string taskId
+    4: optional string state
+    5: optional string taskId
 }
 
 service UploadService {
     UploadChunksResp UploadChunksMethod(1: UploadChunksReq request) (api.post="/upload/upload-link/:node/:uid");
-    UploadLinkResp UploadLinkMethod(1: UploadLinkReq request) (api.get="/upload/upload-link/*node");
-    UploadedBytesResp UploadedBytesMethod(1: UploadedBytesReq request) (api.get="/upload/file-uploaded-bytes/*node");
+    string UploadLinkMethod(1: UploadLinkReq request) (api.get="/upload/upload-link/:node/");
+    UploadedBytesResp UploadedBytesMethod(1: UploadedBytesReq request) (api.get="/upload/file-uploaded-bytes/:node/");
 }

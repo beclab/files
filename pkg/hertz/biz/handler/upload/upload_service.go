@@ -5,14 +5,12 @@ package upload
 import (
 	"context"
 	"encoding/json"
-	"files/pkg/hertz/biz/handler"
+	"files/pkg/hertz/biz/handler/handle_func"
 	upload "files/pkg/hertz/biz/model/upload"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"net/http"
-	"net/http/httptest"
 )
 
 // UploadLinkMethod .
@@ -29,8 +27,10 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(upload.UploadLinkResp)
-	handler.CommonConvert(c, http2.WrapperFilesUploadArgs(http2.FileUploadLinkHandler), resp, true)
+	resp := handle_func.FileUploadHandle(ctx, c, req, handle_func.FileUploadLinkHandler)
+	if resp != nil {
+		c.JSON(consts.StatusOK, string(resp))
+	}
 }
 
 // UploadedBytesMethod .
@@ -48,34 +48,15 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(upload.UploadedBytesResp)
-
-	stdReq, err := handler.ConvertHertzRequest(&c.Request)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
+	respBytes := handle_func.FileUploadHandle(ctx, c, req, handle_func.FileUploadedBytesHandler)
+	if respBytes != nil {
+		if err = json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
 	}
-	recorder := httptest.NewRecorder()
-	originalHandler := http2.WrapperFilesUploadArgs(http2.FileUploadedBytesHandler)
-	originalHandler.ServeHTTP(recorder, stdReq)
-	handler.CopyHeaders(&c.Response.Header, recorder.Header())
-
-	var use interface{}
-	if recorder.Code == http.StatusOK {
-		resp.Success = new(upload.UploadedBytesSuccessResp)
-		use = resp.Success
-		resp.Error = nil
-	} else {
-		resp.Error = new(upload.UploadedBytesErrorResp)
-		use = resp.Error
-		resp.Success = nil
-	}
-
-	if err = json.Unmarshal(recorder.Body.Bytes(), &use); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.String(consts.StatusBadRequest, "Failed to unmarshal response body")
-	}
-
-	c.JSON(recorder.Code, handler.Coalesce(resp.Success, resp.Error))
 }
 
 // UploadChunksMethod .
@@ -94,30 +75,21 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("~~~Debug log: req = %v", req)
 
 	resp := new(upload.UploadChunksResp)
+	respBytes := handle_func.FileUploadHandle(ctx, c, req, handle_func.FileUploadChunksHandler)
 
-	stdReq, err := handler.ConvertHertzRequest(&c.Request)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-	recorder := httptest.NewRecorder()
-	originalHandler := http2.WrapperFilesUploadArgs(http2.FileUploadChunksHandler)
-	originalHandler.ServeHTTP(recorder, stdReq)
-	handler.CopyHeaders(&c.Response.Header, recorder.Header())
-
-	if recorder.Code == http.StatusOK {
+	if respBytes != nil {
 		klog.Infof("req.ResumableChunksNumber=%d, req.ResumableTotalChunks=%d", req.ResumableChunkNumber, req.ResumableTotalChunks)
 		if req.ResumableChunkNumber == req.ResumableTotalChunks {
 			resp.Success = nil
 			resp.Item = nil
 			resp.Items = make([]*upload.UploadChunksFileItem, 0)
-			if err = json.Unmarshal(recorder.Body.Bytes(), &resp.Items); err != nil {
+			if err = json.Unmarshal(respBytes, &resp.Items); err != nil {
 				klog.Errorf("Failed to unmarshal response body for old version: %v", err)
 				resp.Items = nil
 				resp.Item = new(upload.UploadChunksFileItem)
-				if err = json.Unmarshal(recorder.Body.Bytes(), resp.Item); err != nil {
+				if err = json.Unmarshal(respBytes, resp.Item); err != nil {
 					klog.Errorf("Failed to unmarshal response body for new version: %v", err)
-					c.String(consts.StatusBadRequest, "Failed to unmarshal response body")
+					c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
 					return
 				}
 			}
@@ -125,12 +97,13 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 			resp.Item = nil
 			resp.Items = nil
 			resp.Success = new(upload.UploadChunksSuccess)
-			resp.Success.Success = true
+			if err = json.Unmarshal(respBytes, &resp.Success); err != nil {
+				klog.Errorf("Failed to unmarshal response body for old version: %v", err)
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+				return
+			}
 		}
-	} else {
-		c.JSON(recorder.Code, recorder.Body.Bytes())
-		return
-	}
 
-	c.JSON(recorder.Code, handler.Coalesce(resp.Success, resp.Items, resp.Item))
+		c.JSON(consts.StatusOK, handle_func.Coalesce(resp.Success, resp.Items, resp.Item))
+	}
 }

@@ -4,9 +4,10 @@ package callback
 
 import (
 	"context"
-	"files/pkg/drivers/sync/seahub"
-	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"k8s.io/klog/v2"
 
 	callback "files/pkg/hertz/biz/model/callback"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -25,7 +26,15 @@ func CallbackCreateMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(callback.CallbackCreateResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(seahub.CallbackCreateHandler, "/callback/create"), resp, true)
+	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.CallbackCreateHandler, "/callback/create")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // CallbackDeleteMethod .
@@ -40,5 +49,13 @@ func CallbackDeleteMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(callback.CallbackDeleteResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(seahub.CallbackDeleteHandler, "/callback/delete"), resp, true)
+	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.CallbackDeleteHandler, "/callback/delete")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

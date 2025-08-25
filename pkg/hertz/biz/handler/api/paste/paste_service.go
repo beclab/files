@@ -4,8 +4,10 @@ package paste
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"k8s.io/klog/v2"
 
 	paste "files/pkg/hertz/biz/model/api/paste"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -24,7 +26,15 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(paste.PasteResp)
-	handler.CommonConvert(c, http2.WrapperPasteArgs("/api/paste"), resp, false)
+	respBytes := handle_func.PasteHandle(ctx, c, req, "/api/paste")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // GetTaskMethod .
@@ -39,7 +49,15 @@ func GetTaskMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(paste.GetTaskResp)
-	handler.CommonConvert(c, http2.WrapperTaskArgs("/api/task"), resp, false)
+	respBytes := handle_func.TaskHandle(ctx, c, req, "/api/task")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // DeleteTaskMethod .
@@ -54,5 +72,13 @@ func DeleteTaskMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(paste.DeleteTaskResp)
-	handler.CommonConvert(c, http2.WrapperTaskArgs("/api/task"), resp, false)
+	respBytes := handle_func.TaskHandle(ctx, c, req, "/api/task")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

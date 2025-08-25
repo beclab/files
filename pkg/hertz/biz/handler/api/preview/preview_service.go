@@ -4,11 +4,13 @@ package preview
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
 	preview "files/pkg/hertz/biz/model/api/preview"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 )
 
 // PreviewMethod .
@@ -21,6 +23,15 @@ func PreviewMethod(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	handler.StraightForward(c, http2.WrapperPreviewArgs(http2.PreviewHandler, "/api/preview/"))
 
+	resp := new(preview.PreviewResp)
+	respBytes := handle_func.PreviewHandle(ctx, c, req, handle_func.PreviewHandler, "/api/preview/")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

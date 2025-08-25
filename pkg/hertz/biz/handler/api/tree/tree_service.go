@@ -4,16 +4,26 @@ package tree
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
 	tree "files/pkg/hertz/biz/model/api/tree"
-	http2 "files/pkg/http"
-
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 )
 
 // TreeMethod .
 // @router /api/tree/*path [GET]
 func TreeMethod(ctx context.Context, c *app.RequestContext) {
-	_ = new(tree.TreeResp)
-	handler.StraightForward(c, http2.WrapWithTreeParm(http2.TreeHandler, "/api/tree/"))
+	resp := new(tree.TreeResp)
+	respBytes := handle_func.TreeHandle(ctx, c, nil, handle_func.TreeHandler, "/api/tree")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }

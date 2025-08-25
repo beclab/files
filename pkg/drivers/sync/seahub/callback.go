@@ -1,16 +1,13 @@
 package seahub
 
 import (
-	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"k8s.io/klog/v2"
-	"net/http"
-	"strings"
 )
 
-func createDefaultLibrary(newUsername string) (string, error) {
+func CreateDefaultLibrary(newUsername string) (string, error) {
 	username := newUsername
 	if username == "" {
 		return "", errors.New("username is empty")
@@ -55,45 +52,7 @@ func createDefaultLibrary(newUsername string) (string, error) {
 	return defaultRepo, nil
 }
 
-func CallbackCreateHandler(w http.ResponseWriter, r *http.Request) (int, error) {
-	var data map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		klog.Infof("Error parsing request body: %v", err)
-		return http.StatusBadRequest, err
-	}
-	klog.Infof("Received data: %v", data)
-
-	bflName, ok := data["name"].(string)
-	if !ok {
-		klog.Infoln("Name field is missing or not a string")
-		return http.StatusBadRequest, nil
-	}
-
-	bflName = strings.TrimSpace(bflName)
-	if bflName != "" {
-		newUsername := bflName + "@auth.local"
-		klog.Infof("Try to create user for %s", newUsername)
-
-		isNew, err := createUser(newUsername)
-		if err != nil {
-			klog.Infof("Error creating user: %v", err)
-			return http.StatusInternalServerError, err
-		}
-
-		if isNew {
-			repoId, err := createDefaultLibrary(newUsername)
-			if err != nil {
-				klog.Infof("Create default library for %s failed: %v", newUsername, err)
-			} else {
-				klog.Infof("Create default library %s for %s successfully!", repoId, newUsername)
-			}
-		}
-	}
-
-	return 0, nil
-}
-
-func createUser(username string) (bool, error) {
+func CreateUser(username string) (bool, error) {
 	allUsers, err := seaserv.ListAllUsers()
 	if err != nil {
 		klog.Errorf("Error listing users: %v", err)
@@ -119,27 +78,7 @@ func createUser(username string) (bool, error) {
 	return true, nil
 }
 
-func CallbackDeleteHandler(w http.ResponseWriter, r *http.Request) (int, error) {
-	var requestData map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		return http.StatusBadRequest, err
-	}
-	defer r.Body.Close()
-
-	bflName, exists := requestData["name"]
-	if !exists {
-		return http.StatusBadRequest, errors.New("Missing name field")
-	}
-	username := bflName + "@auth.local"
-
-	err := removeUser(username)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
-}
-
-func removeUser(username string) error {
+func RemoveUser(username string) error {
 	allUsers, err := seaserv.ListAllUsers()
 	if err != nil {
 		klog.Errorf("Error listing users: %v", err)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strings"
 )
 
 type QueryParam struct {
@@ -24,33 +23,6 @@ type QueryParam struct {
 	ShareType               string          `json:"shareType,omitempty"`
 	Header                  http.Header     `json:"-"`
 	Body                    io.ReadCloser   `json:"-"`
-}
-
-func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {
-	// TODO: add for sync
-	sizeStr := r.URL.Query().Get("size")
-	if sizeStr == "" {
-		sizeStr = r.URL.Query().Get("thumb")
-	}
-
-	// add end
-	return &QueryParam{
-		Ctx:                     r.Context(),
-		Owner:                   owner,
-		PreviewSize:             sizeStr,          // r.URL.Query().Get("size"),
-		PreviewEnableThumbnails: enableThumbnails, // todo
-		PreviewResizePreview:    resizePreview,    // todo
-		RawInline:               strings.TrimSpace(r.URL.Query().Get("inline")),
-		RawMeta:                 strings.TrimSpace(r.URL.Query().Get("meta")),
-		Files:                   strings.TrimSpace(r.URL.Query().Get("files")),
-		FileMode:                strings.TrimSpace(r.URL.Query().Get("mode")),
-		RepoName:                strings.TrimSpace(r.URL.Query().Get("repoName")),
-		RepoId:                  strings.TrimSpace(r.URL.Query().Get("repoId")),
-		Destination:             strings.TrimSpace(r.URL.Query().Get("destination")),
-		ShareType:               strings.TrimSpace(r.URL.Query().Get("type")), // "mine", "shared", "share_to_me"
-		Header:                  r.Header,
-		Body:                    r.Body,
-	}
 }
 
 func (r *QueryParam) Json() string {

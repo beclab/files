@@ -26,6 +26,7 @@ type RawHandlerResponse struct {
 	FileLength   int64         `json:"file_length"`
 	FileModified time.Time     `json:"file_modified"`
 	IsCloud      bool          `json:"is_cloud"`
+	Redirect     bool          `json:"redirect"`
 	RespHeader   http.Header   `json:"header"`
 	StatusCode   int           `json:"status_code"`
 	Reader       io.ReadSeeker `json:"-"`

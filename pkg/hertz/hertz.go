@@ -3,6 +3,7 @@
 package hertz
 
 import (
+	"files/pkg/hertz/biz/router"
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/network/standard"
 	"k8s.io/klog/v2"
@@ -14,6 +15,9 @@ func HertzServer() {
 		server.WithMaxRequestBodySize(20<<20),
 		server.WithTransport(standard.NewTransporter),
 	)
+
+	h.Use(router.TimingMiddleware())
+	h.Use(router.CookieMiddleware())
 
 	register(h)
 	h.Spin()

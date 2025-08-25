@@ -4,8 +4,10 @@ package external
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"k8s.io/klog/v2"
 
 	external "files/pkg/hertz/biz/model/api/external"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -16,7 +18,15 @@ import (
 // @router /api/mounted/*node [GET]
 func MountedMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(external.MountedResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.ResourceMountedHandler, "/api/mounted"), resp, false)
+	respBytes := handle_func.MonkeyHandle(ctx, c, nil, handle_func.ResourceMountedHandler, "/api/mounted")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // MountMethod .
@@ -31,21 +41,53 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(external.MountResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.ResourceMountHandler, "/api/mount"), resp, false)
+	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.ResourceMountHandler, "/api/mount")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // UnmountMethod .
 // @router /api/unmount/*path [POST]
 func UnmountMethod(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req external.UnmountReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
 	resp := new(external.UnmountResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.ResourceUnmountHandler, "/api/unmount"), resp, false)
+	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.ResourceUnmountHandler, "/api/unmount")
+	if respBytes != nil {
+		if err = json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // GetSmbHistoryMethod .
 // @router /api/smb_history/*node [GET]
 func GetSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(external.GetSmbHistoryResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.SmbHistoryGetHandler, "/api/smb_history"), resp, true)
+	respBytes := handle_func.MonkeyHandle(ctx, c, nil, handle_func.SmbHistoryGetHandler, "/api/smb_history")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // PutSmbHistoryMethod .
@@ -59,8 +101,10 @@ func PutSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(external.PutSmbHistoryResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.SmbHistoryPutHandler, "/api/smb_history"), resp, true)
+	resp := handle_func.MonkeyHandle(ctx, c, req, handle_func.SmbHistoryPutHandler, "/api/smb_history")
+	if resp != nil {
+		c.JSON(consts.StatusOK, string(resp))
+	}
 }
 
 // DeleteSmbHistoryMethod .
@@ -74,6 +118,8 @@ func DeleteSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(external.DeleteSmbHistoryResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.SmbHistoryDeleteHandler, "/api/smb_history"), resp, true)
+	resp := handle_func.MonkeyHandle(ctx, c, req, handle_func.SmbHistoryDeleteHandler, "/api/smb_history")
+	if resp != nil {
+		c.JSON(consts.StatusOK, string(resp))
+	}
 }

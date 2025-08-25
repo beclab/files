@@ -4,8 +4,11 @@ package md5
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
+	"encoding/json"
+	"files/pkg/hertz/biz/handler/handle_func"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 
 	md5 "files/pkg/hertz/biz/model/api/md5"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -15,5 +18,13 @@ import (
 // @router /api/md5/*path [GET]
 func Md5Method(ctx context.Context, c *app.RequestContext) {
 	resp := new(md5.Md5Resp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.Md5Handler, "/api/md5"), resp, false)
+	respBytes := handle_func.MonkeyHandle(ctx, c, nil, handle_func.Md5Handler, "/api/md5")
+	if respBytes != nil {
+		if err := json.Unmarshal(respBytes, &resp); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+		c.JSON(consts.StatusOK, resp)
+	}
 }
