@@ -99,17 +99,13 @@ func (i *integration) GetIntegrations() error {
 		return fmt.Errorf("users not exists")
 	}
 
-	for _, user := range users {
-		klog.Infof("integration get users: %s", user.Name)
-	}
-
 	var configs []*config.Config
 
 	for _, user := range users {
 		accounts, err := i.getAccounts(user.Name)
 
 		if err != nil {
-			klog.Errorf("get user accounts error: %v, user: %s", err, user.Name)
+			klog.Errorf("get user accounts failed, user: %s, error: %s", user.Name, err)
 			continue
 		}
 
@@ -117,7 +113,7 @@ func (i *integration) GetIntegrations() error {
 			continue
 		}
 
-		klog.Infof("integration get accounts, user: %s, data: %s", user.Name, common.ToJson(accounts))
+		// klog.Infof("integration get accounts, user: %s, count: %d", user.Name, len(accounts))
 
 		for _, acc := range accounts {
 			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)

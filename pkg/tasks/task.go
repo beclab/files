@@ -19,6 +19,8 @@ type TaskInfo struct {
 	DstFileType   string `json:"dst_type"`
 	Src           string `json:"source"`
 	SrcFileType   string `json:"src_type"`
+	CurrentPhase  int    `json:"current_phase"`
+	TotalPhases   int    `json:"total_phases"`
 	Progress      int    `json:"progress"`
 	Transferred   int64  `json:"transferred"`
 	TotalFileSize int64  `json:"total_file_size"`
@@ -28,10 +30,14 @@ type TaskInfo struct {
 }
 
 type Task struct {
-	id      string
-	param   *models.PasteParam
-	state   string
-	message string
+	id        string
+	param     *models.PasteParam
+	prevParam *models.FileParam
+	nextParam *models.FileParam
+	state     string
+	message   string
+
+	toCloud bool
 
 	currentPhase int // current phase
 	totalPhases  int // number of execution phases
@@ -77,7 +83,7 @@ func (t *Task) Execute(fs ...func() error) error {
 		t.state = common.Running
 
 		for phase, f := range fs { //
-			t.currentPhase = phase
+			t.currentPhase = phase + 1
 			// If f() is not the final stage, such as downloadFromCloud, and uploadToSync will be executed afterwards, the src and dst need to be reset. After entering the next phase, src and dst will be extracted again.
 			err := f()
 			if err != nil {
@@ -119,5 +125,5 @@ func (t *Task) GetProgress() (string, int, int64, int64) {
 }
 
 func (t *Task) isLastPhase() bool {
-	return t.currentPhase == (t.totalPhases - 1)
+	return t.currentPhase == t.totalPhases
 }

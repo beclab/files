@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
@@ -57,7 +58,7 @@ func GetPVC(fileParam *models.FileParam) (string, string, string, string, error)
 	var userPvc = global.GlobalData.GetPvcUser(owner)
 	var cachePvc = global.GlobalData.GetPvcCache(owner)
 
-	var uploadsDir = CachePathPrefix + "/" + cachePvc + "/files/.uploadstemp"
+	var uploadsDir = CachePathPrefix + "/" + cachePvc + common.DefaultUploadToCloudTempPath
 
 	return owner, userPvc, cachePvc, uploadsDir, nil
 }

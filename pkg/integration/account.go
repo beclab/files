@@ -16,7 +16,7 @@ func (i *integration) getAccounts(owner string) ([]*accountsResponseData, error)
 	headerNonce := os.Getenv("APP_RANDOM_KEY")
 	settingsUrl := fmt.Sprintf("http://%s/legacy/v1alpha1/service.settings/v1/api/account/all", server)
 
-	klog.Infof("fetch integration from settings: %s", settingsUrl)
+	// klog.Infof("fetch integration from settings: %s", settingsUrl)
 	resp, err := i.rest.SetDebug(false).R().SetHeader(common.REQUEST_HEADER_TOKEN, headerNonce).
 		SetResult(&accountsResponse{}).
 		Get(settingsUrl)
@@ -26,7 +26,7 @@ func (i *integration) getAccounts(owner string) ([]*accountsResponseData, error)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("request status invalid, status code: %d", resp.StatusCode())
+		return nil, fmt.Errorf("request status invalid, status code: %d, msg: %s", resp.StatusCode(), string(resp.Body()))
 	}
 
 	accountsResp := resp.Result().(*accountsResponse)

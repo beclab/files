@@ -94,7 +94,11 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 
 	changedConfigs := r.checkChangedConfigs(configs)
 
-	klog.Infof("[startHttp] changed configs: %s", common.ToJson(changedConfigs))
+	changedConfigsJson := common.ToJson(changedConfigs)
+
+	if changedConfigsJson != "{}" {
+		klog.Infof("[startHttp] changed configs: %s", common.ToJson(changedConfigs))
+	}
 
 	if len(changedConfigs.Delete) > 0 {
 		for _, deleteServe := range changedConfigs.Delete {
@@ -548,7 +552,7 @@ func (r *rclone) Delete(param *models.FileParam, dirents []string) ([]string, er
 
 		} else {
 			fs = fsPrefix + param.Path
-			remote = strings.TrimPrefix(dpd, "/")
+			remote = strings.Trim(dpd, "/")
 
 			if err = r.GetOperation().Purge(fs, remote); err != nil {
 				deleteFailedPaths = append(deleteFailedPaths, dp)

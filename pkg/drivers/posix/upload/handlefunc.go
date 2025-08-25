@@ -170,7 +170,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 
 	var cachePvcPath = global.GlobalData.GetPvcCache(user)
 	if cachePvcPath == "" {
-		return false, nil, fmt.Errorf("cache dir not found")
+		return false, nil, fmt.Errorf("pvc cache not found")
 	}
 
 	startTime := time.Now()
