@@ -5,8 +5,8 @@ package preview
 import (
 	"context"
 	"files/pkg/hertz/biz/handler"
+	"files/pkg/hertz/biz/handler/handle_func"
 	preview "files/pkg/hertz/biz/model/api/preview"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
@@ -21,6 +21,6 @@ func PreviewMethod(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	handler.StraightForward(c, http2.WrapperPreviewArgs(http2.PreviewHandler, "/api/preview/"))
+	handler.StraightForward(c, handle_func.WrapperPreviewArgs(handle_func.PreviewHandler, "/api/preview/"))
 
 }

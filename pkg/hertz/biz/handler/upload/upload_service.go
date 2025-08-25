@@ -6,8 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"files/pkg/hertz/biz/handler"
+	"files/pkg/hertz/biz/handler/handle_func"
 	upload "files/pkg/hertz/biz/model/upload"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
@@ -30,7 +30,7 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(upload.UploadLinkResp)
-	handler.CommonConvert(c, http2.WrapperFilesUploadArgs(http2.FileUploadLinkHandler), resp, true)
+	handler.CommonConvert(c, handle_func.WrapperFilesUploadArgs(handle_func.FileUploadLinkHandler), resp, true)
 }
 
 // UploadedBytesMethod .
@@ -55,7 +55,7 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	recorder := httptest.NewRecorder()
-	originalHandler := http2.WrapperFilesUploadArgs(http2.FileUploadedBytesHandler)
+	originalHandler := handle_func.WrapperFilesUploadArgs(handle_func.FileUploadedBytesHandler)
 	originalHandler.ServeHTTP(recorder, stdReq)
 	handler.CopyHeaders(&c.Response.Header, recorder.Header())
 
@@ -101,7 +101,7 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	recorder := httptest.NewRecorder()
-	originalHandler := http2.WrapperFilesUploadArgs(http2.FileUploadChunksHandler)
+	originalHandler := handle_func.WrapperFilesUploadArgs(handle_func.FileUploadChunksHandler)
 	originalHandler.ServeHTTP(recorder, stdReq)
 	handler.CopyHeaders(&c.Response.Header, recorder.Header())
 

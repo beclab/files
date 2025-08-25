@@ -5,8 +5,8 @@ package resources
 import (
 	"context"
 	"files/pkg/hertz/biz/handler"
+	"files/pkg/hertz/biz/handler/handle_func"
 	resources "files/pkg/hertz/biz/model/api/resources"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
@@ -18,7 +18,7 @@ func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("~~~Debug log: path=%s", c.Param("path"))
 
 	resp := new(resources.GetResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.ListHandler, "/api/resources/"), resp, true)
+	handler.CommonConvert(c, handle_func.WrapperFilesResourcesArgs(handle_func.ListHandler, "/api/resources/"), resp, true)
 }
 
 // PostResourcesMethod .
@@ -27,7 +27,7 @@ func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("~~~Debug log: path=%s", c.Param("path"))
 
 	resp := new(resources.PostResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.CreateHandler, "/api/resources/"), resp, false)
+	handler.CommonConvert(c, handle_func.WrapperFilesResourcesArgs(handle_func.CreateHandler, "/api/resources/"), resp, false)
 }
 
 // PatchResourcesMethod .
@@ -42,7 +42,7 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.PatchResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.RenameHandler, "/api/resources/"), resp, false)
+	handler.CommonConvert(c, handle_func.WrapperFilesResourcesArgs(handle_func.RenameHandler, "/api/resources/"), resp, false)
 }
 
 // PutResourcesMethod .
@@ -57,7 +57,7 @@ func PutResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.PutResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesEditArgs(http2.EditHandler, "/api/resources/"), resp, false)
+	handler.CommonConvert(c, handle_func.WrapperFilesEditArgs(handle_func.EditHandler, "/api/resources/"), resp, false)
 }
 
 // DeleteResourcesMethod .
@@ -72,5 +72,5 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.DeleteResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesDeleteArgs(http2.DeleteHandler, "/api/resources/"), resp, false)
+	handler.CommonConvert(c, handle_func.WrapperFilesDeleteArgs(handle_func.DeleteHandler, "/api/resources/"), resp, false)
 }

@@ -5,9 +5,8 @@ package tree
 import (
 	"context"
 	"files/pkg/hertz/biz/handler"
+	"files/pkg/hertz/biz/handler/handle_func"
 	tree "files/pkg/hertz/biz/model/api/tree"
-	http2 "files/pkg/http"
-
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
@@ -15,5 +14,5 @@ import (
 // @router /api/tree/*path [GET]
 func TreeMethod(ctx context.Context, c *app.RequestContext) {
 	_ = new(tree.TreeResp)
-	handler.StraightForward(c, http2.WrapWithTreeParm(http2.TreeHandler, "/api/tree/"))
+	handler.StraightForward(c, handle_func.WrapWithTreeParm(handle_func.TreeHandler, "/api/tree/"))
 }

@@ -6,8 +6,7 @@ import (
 	"context"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
-
+	"files/pkg/hertz/biz/handler/handle_func"
 	callback "files/pkg/hertz/biz/model/callback"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -25,7 +24,7 @@ func CallbackCreateMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(callback.CallbackCreateResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(seahub.CallbackCreateHandler, "/callback/create"), resp, true)
+	handler.CommonConvert(c, handle_func.MonkeyHandle(seahub.CallbackCreateHandler, "/callback/create"), resp, true)
 }
 
 // CallbackDeleteMethod .
@@ -40,5 +39,5 @@ func CallbackDeleteMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(callback.CallbackDeleteResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(seahub.CallbackDeleteHandler, "/callback/delete"), resp, true)
+	handler.CommonConvert(c, handle_func.MonkeyHandle(seahub.CallbackDeleteHandler, "/callback/delete"), resp, true)
 }

@@ -5,8 +5,7 @@ package md5
 import (
 	"context"
 	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
-
+	"files/pkg/hertz/biz/handler/handle_func"
 	md5 "files/pkg/hertz/biz/model/api/md5"
 	"github.com/cloudwego/hertz/pkg/app"
 )
@@ -15,5 +14,5 @@ import (
 // @router /api/md5/*path [GET]
 func Md5Method(ctx context.Context, c *app.RequestContext) {
 	resp := new(md5.Md5Resp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.Md5Handler, "/api/md5"), resp, false)
+	handler.CommonConvert(c, handle_func.MonkeyHandle(handle_func.Md5Handler, "/api/md5"), resp, false)
 }
