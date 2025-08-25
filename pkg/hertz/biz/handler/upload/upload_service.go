@@ -29,8 +29,10 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(upload.UploadLinkResp)
-	handler.CommonConvert(c, http2.WrapperFilesUploadArgs(http2.FileUploadLinkHandler), resp, true)
+	resp := fileUploadHandle(ctx, c, FileUploadLinkHandler)
+	if resp != nil {
+		c.JSON(consts.StatusOK, resp)
+	}
 }
 
 // UploadedBytesMethod .
