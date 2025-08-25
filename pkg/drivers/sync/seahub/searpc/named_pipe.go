@@ -3,7 +3,6 @@ package searpc
 import (
 	"encoding/binary"
 	"files/pkg/common"
-	"k8s.io/klog/v2"
 	"net"
 	"sync"
 )
@@ -43,7 +42,7 @@ func (t *NamedPipeTransport) Stop() {
 }
 
 func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
-	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
+	// klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
 
 	reqBody := map[string]string{
 		"service": service,

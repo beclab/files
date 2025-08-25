@@ -292,11 +292,9 @@ func (o *operations) Deletefile(fs string, remote string) error {
 
 func (o *operations) Purge(fs string, remote string) error {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, PurgePath)
-	var leaveRoot = true
 	var param = OperationsReq{
-		Fs:        fs,     // xxx:yyy/parent
-		Remote:    remote, // dir/
-		LeaveRoot: &leaveRoot,
+		Fs:     fs,     // xxx:yyy/parent
+		Remote: remote, // dir/
 	}
 
 	klog.Infof("[rclone] operations purge, param: %s", commonutils.ToJson(param))

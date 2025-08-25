@@ -30,7 +30,7 @@ func (s *SyncStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error) 
 	} else if dstType == common.Sync {
 		return s.copyToSync()
 
-	} else if dstType == common.Cloud {
+	} else if dstType == common.AwsS3 || dstType == common.TencentCos || dstType == common.GoogleDrive || dstType == common.DropBox {
 		return s.copyToCloud()
 	}
 
@@ -142,7 +142,7 @@ func (s *SyncStorage) copyToCloud() (task *tasks.Task, err error) {
 	}
 
 	task = tasks.TaskManager.CreateTask(s.paste)
-	if err = task.Execute(task.DownloadFromSync, task.UploadToCloud); err != nil { // ! todo
+	if err = task.Execute(task.DownloadFromSync, task.UploadToCloud); err != nil {
 		klog.Errorf("Sync copyToCloud error: %v", err)
 	}
 

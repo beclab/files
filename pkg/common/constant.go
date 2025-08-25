@@ -61,6 +61,8 @@ const (
 )
 
 var (
-	DefaultLocalRootPath = "/data/"
-	DefaultKeepFileName  = ".keep"
+	DefaultLocalRootPath             = "/data/"
+	DefaultKeepFileName              = ".keep"
+	DefaultSyncUploadToCloudTempPath = "/files/.downloadstemp"
+	DefaultUploadToCloudTempPath     = "/files/.uploadstemp"
 )

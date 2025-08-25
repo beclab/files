@@ -115,10 +115,16 @@ func (t *Task) UploadToCloud() error {
 	var cmd = rclone.Command
 	var user = t.param.Owner
 	var action = t.param.Action
-	var posixParam = t.param.Src
 	var cloudParam = t.param.Dst
 
-	klog.Infof("[Task] Id: %s, start, uploadToCloud, user: %s, action: %s, src: %s, dst: %s", t.id, user, action, common.ToJson(cloudParam), common.ToJson(posixParam))
+	var posixParam = t.param.Src
+	if t.prevParam != nil {
+		posixParam = t.prevParam
+	}
+
+	klog.Infof("[Task] Id: %s, start, uploadToCloud, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(posixParam), common.ToJson(cloudParam))
+
+	t.updateProgress(0, 0)
 
 	posixPathPrefix := files.GetPrefixPath(posixParam.Path)
 	posixFileName, _ := files.GetFileNameFromPath(posixParam.Path)
@@ -148,12 +154,15 @@ func (t *Task) UploadToCloud() error {
 	}
 
 	// get src size
-	posizeSize, err := cmd.GetFilesSize(posixParam)
+	posixSize, err := cmd.GetFilesSize(posixParam)
 	if err != nil {
 		klog.Errorf("get posix size error: %v", err)
 		return err
 	}
-	t.updateTotalSize(posizeSize)
+
+	klog.Infof("[Task] Id: %s, totalSize: %d", t.id, posixSize)
+
+	t.updateTotalSize(posixSize)
 
 	// upload to cloud job
 	jobResp, err := cmd.Copy(posixParam, cloudParam)
@@ -319,11 +328,11 @@ func (t *Task) checkJobStats(jobId int) (bool, error) {
 
 			klog.Infof("[Task] Id: %s, get job core stats: %s, status: %s", t.id, common.ToJson(data), common.ToJson(jobStatusData))
 
-			var totalTransfers = data.TotalBytes //data.TotalTransfers
-			var transfers = data.Bytes           //data.Transfers
+			var totalTransfers = t.totalSize
+			var transfers = data.Bytes
 
 			if transfers != totalTransfers {
-				var progress = transfers * 100 / totalTransfers / int64(t.totalPhases)
+				var progress = transfers * 100 / totalTransfers
 				klog.Infof("[Task] Id: %s, jobId: %d, progress: %d, transfers: %d, totals: %d", t.id, jobId, progress, transfers, totalTransfers)
 				t.updateProgress(int(progress), data.Bytes)
 				continue
@@ -331,7 +340,7 @@ func (t *Task) checkJobStats(jobId int) (bool, error) {
 
 			if transfers == totalTransfers && data.Transferring == nil && data.Bytes == data.TotalBytes {
 				klog.Infof("[Task] Id: %s, upload success, jobId: %d", t.id, jobId)
-				var progress = 100 / int64(t.totalPhases)
+				var progress = 100
 				transferFinished = true
 				t.updateProgress(int(progress), data.TotalBytes)
 			}

@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
+	"files/pkg/global"
 	"files/pkg/models"
 	"fmt"
 	"io"
@@ -29,11 +30,30 @@ import (
  * ~ DownloadFromSync
  */
 func (t *Task) DownloadFromSync() error {
+	var user = t.param.Owner
+	var action = t.param.Action
+	var src = t.param.Src
+	var dst = t.param.Dst
+
+	if dst.IsCloud() {
+		var nextParam = &models.FileParam{
+			Owner:    user,
+			FileType: common.Cache,
+			Extend:   global.CurrentNodeName,
+			Path:     common.DefaultSyncUploadToCloudTempPath + src.Path,
+		}
+		t.nextParam = nextParam
+		t.toCloud = true
+	}
+
+	klog.Infof("[Task] Id: %s, start, downloadFormSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst))
+
 	totalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
 	if err != nil {
-		klog.Errorf("DownloadFromSync - GetFromSyncFileCount - %v", err)
+		klog.Errorf("[Task] Id: %s, getFromSyncFileCount - %v", t.id, err)
 		return err
 	}
+
 	t.updateTotalSize(totalSize)
 
 	_, isFile := t.param.Src.IsFile()
@@ -48,14 +68,29 @@ func (t *Task) DownloadFromSync() error {
 			return err
 		}
 	}
-	if t.param.Action == "move" {
-		err = seahub.HandleDelete(t.param.Src)
-		if err != nil {
-			return err
+
+	if t.isLastPhase() {
+		if t.param.Action == "move" {
+			err = seahub.HandleDelete(t.param.Src)
+			if err != nil {
+				return err
+			}
 		}
 	}
+
 	_, _, transferred, _ := t.GetProgress()
 	t.updateProgress(100, transferred)
+
+	if !t.isLastPhase() { // enter next phase, next phase will use prev param
+		var nextParam = &models.FileParam{
+			Owner:    t.param.Owner,
+			FileType: t.nextParam.FileType,
+			Extend:   t.nextParam.Extend,
+			Path:     t.nextParam.Path,
+		}
+		t.prevParam = nextParam
+	}
+
 	return nil
 }
 
@@ -212,18 +247,32 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam) error {
 	default:
 	}
 
+	var begin bool
+	if src == nil || dst == nil {
+		begin = true
+	}
+
 	if src == nil {
 		src = t.param.Src
 	}
 	if dst == nil {
-		dst = t.param.Dst
+		if t.nextParam != nil {
+			dst = t.nextParam
+		} else {
+			dst = t.param.Dst
+		}
 	}
+
+	klog.Infof("[Task] Id: %s, begin dir: %v, src: %s, dst: %s", t.id, begin, common.ToJson(src), common.ToJson(dst))
+
+	var cachePvcPath, downloadPath string
 
 	dstUri, err := dst.GetResourceUri()
 	if err != nil {
 		return err
 	}
-	dstFullPath := dstUri + dst.Path
+
+	downloadPath = dstUri + dst.Path
 
 	dirInfoRes, err := seahub.HandleGetRepoDir(src)
 	if err != nil || dirInfoRes == nil {
@@ -234,15 +283,24 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam) error {
 		return err
 	}
 
-	dstFullPath = AddVersionSuffix(dstFullPath, dst, true)
+	if !t.toCloud {
+		downloadPath = AddVersionSuffix(downloadPath, dst, true)
+	}
 
 	mode := seahub.SyncPermToMode(dirInfo["user_perm"].(string))
-	if err = files.MkdirAllWithChown(nil, dstFullPath, mode); err != nil {
-		klog.Errorln(err)
+	if err = files.MkdirAllWithChown(nil, downloadPath, mode); err != nil {
+		klog.Errorf("[Task] Id: %s, mkdir %s failed, error: %v", t.id, downloadPath, err)
 		return err
 	}
 
-	var fdstBase string = strings.TrimPrefix(dstFullPath, dstUri)
+	var fdstBase string
+	if t.toCloud {
+		fdstBase = strings.TrimPrefix(downloadPath, filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultSyncUploadToCloudTempPath))
+	} else {
+		fdstBase = strings.TrimPrefix(downloadPath, dstUri)
+	}
+
+	klog.Infof("[Task] Id: %s, dstFullPath: %s, fdstBase: %s", t.id, downloadPath, fdstBase)
 
 	direntInterfaceList, ok := dirInfo["dirent_list"].([]interface{})
 	if !ok {
@@ -305,23 +363,42 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam) error {
 	default:
 	}
 
+	var begin bool
+	if src == nil || dst == nil {
+		begin = true
+	}
+
 	if src == nil {
 		src = t.param.Src
 	}
 	if dst == nil {
-		dst = t.param.Dst
+		if t.nextParam != nil {
+			dst = t.nextParam
+		} else {
+			dst = t.param.Dst
+		}
+
 	}
+
+	klog.Infof("[Task] Id: %s, begin file: %v, src: %s, dst: %s", t.id, begin, common.ToJson(src), common.ToJson(dst))
+
+	var downloadPath, downloadFilePath string
+
+	srcFileName, _ := files.GetFileNameFromPath(src.Path)
+	_ = srcFileName
+	dstFileName, _ := files.GetFileNameFromPath(dst.Path)
 
 	dstUri, err := dst.GetResourceUri()
 	if err != nil {
 		return err
 	}
-	dstFullPath := dstUri + dst.Path
+
+	downloadPath = dstUri + filepath.Dir(dst.Path)
+
+	// todo check local size, if is dir?
 
 	fileInfo := seahub.GetFileInfo(src.Extend, src.Path)
-	diskSize := fileInfo["size"].(int64)
-
-	left, _, right := t.CalculateSyncProgressRange(diskSize) // mid may used for sync <-> cloud, reserved but not used here
+	fileSize := fileInfo["size"].(int64)
 
 	dlUrlRaw, err := seahub.ViewLibFile(src, "dl")
 	if err != nil {
@@ -351,15 +428,24 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam) error {
 		return fmt.Errorf("unrecognizable response format")
 	}
 
-	dstFullPath = AddVersionSuffix(dstFullPath, dst, false)
-
-	if err = files.MkdirAllWithChown(nil, filepath.Dir(dstFullPath), 0755); err != nil {
-		klog.Errorln(err)
-		return fmt.Errorf("failed to create parent directories: %v", err)
+	if !t.toCloud {
+		downloadFilePath = AddVersionSuffix(downloadPath, dst, false)
+	} else {
+		downloadFilePath = filepath.Join(downloadPath, dstFileName) // todo common.MD5(srcFileName)
 	}
 
-	dstFile, err := os.OpenFile(dstFullPath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+	if !common.PathExists(downloadPath) {
+		if err = files.MkdirAllWithChown(nil, filepath.Dir(downloadFilePath), 0755); err != nil {
+			klog.Errorf("[Task] Id: %s, mkdir %s error: %v", t.id, downloadPath, err)
+			return fmt.Errorf("failed to create parent directories: %v", err)
+		}
+	}
+
+	klog.Infof("[Task] Id: %s, downloadFilePath: %s, fileSize: %d", t.id, downloadFilePath, fileSize)
+
+	dstFile, err := os.OpenFile(downloadFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
 	if err != nil {
+		klog.Errorf("[Task] Id: %s, open file error: %v", t.id, err)
 		return err
 	}
 	defer dstFile.Close()
@@ -368,19 +454,26 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam) error {
 	if response.Header.Get("Content-Encoding") == "gzip" {
 		gzipReader, err := gzip.NewReader(response.Body)
 		if err != nil {
+			klog.Errorf("[Task] Id: %s, gzipReader error: %v", t.id, err)
 			return err
 		}
 		defer gzipReader.Close()
 		reader = gzipReader
 	}
 
-	buf := make([]byte, 32*1024)
-	var totalRead int64
-	lastProgress := 0
+	var buf = make([]byte, 32*1024)
+	var transferred int64
+	var ticker = time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-t.ctx.Done():
-			return nil
+			// todo clear cache
+			klog.Infof("[Task] Id: %s, canceled", t.id)
+			return t.ctx.Err()
+		case <-ticker.C:
+			klog.Infof("[Task] Id: %s, download progress %d (%d/%d)", t.id, t.progress, t.transfer, t.totalSize)
 		default:
 		}
 
@@ -389,27 +482,14 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam) error {
 			if _, err := dstFile.Write(buf[:nr]); err != nil {
 				return err
 			}
-			_, _, transferred, _ := t.GetProgress()
-			totalRead += int64(nr)
+			transferred += int64(nr)
+			progress := int(float64(transferred) / float64(fileSize) * 100)
 
-			progress := int(float64(totalRead) / float64(diskSize) * 100)
 			if progress > 100 {
 				progress = 100
 			}
 
-			mappedProgress := left + (progress*(right-left))/100
-
-			if mappedProgress < left {
-				mappedProgress = left
-			} else if mappedProgress > right {
-				mappedProgress = right
-			}
-
-			if lastProgress != progress {
-				klog.Info("[" + time.Now().Format("2006-01-02 15:04:05") + "]" + fmt.Sprintf("downloaded from seafile %d/%d with progress %d", totalRead, diskSize, progress))
-				lastProgress = progress
-			}
-			t.updateProgress(mappedProgress, transferred+int64(nr))
+			t.updateProgress(progress, transferred)
 		}
 
 		if er != nil {
