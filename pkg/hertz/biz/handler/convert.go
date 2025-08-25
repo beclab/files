@@ -94,12 +94,12 @@ func ConvertHertzRequest(hertzReq *protocol.Request) (*http.Request, error) {
 		// reset request body
 		stdReq.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
 		stdReq.Header.Set("Content-Type", writer.FormDataContentType())
-	}
 
-	// parse form data
-	if err := stdReq.ParseMultipartForm(32 << 20); err != nil { // 32MB mem-buffer
-		if !strings.Contains(err.Error(), "request Content-Type isn't multipart/form-data") {
-			return nil, fmt.Errorf("parse form failed: %v", err)
+		// parse form data
+		if err = stdReq.ParseMultipartForm(32 << 20); err != nil { // 32MB mem-buffer
+			if !strings.Contains(err.Error(), "request Content-Type isn't multipart/form-data") {
+				return nil, fmt.Errorf("parse form failed: %v", err)
+			}
 		}
 	}
 
@@ -148,7 +148,6 @@ func CommonConvert(c *app.RequestContext, originalHandler http.Handler, resp int
 	originalHandler.ServeHTTP(recorder, stdReq)
 	CopyHeaders(&c.Response.Header, recorder.Header())
 
-	klog.Infof("~~~Debug log: recorder.Body.Bytes()=%v", recorder.Body.Bytes())
 	bodyBytes := recorder.Body.Bytes()
 	if direct {
 		if len(bodyBytes) > 0 {
