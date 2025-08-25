@@ -6,7 +6,6 @@ import (
 	"context"
 	"files/pkg/hertz/biz/handler"
 	repos "files/pkg/hertz/biz/model/api/repos"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
@@ -23,7 +22,7 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(repos.GetReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.ReposGetHandler), resp, false)
+	handler.CommonConvert(c, handler.CommonHandle(handler.ReposGetHandler), resp, false)
 }
 
 // PostReposMethod .
@@ -38,7 +37,7 @@ func PostReposMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(repos.PostReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.CreateRepoHandler), resp, false)
+	handler.CommonConvert(c, handler.CommonHandle(handler.CreateRepoHandler), resp, false)
 }
 
 // DeleteReposMethod .
@@ -53,7 +52,7 @@ func DeleteReposMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(repos.DeleteReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.DeleteRepoHandler), resp, false)
+	handler.CommonConvert(c, handler.CommonHandle(handler.DeleteRepoHandler), resp, false)
 }
 
 // PatchReposMethod .
@@ -68,5 +67,5 @@ func PatchReposMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(repos.PatchReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.RenameRepoHandler), resp, false)
+	handler.CommonConvert(c, handler.CommonHandle(handler.RenameRepoHandler), resp, false)
 }

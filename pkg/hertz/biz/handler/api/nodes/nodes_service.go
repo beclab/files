@@ -6,7 +6,6 @@ import (
 	"context"
 	"files/pkg/hertz/biz/handler"
 	nodes "files/pkg/hertz/biz/model/api/nodes"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
@@ -14,5 +13,5 @@ import (
 // @router /api/nodes [GET]
 func NodesMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(nodes.NodesResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.NodesGetHandler), resp, false)
+	handler.CommonConvert(c, handler.CommonHandle(handler.NodesGetHandler), resp, false)
 }

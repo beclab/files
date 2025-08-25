@@ -5,8 +5,6 @@ package paste
 import (
 	"context"
 	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
-
 	paste "files/pkg/hertz/biz/model/api/paste"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -24,7 +22,7 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(paste.PasteResp)
-	handler.CommonConvert(c, http2.WrapperPasteArgs("/api/paste"), resp, false)
+	handler.CommonConvert(c, handler.WrapperPasteArgs("/api/paste"), resp, false)
 }
 
 // GetTaskMethod .
@@ -39,7 +37,7 @@ func GetTaskMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(paste.GetTaskResp)
-	handler.CommonConvert(c, http2.WrapperTaskArgs("/api/task"), resp, false)
+	handler.CommonConvert(c, handler.WrapperTaskArgs("/api/task"), resp, false)
 }
 
 // DeleteTaskMethod .
@@ -54,5 +52,5 @@ func DeleteTaskMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(paste.DeleteTaskResp)
-	handler.CommonConvert(c, http2.WrapperTaskArgs("/api/task"), resp, false)
+	handler.CommonConvert(c, handler.WrapperTaskArgs("/api/task"), resp, false)
 }

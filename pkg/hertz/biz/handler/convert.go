@@ -148,7 +148,6 @@ func CommonConvert(c *app.RequestContext, originalHandler http.Handler, resp int
 	originalHandler.ServeHTTP(recorder, stdReq)
 	CopyHeaders(&c.Response.Header, recorder.Header())
 
-	klog.Infof("~~~Debug log: recorder.Body.Bytes()=%v", recorder.Body.Bytes())
 	bodyBytes := recorder.Body.Bytes()
 	if direct {
 		if len(bodyBytes) > 0 {

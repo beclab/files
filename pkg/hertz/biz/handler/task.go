@@ -1,4 +1,4 @@
-package http
+package handler
 
 import (
 	"files/pkg/common"

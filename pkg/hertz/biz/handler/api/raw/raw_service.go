@@ -6,7 +6,6 @@ import (
 	"context"
 	"files/pkg/hertz/biz/handler"
 	raw "files/pkg/hertz/biz/model/api/raw"
-	http2 "files/pkg/http"
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
@@ -14,5 +13,5 @@ import (
 // @router /api/raw/*path [GET]
 func RawMethod(ctx context.Context, c *app.RequestContext) {
 	_ = new(raw.RawResp)
-	handler.StraightForward(c, http2.WrapperRawArgs(http2.RawHandler, "/api/raw/"))
+	handler.StraightForward(c, handler.WrapperRawArgs(handler.RawHandler, "/api/raw/"))
 }
