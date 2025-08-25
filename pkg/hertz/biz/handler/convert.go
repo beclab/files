@@ -96,7 +96,7 @@ func ConvertHertzRequest(hertzReq *protocol.Request) (*http.Request, error) {
 		stdReq.Header.Set("Content-Type", writer.FormDataContentType())
 
 		// parse form data
-		if err := stdReq.ParseMultipartForm(32 << 20); err != nil { // 32MB mem-buffer
+		if err = stdReq.ParseMultipartForm(32 << 20); err != nil { // 32MB mem-buffer
 			if !strings.Contains(err.Error(), "request Content-Type isn't multipart/form-data") {
 				return nil, fmt.Errorf("parse form failed: %v", err)
 			}
