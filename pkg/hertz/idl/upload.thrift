@@ -65,6 +65,6 @@ struct UploadChunksFileItem {
 
 service UploadService {
     UploadChunksResp UploadChunksMethod(1: UploadChunksReq request) (api.post="/upload/upload-link/:node/:uid");
-    string UploadLinkMethod(1: UploadLinkReq request) (api.get="/upload/upload-link/*node");
+    string UploadLinkMethod(1: UploadLinkReq request) (api.get="/upload/upload-link/:node/");
     UploadedBytesResp UploadedBytesMethod(1: UploadedBytesReq request) (api.get="/upload/file-uploaded-bytes/*node");
 }

@@ -25,9 +25,9 @@ func Register(r *server.Hertz) {
 		}
 		{
 			_upload_link := _upload.Group("/upload-link", _upload_linkMw()...)
-			_upload_link.GET("/*node", append(_uploadlinkmethodMw(), upload.UploadLinkMethod)...)
 			{
 				_node := _upload_link.Group("/:node", _nodeMw()...)
+				_node.GET("/", append(_uploadlinkmethodMw(), upload.UploadLinkMethod)...)
 				_node.POST("/:uid", append(_uploadchunksmethodMw(), upload.UploadChunksMethod)...)
 			}
 		}
