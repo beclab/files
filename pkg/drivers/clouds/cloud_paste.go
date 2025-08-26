@@ -121,7 +121,7 @@ func (s *CloudStorage) copyToSync() (task *tasks.Task, err error) {
 	}
 
 	task = tasks.TaskManager.CreateTask(s.paste)
-	if err = task.Execute(task.DownloadFromCloud, task.UploadToSync); err != nil { // ! todo
+	if err = task.Execute(task.DownloadFromCloud, task.UploadToSync); err != nil {
 		klog.Errorf("Cloud copyToSync error: %v", err)
 	}
 

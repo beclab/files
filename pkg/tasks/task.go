@@ -30,14 +30,10 @@ type TaskInfo struct {
 }
 
 type Task struct {
-	id        string
-	param     *models.PasteParam
-	prevParam *models.FileParam
-	nextParam *models.FileParam
-	state     string
-	message   string
-
-	toCloud bool
+	id      string
+	param   *models.PasteParam
+	state   string
+	message string
 
 	currentPhase int // current phase
 	totalPhases  int // number of execution phases
@@ -79,12 +75,12 @@ func (t *Task) Execute(fs ...func() error) error {
 
 		t.totalPhases = len(fs)
 
-		klog.Infof("[Task] Id: %s, phases: %d", t.id, t.totalPhases)
 		t.state = common.Running
 
 		for phase, f := range fs { //
 			t.currentPhase = phase + 1
 			// If f() is not the final stage, such as downloadFromCloud, and uploadToSync will be executed afterwards, the src and dst need to be reset. After entering the next phase, src and dst will be extracted again.
+			klog.Infof("[Task] Id: %s, exec phase: %d/%d", t.id, t.currentPhase, t.totalPhases)
 			err := f()
 			if err != nil {
 				klog.Errorf("[Task] Id: %s, exec error: %v", t.id, err)
@@ -126,4 +122,13 @@ func (t *Task) GetProgress() (string, int, int64, int64) {
 
 func (t *Task) isLastPhase() bool {
 	return t.currentPhase == t.totalPhases
+}
+
+func (t *Task) isCanceled() (bool, error) {
+	select {
+	case <-t.ctx.Done():
+		return true, t.ctx.Err()
+	default:
+	}
+	return false, nil
 }

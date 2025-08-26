@@ -11,7 +11,6 @@ import (
 	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/preview"
-	"files/pkg/tasks"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -527,9 +526,8 @@ func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListR
  * UploadLink
  */
 func (s *CloudStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	var user = fileUploadArg.FileParam.Owner
 
-	klog.Infof("Cloud uploadLink, user: %s, param: %s", user, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Cloud uploadLink, param: %s", common.ToJson(fileUploadArg))
 
 	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
 
@@ -542,8 +540,7 @@ func (s *CloudStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
  * UploadedBytes
  */
 func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	var user = fileUploadArg.FileParam.Owner
-	klog.Infof("Cloud uploadBytes, user: %s, param: %s", user, common.ToJson(fileUploadArg))
+	klog.Infof("Cloud uploadBytes, param: %s", common.ToJson(fileUploadArg))
 
 	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
 
@@ -561,29 +558,28 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	var chunkInfo = fileUploadArg.ChunkInfo
 	var taskId = chunkInfo.UploadToCloudTaskId
 	var canceled = chunkInfo.UploadToCloudTaskCancel
+	var lastChunk = chunkInfo.ResumableChunkNumber == chunkInfo.ResumableTotalChunks
 
 	if taskId != "" { // ~ query task status
 		if canceled == 1 { // todo cancel
 			// 	tasks.TaskManager.CancelTask(taskId)
 			// 	return nil, nil
 		}
-		return s.service.checkUploadTaskState(user, uploadId, taskId, chunkInfo)
+		klog.Infof("Cloud uploadChunks, uploadId: %s, taskId: %s, query task stats, param: %s", fileUploadArg.UploadId, taskId, common.ToJson(fileUploadArg))
+		return s.service.checkUploadStats(user, uploadId, taskId, chunkInfo)
 	}
 
-	klog.Infof("Cloud uploadChunks, user: %s, uploadId: %s, param: %s", user, fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Cloud uploadChunks, uploadId: %s, param: %s", fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
 
 	ok, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
 
+	_ = ok
 	if err != nil {
 		return nil, err
 	}
 
-	if fileInfo == nil {
-		return common.ToBytes(&upload.FileUploadSucced{Success: true}), nil
-	}
-
-	if !ok {
-		return common.ToBytes(fileInfo), nil // frontend ignored
+	if fileInfo == nil && !lastChunk {
+		return common.ToBytes(&upload.FileUploadSucced{Success: true, IsCloud: true}), nil
 	}
 
 	klog.Infof("Cloud uploadChunks, phase done, tempPath: %s, data: %s", fileInfo.UploadTempPath, common.ToJson(fileInfo))
@@ -598,28 +594,29 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 
 	var dstParam = fileUploadArg.FileParam
 
-	uploadCopyParam, err := s.service.CreateUploadParam(srcParam, dstParam, fileInfo.Name, fileInfo.FileInfo.FileRelativePath)
+	uploadParam, err := s.service.createUploadParam(srcParam, dstParam, fileInfo.Name, fileInfo.FileInfo.FileRelativePath)
 	if err != nil {
+		klog.Errorf("Cloud uploadChunks, uploadId: %s, create copy param error: %v", uploadId, err)
 		return nil, err
 	}
 
-	klog.Infof("Cloud uploadChunks, uploadToCloud param: %s", common.ToJson(uploadCopyParam))
+	klog.Infof("Cloud uploadChunks, uploadId: %s, uploadToCloud param: %s", uploadId, common.ToJson(uploadParam))
 
-	var task = tasks.TaskManager.CreateTask(uploadCopyParam)
-	if err = task.Execute(task.UploadToCloud); err != nil {
-		klog.Errorf("Cloud uploadChunks, execute uploadToCloud error: %v", err)
+	jobResp, err := s.service.uploadCloud(uploadId, uploadParam)
+	if err != nil {
+		klog.Errorf("Cloud uploadChunks, create upload task error: %v", err)
 		return nil, err
 	}
 
-	taskId = task.Id()
+	var jobId = *jobResp.JobId
 
-	klog.Infof("Cloud uploadChunks, uploadToCloud waiting for execute, taskId: %s", taskId)
+	klog.Infof("Cloud uploadChunks, uploadToCloud waiting for execute, jobId: %d", jobId)
 
 	return common.ToBytes(
 		&upload.FileUploadSucced{
 			Success: true,
 			IsCloud: true,
-			TaskId:  taskId,
+			TaskId:  fmt.Sprintf("%d", jobId),
 			Size:    fileInfo.Size,
 			State:   common.Pending,
 		}), nil

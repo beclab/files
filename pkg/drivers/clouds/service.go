@@ -6,11 +6,10 @@ import (
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
-	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
 	"files/pkg/models"
-	"files/pkg/tasks"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"k8s.io/klog/v2"
@@ -319,7 +318,7 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 	return result, nil
 }
 
-func (s *service) CreateUploadParam(src, dst *models.FileParam, uploadFileName string, newFileRelativePath string) (*models.PasteParam, error) {
+func (s *service) createUploadParam(src, dst *models.FileParam, uploadFileName string, newFileRelativePath string) (*models.PasteParam, error) {
 	var cmd = rclone.Command
 
 	klog.Infof("[service] upload, start, uploadFileName: %s, relativePath: %s, src: %s, dst: %s", uploadFileName, newFileRelativePath, common.ToJson(src), common.ToJson(dst))
@@ -418,44 +417,76 @@ func (s *service) CreateUploadParam(src, dst *models.FileParam, uploadFileName s
 	return data, nil
 }
 
-func (s *service) checkUploadTaskState(user string, uploadId string, taskId string, chunkInfo *models.ResumableInfo) ([]byte, error) {
-	var result []*upload.FileUploadState
+func (s *service) uploadCloud(uploadId string, param *models.PasteParam) (*operations.OperationsAsyncJobResp, error) {
+	var cmd = s.command
+	var src = param.Src
+	var dst = param.Dst
 
-	taskInfo := tasks.TaskManager.GetTask(taskId)
-	if taskInfo == nil {
-		var item = &upload.FileUploadState{
-			Id:    "",
-			Name:  chunkInfo.ResumableFilename,
-			Size:  chunkInfo.ResumableTotalSize,
-			State: common.Completed,
+	klog.Infof("[service] uploadTask, uploadId: %s, param: %s", uploadId, common.ToJson(param))
+
+	posixPathPrefix := files.GetPrefixPath(src.Path)
+	posixFileName, _ := files.GetFileNameFromPath(src.Path)
+	_, _ = posixPathPrefix, posixFileName
+	cloudFileName, isFile := files.GetFileNameFromPath(dst.Path)
+	cloudPrefixPath := files.GetPrefixPath(dst.Path)
+
+	cloudItems, err := cmd.GetFilesList(dst, true)
+	if err != nil {
+		return nil, fmt.Errorf("get local files list error: %v", err)
+	}
+	var dupNames []string
+	if cloudItems != nil && cloudItems.List != nil && len(cloudItems.List) > 0 {
+		for _, item := range cloudItems.List {
+			dupNames = append(dupNames, item.Name)
 		}
-
-		result = append(result, item)
-		return common.ToBytes(result), nil
 	}
 
-	klog.Infof("Cloud uploadChunks, user: %s, uploadId: %s, taskId: %s, taskInfo: %s", user, uploadId, taskId, common.ToJson(taskInfo))
+	newCloudName := files.GenerateDupName(dupNames, cloudFileName, isFile)
+	klog.Infof("[service] uploadId: %s, newCloudName: %s", uploadId, newCloudName)
 
-	if taskInfo.Status == common.Completed || taskInfo.Status == common.Failed || taskInfo.Status == common.Canceled {
-		var item = &upload.FileUploadState{
-			Id:    "",
-			Name:  chunkInfo.ResumableFilename,
-			Size:  chunkInfo.ResumableTotalSize,
-			State: taskInfo.Status,
-		}
+	dst.Path = cloudPrefixPath + newCloudName
 
-		result = append(result, item)
-		return common.ToBytes(result), nil
-
-	} else {
-		var result = &upload.FileUploadSucced{
-			Success:   true,
-			IsCloud:   true,
-			TaskId:    taskId,
-			Size:      chunkInfo.ResumableTotalSize,
-			Transfers: taskInfo.Transferred,
-		}
-
-		return common.ToBytes(result), nil
+	if !isFile {
+		dst.Path += "/"
 	}
+
+	// get src size
+	posixSize, err := cmd.GetFilesSize(src)
+	if err != nil {
+		return nil, fmt.Errorf("get size error: %v", err)
+	}
+
+	klog.Infof("[service] uploadId: %s, totalSize: %d", uploadId, posixSize)
+
+	jobResp, err := cmd.Copy(src, dst)
+	if err != nil {
+		return nil, fmt.Errorf("copy error: %v", err)
+	}
+
+	if jobResp.JobId == nil {
+		return nil, fmt.Errorf("job invalid")
+	}
+
+	return jobResp, nil
+}
+
+func (s *service) checkUploadStats(user string, uploadId string, jobId string, chunkInfo *models.ResumableInfo) ([]byte, error) {
+	id, err := strconv.Atoi(jobId)
+	if err != nil {
+		return nil, err
+	}
+
+	jobStatus, err := s.QueryJob(id)
+	if err != nil {
+		return nil, err
+	}
+
+	jobStat, err := s.QueryJobCoreStat(id)
+	if err != nil {
+		return nil, err
+	}
+
+	_, _ = jobStat, jobStatus
+
+	return nil, nil
 }

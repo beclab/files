@@ -22,6 +22,7 @@ type PasteParam struct {
 	UploadToCloud bool   `json:"uploadToCloud"`
 	Src           *FileParam
 	Dst           *FileParam
+	Temp          *FileParam
 }
 
 func NewPasteParam(r *http.Request) (*PasteParam, error) {

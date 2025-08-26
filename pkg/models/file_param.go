@@ -211,6 +211,10 @@ func (r *FileParam) IsCloud() bool {
 	return common.ListContains([]string{common.AwsS3, common.TencentCos, common.DropBox, common.GoogleDrive}, r.FileType)
 }
 
+func (r *FileParam) IsSync() bool {
+	return r.FileType == common.Sync
+}
+
 func (r *FileParam) IsFile() (string, bool) {
 	if r.Path == "" || r.Path == "/" || strings.HasSuffix(r.Path, "/") {
 		return "", false

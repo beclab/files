@@ -246,3 +246,8 @@ func ListContains[T comparable](items []T, v T) bool {
 	}
 	return false
 }
+
+func IsDiskSpaceEnough(diskSize, fileSize int64) (int64, bool) {
+	requiredSpace := int64(float64(fileSize) * 1.05)
+	return requiredSpace, diskSize < requiredSpace
+}
