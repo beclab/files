@@ -29,7 +29,7 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(upload.UploadLinkResp)
+	var resp string
 	handler.CommonConvert(c, http2.WrapperFilesUploadArgs(http2.FileUploadLinkHandler), resp, true)
 }
 

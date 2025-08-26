@@ -5,10 +5,6 @@ struct UploadLinkReq {
     2: required string From (api.query="from");
 }
 
-struct UploadLinkResp {
-    1: string RespBody;
-}
-
 struct UploadedBytesReq {
     1: required string ParentDir (api.query="parent_dir");
     2: required string FileName (api.query="file_name");
@@ -35,7 +31,7 @@ struct UploadChunksReq {
     3: required i32 resumableChunkSize (api.form="resumableChunkSize");
     4: required i32 resumableCurrentChunkSize (api.form="resumableCurrentChunkSize");
     5: required i64 resumableTotalSize (api.form="resumableTotalSize");
-    6: required string resumableType (api.form="resumableType");
+    6: optional string resumableType (api.form="resumableType");
     7: required string resumableIdentifier (api.form="resumableIdentifier");
     8: required string resumableFilename (api.form="resumableFilename");
     9: required string resumableRelativePath (api.form="resumableRelativePath");
@@ -69,6 +65,6 @@ struct UploadChunksFileItem {
 
 service UploadService {
     UploadChunksResp UploadChunksMethod(1: UploadChunksReq request) (api.post="/upload/upload-link/:node/:uid");
-    UploadLinkResp UploadLinkMethod(1: UploadLinkReq request) (api.get="/upload/upload-link/*node");
+    string UploadLinkMethod(1: UploadLinkReq request) (api.get="/upload/upload-link/*node");
     UploadedBytesResp UploadedBytesMethod(1: UploadedBytesReq request) (api.get="/upload/file-uploaded-bytes/*node");
 }
