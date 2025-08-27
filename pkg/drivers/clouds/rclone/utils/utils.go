@@ -87,7 +87,7 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 }
 
 func FormatError(resp []byte) error {
-	klog.Infof("[request] result: %s", string(resp))
+	// klog.Infof("[request] result: %s", string(resp))
 	var errMsg *common.ErrorMessage
 	if err := json.Unmarshal(resp, &errMsg); err != nil {
 		return fmt.Errorf("request unmarshal error: %v, resp: %s", err, string(resp))
@@ -102,7 +102,9 @@ func FormatError(resp []byte) error {
 			if strings.Contains(errMsg.Error, "directory not found") {
 				return nil
 			}
-		case "config/create":
+		case
+			"operations/deletefile",
+			"config/create":
 			return fmt.Errorf("%s", errMsg.Error)
 		}
 		return fmt.Errorf("%s", string(resp))

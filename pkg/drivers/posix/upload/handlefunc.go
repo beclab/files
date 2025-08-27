@@ -128,11 +128,11 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 		}
 
 		if err = FileInfoManager.AddFileInfo(innerIdentifier, fileInfo); err != nil {
-			klog.Warningf("innerIdentifier:%s, err:%v", innerIdentifier, err)
+			klog.Warningf("[upload] uploadedBytes, innerIdentifier:%s, err:%v", innerIdentifier, err)
 			return nil, errors.New("Error save file info")
 		}
 
-		klog.Infof("innerIdentifier:%s, fileInfo:%+v", innerIdentifier, fileInfo)
+		klog.Infof("[upload] uploadedBytes, innerIdentifier:%s, fileInfo:%+v", innerIdentifier, fileInfo)
 		info = fileInfo
 		exist = true
 	}
@@ -146,7 +146,7 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 				info.Offset = fileLen
 				FileInfoManager.UpdateInfo(innerIdentifier, info)
 			}
-			klog.Infof("innerIdentifier:%s, info.Offset:%d", innerIdentifier, info.Offset)
+			klog.Infof("[upload] uploadedBytes, innerIdentifier:%s, info.Offset:%d", innerIdentifier, info.Offset)
 			responseData["uploadedBytes"] = info.Offset
 		} else if info.Offset == 0 {
 			klog.Warningf("innerIdentifier:%s, info.Offset:%d", innerIdentifier, info.Offset)
@@ -258,13 +258,6 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		if !CheckSize(resumableInfo.ResumableTotalSize) {
 			if info.Offset == info.FileSize {
 				klog.Warningf("[upload] uploadId: %s, All file chunks have been uploaded, skip upload", uploadId)
-				// finishData := []map[string]interface{}{
-				// 	{
-				// 		"name": resumableInfo.ResumableFilename,
-				// 		"id":   MakeUid(info.FullPath),
-				// 		"size": info.FileSize,
-				// 	},
-				// }
 
 				var data = &FileUploadState{
 					Name:           resumableInfo.ResumableFilename,
@@ -437,7 +430,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 			FileInfo:       &info,
 		}
 
-		if common.ListContains([]string{common.AwsS3, common.TencentCos, common.DropBox, common.GoogleDrive}, fileParam.FileType) {
+		if fileParam.IsCloud() {
 			return true, data, nil
 		}
 
