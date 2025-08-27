@@ -5,6 +5,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/models"
 	"fmt"
+	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -47,6 +48,10 @@ type Task struct {
 	cancel   context.CancelFunc
 	canceled bool
 
+	createAt time.Time
+	execAt   time.Time
+	endAt    time.Time
+
 	manager *taskManager
 }
 
@@ -55,33 +60,38 @@ func (t *Task) Id() string {
 }
 
 func (t *Task) Execute(fs ...func() error) error {
-	_, loaded := t.manager.task.LoadOrStore(t.id, t)
+	userPool := t.manager.getOrCreateUserPool(t.param.Owner)
+	_, loaded := userPool.tasks.LoadOrStore(t.id, t)
 	if loaded {
 		return fmt.Errorf("task %s exists in taskManager", t.id)
 	}
 
-	_, ok := t.manager.pool.TrySubmit(func() {
+	_, ok := userPool.pool.TrySubmit(func() {
+		var err error
+
+		defer func() {
+			klog.Infof("[Task] Id: %s done! status: %s, progress: %d, size: %d, transfer: %d, elapse: %d, error: %v",
+				t.id, t.state, t.progress, t.totalSize, t.transfer, time.Since(t.execAt), err)
+
+			t.endAt = time.Now()
+		}()
+
 		if t.canceled {
 			t.state = common.Canceled
 			return
 		}
 
-		var err error
-		_ = err
-
-		defer func() {
-			klog.Infof("[Task] Id: %s done! status: %s, progress: %d, size: %d, transfer: %d", t.id, t.state, t.progress, t.totalSize, t.transfer)
-		}()
-
 		t.totalPhases = len(fs)
 
+		t.execAt = time.Now()
 		t.state = common.Running
 
 		for phase, f := range fs { //
 			t.currentPhase = phase + 1
 			// If f() is not the final stage, such as downloadFromCloud, and uploadToSync will be executed afterwards, the src and dst need to be reset. After entering the next phase, src and dst will be extracted again.
 			klog.Infof("[Task] Id: %s, exec phase: %d/%d", t.id, t.currentPhase, t.totalPhases)
-			err := f()
+			err = f()
+
 			if err != nil {
 				klog.Errorf("[Task] Id: %s, exec error: %v", t.id, err)
 				if err.Error() == "context canceled" {

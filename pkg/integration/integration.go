@@ -71,13 +71,13 @@ func (i *integration) HandlerEvent() cache.ResourceEventHandler {
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				klog.Infof("ingegrateion add func")
+				klog.Infof("ingegrateion add func: %s", common.ToJson(obj))
 				if err := i.GetIntegrations(); err != nil {
 					klog.Errorf("get users error: %v", err)
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				klog.Infof("ingegrateion delete func")
+				klog.Infof("ingegrateion delete func: %s", common.ToJson(obj))
 				if err := i.GetIntegrations(); err != nil {
 					klog.Errorf("get users error: %v", err)
 				}
@@ -113,7 +113,7 @@ func (i *integration) GetIntegrations() error {
 			continue
 		}
 
-		// klog.Infof("integration get accounts, user: %s, count: %d", user.Name, len(accounts))
+		klog.Infof("integration get accounts, user: %s, count: %d", user.Name, len(accounts))
 
 		for _, acc := range accounts {
 			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)

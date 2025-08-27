@@ -58,11 +58,16 @@ const (
 	Failed    = "failed"
 	Canceled  = "canceled"
 	Completed = "completed"
+
+	ActionCopy   = "copy"
+	ActionMove   = "move"
+	ActionUpload = "upload"
 )
 
 var (
 	DefaultLocalRootPath             = "/data/"
 	DefaultKeepFileName              = ".keep"
-	DefaultSyncUploadToCloudTempPath = "/files/.downloadstemp"
-	DefaultUploadToCloudTempPath     = "/files/.uploadstemp"
+	DefaultSyncUploadToCloudTempPath = "/files_cache/.downloadstemp"
+	DefaultUploadTempDir             = ".uploadstemp"
+	DefaultUploadToCloudTempPath     = "/files_cache/" + DefaultUploadTempDir
 )

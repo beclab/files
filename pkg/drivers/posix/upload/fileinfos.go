@@ -31,13 +31,7 @@ type FileInfo struct {
 }
 
 type FileUploadSucced struct {
-	Success   bool   `json:"success"`
-	IsCloud   bool   `json:"isCloud,omitempty"`
-	TaskId    string `json:"taskId,omitempty"`
-	Progress  int64  `json:"progress,omitempty"`
-	Transfers int64  `json:"transfers,omitempty"`
-	Size      int64  `json:"totalSize,omitempty"`
-	State     string `json:"state,omitempty"`
+	Success bool `json:"success"`
 }
 
 type FileUploadState struct {
@@ -45,6 +39,7 @@ type FileUploadState struct {
 	Id             string    `json:"id"`
 	Size           int64     `json:"size"`
 	State          string    `json:"state"`
+	TaskId         string    `json:"taskId,omitempty"`
 	UploadTempPath string    `json:"-"`
 	FileInfo       *FileInfo `json:"-"`
 }

@@ -11,6 +11,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/preview"
+	"files/pkg/tasks"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -553,21 +554,9 @@ func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
  * UploadChunks
  */
 func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	var user = fileUploadArg.FileParam.Owner
 	var uploadId = fileUploadArg.UploadId
 	var chunkInfo = fileUploadArg.ChunkInfo
-	var taskId = chunkInfo.UploadToCloudTaskId
-	var canceled = chunkInfo.UploadToCloudTaskCancel
 	var lastChunk = chunkInfo.ResumableChunkNumber == chunkInfo.ResumableTotalChunks
-
-	if taskId != "" { // ~ query task status
-		if canceled == 1 { // todo cancel
-			// 	tasks.TaskManager.CancelTask(taskId)
-			// 	return nil, nil
-		}
-		klog.Infof("Cloud uploadChunks, uploadId: %s, taskId: %s, query task stats, param: %s", fileUploadArg.UploadId, taskId, common.ToJson(fileUploadArg))
-		return s.service.checkUploadStats(user, uploadId, taskId, chunkInfo)
-	}
 
 	klog.Infof("Cloud uploadChunks, uploadId: %s, param: %s", fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
 
@@ -579,7 +568,7 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	}
 
 	if fileInfo == nil && !lastChunk {
-		return common.ToBytes(&upload.FileUploadSucced{Success: true, IsCloud: true}), nil
+		return common.ToBytes(&upload.FileUploadSucced{Success: true}), nil
 	}
 
 	klog.Infof("Cloud uploadChunks, phase done, tempPath: %s, data: %s", fileInfo.UploadTempPath, common.ToJson(fileInfo))
@@ -602,22 +591,22 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 
 	klog.Infof("Cloud uploadChunks, uploadId: %s, uploadToCloud param: %s", uploadId, common.ToJson(uploadParam))
 
-	jobResp, err := s.service.uploadCloud(uploadId, uploadParam)
-	if err != nil {
-		klog.Errorf("Cloud uploadChunks, create upload task error: %v", err)
+	task := tasks.TaskManager.CreateTask(uploadParam)
+	if err := task.Execute(s.service.uploadReady, task.UploadToCloud); err != nil {
 		return nil, err
 	}
 
-	var jobId = *jobResp.JobId
+	taskId := task.Id()
 
-	klog.Infof("Cloud uploadChunks, uploadToCloud waiting for execute, jobId: %d", jobId)
+	var result []*upload.FileUploadState
+	result = append(result, &upload.FileUploadState{
+		Id:     fileInfo.Id,
+		Name:   fileInfo.Name,
+		Size:   fileInfo.Size,
+		TaskId: taskId,
+	})
 
-	return common.ToBytes(
-		&upload.FileUploadSucced{
-			Success: true,
-			IsCloud: true,
-			TaskId:  fmt.Sprintf("%d", jobId),
-			Size:    fileInfo.Size,
-			State:   common.Pending,
-		}), nil
+	klog.Infof("Cloud uploadChunks, uploadId: %s, new task %s", uploadId, taskId)
+
+	return common.ToBytes(result), nil
 }

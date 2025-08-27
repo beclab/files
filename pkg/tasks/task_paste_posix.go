@@ -71,7 +71,7 @@ func (t *Task) Rsync() error {
 		t.param.Dst.Path = generatedDstNewPath
 	}
 
-	if t.param.Action == "move" {
+	if t.param.Action == common.ActionMove {
 		return t.move()
 	}
 	return t.rsync()

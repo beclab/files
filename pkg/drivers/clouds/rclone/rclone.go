@@ -1,6 +1,7 @@
 package rclone
 
 import (
+	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone/config"
@@ -95,10 +96,11 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 	changedConfigs := r.checkChangedConfigs(configs)
 
 	changedConfigsJson := common.ToJson(changedConfigs)
+	_ = changedConfigsJson
 
-	if changedConfigsJson != "{}" {
-		klog.Infof("[startHttp] changed configs: %s", common.ToJson(changedConfigs))
-	}
+	// if changedConfigsJson != "{}" {
+	klog.Infof("[startHttp] changed configs: %s", common.ToJson(changedConfigs))
+	// }
 
 	if len(changedConfigs.Delete) > 0 {
 		for _, deleteServe := range changedConfigs.Delete {
@@ -566,4 +568,39 @@ func (r *rclone) Delete(param *models.FileParam, dirents []string) ([]string, er
 
 	return nil, nil
 
+}
+
+func (r *rclone) StopJobs() error {
+	klog.Infof("[rclone] stop running jobs")
+
+	jobsResp, err := r.job.List()
+	if err != nil {
+		klog.Errorf("[rclone] get job list error: %v", err)
+		return err
+	}
+
+	var jobList *job.JobListResp
+	if err := json.Unmarshal(jobsResp, &jobList); err != nil {
+		klog.Errorf("[rclone] unmarshal job list error: %v", err)
+		return err
+	}
+
+	if jobList.JobIds == nil || len(jobList.JobIds) == 0 {
+		return nil
+	}
+
+	klog.Infof("[rclone] running jobs: %v", jobList.JobIds)
+
+	var stopIds []int
+	for _, jobId := range jobList.JobIds {
+		if _, err := r.job.Stop(jobId); err != nil {
+			klog.Errorf("[rclone] stop job %d error: %v", jobId, err)
+		} else {
+			stopIds = append(stopIds, jobId)
+		}
+	}
+
+	klog.Infof("[rclone] stop running jobs done! jobs: %v", stopIds)
+
+	return nil
 }

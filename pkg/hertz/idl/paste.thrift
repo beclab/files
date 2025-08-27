@@ -37,7 +37,8 @@ struct TaskInfo {
 struct GetTaskResp {
     1: required i32 code,
     2: optional string msg,
-    3: optional TaskInfo task
+    3: optional list<TaskInfo> tasks
+    4: optional TaskInfo task
 }
 
 struct DeleteTaskReq {

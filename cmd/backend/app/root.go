@@ -16,13 +16,14 @@ import (
 	"files/pkg/redisutils"
 	"files/pkg/tasks"
 	"files/pkg/watchers"
-	"github.com/spf13/afero"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
-	"k8s.io/klog/v2"
 	"net"
 	"os"
 	"strings"
+
+	"github.com/spf13/afero"
+	"gopkg.in/natefinch/lumberjack.v2"
+	"k8s.io/klog/v2"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
@@ -151,6 +152,7 @@ user created with the credentials from options "username" and "password".`,
 		// step5: init commands
 		rclone.NewCommandRclone()
 		rclone.Command.InitServes()
+		rclone.Command.StopJobs()
 
 		// step6: build driver handler
 		drivers.NewDriverHandler()
