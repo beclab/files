@@ -74,6 +74,7 @@ func (t *Task) Rsync() error {
 	if t.param.Action == common.ActionMove {
 		return t.move()
 	}
+
 	return t.rsync()
 }
 
@@ -111,7 +112,8 @@ func (t *Task) rsync() error {
 	_, err = common.ExecRsync(t.ctx, rsync, args, t.updateProgress)
 
 	if err != nil {
-		return fmt.Errorf("exec rsync error: %v", err)
+		klog.Errorf("exec rsync error: %v", err)
+		return err
 	}
 
 	return nil

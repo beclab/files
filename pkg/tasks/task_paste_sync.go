@@ -66,14 +66,6 @@ func (t *Task) DownloadFromSync() error {
 
 	defer func() {
 		klog.Infof("[Task] Id: %s, defer, error: %v", t.id, err)
-		if err != nil {
-			if t.param.Dst.IsCloud() {
-				if e := cmd.Clear(dst); e != nil {
-					klog.Errorf("[Task] Id: %s, clear sync temps error: %v", t.id, e)
-				}
-			}
-		}
-
 	}()
 
 	_, isFile := t.param.Src.IsFile()
@@ -81,20 +73,27 @@ func (t *Task) DownloadFromSync() error {
 		err = t.DownloadFileFromSync(src, dst)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, downloadFileFromSync error: %v", t.id, err)
-			return err
 		}
 	} else {
 		err = t.DownloadDirFromSync(src, dst)
-		klog.Errorf("[Task] Id: %s, downloadDirFromSync error: %v", t.id, err)
+
 		if err != nil {
-			return err
+			klog.Errorf("[Task] Id: %s, downloadDirFromSync error: %v", t.id, err)
 		}
 	}
 
-	if t.isLastPhase() {
-		if t.param.Action == common.ActionMove {
-			err = seahub.HandleDelete(t.param.Src)
-			if err != nil {
+	if err != nil {
+		if err.Error() == TaskCancel && !t.suspend {
+			t.param.Delete = dst
+		} else {
+			if e := cmd.Clear(dst); e != nil { // cache
+				klog.Errorf("[Task] Id: %s, clear sync dst error: %v", t.id, e)
+			}
+		}
+		return err
+	} else {
+		if !t.param.Dst.IsCloud() && t.param.Action == common.ActionMove {
+			if err = seahub.HandleDelete(t.param.Src); err != nil {
 				return err
 			}
 		}
@@ -103,7 +102,7 @@ func (t *Task) DownloadFromSync() error {
 	_, _, transferred, _ := t.GetProgress()
 	t.updateProgress(100, transferred)
 
-	if !t.isLastPhase() { // enter next phase, next phase will use prev param
+	if t.param.Dst.IsCloud() {
 		t.param.Temp = tempParam
 	}
 
@@ -127,11 +126,6 @@ func (t *Task) UploadToSync() error {
 		src = t.param.Src
 	}
 
-	canceled, err := t.isCanceled()
-	if canceled {
-		return err
-	}
-
 	klog.Infof("[Task] Id: %s, start, uploadToSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst))
 
 	t.updateProgress(0, 0)
@@ -143,39 +137,52 @@ func (t *Task) UploadToSync() error {
 	}
 	t.updateTotalSize(posixSize)
 
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		if t.param.Src.IsCloud() && !t.suspend {
+			t.param.Delete = src
+		}
+		return ctxErr
+	}
+
 	_, isFile := src.IsFile()
 	if isFile {
 		err = t.UploadFileToSync(src, dst)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, uploadFileToSync error: %v", t.id, err)
-			return err
 		}
 	} else {
 		err = t.UploadDirToSync(src, dst)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, uploadDirToSync error: %v", t.id, err)
-			return err
 		}
 	}
 
-	if t.isLastPhase() {
+	if err != nil {
 		if t.param.Src.IsCloud() {
-			if e := cmd.Clear(src); e != nil {
-				klog.Errorf("[Task] Id: %s, clear sync temps error: %v", t.id, err)
+			if err.Error() == TaskCancel {
+				if !t.suspend {
+					t.param.Delete = src
+				}
+			} else {
+				if e := cmd.Clear(src); e != nil {
+					klog.Errorf("[Task] Id: %s, clear sync temps error: %v", t.id, err)
+				}
 			}
 		}
 
-		if t.param.Action == common.ActionMove {
-			srcUri := ""
-			srcUri, err = t.param.Src.GetResourceUri()
-			if err != nil {
-				return err
-			}
-			srcFullPath := srcUri + t.param.Src.Path
-			err = os.RemoveAll(srcFullPath)
-			if err != nil {
-				return err
-			}
+		return err
+	}
+
+	if t.param.Action == common.ActionMove {
+		srcUri := ""
+		srcUri, err = t.param.Src.GetResourceUri()
+		if err != nil {
+			return err
+		}
+		srcFullPath := srcUri + t.param.Src.Path
+		err = os.RemoveAll(srcFullPath)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -292,7 +299,7 @@ func (t *Task) GetFromSyncFileCount(countType string) (int64, error) {
 }
 
 func (t *Task) DownloadDirFromSync(src, dst *models.FileParam) error {
-	canceled, err := t.isCanceled()
+	canceled, err := t.isCancel()
 	if canceled {
 		return err
 	}
@@ -348,7 +355,7 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam) error {
 	}
 
 	for _, item := range direntList {
-		canceled, _ = t.isCanceled()
+		canceled, _ = t.isCancel()
 		if canceled {
 			return nil
 		}
@@ -384,7 +391,7 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam) error {
 }
 
 func (t *Task) DownloadFileFromSync(src, dst *models.FileParam) error {
-	canceled, err := t.isCanceled()
+	canceled, err := t.isCancel()
 	if canceled {
 		return err
 	}
@@ -558,9 +565,8 @@ func (t *Task) GetToSyncFileCount(countType string) (int64, error) {
 }
 
 func (t *Task) UploadDirToSync(src, dst *models.FileParam) error {
-	canceled, err := t.isCanceled()
-	if canceled {
-		return err
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		return ctxErr
 	}
 
 	srcUri, err := src.GetResourceUri()
@@ -595,8 +601,7 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam) error {
 	var errs []error
 
 	for _, obj := range obs {
-		canceled, _ = t.isCanceled()
-		if canceled {
+		if ctxCancel, _ := t.isCancel(); ctxCancel {
 			return nil
 		}
 
@@ -642,9 +647,8 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam) error {
 }
 
 func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
-	canceled, err := t.isCanceled()
-	if canceled {
-		return err
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		return ctxErr
 	}
 
 	srcUri, err := src.GetResourceUri()
@@ -697,8 +701,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 
 	var chunkStart int64 = 0
 	for chunkNumber := int64(1); chunkNumber <= totalChunks; chunkNumber++ {
-		canceled, _ := t.isCanceled()
-		if canceled {
+		if ctxCancel, _ := t.isCancel(); ctxCancel {
 			return nil
 		}
 
@@ -990,7 +993,7 @@ func (t *Task) CalculateSyncProgressRange(currentFileSize int64) (left, mid, rig
 }
 
 func (t *Task) DoSyncCopy(src, dst *models.FileParam) error {
-	canceled, _ := t.isCanceled()
+	canceled, _ := t.isCancel()
 	if canceled {
 		return nil
 	}

@@ -56,3 +56,19 @@ func DeleteTaskMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(paste.DeleteTaskResp)
 	handler.CommonConvert(c, http2.WrapperTaskArgs("/api/task"), resp, false)
 }
+
+// PauseResumeTaskMethod .
+// @router /api/task/*node [POST]
+func PauseResumeTaskMethod(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req paste.PauseResumeTaskReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp := new(paste.PauseResumeTaskResp)
+
+	c.JSON(consts.StatusOK, resp)
+}

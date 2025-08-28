@@ -50,3 +50,8 @@ func _gettaskmethodMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _pauseresumetaskmethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

@@ -592,6 +592,7 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	klog.Infof("Cloud uploadChunks, uploadId: %s, uploadToCloud param: %s", uploadId, common.ToJson(uploadParam))
 
 	task := tasks.TaskManager.CreateTask(uploadParam)
+	task.SetTotalSize(fileInfo.Size)
 	if err := task.Execute(s.service.uploadReady, task.UploadToCloud); err != nil {
 		return nil, err
 	}

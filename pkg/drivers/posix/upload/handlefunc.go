@@ -52,10 +52,10 @@ func HandleUploadLink(fileParam *models.FileParam, from string) ([]byte, error) 
 		}
 	}
 
-	klog.Infof("[upload] uploadLink, uploadPath: %s, uploadTempPath: %s", uploadPath, uploadTempPath)
-
-	uploadID := MakeUid(uploadPath)
+	uploadID := MakeUid(uploadPath + from)
 	uploadLink := fmt.Sprintf("/upload/upload-link/%s/%s", common.NodeName, uploadID)
+
+	klog.Infof("[upload] uploadLink, uploadPath: %s, uploadTempPath: %s, uploadLink: %s", uploadPath, uploadTempPath, uploadLink)
 
 	return []byte(uploadLink), nil
 }

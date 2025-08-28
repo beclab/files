@@ -32,6 +32,8 @@ const (
 	TypeCloudCopy
 )
 
+var TaskCancel = "context canceled"
+
 type TaskManagerInterface interface {
 	CreateTask(taskType TaskType, param *models.PasteParam) *Task
 }
@@ -75,18 +77,58 @@ func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 	var _, isFile = param.Src.IsFile()
 
 	var task = &Task{
-		id:       t.generateTaskId(),
-		param:    param,
-		state:    common.Pending,
-		ctx:      ctx,
-		cancel:   cancel,
-		manager:  t,
-		isFile:   isFile,
-		createAt: time.Now(),
+		id:        t.generateTaskId(),
+		param:     param,
+		state:     common.Pending,
+		ctx:       ctx,
+		ctxCancel: cancel,
+		manager:   t,
+		isFile:    isFile,
+		createAt:  time.Now(),
 	}
 
 	return task
 
+}
+
+/**
+ * PauseTask
+ */
+func (t *taskManager) PauseTask(owner, taskId string) error {
+	userPool := t.getOrCreateUserPool(owner)
+
+	val, ok := userPool.tasks.Load(taskId)
+	if !ok {
+		return fmt.Errorf("task %s not found", taskId)
+	}
+
+	var task = val.(*Task)
+	task.suspend = true
+	task.Cancel()
+
+	return nil
+}
+
+/**
+ * ResumeTask
+ */
+func (t *taskManager) ResumeTask(owner, taskId string) error {
+	userPool := t.getOrCreateUserPool(owner)
+
+	val, ok := userPool.tasks.Load(taskId)
+	if !ok {
+		return fmt.Errorf("task %s not found", taskId)
+	}
+
+	var ctx, cancel = context.WithCancel(context.Background())
+
+	var task = val.(*Task)
+	task.ctx = ctx
+	task.ctxCancel = cancel
+	task.suspend = false
+	task.state = common.Pending
+
+	return task.Execute(task.funcs...)
 }
 
 func (t *taskManager) CancelTask(owner, taskId string, all string) {
@@ -95,8 +137,7 @@ func (t *taskManager) CancelTask(owner, taskId string, all string) {
 	if all == "1" {
 		userPool.tasks.Range(func(key, value any) bool {
 			task := value.(*Task)
-			task.cancel()
-			task.canceled = true
+			go task.Cancel()
 			return true
 		})
 		return
@@ -108,8 +149,7 @@ func (t *taskManager) CancelTask(owner, taskId string, all string) {
 	}
 
 	task := val.(*Task)
-	task.cancel()
-	task.canceled = true
+	go task.Cancel()
 }
 
 func (t *taskManager) GetTask(owner string, taskId string, status string) []*TaskInfo {
