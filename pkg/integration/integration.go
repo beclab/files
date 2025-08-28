@@ -29,6 +29,8 @@ type integration struct {
 	rest   *resty.Client
 	tokens map[string]*Integrations
 
+	authToken string
+
 	sync.RWMutex
 }
 
@@ -89,6 +91,12 @@ func (i *integration) HandlerEvent() cache.ResourceEventHandler {
 func (i *integration) GetIntegrations() error {
 	i.Lock()
 	defer i.Unlock()
+
+	err := i.getAuthToken()
+	if err != nil {
+		klog.Errorf("get auth token error: %v", err)
+		return err
+	}
 
 	users, err := i.getUsers()
 	if err != nil {

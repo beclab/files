@@ -13,9 +13,8 @@ const (
 )
 
 const (
-	REQUEST_HEADER_OWNER = "X-Bfl-User"
-	REQUEST_HEADER_NODE  = "X-Terminus-Node"
-	REQUEST_HEADER_TOKEN = "Terminus-Nonce"
+	REQUEST_HEADER_OWNER         = "X-Bfl-User"
+	REQUEST_HEADER_AUTHORIZATION = "Authorization"
 )
 
 var (

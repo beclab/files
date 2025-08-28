@@ -11,13 +11,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
+var authTokenPatn = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
 func (i *integration) getAccounts(owner string) ([]*accountsResponseData, error) {
-	server := "system-server.user-system-" + owner
-	headerNonce := os.Getenv("APP_RANDOM_KEY")
-	settingsUrl := fmt.Sprintf("http://%s/legacy/v1alpha1/service.settings/v1/api/account/all", server)
+	settingsUrl := fmt.Sprintf("http://settings.user-system-%s:28080/api/account/all", owner)
 
 	// klog.Infof("fetch integration from settings: %s", settingsUrl)
-	resp, err := i.rest.SetDebug(false).R().SetHeader(common.REQUEST_HEADER_TOKEN, headerNonce).
+	resp, err := i.rest.SetDebug(false).R().SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", i.authToken)).
 		SetResult(&accountsResponse{}).
 		Get(settingsUrl)
 
@@ -39,15 +39,13 @@ func (i *integration) getAccounts(owner string) ([]*accountsResponseData, error)
 }
 
 func (i *integration) getToken(owner string, accountName string, accountType string) (*accountResponseData, error) {
-	server := "system-server.user-system-" + owner
-	headerNonce := os.Getenv("APP_RANDOM_KEY")
-	settingsUrl := fmt.Sprintf("http://%s/legacy/v1alpha1/service.settings/v1/api/account/retrieve", server)
+	settingsUrl := fmt.Sprintf("http://settings.user-system-%s:28080/api/account/retrieve", owner)
 
 	var data = make(map[string]string)
 	data["name"] = i.formatUrl(accountType, accountName)
 	klog.Infof("fetch integration from settings: %s", settingsUrl)
 	resp, err := i.rest.R().SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(common.REQUEST_HEADER_TOKEN, headerNonce).
+		SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", i.authToken)).
 		SetBody(data).
 		SetResult(&accountResponse{}).
 		Post(settingsUrl)
@@ -87,4 +85,19 @@ func (i *integration) checkExpired(expiredAt int64) bool {
 	adjustedTimestamp := expiredAt - (15 * 1000)
 	currentTimestamp := time.Now().UnixMilli()
 	return adjustedTimestamp < currentTimestamp
+}
+
+func (i *integration) getAuthToken() error {
+	token, err := os.ReadFile(authTokenPatn)
+	if err != nil {
+		return fmt.Errorf("read auth token file error: %v", err)
+	}
+
+	if token == nil || len(token) == 0 {
+		return fmt.Errorf("auth token invalid")
+	}
+
+	i.authToken = string(token)
+
+	return nil
 }
