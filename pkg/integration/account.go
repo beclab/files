@@ -32,7 +32,7 @@ func (i *integration) getAccounts(owner string) ([]*accountsResponseData, error)
 	accountsResp := resp.Result().(*accountsResponse)
 
 	if accountsResp.Code != 0 {
-		return nil, fmt.Errorf("get accounts failed, code:  %d, msg: %s", accountsResp.Code, accountsResp.Message)
+		return nil, fmt.Errorf("get accounts failed, code:  %d, msg: %s", accountsResp.Code, string(resp.Body()))
 	}
 
 	return accountsResp.Data, nil

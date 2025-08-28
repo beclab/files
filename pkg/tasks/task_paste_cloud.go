@@ -11,6 +11,7 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -41,7 +42,7 @@ func (t *Task) DownloadFromCloud() error {
 		}
 		dst = cacheParam
 	} else {
-		dst = t.param.Dst
+		dst = t.param.Dst // posix
 	}
 
 	klog.Infof("[Task] Id: %s, start, downloadFromCloud, user: %s, action: %s, src: %s, dst: %s", t.id, user, action, common.ToJson(src), common.ToJson(dst))
@@ -122,7 +123,7 @@ func (t *Task) DownloadFromCloud() error {
 	var jobId = *jobResp.JobId
 
 	// check job stats
-	done, err = t.checkJobStats(jobId)
+	done, err = t.checkJobStats(jobId) // todo Continuously monitor the remaining local storage space
 
 	if err != nil && jobId > 0 {
 		_, _ = cmd.GetJob().Stop(jobId)
@@ -131,13 +132,17 @@ func (t *Task) DownloadFromCloud() error {
 	// clear files
 	if t.isLastPhase() {
 		if err == nil {
-			if t.param.Action == "copy" {
+			if t.param.Action == common.ActionCopy {
 				return err
 			}
-			err = cmd.Clear(t.param.Src)
+			if e := cmd.Clear(t.param.Src); e != nil {
+				klog.Errorf("[Task] Id: %s, clear src error: %v", t.id, e)
+			}
 
 		} else {
-			err = cmd.Clear(t.param.Dst)
+			if e := cmd.Clear(t.param.Dst); e != nil {
+				klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
+			}
 		}
 	}
 
@@ -164,7 +169,7 @@ func (t *Task) UploadToCloud() error {
 	var err error
 	var cmd = rclone.Command
 	var user = t.param.Owner
-	var action = t.param.Action
+	var action = t.param.Action // copy, move, upload
 	var dst = t.param.Dst
 	var jobId int
 
@@ -186,7 +191,7 @@ func (t *Task) UploadToCloud() error {
 
 			if err == nil {
 
-				if t.param.Action == "copy" {
+				if t.param.Action == common.ActionCopy {
 					if !t.param.Src.IsSync() {
 						return
 					}
@@ -240,7 +245,10 @@ func (t *Task) UploadToCloud() error {
 	// check duplicated names and generate new name
 	cloudItems, err := cmd.GetFilesList(dst, true)
 	if err != nil {
-		return fmt.Errorf("get local files list error: %v", err)
+		if !strings.Contains(err.Error(), "directory not found") {
+			return fmt.Errorf("get local files list error: %v", err)
+		}
+
 	}
 	var dupNames []string
 	if cloudItems != nil && cloudItems.List != nil && len(cloudItems.List) > 0 {
@@ -369,7 +377,7 @@ func (t *Task) CopyToCloud() error {
 	// clear files
 	if t.isLastPhase() {
 		if err == nil {
-			if t.param.Action == "copy" {
+			if t.param.Action == common.ActionCopy {
 				return err
 			}
 			err = cmd.Clear(t.param.Src)

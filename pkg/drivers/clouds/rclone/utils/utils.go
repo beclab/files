@@ -104,7 +104,9 @@ func FormatError(resp []byte) error {
 			}
 		case
 			"operations/deletefile",
-			"config/create":
+			"operations/list",
+			"config/create",
+			"job/list", "job/stop":
 			return fmt.Errorf("%s", errMsg.Error)
 		}
 		return fmt.Errorf("%s", string(resp))

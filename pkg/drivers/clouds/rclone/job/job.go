@@ -14,6 +14,7 @@ type Interface interface {
 	Status(jobId int) ([]byte, error) // job/status
 	Stop(jobId int) ([]byte, error)   // job/stop
 	Stats(jobId int) ([]byte, error)  // core/stats with progress
+	List() ([]byte, error)
 }
 
 type job struct {
@@ -70,6 +71,21 @@ func (j *job) Stop(jobId int) ([]byte, error) {
 	}
 
 	resp, err := utils.Request(ctx, url, http.MethodPost, nil, []byte(commonutils.ToJson(data)))
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (j *job) List() ([]byte, error) {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, JobListPath)
+	var ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	var header = make(http.Header)
+	header.Add("Content-Type", "text/plain")
+	resp, err := utils.Request(ctx, url, http.MethodPost, &header, nil)
 	if err != nil {
 		return nil, err
 	}

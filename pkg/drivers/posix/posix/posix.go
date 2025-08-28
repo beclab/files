@@ -553,12 +553,13 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	}
 
 	if fileInfo == nil {
-		return common.ToBytes(&upload.FileUploadSucced{Success: true, State: common.Running}), nil
-	} else {
-		fileInfo.State = common.Completed
+		return common.ToBytes(&upload.FileUploadSucced{Success: true}), nil
 	}
 
 	klog.Infof("Posix uploadChunks, done! data: %s", common.ToJson(fileInfo))
 
-	return common.ToBytes(fileInfo), err
+	var result []*upload.FileUploadState
+	result = append(result, fileInfo)
+
+	return common.ToBytes(result), err
 }

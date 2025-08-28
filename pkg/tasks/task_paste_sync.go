@@ -92,7 +92,7 @@ func (t *Task) DownloadFromSync() error {
 	}
 
 	if t.isLastPhase() {
-		if t.param.Action == "move" {
+		if t.param.Action == common.ActionMove {
 			err = seahub.HandleDelete(t.param.Src)
 			if err != nil {
 				return err
@@ -165,7 +165,7 @@ func (t *Task) UploadToSync() error {
 			}
 		}
 
-		if t.param.Action == "move" {
+		if t.param.Action == common.ActionMove {
 			srcUri := ""
 			srcUri, err = t.param.Src.GetResourceUri()
 			if err != nil {
@@ -1008,7 +1008,7 @@ func (t *Task) DoSyncCopy(src, dst *models.FileParam) error {
 	srcParentDir := filepath.Dir(strings.TrimSuffix(src.Path, "/"))
 	srcDirents := []string{filepath.Base(strings.TrimSuffix(src.Path, "/"))}
 	dstParentDir := filepath.Dir(strings.TrimSuffix(dst.Path, "/"))
-	if t.param.Action == "copy" {
+	if t.param.Action == common.ActionCopy {
 		_, err = seahub.HandleBatchCopy(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
 		if err != nil {
 			return err

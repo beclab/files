@@ -3,8 +3,14 @@ package job
 var (
 	JobStatusPath = "job/status"
 	JobStopPath   = "job/stop"
+	JobListPath   = "job/list"
 	CoreStats     = "core/stats"
 )
+
+type JobListResp struct {
+	ExecuteId string `json:"executeId"`
+	JobIds    []int  `json:"jobids"`
+}
 
 type JobStatusReq struct {
 	JobId int `json:"jobid"`

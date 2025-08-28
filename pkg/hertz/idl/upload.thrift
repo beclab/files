@@ -64,7 +64,7 @@ struct UploadChunksFileItem {
     1: string id
     2: string name
     3: i64 size
-    4: optional string state
+    4: optional string taskId
 }
 
 service UploadService {

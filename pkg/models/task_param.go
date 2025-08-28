@@ -9,9 +9,10 @@ import (
 type TaskParam struct {
 	Owner   string `json:"owner"`
 	TaskId  string `json:"taskId"`
-	Status  string `json:"status"`
+	Status  string `json:"status"` // x,y,z
 	LogView string `json:"logView"`
 	Delete  string `json:"delete"`
+	All     string `json:"all"`
 }
 
 func NewTaskParam(r *http.Request) (*TaskParam, error) {
@@ -26,6 +27,7 @@ func NewTaskParam(r *http.Request) (*TaskParam, error) {
 		Status:  r.URL.Query().Get("status"),
 		LogView: r.URL.Query().Get("log_view"),
 		Delete:  r.URL.Query().Get("delete"),
+		All:     r.URL.Query().Get("all"),
 	}
 
 	return taskParam, nil

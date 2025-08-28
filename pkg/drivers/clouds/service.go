@@ -9,7 +9,6 @@ import (
 	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"k8s.io/klog/v2"
@@ -358,8 +357,10 @@ func (s *service) createUploadParam(src, dst *models.FileParam, uploadFileName s
 
 	dstItems, err := cmd.GetFilesList(dstFirstLevelPathParam, false)
 	if err != nil {
-		klog.Errorf("[service] upload, get lists failed, path: %s, error: %v", dst.Path, err)
-		return nil, fmt.Errorf("get dst files list error: %v", err)
+		if !strings.Contains(err.Error(), "directory not found") {
+			klog.Errorf("[service] upload, get lists failed, path: %s, error: %v", dst.Path, err)
+			return nil, fmt.Errorf("get dst files list error: %v", err)
+		}
 	}
 
 	var dupNames []string
@@ -398,7 +399,7 @@ func (s *service) createUploadParam(src, dst *models.FileParam, uploadFileName s
 
 	var data = &models.PasteParam{
 		Owner:         src.Owner,
-		Action:        "copy",
+		Action:        common.ActionUpload,
 		UploadToCloud: true,
 		Src: &models.FileParam{
 			Owner:    src.Owner,
@@ -417,76 +418,6 @@ func (s *service) createUploadParam(src, dst *models.FileParam, uploadFileName s
 	return data, nil
 }
 
-func (s *service) uploadCloud(uploadId string, param *models.PasteParam) (*operations.OperationsAsyncJobResp, error) {
-	var cmd = s.command
-	var src = param.Src
-	var dst = param.Dst
-
-	klog.Infof("[service] uploadTask, uploadId: %s, param: %s", uploadId, common.ToJson(param))
-
-	posixPathPrefix := files.GetPrefixPath(src.Path)
-	posixFileName, _ := files.GetFileNameFromPath(src.Path)
-	_, _ = posixPathPrefix, posixFileName
-	cloudFileName, isFile := files.GetFileNameFromPath(dst.Path)
-	cloudPrefixPath := files.GetPrefixPath(dst.Path)
-
-	cloudItems, err := cmd.GetFilesList(dst, true)
-	if err != nil {
-		return nil, fmt.Errorf("get local files list error: %v", err)
-	}
-	var dupNames []string
-	if cloudItems != nil && cloudItems.List != nil && len(cloudItems.List) > 0 {
-		for _, item := range cloudItems.List {
-			dupNames = append(dupNames, item.Name)
-		}
-	}
-
-	newCloudName := files.GenerateDupName(dupNames, cloudFileName, isFile)
-	klog.Infof("[service] uploadId: %s, newCloudName: %s", uploadId, newCloudName)
-
-	dst.Path = cloudPrefixPath + newCloudName
-
-	if !isFile {
-		dst.Path += "/"
-	}
-
-	// get src size
-	posixSize, err := cmd.GetFilesSize(src)
-	if err != nil {
-		return nil, fmt.Errorf("get size error: %v", err)
-	}
-
-	klog.Infof("[service] uploadId: %s, totalSize: %d", uploadId, posixSize)
-
-	jobResp, err := cmd.Copy(src, dst)
-	if err != nil {
-		return nil, fmt.Errorf("copy error: %v", err)
-	}
-
-	if jobResp.JobId == nil {
-		return nil, fmt.Errorf("job invalid")
-	}
-
-	return jobResp, nil
-}
-
-func (s *service) checkUploadStats(user string, uploadId string, jobId string, chunkInfo *models.ResumableInfo) ([]byte, error) {
-	id, err := strconv.Atoi(jobId)
-	if err != nil {
-		return nil, err
-	}
-
-	jobStatus, err := s.QueryJob(id)
-	if err != nil {
-		return nil, err
-	}
-
-	jobStat, err := s.QueryJobCoreStat(id)
-	if err != nil {
-		return nil, err
-	}
-
-	_, _ = jobStat, jobStatus
-
-	return nil, nil
+func (s *service) uploadReady() error {
+	return nil
 }

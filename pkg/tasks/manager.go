@@ -6,6 +6,8 @@ import (
 	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,15 +37,36 @@ type TaskManagerInterface interface {
 }
 
 type taskManager struct {
-	task sync.Map
-	pool pond.Pool //pond.ResultPool[string]
+	userPools sync.Map
+}
+
+type userPool struct {
+	owner string
+	pool  pond.Pool
+	tasks sync.Map
 }
 
 func NewTaskManager() {
 	TaskManager = &taskManager{
-		task: sync.Map{},
-		pool: pond.NewPool(1, pond.WithContext(context.Background()), pond.WithNonBlocking(true)),
+		userPools: sync.Map{},
 	}
+}
+
+func (t *taskManager) getOrCreateUserPool(owner string) *userPool {
+	if pool, ok := t.userPools.Load(owner); ok {
+		userPool := pool.(*userPool)
+		return userPool
+	}
+
+	userPool := &userPool{
+		owner: owner,
+		tasks: sync.Map{},
+		pool:  pond.NewPool(1, pond.WithContext(context.Background()), pond.WithNonBlocking(true)),
+	}
+
+	t.userPools.Store(owner, userPool)
+
+	return userPool
 }
 
 func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
@@ -52,21 +75,34 @@ func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 	var _, isFile = param.Src.IsFile()
 
 	var task = &Task{
-		id:      t.generateTaskId(),
-		param:   param,
-		state:   common.Pending,
-		ctx:     ctx,
-		cancel:  cancel,
-		manager: t,
-		isFile:  isFile,
+		id:       t.generateTaskId(),
+		param:    param,
+		state:    common.Pending,
+		ctx:      ctx,
+		cancel:   cancel,
+		manager:  t,
+		isFile:   isFile,
+		createAt: time.Now(),
 	}
 
 	return task
 
 }
 
-func (t *taskManager) CancelTask(taskId string) {
-	val, ok := t.task.Load(taskId)
+func (t *taskManager) CancelTask(owner, taskId string, all string) {
+	userPool := t.getOrCreateUserPool(owner)
+
+	if all == "1" {
+		userPool.tasks.Range(func(key, value any) bool {
+			task := value.(*Task)
+			task.cancel()
+			task.canceled = true
+			return true
+		})
+		return
+	}
+
+	val, ok := userPool.tasks.Load(taskId)
 	if !ok {
 		return
 	}
@@ -76,10 +112,17 @@ func (t *taskManager) CancelTask(taskId string) {
 	task.canceled = true
 }
 
-func (t *taskManager) GetTask(taskId string) *TaskInfo {
-	val, ok := t.task.Load(taskId)
+func (t *taskManager) GetTask(owner string, taskId string, status string) []*TaskInfo {
+	userPool := t.getOrCreateUserPool(owner)
+
+	if status != "" {
+		return t.GetTasksByStatus(owner, status)
+	}
+
+	var tasks []*TaskInfo
+	val, ok := userPool.tasks.Load(taskId)
 	if !ok {
-		return nil
+		return tasks
 	}
 
 	task := val.(*Task)
@@ -112,7 +155,66 @@ func (t *taskManager) GetTask(taskId string) *TaskInfo {
 		ErrorMessage:  task.message,
 	}
 
-	return res
+	tasks = append(tasks, res)
+
+	return tasks
+}
+
+func (t *taskManager) GetTasksByStatus(owner, status string) []*TaskInfo {
+	userPool := t.getOrCreateUserPool(owner)
+
+	var tasks []*Task
+	var result []*TaskInfo
+	userPool.tasks.Range(func(key, value any) bool {
+		task := value.(*Task)
+		if strings.Contains(status, task.state) {
+			tasks = append(tasks, task)
+		}
+
+		return true
+	})
+
+	if tasks == nil || len(tasks) == 0 {
+		return result
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].createAt.Before(tasks[j].createAt) // asc
+	})
+
+	for _, task := range tasks {
+		var src = task.param.Src
+		var dst = task.param.Dst
+
+		var srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
+		var dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
+		var dstFileName = files.GetPathName(dst.Path)
+		var srcFileName = files.GetPathName(src.Path)
+
+		var res = &TaskInfo{
+			Id:            task.id,
+			Action:        task.param.Action,
+			IsDir:         !task.isFile,
+			FileName:      srcFileName,
+			Dst:           dstUri,
+			DstPath:       dstFileName,
+			DstFileType:   dst.FileType,
+			Src:           srcUri,
+			SrcFileType:   src.FileType,
+			CurrentPhase:  task.currentPhase,
+			TotalPhases:   task.totalPhases,
+			Progress:      task.progress,
+			Transferred:   task.transfer,
+			TotalFileSize: task.totalSize,
+			TidyDirs:      task.tidyDirs,
+			Status:        task.state,
+			ErrorMessage:  task.message,
+		}
+
+		result = append(result, res)
+	}
+
+	return result
 }
 
 func (t *taskManager) generateTaskId() string {
