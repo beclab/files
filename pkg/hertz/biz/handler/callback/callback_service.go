@@ -4,10 +4,10 @@ package callback
 
 import (
 	"context"
-	"encoding/json"
-	"files/pkg/hertz/biz/handler/handle_func"
+	"files/pkg/drivers/sync/seahub"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"k8s.io/klog/v2"
+	"strings"
 
 	callback "files/pkg/hertz/biz/model/callback"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -21,20 +21,34 @@ func CallbackCreateMethod(ctx context.Context, c *app.RequestContext) {
 	var req callback.CallbackCreateReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(callback.CallbackCreateResp)
-	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.CallbackCreateHandler, "/callback/create")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+	bflName := strings.TrimSpace(req.Name)
+	if bflName != "" {
+		newUsername := bflName + "@auth.local"
+		klog.Infof("Try to create user for %s", newUsername)
+
+		isNew, err := seahub.CreateUser(newUsername)
+		if err != nil {
+			klog.Infof("Error creating user: %v", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
 		}
-		c.JSON(consts.StatusOK, resp)
+
+		if isNew {
+			repoId, err := seahub.CreateDefaultLibrary(newUsername)
+			if err != nil {
+				klog.Infof("Create default library for %s failed: %v", newUsername, err)
+			} else {
+				klog.Infof("Create default library %s for %s successfully!", repoId, newUsername)
+			}
+		}
 	}
+
+	resp := new(callback.CallbackCreateResp)
+	c.JSON(consts.StatusOK, resp)
 }
 
 // CallbackDeleteMethod .
@@ -44,18 +58,19 @@ func CallbackDeleteMethod(ctx context.Context, c *app.RequestContext) {
 	var req callback.CallbackDeleteReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	bflName := strings.TrimSpace(req.Name)
+	username := bflName + "@auth.local"
+
+	err = seahub.RemoveUser(username)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
 
 	resp := new(callback.CallbackDeleteResp)
-	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.CallbackDeleteHandler, "/callback/delete")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
-		}
-		c.JSON(consts.StatusOK, resp)
-	}
+	c.JSON(consts.StatusOK, resp)
 }

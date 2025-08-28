@@ -3,30 +3,45 @@
 package external
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"files/pkg/hertz/biz/handler/handle_func"
-	"github.com/cloudwego/hertz/pkg/common/utils"
-	"k8s.io/klog/v2"
-
+	"files/pkg/common"
+	"files/pkg/files"
+	"files/pkg/global"
 	external "files/pkg/hertz/biz/model/api/external"
+	"files/pkg/integration"
+	"files/pkg/models"
+	"files/pkg/redisutils"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"github.com/go-redis/redis"
+	"io/ioutil"
+	"k8s.io/klog/v2"
+	"net/http"
+	"strings"
+	"time"
 )
 
 // MountedMethod .
 // @router /api/mounted/*node [GET]
 func MountedMethod(ctx context.Context, c *app.RequestContext) {
+	global.GlobalMounted.Updated()
+	res := common.ToBytes(map[string]interface{}{
+		"code":         0,
+		"message":      "success",
+		"mounted_data": global.GlobalMounted.GetMountedData(),
+	})
+
 	resp := new(external.MountedResp)
-	respBytes := handle_func.MonkeyHandle(ctx, c, nil, handle_func.ResourceMountedHandler, "/api/mounted")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
-		}
-		c.JSON(consts.StatusOK, resp)
+	if err := json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
 	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // MountMethod .
@@ -36,20 +51,114 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	var req external.MountReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(external.MountResp)
-	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.ResourceMountHandler, "/api/mount")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+	externalType := req.ExternalType
+	var urls []string
+	if externalType == "smb" {
+		urls = []string{"http://" + files.TerminusdHost + "/command/v2/mount-samba", "http://" + files.TerminusdHost + "/command/mount-samba"}
+	} else {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("Unsupported external type: %s", externalType)})
+		return
+	}
+
+	var res map[string]interface{}
+	mounted := false
+	for _, url := range urls {
+		bodyStruct := struct {
+			SmbPath  string `json:"smbPath"`
+			User     string `json:"user"`
+			Password string `json:"password"`
+		}{
+			SmbPath:  req.SmbPath,
+			User:     req.User,
+			Password: req.Password,
+		}
+
+		bodyBytes, err := json.Marshal(bodyStruct)
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 			return
 		}
-		c.JSON(consts.StatusOK, resp)
+
+		client := &http.Client{}
+		request, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+			return
+		}
+		c.Request.Header.VisitAll(func(key []byte, value []byte) {
+			request.Header.Set(string(key), string(value))
+		})
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-Signature", "temp_signature")
+
+		resp, err := client.Do(request)
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		if resp == nil {
+			klog.Errorf("not get response from %s", url)
+			continue
+		}
+
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		err = json.Unmarshal(respBody, &res)
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		err = resp.Body.Close()
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		if resp.StatusCode >= 400 {
+			klog.Errorf("Failed to mount by %s to %s", url, files.TerminusdHost)
+			klog.Infof("response status: %d, response body: %v", resp.Status, res)
+			continue
+		}
+
+		mounted = true
+		break
 	}
+	if !mounted {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "failed to mount samba"})
+	}
+
+	if int(res["code"].(float64)) != consts.StatusOK {
+		klog.Warningf(res["message"].(string))
+		if strings.Contains(res["message"].(string), "mount error(13)") {
+			res["message"] = "Incorrect username or password"
+		}
+		if strings.Contains(res["message"].(string), "mount error(113)") {
+			res["message"] = "Unable to find suitable address"
+		}
+		if strings.Contains(res["message"].(string), "mount error(115)") {
+			res["message"] = "Cannot connect to samba server"
+		}
+	}
+
+	global.GlobalMounted.Updated()
+
+	resp := new(external.MountResp)
+	if err := json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // UnmountMethod .
@@ -59,35 +168,167 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 	var req external.UnmountReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(external.UnmountResp)
-	respBytes := handle_func.MonkeyHandle(ctx, c, req, handle_func.ResourceUnmountHandler, "/api/unmount")
-	if respBytes != nil {
-		if err = json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
-		}
-		c.JSON(consts.StatusOK, resp)
+	var p = string(c.Path())
+	var path = strings.TrimPrefix(p, "/api/unmount")
+	if path == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
 	}
+
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	fileParam, err := models.CreateFileParam(owner, path)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+	urlPath := uri + fileParam.Path
+
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:         files.DefaultFs,
+		Path:       strings.TrimPrefix(urlPath, "/data"),
+		Modify:     true,
+		Expand:     false,
+		ReadHeader: true,
+	})
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	externalType := req.ExternalType
+	var url = ""
+	if externalType == "usb" {
+		url = "http://" + files.TerminusdHost + "/command/umount-usb-incluster"
+	} else if externalType == "smb" {
+		url = "http://" + files.TerminusdHost + "/command/umount-samba-incluster"
+	} else {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("Unsupported external type: %s", externalType)})
+		return
+	}
+	klog.Infoln("path:", file.Path)
+	klog.Infoln("externalTYpe:", externalType)
+	klog.Infoln("url:", url)
+
+	mountPath := strings.TrimPrefix(strings.TrimSuffix(file.Path, "/"), "/")
+	lastSlashIndex := strings.LastIndex(mountPath, "/")
+	if lastSlashIndex != -1 {
+		mountPath = mountPath[lastSlashIndex+1:]
+	}
+	klog.Infoln("mountPath:", mountPath)
+
+	bodyData := map[string]string{
+		"path": mountPath,
+	}
+	klog.Infoln("bodyData:", bodyData)
+	body, err := json.Marshal(bodyData)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	klog.Infoln("body (byte slice):", body)
+	klog.Infoln("body (string):", string(body))
+
+	client := &http.Client{}
+	request, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	c.Request.Header.VisitAll(func(key []byte, value []byte) {
+		request.Header.Set(string(key), string(value))
+	})
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Signature", "temp_signature")
+	response, err := client.Do(request)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	defer response.Body.Close()
+
+	respBody, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	var res map[string]interface{}
+	err = json.Unmarshal(respBody, &res)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	klog.Infoln("res:", res)
+	global.GlobalMounted.Updated()
+
+	resp := new(external.UnmountResp)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // GetSmbHistoryMethod .
 // @router /api/smb_history/*node [GET]
 func GetSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
-	resp := new(external.GetSmbHistoryResp)
-	respBytes := handle_func.MonkeyHandle(ctx, c, nil, handle_func.SmbHistoryGetHandler, "/api/smb_history")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+	bflName := string(c.GetHeader("X-Bfl-User"))
+	if bflName == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	key := bflName + "_smb_history"
+
+	zset, err := redisutils.RedisClient.ZRevRangeWithScores(key, 0, -1).Result()
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("get reverse range with scores from zset failed: %v", err)})
+		return
+	}
+
+	var res []map[string]interface{}
+
+	for _, entry := range zset {
+		member := entry.Member.(string)
+		score := entry.Score
+
+		hashKey := key + "_url_details:" + member
+		var urlInfo map[string]string
+		urlInfo, err = redisutils.RedisClient.HGetAll(hashKey).Result()
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
 		}
-		c.JSON(consts.StatusOK, resp)
+
+		item := map[string]interface{}{
+			"url":       urlInfo["url"],
+			"username":  urlInfo["username"],
+			"password":  urlInfo["password"],
+			"timestamp": score,
+		}
+
+		res = append(res, item)
 	}
+
+	resp := new(external.GetSmbHistoryResp)
+	if err := json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // PutSmbHistoryMethod .
@@ -97,14 +338,44 @@ func PutSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 	var req external.PutSmbHistoryReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := handle_func.MonkeyHandle(ctx, c, req, handle_func.SmbHistoryPutHandler, "/api/smb_history")
-	if resp != nil {
-		c.JSON(consts.StatusOK, string(resp))
+	bflName := string(c.GetHeader("X-Bfl-User"))
+	if bflName == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
 	}
+
+	key := bflName + "_smb_history"
+	requestData := req.Data
+	score := float64(time.Now().Unix())
+	for _, datum := range requestData {
+		err = redisutils.RedisClient.ZAdd(key, redis.Z{Score: score, Member: datum.URL}).Err()
+		if err != nil {
+			klog.Errorln("add new member to zset failed: ", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("add new member to zset failed: %v", err)})
+			return
+		}
+
+		hashKey := key + "_url_details:" + datum.URL
+
+		var fields = map[string]interface{}{
+			"url":      datum.URL,
+			"username": datum.Username,
+			"password": datum.Password,
+		}
+		for field, value := range fields {
+			_, err = redisutils.RedisClient.HSet(hashKey, field, value).Result()
+			if err != nil {
+				klog.Errorf("set hash field '%s' failed: %v\n", field, err)
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("set hash field '%s' failed: %v", field, err)})
+				return
+			}
+		}
+	}
+	c.String(consts.StatusOK, "Successfully added/updated SMB history and hash")
 }
 
 // DeleteSmbHistoryMethod .
@@ -114,12 +385,73 @@ func DeleteSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 	var req external.DeleteSmbHistoryReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := handle_func.MonkeyHandle(ctx, c, req, handle_func.SmbHistoryDeleteHandler, "/api/smb_history")
-	if resp != nil {
-		c.JSON(consts.StatusOK, string(resp))
+	bflName := string(c.GetHeader("X-Bfl-User"))
+	if bflName == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
 	}
+
+	key := bflName + "_smb_history"
+	requestData := req.Data
+	var urls []string
+	for _, datum := range requestData {
+		urls = append(urls, datum.URL)
+
+		hashKey := key + "_url_details:" + datum.URL
+		_, err = redisutils.RedisClient.Del(hashKey).Result()
+		if err != nil {
+			klog.Errorf("delete key failed: %v\n", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("delete key failed: %v", err)})
+			return
+		}
+	}
+
+	err = redisutils.RedisClient.ZRem(key, urls).Err()
+	if err != nil {
+		klog.Errorln("remove member for zset failed: ", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("remove member for zset failed: %v", err)})
+		return
+	}
+	c.String(consts.StatusOK, "Successfully deleted SMB history")
+}
+
+// AccountsMethod .
+// @router /api/accounts [GET]
+func AccountsMethod(ctx context.Context, c *app.RequestContext) {
+	var err error
+
+	var result = make(map[string]interface{})
+
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	accounts, err := integration.IntegrationManager().GetAccounts(owner)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	result["code"] = http.StatusOK
+	result["data"] = accounts
+
+	res, err := json.Marshal(result)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	resp := new(external.AccountsResp)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }

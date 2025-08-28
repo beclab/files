@@ -60,3 +60,8 @@ func _node0Mw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _pauseresumetaskmethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

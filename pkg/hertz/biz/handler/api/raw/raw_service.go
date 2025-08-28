@@ -4,26 +4,124 @@ package raw
 
 import (
 	"context"
-	"encoding/json"
-	"files/pkg/hertz/biz/handler/handle_func"
+	"files/pkg/common"
+	"files/pkg/drivers"
+	"files/pkg/drivers/base"
 	raw "files/pkg/hertz/biz/model/api/raw"
+	"files/pkg/models"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
+	"mime"
+	"strings"
+	"time"
 )
 
 // RawMethod .
 // @router /api/raw/*path [GET]
 func RawMethod(ctx context.Context, c *app.RequestContext) {
-	resp := new(raw.RawResp)
-	respBytes := handle_func.RawHandle(ctx, c, nil, handle_func.RawHandler, "/api/raw")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
+	var err error
+	var req raw.RawReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	_ = new(raw.RawResp) // file stream, won't use
+	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/raw", false, false)
+	if err != nil {
+		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	klog.Infof("[Incoming] raw, user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: contextArg.FileParam.Owner,
+	}
+
+	var rawInline = ""
+	if req.Inline != nil {
+		rawInline = *req.Inline
+	}
+	var rawMeta = ""
+	if req.Meta != nil {
+		rawMeta = *req.Meta
+	}
+	var fileType = contextArg.FileParam.FileType
+
+	var handler = drivers.Adaptor.NewFileHandler(fileType, handlerParam)
+	if handler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		return
+	}
+
+	file, err := handler.Raw(contextArg)
+	if err != nil {
+		klog.Errorf("raw error: %v, user: %s, url: %s", err, contextArg.FileParam.Owner, strings.TrimPrefix(string(c.Path()), "/api/raw"))
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	if rawInline == "true" {
+		if rawMeta == "true" {
+			c.SetContentType("application/json; charset=utf-8")
 		}
-		c.JSON(consts.StatusOK, resp)
+		c.Header("Cache-Control", "private")
+		c.Header("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
+			"filename": file.FileName,
+		}))
+
+	} else {
+		c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{
+			"filename": file.FileName,
+		}))
+	}
+
+	if file.Redirect {
+		klog.Infof("redirect to %s", file.FileName)
+		c.Redirect(consts.StatusFound, []byte(file.FileName))
+		return
+	}
+
+	if !file.IsCloud {
+		c.Header("Content-Disposition", "attachment; filename="+file.FileName)
+		c.Header("Last-Modified", file.FileModified.UTC().Format(time.RFC1123))
+		ifMatch := string(c.GetHeader("If-Modified-Since"))
+		if ifMatch != "" {
+			t, _ := time.Parse(time.RFC1123, ifMatch)
+			if !file.FileModified.After(t) {
+				c.AbortWithStatusJSON(consts.StatusNotModified, utils.H{
+					"message": "file not modified",
+				})
+				return
+			}
+		}
+		c.SetBodyStream(file.Reader, int(file.FileLength))
+	} else {
+		for k, vs := range file.RespHeader {
+			for _, v := range vs {
+				c.Header(k, v)
+			}
+		}
+
+		if rawInline == "true" {
+			c.Header("Cache-Control", "private")
+			c.Header("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
+				"filename": file.FileName,
+			}))
+			c.SetContentType(common.MimeTypeByExtension(file.FileName))
+		}
+
+		c.SetStatusCode(file.StatusCode)
+		c.SetBodyStream(file.ReadCloser, int(file.FileLength))
 	}
 }

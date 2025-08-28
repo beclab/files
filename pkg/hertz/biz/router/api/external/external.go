@@ -19,19 +19,29 @@ func Register(r *server.Hertz) {
 	root := r.Group("/", rootMw()...)
 	{
 		_api := root.Group("/api", _apiMw()...)
+		_api.GET("/accounts", append(_accountsmethodMw(), external.AccountsMethod)...)
 		{
 			_mount := _api.Group("/mount", _mountMw()...)
-			_mount.POST("/*node", append(_mountmethodMw(), external.MountMethod)...)
+			{
+				_node := _mount.Group("/:node", _nodeMw()...)
+				_node.POST("/", append(_mountmethodMw(), external.MountMethod)...)
+			}
 		}
 		{
 			_mounted := _api.Group("/mounted", _mountedMw()...)
-			_mounted.GET("/*node", append(_mountedmethodMw(), external.MountedMethod)...)
+			{
+				_node0 := _mounted.Group("/:node", _node0Mw()...)
+				_node0.GET("/", append(_mountedmethodMw(), external.MountedMethod)...)
+			}
 		}
 		{
 			_smb_history := _api.Group("/smb_history", _smb_historyMw()...)
-			_smb_history.DELETE("/*node", append(_deletesmbhistorymethodMw(), external.DeleteSmbHistoryMethod)...)
-			_smb_history.GET("/*node", append(_getsmbhistorymethodMw(), external.GetSmbHistoryMethod)...)
-			_smb_history.PUT("/*node", append(_putsmbhistorymethodMw(), external.PutSmbHistoryMethod)...)
+			{
+				_node1 := _smb_history.Group("/:node", _node1Mw()...)
+				_node1.DELETE("/", append(_deletesmbhistorymethodMw(), external.DeleteSmbHistoryMethod)...)
+				_node1.GET("/", append(_getsmbhistorymethodMw(), external.GetSmbHistoryMethod)...)
+				_node1.PUT("/", append(_putsmbhistorymethodMw(), external.PutSmbHistoryMethod)...)
+			}
 		}
 		{
 			_unmount := _api.Group("/unmount", _unmountMw()...)

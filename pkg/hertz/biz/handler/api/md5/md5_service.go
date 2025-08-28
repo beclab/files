@@ -5,10 +5,14 @@ package md5
 import (
 	"context"
 	"encoding/json"
-	"files/pkg/hertz/biz/handler/handle_func"
+	"files/pkg/common"
+	"files/pkg/files"
+	"files/pkg/models"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
+	"strings"
 
 	md5 "files/pkg/hertz/biz/model/api/md5"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -17,14 +21,62 @@ import (
 // Md5Method .
 // @router /api/md5/*path [GET]
 func Md5Method(ctx context.Context, c *app.RequestContext) {
-	resp := new(md5.Md5Resp)
-	respBytes := handle_func.MonkeyHandle(ctx, c, nil, handle_func.Md5Handler, "/api/md5")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
-		}
-		c.JSON(consts.StatusOK, resp)
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+
+	var p = string(c.Path())
+	var path = strings.TrimPrefix(p, "/api/md5")
+	if path == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
 	}
+
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	var fileParam, err = models.CreateFileParam(owner, path)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+	urlPath := uri + fileParam.Path
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:         files.DefaultFs,
+		Path:       strings.TrimPrefix(urlPath, "/data"),
+		Modify:     true,
+		Expand:     false,
+		ReadHeader: true,
+	})
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	if file.IsDir {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "only support md5 for file"})
+		return
+	}
+
+	res := make(map[string]interface{})
+	res["md5"], err = common.Md5File(file.Path)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	resp := new(md5.Md5Resp)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }

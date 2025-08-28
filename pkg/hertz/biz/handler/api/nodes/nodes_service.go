@@ -5,7 +5,8 @@ package nodes
 import (
 	"context"
 	"encoding/json"
-	"files/pkg/hertz/biz/handler/handle_func"
+	"files/pkg/common"
+	"files/pkg/global"
 	nodes "files/pkg/hertz/biz/model/api/nodes"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -17,13 +18,21 @@ import (
 // @router /api/nodes [GET]
 func NodesMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(nodes.NodesResp)
-	respBytes := handle_func.CommonHandle(ctx, c, nil, handle_func.NodesGetHandler)
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
-		}
-		c.JSON(consts.StatusOK, resp)
+
+	var globalNodes = global.GlobalNode.GetNodes()
+
+	var data = make(map[string]interface{})
+	data["nodes"] = globalNodes
+	data["currentNode"] = common.NodeName
+
+	var result = make(map[string]interface{})
+	result["code"] = consts.StatusOK
+	result["data"] = data
+
+	if err := json.Unmarshal(common.ToBytes(result), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
 	}
+	c.JSON(consts.StatusOK, resp)
 }

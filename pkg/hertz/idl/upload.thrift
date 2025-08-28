@@ -38,7 +38,6 @@ struct UploadChunksReq {
 union UploadChunksResp {
     1: UploadChunksSuccess success
     2: list<UploadChunksFileItem> items
-    3: UploadChunksFileItem item
 }
 
 struct UploadChunksSuccess {

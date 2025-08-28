@@ -71,11 +71,26 @@ struct DeleteSmbHistoryReq {
     1: required list<SmbHistoryInfo> data;
 }
 
+struct AccountInfo {
+    1: string name;
+    2: string type;
+    3: bool available;
+    4: i64 create_at;
+    5: i64 expires_at;
+}
+
+struct AccountsResp {
+    1: required i32 code,
+    2: optional string msg,
+    3: list<AccountInfo> data
+}
+
 service ExternalService {
-    MountedResp MountedMethod() (api.get="/api/mounted/*node");
-    MountResp MountMethod(1: MountReq request) (api.post="/api/mount/*node");
+    MountedResp MountedMethod() (api.get="/api/mounted/:node/");
+    MountResp MountMethod(1: MountReq request) (api.post="/api/mount/:node/");
     UnmountResp UnmountMethod(1: UnmountReq request) (api.post="/api/unmount/*path");
-    GetSmbHistoryResp GetSmbHistoryMethod() (api.get="/api/smb_history/*node");
-    string PutSmbHistoryMethod(1: PutSmbHistoryReq request) (api.put="/api/smb_history/*node");
-    string DeleteSmbHistoryMethod(1: DeleteSmbHistoryReq request) (api.delete="/api/smb_history/*node");
+    GetSmbHistoryResp GetSmbHistoryMethod() (api.get="/api/smb_history/:node/");
+    string PutSmbHistoryMethod(1: PutSmbHistoryReq request) (api.put="/api/smb_history/:node/");
+    string DeleteSmbHistoryMethod(1: DeleteSmbHistoryReq request) (api.delete="/api/smb_history/:node/");
+    AccountsResp AccountsMethod() (api.get="/api/accounts");
 }

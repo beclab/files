@@ -54,8 +54,19 @@ struct DeleteTaskResp {
     2: optional string msg
 }
 
+struct PauseResumeTaskReq {
+    1: string TaskId (api.query="task_id");
+    2: string op (api.query="op");
+}
+
+struct PauseResumeTaskResp {
+    1: required i32 code,
+    2: optional string msg
+}
+
 service PasteService {
     PasteResp PasteMethod(1: PasteReq request) (api.patch="/api/paste/:node/");
     GetTaskResp GetTaskMethod(1: GetTaskReq request) (api.get="/api/task/:node/");
     DeleteTaskResp DeleteTaskMethod(1: DeleteTaskReq request) (api.delete="/api/task/:node/");
+    PauseResumeTaskResp PauseResumeTaskMethod(1: PauseResumeTaskReq request) (api.post="/api/task/:node/");
 }

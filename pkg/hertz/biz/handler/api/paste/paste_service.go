@@ -5,9 +5,15 @@ package paste
 import (
 	"context"
 	"encoding/json"
-	"files/pkg/hertz/biz/handler/handle_func"
+	"files/pkg/common"
+	"files/pkg/drivers"
+	"files/pkg/drivers/base"
+	"files/pkg/models"
+	"files/pkg/tasks"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"k8s.io/klog/v2"
+	"strconv"
 
 	paste "files/pkg/hertz/biz/model/api/paste"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -21,20 +27,58 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	var req paste.PasteReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(paste.PasteResp)
-	respBytes := handle_func.PasteHandle(ctx, c, req, "/api/paste")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
-		}
-		c.JSON(consts.StatusOK, resp)
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
 	}
+
+	src, err := models.CreateFileParam(owner, req.Source)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	dst, err := models.CreateFileParam(owner, req.Destination)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	var pasteParam = &models.PasteParam{
+		Owner:  owner,
+		Action: req.Action,
+		Src:    src,
+		Dst:    dst,
+	}
+
+	handler := drivers.Adaptor.NewFileHandler(pasteParam.Src.FileType, &base.HandlerParam{})
+
+	task, err := handler.Paste(pasteParam)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.SetStatusCode(consts.StatusOK)
+	var res = map[string]string{"task_id": task.Id()}
+
+	resp := new(paste.PasteResp)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // GetTaskMethod .
@@ -44,20 +88,44 @@ func GetTaskMethod(ctx context.Context, c *app.RequestContext) {
 	var req paste.GetTaskReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(paste.GetTaskResp)
-	respBytes := handle_func.TaskHandle(ctx, c, req, "/api/task")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
-		}
-		c.JSON(consts.StatusOK, resp)
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
 	}
+
+	status := ""
+	if req.Status != nil {
+		status = *req.Status
+	}
+	tasks := tasks.TaskManager.GetTask(owner, req.TaskId, status)
+	var res = make(map[string]interface{})
+	res["code"] = 0
+	res["msg"] = "success"
+
+	if req.TaskId == "" {
+		res["tasks"] = tasks
+	} else {
+		if tasks != nil && len(tasks) > 0 {
+			res["task"] = tasks[0]
+		} else {
+			res["task"] = tasks
+		}
+	}
+
+	klog.Infof("Task - id: %s, status: %s, res: %s", req.TaskId, status, common.ToJson(res))
+
+	resp := new(paste.GetTaskResp)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // DeleteTaskMethod .
@@ -67,18 +135,50 @@ func DeleteTaskMethod(ctx context.Context, c *app.RequestContext) {
 	var req paste.DeleteTaskReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(paste.DeleteTaskResp)
-	respBytes := handle_func.TaskHandle(ctx, c, req, "/api/task")
-	if respBytes != nil {
-		if err := json.Unmarshal(respBytes, &resp); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-			return
-		}
-		c.JSON(consts.StatusOK, resp)
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
 	}
+
+	all := ""
+	if req.All != nil {
+		all = strconv.Itoa(int(*req.All))
+	}
+
+	tasks.TaskManager.CancelTask(owner, req.TaskId, all)
+
+	var res = map[string]interface{}{
+		"code": 0,
+		"msg":  "success",
+	}
+
+	resp := new(paste.DeleteTaskResp)
+	if err := json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
+}
+
+// PauseResumeTaskMethod .
+// @router /api/task/:node/ [POST]
+func PauseResumeTaskMethod(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req paste.PauseResumeTaskReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	// TODO: not implemented in main now
+	resp := new(paste.PauseResumeTaskResp)
+
+	c.JSON(consts.StatusOK, resp)
 }

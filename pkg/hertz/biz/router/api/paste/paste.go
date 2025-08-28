@@ -32,6 +32,7 @@ func Register(r *server.Hertz) {
 				_node0 := _task.Group("/:node", _node0Mw()...)
 				_node0.DELETE("/", append(_deletetaskmethodMw(), paste.DeleteTaskMethod)...)
 				_node0.GET("/", append(_gettaskmethodMw(), paste.GetTaskMethod)...)
+				_node0.POST("/", append(_pauseresumetaskmethodMw(), paste.PauseResumeTaskMethod)...)
 			}
 		}
 	}
