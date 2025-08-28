@@ -20,12 +20,29 @@ func taskHandle(prefix string) http.Handler {
 
 		if r.Method == http.MethodDelete {
 			taskCancel(w, taskParam.Owner, taskParam.TaskId, taskParam.Delete, taskParam.All)
+		} else if r.Method == http.MethodPost {
+			taskPause(w, taskParam.Owner, taskParam.TaskId, taskParam.Op)
 		} else {
 			taskQuery(w, taskParam.Owner, taskParam.TaskId, taskParam.Status)
 		}
 	})
 
 	return handler
+}
+
+func taskPause(w http.ResponseWriter, owner string, taskId string, op string) {
+	if op == "pause" {
+		tasks.TaskManager.PauseTask(owner, taskId)
+	} else {
+		tasks.TaskManager.ResumeTask(owner, taskId)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	var data = map[string]interface{}{
+		"code": 0,
+		"msg":  "success",
+	}
+	w.Write([]byte(common.ToJson(data)))
 }
 
 func taskCancel(w http.ResponseWriter, owner string, taskId string, deleted string, all string) {

@@ -13,6 +13,7 @@ type TaskParam struct {
 	LogView string `json:"logView"`
 	Delete  string `json:"delete"`
 	All     string `json:"all"`
+	Op      string `json:"op"`
 }
 
 func NewTaskParam(r *http.Request) (*TaskParam, error) {

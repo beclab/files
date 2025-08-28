@@ -107,6 +107,13 @@ func (t *Task) DownloadFromCloud() error {
 		dst.Path += "/"
 	}
 
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		if !t.suspend {
+			t.param.Delete = dst
+		}
+		return ctxErr
+	}
+
 	// create download job
 	jobResp, err := cmd.Copy(src, dst)
 	if err != nil {
@@ -130,7 +137,7 @@ func (t *Task) DownloadFromCloud() error {
 	}
 
 	// clear files
-	if t.isLastPhase() {
+	if !t.param.Dst.IsSync() {
 		if err == nil {
 			if t.param.Action == common.ActionCopy {
 				return err
@@ -138,25 +145,42 @@ func (t *Task) DownloadFromCloud() error {
 			if e := cmd.Clear(t.param.Src); e != nil {
 				klog.Errorf("[Task] Id: %s, clear src error: %v", t.id, e)
 			}
-
 		} else {
-			if e := cmd.Clear(t.param.Dst); e != nil {
-				klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
+			if err.Error() == TaskCancel {
+				if !t.suspend {
+					t.param.Delete = dst
+				}
+			} else {
+				if e := cmd.Clear(dst); e != nil {
+					klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
+				}
+			}
+
+		}
+	} else { // > sync
+		if err == nil {
+			var nextPhaseParam = &models.FileParam{
+				Owner:    t.param.Owner,
+				FileType: common.Cache,
+				Extend:   global.CurrentNodeName,
+				Path:     dst.Path,
+			}
+			t.param.Temp = nextPhaseParam
+		} else {
+			if err.Error() == TaskCancel {
+				if !t.suspend {
+					t.param.Delete = dst
+				}
+			} else {
+				if e := cmd.Clear(dst); e != nil {
+					klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
+				}
 			}
 		}
 	}
 
-	if !t.isLastPhase() {
-		var nextPhaseParam = &models.FileParam{
-			Owner:    t.param.Owner,
-			FileType: common.Cache,
-			Extend:   global.CurrentNodeName,
-			Path:     dst.Path,
-		}
-		t.param.Temp = nextPhaseParam
-	}
-
 	klog.Infof("[Task] Id: %s done! done: %v, error: %v", t.id, done, err)
+
 	return err
 }
 
@@ -165,7 +189,7 @@ func (t *Task) DownloadFromCloud() error {
  */
 func (t *Task) UploadToCloud() error {
 
-	// sync > cloud; posix > cloud
+	// sync > cloud; posix > cloud; upload to cloud
 	var err error
 	var cmd = rclone.Command
 	var user = t.param.Owner
@@ -211,11 +235,23 @@ func (t *Task) UploadToCloud() error {
 					}
 				}
 
+				if t.param.Src.IsCache() && t.param.Action == common.ActionUpload {
+					var srcCacheInfoParam = &models.FileParam{
+						Owner:    t.param.Src.Owner,
+						FileType: t.param.Src.FileType,
+						Extend:   t.param.Src.Extend,
+						Path:     t.param.Src.Path + ".info",
+					}
+					if e := cmd.Clear(srcCacheInfoParam); e != nil {
+						klog.Errorf("[Task] Id: %s, clear upload cache file error: %v", t.id, e)
+					}
+				}
+
 				if e := cmd.Clear(t.param.Src); e != nil {
 					klog.Errorf("[Task] Id: %s, clear move src error: %v", t.id, e)
 				}
 
-			} else {
+			} else if err.Error() != TaskCancel {
 
 				if t.param.Src.IsSync() {
 					if e := cmd.Clear(src); e != nil {
@@ -227,13 +263,16 @@ func (t *Task) UploadToCloud() error {
 					klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
 				}
 
+			} else {
+				if !t.suspend {
+					t.param.Delete = src
+				}
 			}
 		}
 	}()
 
-	canceled, err := t.isCanceled()
-	if canceled {
-		return err
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		return ctxErr
 	}
 
 	posixPathPrefix := files.GetPrefixPath(src.Path)
@@ -277,9 +316,8 @@ func (t *Task) UploadToCloud() error {
 
 	t.updateTotalSize(posixSize)
 
-	canceled, _ = t.isCanceled()
-	if canceled {
-		return nil
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		return ctxErr
 	}
 
 	// upload to cloud job
@@ -352,6 +390,10 @@ func (t *Task) CopyToCloud() error {
 	}
 	t.updateTotalSize(srcSize)
 
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		return ctxErr
+	}
+
 	// create download job
 	jobResp, err := cmd.Copy(cloudSrcParam, cloudDstParam)
 	if err != nil {
@@ -375,15 +417,17 @@ func (t *Task) CopyToCloud() error {
 	}
 
 	// clear files
-	if t.isLastPhase() {
-		if err == nil {
-			if t.param.Action == common.ActionCopy {
-				return err
-			}
-			err = cmd.Clear(t.param.Src)
+	if err == nil {
+		if t.param.Action == common.ActionCopy {
+			return err
+		}
+		err = cmd.Clear(t.param.Src)
 
-		} else {
-			err = cmd.Clear(t.param.Dst)
+	} else if err.Error() != TaskCancel {
+		err = cmd.Clear(t.param.Dst)
+	} else {
+		if !t.suspend {
+			t.param.Delete = cloudDstParam
 		}
 	}
 
@@ -462,8 +506,8 @@ func (t *Task) checkJobStats(jobId int) (bool, error) {
 
 			break
 		case <-t.ctx.Done():
-			klog.Infof("[Task] Id: %s, context cancel, jobId: %d", t.id, jobId)
 			err = t.ctx.Err()
+			klog.Infof("[Task] Id: %s, job %v, jobId: %d", t.id, err, jobId)
 			break
 		}
 

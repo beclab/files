@@ -215,6 +215,10 @@ func (r *FileParam) IsSync() bool {
 	return r.FileType == common.Sync
 }
 
+func (r *FileParam) IsCache() bool {
+	return r.FileType == common.Cache
+}
+
 func (r *FileParam) IsFile() (string, bool) {
 	if r.Path == "" || r.Path == "/" || strings.HasSuffix(r.Path, "/") {
 		return "", false

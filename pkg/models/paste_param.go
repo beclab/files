@@ -23,6 +23,7 @@ type PasteParam struct {
 	Src           *FileParam
 	Dst           *FileParam
 	Temp          *FileParam
+	Delete        *FileParam
 }
 
 func NewPasteParam(r *http.Request) (*PasteParam, error) {

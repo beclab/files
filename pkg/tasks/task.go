@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"files/pkg/common"
+	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/models"
 	"fmt"
 	"time"
@@ -44,14 +45,18 @@ type Task struct {
 	tidyDirs     bool
 	isFile       bool
 
-	ctx      context.Context
-	cancel   context.CancelFunc
-	canceled bool
+	executed bool
+	finished bool
+	suspend  bool
+
+	ctx       context.Context
+	ctxCancel context.CancelFunc
 
 	createAt time.Time
 	execAt   time.Time
 	endAt    time.Time
 
+	funcs   []func() error
 	manager *taskManager
 }
 
@@ -59,14 +64,45 @@ func (t *Task) Id() string {
 	return t.id
 }
 
+func (t *Task) SetTotalSize(size int64) {
+	t.totalSize = size
+}
+
+func (t *Task) Cancel() {
+	t.ctxCancel()
+
+	if !t.executed {
+		return
+	}
+
+	for {
+		if !t.finished {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		break
+	}
+
+	cmd := rclone.Command
+
+	klog.Infof("[Task] Id: %s, Canceled, delete param: %s", t.id, common.ToJson(t.param.Delete))
+	if !t.suspend && t.param.Delete != nil {
+		if e := cmd.Clear(t.param.Delete); e != nil {
+			klog.Errorf("[Task] Id: %s, clear sync dst error: %v", t.id, e)
+		}
+	}
+}
+
 func (t *Task) Execute(fs ...func() error) error {
 	userPool := t.manager.getOrCreateUserPool(t.param.Owner)
 	_, loaded := userPool.tasks.LoadOrStore(t.id, t)
-	if loaded {
-		return fmt.Errorf("task %s exists in taskManager", t.id)
+	_ = loaded
+
+	if t.funcs == nil {
+		t.funcs = append(t.funcs, fs...)
 	}
 
-	_, ok := userPool.pool.TrySubmit(func() {
+	_, ok := userPool.pool.TrySubmit(func() { // ~ enter
 		var err error
 
 		defer func() {
@@ -74,19 +110,19 @@ func (t *Task) Execute(fs ...func() error) error {
 				t.id, t.state, t.progress, t.totalSize, t.transfer, time.Since(t.execAt), err)
 
 			t.endAt = time.Now()
+			t.finished = true
 		}()
 
-		if t.canceled {
-			t.state = common.Canceled
+		if t.state == common.Canceled || t.state == common.Paused {
 			return
 		}
 
 		t.totalPhases = len(fs)
-
 		t.execAt = time.Now()
 		t.state = common.Running
+		t.executed = true
 
-		for phase, f := range fs { //
+		for phase, f := range t.funcs {
 			t.currentPhase = phase + 1
 			// If f() is not the final stage, such as downloadFromCloud, and uploadToSync will be executed afterwards, the src and dst need to be reset. After entering the next phase, src and dst will be extracted again.
 			klog.Infof("[Task] Id: %s, exec phase: %d/%d", t.id, t.currentPhase, t.totalPhases)
@@ -94,7 +130,12 @@ func (t *Task) Execute(fs ...func() error) error {
 
 			if err != nil {
 				klog.Errorf("[Task] Id: %s, exec error: %v", t.id, err)
-				if err.Error() == "context canceled" {
+				if err.Error() == TaskCancel {
+					if t.suspend {
+						t.state = common.Paused
+						return
+					}
+
 					t.state = common.Canceled
 				} else {
 					t.state = common.Failed
@@ -134,7 +175,7 @@ func (t *Task) isLastPhase() bool {
 	return t.currentPhase == t.totalPhases
 }
 
-func (t *Task) isCanceled() (bool, error) {
+func (t *Task) isCancel() (bool, error) {
 	select {
 	case <-t.ctx.Done():
 		return true, t.ctx.Err()

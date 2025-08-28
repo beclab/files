@@ -57,6 +57,8 @@ const (
 	Failed    = "failed"
 	Canceled  = "canceled"
 	Completed = "completed"
+	Paused    = "paused"
+	Resumed   = "resumed"
 
 	ActionCopy   = "copy"
 	ActionMove   = "move"
