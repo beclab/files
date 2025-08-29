@@ -145,31 +145,27 @@ user created with the credentials from options "username" and "password".`,
 		// Step3-2: Build file cache
 		diskcache.New(afero.NewOsFs(), common.CACHE_PREFIX)
 
-		// step4: Crontab
-		//		- CleanupOldFilesAndRedisEntries
-		InitCrontabs()
-
-		// step5: init commands
+		// step4: init commands
 		rclone.NewCommandRclone()
 		rclone.Command.InitServes()
 		rclone.Command.StopJobs()
 
-		// step6: build driver handler
+		// step5: build driver handler
 		drivers.NewDriverHandler()
 
-		// step7: init global
+		// step6: init global
 		config := ctrl.GetConfigOrDie()
 		global.InitGlobalData(config)
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
 
-		// step8: init seahub (for test now)
+		// step7: init seahub (for test now)
 		seaserv.InitSeaRPC()
 
-		// step9: integration
+		// step8: integration
 		integration.NewIntegrationManager()
 
-		// step10: watcher
+		// step9: watcher
 		var w = watchers.NewWatchers(context.Background(), config)
 		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
@@ -177,11 +173,15 @@ user created with the credentials from options "username" and "password".`,
 
 		go w.Run(1)
 
-		// step11: task manager
+		// step10: task manager
 		tasks.NewTaskManager()
 
-		// step12: run hertz server
+		// step11: run hertz server
 		hertz.HertzServer()
+
+		// step12: Crontab
+		// .	- CleanupOldFilesAndRedisEntries
+		InitCrontabs()
 	}, pythonConfig{allowNoDB: true}),
 }
 
