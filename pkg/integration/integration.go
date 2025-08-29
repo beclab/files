@@ -14,6 +14,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
@@ -25,13 +26,18 @@ var UserGVR = schema.GroupVersionResource{Group: "iam.kubesphere.io", Version: "
 var IntegrationService *integration
 
 type integration struct {
-	client *dynamic.DynamicClient
-	rest   *resty.Client
-	tokens map[string]*Integrations
-
-	authToken string
+	client     *dynamic.DynamicClient
+	kubeClient *kubernetes.Clientset
+	rest       *resty.Client
+	tokens     map[string]*Integrations
+	authToken  map[string]*authToken
 
 	sync.RWMutex
+}
+
+type authToken struct {
+	token  string
+	expire time.Time
 }
 
 func NewIntegrationManager() {
@@ -45,10 +51,18 @@ func NewIntegrationManager() {
 		panic(err)
 	}
 
+	kubeClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		klog.Errorf("Failed to create kube client: %v", err)
+		panic(err)
+	}
+
 	IntegrationService = &integration{
-		client: client,
-		rest:   resty.New().SetTimeout(60 * time.Second).SetDebug(true),
-		tokens: make(map[string]*Integrations),
+		client:     client,
+		kubeClient: kubeClient,
+		rest:       resty.New().SetTimeout(60 * time.Second).SetDebug(true),
+		tokens:     make(map[string]*Integrations),
+		authToken:  make(map[string]*authToken),
 	}
 
 	IntegrationService.watch()
@@ -73,13 +87,13 @@ func (i *integration) HandlerEvent() cache.ResourceEventHandler {
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				klog.Infof("ingegrateion add func: %s", common.ToJson(obj))
+				// klog.Infof("ingegrateion add func: %s", common.ToJson(obj))
 				if err := i.GetIntegrations(); err != nil {
 					klog.Errorf("get users error: %v", err)
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				klog.Infof("ingegrateion delete func: %s", common.ToJson(obj))
+				// klog.Infof("ingegrateion delete func: %s", common.ToJson(obj))
 				if err := i.GetIntegrations(); err != nil {
 					klog.Errorf("get users error: %v", err)
 				}
@@ -91,12 +105,6 @@ func (i *integration) HandlerEvent() cache.ResourceEventHandler {
 func (i *integration) GetIntegrations() error {
 	i.Lock()
 	defer i.Unlock()
-
-	err := i.getAuthToken()
-	if err != nil {
-		klog.Errorf("get auth token error: %v", err)
-		return err
-	}
 
 	users, err := i.getUsers()
 	if err != nil {
@@ -110,7 +118,13 @@ func (i *integration) GetIntegrations() error {
 	var configs []*config.Config
 
 	for _, user := range users {
-		accounts, err := i.getAccounts(user.Name)
+		at, err := i.getAuthToken(user.Name)
+		if err != nil {
+			klog.Errorf("get auth token error: %v", err)
+			continue
+		}
+
+		accounts, err := i.getAccounts(user.Name, at)
 
 		if err != nil {
 			klog.Errorf("get user accounts failed, user: %s, error: %s", user.Name, err)
@@ -147,7 +161,7 @@ func (i *integration) GetIntegrations() error {
 
 				configs = append(configs, config)
 			} else {
-				token, err := i.getToken(user.Name, acc.Name, acc.Type)
+				token, err := i.getToken(user.Name, acc.Name, acc.Type, at)
 				if err != nil {
 					klog.Errorf("get token error: %v, user: %s, name: %s", err, user.Name, acc.Name)
 					continue
