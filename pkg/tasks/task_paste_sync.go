@@ -32,37 +32,72 @@ import (
  */
 func (t *Task) DownloadFromSync() error {
 	// sync > posix; sync > cloud
+
+	var cmd = rclone.Command
 	var user = t.param.Owner
 	var action = t.param.Action
 	var src = t.param.Src
-	var dst = t.param.Dst
+
 	var tempParam *models.FileParam
-	var cmd = rclone.Command
+	var dst *models.FileParam
+	if t.wasPaused && t.pausedParam == nil {
+		return errors.New("pause param invalid")
+	}
+
+	if !t.param.Dst.IsCloud() && t.wasPaused {
+		t.param.Dst = t.pausedParam
+	}
 
 	if t.param.Dst.IsCloud() {
-		srcName, isFile := files.GetFileNameFromPath(src.Path)
-		srcPath := srcName
-		if !isFile {
-			srcPath += "/"
+		if !t.wasPaused {
+			srcName, isFile := files.GetFileNameFromPath(src.Path)
+			srcPath := srcName
+			if !isFile {
+				srcPath += "/"
+			}
+			tempParam = &models.FileParam{
+				Owner:    user,
+				FileType: common.Cache,
+				Extend:   global.CurrentNodeName,
+				Path:     common.DefaultSyncUploadToCloudTempPath + "/" + srcPath,
+			}
+			dst = tempParam
+		} else {
+			dst = t.pausedParam
 		}
-		tempParam = &models.FileParam{
-			Owner:    user,
-			FileType: common.Cache,
-			Extend:   global.CurrentNodeName,
-			Path:     common.DefaultSyncUploadToCloudTempPath + "/" + srcPath,
-		}
-		dst = tempParam
+	} else {
+		dst = t.param.Dst
 	}
 
 	klog.Infof("[Task] Id: %s, start, downloadFormSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst))
 
-	totalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
+	// check local free space
+	srcTotalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
 	if err != nil {
 		klog.Errorf("[Task] Id: %s, getFromSyncFileCount error: %v", t.id, err)
 		return err
 	}
 
-	t.updateTotalSize(totalSize)
+	dstSize, err := cmd.GetSpaceSize(dst)
+	if err != nil {
+		klog.Errorf("get posix free space size error: %v", err)
+		return err
+	}
+
+	klog.Infof("[Task] Id: %s, check posix space, syncSize: %d, posixSize: %d", t.id, srcTotalSize, dstSize)
+
+	requiredSpace, ok := common.IsDiskSpaceEnough(dstSize, srcTotalSize)
+	if ok {
+		return fmt.Errorf("not enough free space on disk, required: %s, available: %s", common.FormatBytes(requiredSpace), common.FormatBytes(dstSize))
+	}
+
+	t.updateTotalSize(srcTotalSize)
+
+	if !t.wasPaused {
+
+	}
+
+	// todo need to check dupname and mkdir first
 
 	defer func() {
 		klog.Infof("[Task] Id: %s, defer, error: %v", t.id, err)
@@ -83,13 +118,15 @@ func (t *Task) DownloadFromSync() error {
 	}
 
 	if err != nil {
-		if err.Error() == TaskCancel && !t.suspend {
-			t.param.Delete = dst
-		} else {
-			if e := cmd.Clear(dst); e != nil { // cache
-				klog.Errorf("[Task] Id: %s, clear sync dst error: %v", t.id, e)
-			}
-		}
+		// if err.Error() == TaskCancel && !t.suspend {
+		// 	t.pausedParam = dst
+		// } else {
+		// 	if e := cmd.Clear(dst); e != nil { // cache
+		// 		klog.Errorf("[Task] Id: %s, clear sync dst error: %v", t.id, e)
+		// 	}
+		// }
+		t.pausedParam = dst
+		t.pausedPhase = t.currentPhase
 		return err
 	} else {
 		if !t.param.Dst.IsCloud() && t.param.Action == common.ActionMove {
@@ -137,10 +174,13 @@ func (t *Task) UploadToSync() error {
 	}
 	t.updateTotalSize(posixSize)
 
-	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		if t.param.Src.IsCloud() && !t.suspend {
-			t.param.Delete = src
-		}
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel { // todo cancel or pause
+		// if t.param.Src.IsCloud() && !t.suspend {
+		// 	t.pausedParam = src
+		// 	t.pausedPhase = t.currentPhase
+		// }
+		t.pausedParam = src
+		t.pausedPhase = t.currentPhase
 		return ctxErr
 	}
 
@@ -158,17 +198,19 @@ func (t *Task) UploadToSync() error {
 	}
 
 	if err != nil {
-		if t.param.Src.IsCloud() {
-			if err.Error() == TaskCancel {
-				if !t.suspend {
-					t.param.Delete = src
-				}
-			} else {
-				if e := cmd.Clear(src); e != nil {
-					klog.Errorf("[Task] Id: %s, clear sync temps error: %v", t.id, err)
-				}
-			}
-		}
+		t.pausedParam = src
+		t.pausedPhase = t.currentPhase
+		// if t.param.Src.IsCloud() {
+		// 	if err.Error() == TaskCancel {
+		// 		if !t.suspend {
+		// 			t.pausedParam = src
+		// 		}
+		// 	} else {
+		// 		if e := cmd.Clear(src); e != nil {
+		// 			klog.Errorf("[Task] Id: %s, clear sync temps error: %v", t.id, err)
+		// 		}
+		// 	}
+		// }
 
 		return err
 	}

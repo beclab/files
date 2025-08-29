@@ -33,7 +33,8 @@ struct TaskInfo {
     14: i64 total_file_size,
     15: bool tidy_dirs,
     16: string status,
-    17: string failed_reason
+    17: string failed_reason,
+    18: bool pause_able
 }
 
 struct GetTaskResp {
@@ -56,7 +57,7 @@ struct DeleteTaskResp {
 
 struct PauseResumeTaskReq {
     1: string TaskId (api.query="task_id");
-    2: string op (api.query="op");
+    2: string Op (api.query="op");
 }
 
 struct PauseResumeTaskResp {
