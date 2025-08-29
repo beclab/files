@@ -12,6 +12,8 @@ struct PasteResp {
 
 struct GetTaskReq {
     1: string TaskId (api.query="task_id");
+    2: optional string Status (api.query="status");
+    3: optional i32 LogView (api.query="log_view");
 }
 
 struct TaskInfo {
@@ -43,6 +45,8 @@ struct GetTaskResp {
 
 struct DeleteTaskReq {
     1: string TaskId (api.query="task_id");
+    2: i32 Delete (api.query="delete");
+    3: optional i32 All (api.query="all");
 }
 
 struct DeleteTaskResp {
@@ -61,8 +65,8 @@ struct PauseResumeTaskResp {
 }
 
 service PasteService {
-    PasteResp PasteMethod(1: PasteReq request) (api.patch="/api/paste/*node");
-    GetTaskResp GetTaskMethod(1: GetTaskReq request) (api.get="/api/task/*node");
-    DeleteTaskResp DeleteTaskMethod(1: DeleteTaskReq request) (api.delete="/api/task/*node");
-    PauseResumeTaskResp PauseResumeTaskMethod(1: PauseResumeTaskReq request) (api.post="/api/task/*node");
+    PasteResp PasteMethod(1: PasteReq request) (api.patch="/api/paste/:node/");
+    GetTaskResp GetTaskMethod(1: GetTaskReq request) (api.get="/api/task/:node/");
+    DeleteTaskResp DeleteTaskMethod(1: DeleteTaskReq request) (api.delete="/api/task/:node/");
+    PauseResumeTaskResp PauseResumeTaskMethod(1: PauseResumeTaskReq request) (api.post="/api/task/:node/");
 }

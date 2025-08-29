@@ -4,30 +4,100 @@ package resources
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/common"
+	"files/pkg/drivers"
+	"files/pkg/drivers/base"
 	resources "files/pkg/hertz/biz/model/api/resources"
-	http2 "files/pkg/http"
+	"files/pkg/models"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
+	"strings"
 )
 
 // GetResourcesMethod .
 // @router /api/resources [GET]
 func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
-	klog.Infof("~~~Debug log: path=%s", c.Param("path"))
+	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
+	if err != nil {
+		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
 
-	resp := new(resources.GetResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.ListHandler, "/api/resources/"), resp, true)
+	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: contextArg.FileParam.Owner,
+	}
+
+	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
+	if handler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		return
+	}
+
+	res, err := handler.List(contextArg)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	resp := new(map[string]interface{}) // different disk type with different responses
+	if err := json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // PostResourcesMethod .
 // @router /api/resources/*path [POST]
 func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
-	klog.Infof("~~~Debug log: path=%s", c.Param("path"))
+	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
+	if err != nil {
+		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: contextArg.FileParam.Owner,
+	}
+
+	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
+	if handler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		return
+	}
+
+	res, err := handler.Create(contextArg)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
 
 	resp := new(resources.PostResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.CreateHandler, "/api/resources/"), resp, false)
+	if err := json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // PatchResourcesMethod .
@@ -37,12 +107,46 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	var req resources.PatchResourcesReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
+	if err != nil {
+		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: contextArg.FileParam.Owner,
+	}
+
+	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
+	if handler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		return
+	}
+
+	res, err := handler.Rename(contextArg)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
 		return
 	}
 
 	resp := new(resources.PatchResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesResourcesArgs(http2.RenameHandler, "/api/resources/"), resp, false)
+	if err = json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // PutResourcesMethod .
@@ -52,12 +156,41 @@ func PutResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	var req resources.PutResourcesReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(resources.PutResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesEditArgs(http2.EditHandler, "/api/resources/"), resp, false)
+	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
+	if err != nil {
+		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: contextArg.FileParam.Owner,
+	}
+
+	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
+	if handler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		return
+	}
+
+	res, err := handler.Edit(contextArg)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	_ = new(resources.PutResourcesResp) // no response
+	c.Header("Etag", res.Etag)
 }
 
 // DeleteResourcesMethod .
@@ -67,10 +200,66 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	var req resources.DeleteResourcesReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	var deleteArg = &models.FileDeleteArgs{
+		FileParam: &models.FileParam{},
+	}
+	var p = string(c.Path())
+	var path = strings.TrimPrefix(p, "/api/resources")
+	if path == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
+	}
+
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	deleteArg.FileParam, err = models.CreateFileParam(owner, path)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	deleteArg.Dirents = req.Dirents
+
+	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", deleteArg.FileParam.Owner, deleteArg.FileParam.FileType, c.Method(), common.ToJson(deleteArg))
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: deleteArg.FileParam.Owner,
+	}
+	var handler = drivers.Adaptor.NewFileHandler(deleteArg.FileParam.FileType, handlerParam)
+	if handler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", deleteArg.FileParam.FileType)})
+		return
+	}
+
+	res, err := handler.Delete(deleteArg)
+	if err != nil {
+		var deleteFailedPaths []string
+		if res != nil {
+			json.Unmarshal(res, &deleteFailedPaths)
+		}
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+			"code":    1,
+			"data":    deleteFailedPaths,
+			"message": err.Error(),
+		})
 		return
 	}
 
 	resp := new(resources.DeleteResourcesResp)
-	handler.CommonConvert(c, http2.WrapperFilesDeleteArgs(http2.DeleteHandler, "/api/resources/"), resp, false)
+	if err = json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }

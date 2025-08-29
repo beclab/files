@@ -4,16 +4,94 @@ package tree
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
-	tree "files/pkg/hertz/biz/model/api/tree"
-	http2 "files/pkg/http"
-
+	"files/pkg/common"
+	"files/pkg/drivers"
+	"files/pkg/drivers/base"
+	"files/pkg/hertz/biz/model/api/tree"
+	"files/pkg/models"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"github.com/cloudwego/hertz/pkg/protocol/sse"
+	"k8s.io/klog/v2"
+	"strconv"
+	"strings"
 )
 
 // TreeMethod .
 // @router /api/tree/*path [GET]
 func TreeMethod(ctx context.Context, c *app.RequestContext) {
-	_ = new(tree.TreeResp)
-	handler.StraightForward(c, http2.WrapWithTreeParm(http2.TreeHandler, "/api/tree/"))
+	_ = new(tree.TreeResp) // SSE, won't use
+	var path = strings.TrimPrefix(string(c.Path()), "/api/tree")
+	if path == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
+	}
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	fileParam, err := models.CreateFileParam(owner, path)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	klog.Infof("[Incoming] tree, user: %s, fsType: %s, method: %s, args: %s", owner, fileParam.FileType, c.Method(), fileParam.Json())
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: owner,
+	}
+
+	stopChan := make(chan struct{})
+	dataChan := make(chan string)
+
+	var handler = drivers.Adaptor.NewFileHandler(fileParam.FileType, handlerParam)
+	if handler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", fileParam.FileType)})
+		return
+	}
+
+	err = handler.Tree(fileParam, stopChan, dataChan)
+	if err != nil {
+		klog.Errorf("tree error: %v, user: %s, url: %s", err, owner, strings.TrimPrefix(string(c.Path()), "/api/tree"))
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.SetContentType("text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+
+	klog.Info("Server Got LastEventID", sse.GetLastEventID(&c.Request))
+	w := sse.NewWriter(c)
+	defer w.Close()
+	idNo := 0
+
+	for {
+		select {
+		case event, ok := <-dataChan:
+			if !ok {
+				return
+			}
+			err = w.WriteEvent(strconv.Itoa(idNo), "message", []byte(event))
+			if err != nil {
+				klog.Error(err)
+				return
+			}
+			idNo += 1
+
+		case <-ctx.Done():
+			close(stopChan)
+			return
+		}
+	}
 }

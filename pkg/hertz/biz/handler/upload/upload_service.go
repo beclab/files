@@ -5,132 +5,248 @@ package upload
 import (
 	"context"
 	"encoding/json"
-	"files/pkg/hertz/biz/handler"
+	"files/pkg/common"
+	"files/pkg/drivers"
+	"files/pkg/drivers/base"
 	upload "files/pkg/hertz/biz/model/upload"
-	http2 "files/pkg/http"
+	"files/pkg/models"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"net/http"
-	"net/http/httptest"
+	"reflect"
+	"strings"
 )
 
 // UploadLinkMethod .
 // @router /upload/upload_link [GET]
 func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
-	node := c.Param("node")
-	klog.Infof("~~~Debug log: node = %s", node)
-
 	var err error
 	var req upload.UploadLinkReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(upload.UploadLinkResp)
-	handler.CommonConvert(c, http2.WrapperFilesUploadArgs(http2.FileUploadLinkHandler), resp, true)
+	node := c.Param("node")
+	var uploadArg = &models.FileUploadArgs{
+		FileParam: &models.FileParam{},
+	}
+	uploadArg.Node = node
+	p := req.FilePath
+	uploadArg.From = req.From
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
+	}
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	uploadArg.FileParam, err = models.CreateFileParam(owner, p)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: uploadArg.FileParam.Owner,
+	}
+	var fileHandler = drivers.Adaptor.NewFileHandler(uploadArg.FileParam.FileType, handlerParam)
+	if fileHandler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", uploadArg.FileParam.FileType)})
+		return
+	}
+	resp, err := fileHandler.UploadLink(uploadArg)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
+	c.String(consts.StatusOK, string(resp))
 }
 
 // UploadedBytesMethod .
 // @router /upload/file_uploaded_bytes [GET]
 func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
-	node := c.Param("node")
-	klog.Infof("~~~Debug log: node = %s", node)
-
 	var err error
 	var req upload.UploadedBytesReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	node := c.Param("node")
+	var uploadArg = &models.FileUploadArgs{
+		FileParam: &models.FileParam{},
+	}
+	uploadArg.Node = node
+	uploadArg.FileName = req.FileName
+	p := req.ParentDir
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
+	}
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	uploadArg.FileParam, err = models.CreateFileParam(owner, p)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: uploadArg.FileParam.Owner,
+	}
+	var fileHandler = drivers.Adaptor.NewFileHandler(uploadArg.FileParam.FileType, handlerParam)
+	if fileHandler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", uploadArg.FileParam.FileType)})
+		return
+	}
+	respBytes, err := fileHandler.UploadedBytes(uploadArg)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
 
 	resp := new(upload.UploadedBytesResp)
-
-	stdReq, err := handler.ConvertHertzRequest(&c.Request)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+	if err = json.Unmarshal(respBytes, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
-	recorder := httptest.NewRecorder()
-	originalHandler := http2.WrapperFilesUploadArgs(http2.FileUploadedBytesHandler)
-	originalHandler.ServeHTTP(recorder, stdReq)
-	handler.CopyHeaders(&c.Response.Header, recorder.Header())
-
-	var use interface{}
-	if recorder.Code == http.StatusOK {
-		resp.Success = new(upload.UploadedBytesSuccessResp)
-		use = resp.Success
-		resp.Error = nil
-	} else {
-		resp.Error = new(upload.UploadedBytesErrorResp)
-		use = resp.Error
-		resp.Success = nil
-	}
-
-	if err = json.Unmarshal(recorder.Body.Bytes(), &use); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.String(consts.StatusBadRequest, "Failed to unmarshal response body")
-	}
-
-	c.JSON(recorder.Code, handler.Coalesce(resp.Success, resp.Error))
+	c.JSON(consts.StatusOK, resp)
 }
 
 // UploadChunksMethod .
 // @router /upload/upload-link/:uid [POST]
 func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
-	uid := c.Param("uid")
-	klog.Infof("~~~Debug log: uid = %s", uid)
-
 	var err error
 	var req upload.UploadChunksReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	klog.Infof("~~~Debug log: req = %v", req)
+
+	node := c.Param("node")
+	uid := c.Param("uid")
+	var uploadArg = &models.FileUploadArgs{
+		FileParam: &models.FileParam{},
+	}
+	uploadArg.Node = node
+	uploadArg.UploadId = uid
+	uploadArg.ChunkInfo = new(models.ResumableInfo)
+	if err = c.BindAndValidate(uploadArg.ChunkInfo); err != nil {
+		klog.Errorf("Bind error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "bind error"})
+		return
+	}
+
+	header, err := c.FormFile("file")
+	if err != nil {
+		klog.Errorf("uploadID:%s, Failed to parse file: %v\n", uploadArg.UploadId, err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "param invalid"})
+		return
+	}
+
+	uploadArg.ChunkInfo.File = header
+
+	p := uploadArg.ChunkInfo.ParentDir
+	if p == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
+	}
+
+	uploadArg.Ranges = string(c.GetHeader("Content-Range"))
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
+	}
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	uploadArg.FileParam, err = models.CreateFileParam(owner, p)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	var handlerParam = &base.HandlerParam{
+		Ctx:   ctx,
+		Owner: uploadArg.FileParam.Owner,
+	}
+	var fileHandler = drivers.Adaptor.NewFileHandler(uploadArg.FileParam.FileType, handlerParam)
+	if fileHandler == nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", uploadArg.FileParam.FileType)})
+		return
+	}
+	respBytes, err := fileHandler.UploadChunks(uploadArg)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
 
 	resp := new(upload.UploadChunksResp)
-
-	stdReq, err := handler.ConvertHertzRequest(&c.Request)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-	recorder := httptest.NewRecorder()
-	originalHandler := http2.WrapperFilesUploadArgs(http2.FileUploadChunksHandler)
-	originalHandler.ServeHTTP(recorder, stdReq)
-	handler.CopyHeaders(&c.Response.Header, recorder.Header())
-
-	if recorder.Code == http.StatusOK {
-		klog.Infof("req.ResumableChunksNumber=%d, req.ResumableTotalChunks=%d", req.ResumableChunkNumber, req.ResumableTotalChunks)
-		if req.ResumableChunkNumber == req.ResumableTotalChunks {
-			resp.Success = nil
-			resp.Item = nil
-			resp.Items = make([]*upload.UploadChunksFileItem, 0)
-			if err = json.Unmarshal(recorder.Body.Bytes(), &resp.Items); err != nil {
-				klog.Errorf("Failed to unmarshal response body for old version: %v", err)
-				resp.Items = nil
-				resp.Item = new(upload.UploadChunksFileItem)
-				if err = json.Unmarshal(recorder.Body.Bytes(), resp.Item); err != nil {
-					klog.Errorf("Failed to unmarshal response body for new version: %v", err)
-					c.String(consts.StatusBadRequest, "Failed to unmarshal response body")
-					return
-				}
-			}
-		} else {
-			resp.Item = nil
-			resp.Items = nil
-			resp.Success = new(upload.UploadChunksSuccess)
-			resp.Success.Success = true
+	klog.Infof("req.ResumableChunksNumber=%d, req.ResumableTotalChunks=%d", req.ResumableChunkNumber, req.ResumableTotalChunks)
+	if req.ResumableChunkNumber == req.ResumableTotalChunks {
+		resp.Success = nil
+		resp.Items = make([]*upload.UploadChunksFileItem, 0)
+		if err = json.Unmarshal(respBytes, &resp.Items); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
 		}
 	} else {
-		c.JSON(recorder.Code, recorder.Body.Bytes())
-		return
+		resp.Items = nil
+		resp.Success = new(upload.UploadChunksSuccess)
+		if err = json.Unmarshal(respBytes, &resp.Success); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
 	}
+	c.JSON(consts.StatusOK, Coalesce(resp.Success, resp.Items))
+}
 
-	c.JSON(recorder.Code, handler.Coalesce(resp.Success, resp.Items, resp.Item))
+func Coalesce(vals ...interface{}) interface{} {
+	for _, v := range vals {
+		if val := reflect.ValueOf(v); !isNil(val) {
+			if val.Kind() != reflect.Ptr && val.Kind() != reflect.Interface {
+				return v
+			}
+			if !val.IsNil() {
+				return v
+			}
+		}
+	}
+	return nil
+}
+
+func isNil(val reflect.Value) bool {
+	switch val.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
+		return val.IsNil()
+	default:
+		return false
+	}
 }

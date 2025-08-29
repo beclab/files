@@ -5,8 +5,9 @@ package callback
 import (
 	"context"
 	"files/pkg/drivers/sync/seahub"
-	"files/pkg/hertz/biz/handler"
-	http2 "files/pkg/http"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"k8s.io/klog/v2"
+	"strings"
 
 	callback "files/pkg/hertz/biz/model/callback"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -20,12 +21,34 @@ func CallbackCreateMethod(ctx context.Context, c *app.RequestContext) {
 	var req callback.CallbackCreateReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
+	bflName := strings.TrimSpace(req.Name)
+	if bflName != "" {
+		newUsername := bflName + "@auth.local"
+		klog.Infof("Try to create user for %s", newUsername)
+
+		isNew, err := seahub.CreateUser(newUsername)
+		if err != nil {
+			klog.Infof("Error creating user: %v", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		if isNew {
+			repoId, err := seahub.CreateDefaultLibrary(newUsername)
+			if err != nil {
+				klog.Infof("Create default library for %s failed: %v", newUsername, err)
+			} else {
+				klog.Infof("Create default library %s for %s successfully!", repoId, newUsername)
+			}
+		}
+	}
+
 	resp := new(callback.CallbackCreateResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(seahub.CallbackCreateHandler, "/callback/create"), resp, true)
+	c.JSON(consts.StatusOK, resp)
 }
 
 // CallbackDeleteMethod .
@@ -35,10 +58,19 @@ func CallbackDeleteMethod(ctx context.Context, c *app.RequestContext) {
 	var req callback.CallbackDeleteReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	bflName := strings.TrimSpace(req.Name)
+	username := bflName + "@auth.local"
+
+	err = seahub.RemoveUser(username)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
 
 	resp := new(callback.CallbackDeleteResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(seahub.CallbackDeleteHandler, "/callback/delete"), resp, true)
+	c.JSON(consts.StatusOK, resp)
 }

@@ -19,6 +19,9 @@ func Register(r *server.Hertz) {
 	root := r.Group("/", rootMw()...)
 	{
 		_api := root.Group("/api", _apiMw()...)
-		_api.GET("/nodes", append(_nodesmethodMw(), nodes.NodesMethod)...)
+		{
+			_nodes := _api.Group("/nodes", _nodesMw()...)
+			_nodes.GET("/", append(_nodesmethodMw(), nodes.NodesMethod)...)
+		}
 	}
 }

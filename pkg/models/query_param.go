@@ -1,8 +1,10 @@
 package models
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/cloudwego/hertz/pkg/app"
 	"io"
 	"net/http"
 	"strings"
@@ -26,30 +28,37 @@ type QueryParam struct {
 	Body                    io.ReadCloser   `json:"-"`
 }
 
-func CreateQueryParam(owner string, r *http.Request, enableThumbnails bool, resizePreview bool) *QueryParam {
+func CreateQueryParam(owner string, ctx context.Context, c *app.RequestContext, enableThumbnails bool, resizePreview bool) *QueryParam {
 	// TODO: add for sync
-	sizeStr := r.URL.Query().Get("size")
+	sizeStr := c.Query("size")
 	if sizeStr == "" {
-		sizeStr = r.URL.Query().Get("thumb")
+		sizeStr = c.Query("thumb")
 	}
-
 	// add end
+
+	header := make(http.Header)
+	c.Request.Header.VisitAll(func(key, value []byte) {
+		headerKey := string(key)
+		headerValue := string(value)
+		header.Add(headerKey, headerValue)
+	})
+
 	return &QueryParam{
-		Ctx:                     r.Context(),
+		Ctx:                     ctx,
 		Owner:                   owner,
-		PreviewSize:             sizeStr,          // r.URL.Query().Get("size"),
+		PreviewSize:             sizeStr,
 		PreviewEnableThumbnails: enableThumbnails, // todo
 		PreviewResizePreview:    resizePreview,    // todo
-		RawInline:               strings.TrimSpace(r.URL.Query().Get("inline")),
-		RawMeta:                 strings.TrimSpace(r.URL.Query().Get("meta")),
-		Files:                   strings.TrimSpace(r.URL.Query().Get("files")),
-		FileMode:                strings.TrimSpace(r.URL.Query().Get("mode")),
-		RepoName:                strings.TrimSpace(r.URL.Query().Get("repoName")),
-		RepoId:                  strings.TrimSpace(r.URL.Query().Get("repoId")),
-		Destination:             strings.TrimSpace(r.URL.Query().Get("destination")),
-		ShareType:               strings.TrimSpace(r.URL.Query().Get("type")), // "mine", "shared", "share_to_me"
-		Header:                  r.Header,
-		Body:                    r.Body,
+		RawInline:               strings.TrimSpace(c.Query("inline")),
+		RawMeta:                 strings.TrimSpace(c.Query("meta")),
+		Files:                   strings.TrimSpace(c.Query("files")),
+		FileMode:                strings.TrimSpace(c.Query("mode")),
+		RepoName:                strings.TrimSpace(c.Query("repoName")),
+		RepoId:                  strings.TrimSpace(c.Query("repoId")),
+		Destination:             strings.TrimSpace(c.Query("destination")),
+		ShareType:               strings.TrimSpace(c.Query("type")), // "mine", "shared", "share_to_me"
+		Header:                  header,
+		Body:                    io.NopCloser(bytes.NewReader(c.Request.Body())),
 	}
 }
 

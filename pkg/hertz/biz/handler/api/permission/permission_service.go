@@ -4,18 +4,74 @@ package permission
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/common"
+	"files/pkg/files"
 	permission "files/pkg/hertz/biz/model/api/permission"
-	http2 "files/pkg/http"
+	"files/pkg/models"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"github.com/spf13/afero"
+	"k8s.io/klog/v2"
+	"strings"
 )
 
 // GetPermissionMethod .
 // @router /api/permission/*path [GET]
 func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
+	var p = string(c.Path())
+	var path = strings.TrimPrefix(p, "/api/permission")
+	if path == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
+	}
+
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	var fileParam, err = models.CreateFileParam(owner, path)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+	urlPath := uri + fileParam.Path
+	dealUrlPath := strings.TrimPrefix(urlPath, "/data")
+
+	exists, err := afero.Exists(files.DefaultFs, dealUrlPath)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	if !exists {
+		c.AbortWithStatusJSON(consts.StatusNotFound, utils.H{"error": "file not found"})
+		return
+	}
+
+	res := make(map[string]interface{})
+	res["uid"], err = files.GetUID(files.DefaultFs, dealUrlPath)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
 	resp := new(permission.GetPermissionResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.PermissionGetHandler, "/api/permission"), resp, false)
+	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // PutPermissionMethod .
@@ -25,10 +81,61 @@ func PutPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	var req permission.PutPermissionReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
+	var p = string(c.Path())
+	var path = strings.TrimPrefix(p, "/api/permission")
+	if path == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
+	}
+
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	fileParam, err := models.CreateFileParam(owner, path)
+	if err != nil {
+		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+
+	uri, err := fileParam.GetResourceUri()
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+	urlPath := uri + fileParam.Path
+	dealUrlPath := strings.TrimPrefix(urlPath, "/data")
+
+	exists, err := afero.Exists(files.DefaultFs, dealUrlPath)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	if !exists {
+		c.AbortWithStatusJSON(consts.StatusNotFound, utils.H{"error": "file not found"})
+		return
+	}
+
+	uid := int(req.Uid)
+	gid := uid
+
+	recursive := req.Recursive
+
+	if recursive == nil || *recursive == 0 {
+		err = files.Chown(files.DefaultFs, dealUrlPath, uid, gid)
+	} else {
+		err = files.ChownRecursive(urlPath, uid, gid)
+	}
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
 	resp := new(permission.PutPermissionResp)
-	handler.CommonConvert(c, http2.MonkeyHandle(http2.PermissionPutHandler, "/api/permission"), resp, true)
+	c.JSON(consts.StatusOK, resp)
 }

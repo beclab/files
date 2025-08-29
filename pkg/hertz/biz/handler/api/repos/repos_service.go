@@ -4,11 +4,15 @@ package repos
 
 import (
 	"context"
-	"files/pkg/hertz/biz/handler"
+	"encoding/json"
+	"files/pkg/common"
+	"files/pkg/drivers/sync/seahub"
 	repos "files/pkg/hertz/biz/model/api/repos"
-	http2 "files/pkg/http"
+	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"k8s.io/klog/v2"
 )
 
 // GetReposMethod .
@@ -18,12 +22,38 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 	var req repos.GetReposReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
+	var res []byte
+	if req.Type != nil && (*req.Type == "shared" || *req.Type == "share_to_me") {
+		res = common.ToBytes(map[string][]string{
+			"repos": {},
+		})
+	} else {
+		owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+		if owner == "" {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+			return
+		}
+
+		res, err = seahub.HandleReposGet(owner, []string{"mine"})
+		if err != nil {
+			klog.Errorf("get repos error: %v", err)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get repos error: %v", err)})
+			return
+		}
+		klog.Infof("get repos: %s", string(res))
+	}
+
 	resp := new(repos.GetReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.ReposGetHandler), resp, false)
+	if err = json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // PostReposMethod .
@@ -33,12 +63,39 @@ func PostReposMethod(ctx context.Context, c *app.RequestContext) {
 	var req repos.PostReposReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	var repoName = req.RepoName
+	if repoName == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "repo name is empty"})
+		return
+	}
+
+	klog.Infof("Repo create repo, user: %s, name: %s", owner, repoName)
+
+	res, err := seahub.HandleRepoPost(owner, repoName, "")
+	if err != nil {
+		klog.Errorf("create repo error: %v, name: %s", err, repoName)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("create repo error: %v, name: %s", err, repoName)})
+		return
+	}
+
+	klog.Infof("Repo create success, user: %s, name: %s, result: %s", owner, repoName, string(res))
+
 	resp := new(repos.PostReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.CreateRepoHandler), resp, false)
+	if err = json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // DeleteReposMethod .
@@ -48,12 +105,39 @@ func DeleteReposMethod(ctx context.Context, c *app.RequestContext) {
 	var req repos.DeleteReposReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	var repoId = req.RepoId
+	if repoId == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "repo id is empty"})
+		return
+	}
+
+	klog.Infof("Repo delete repo, user: %s, id: %s", owner, repoId)
+
+	res, err := seahub.HandleRepoDelete(owner, repoId)
+	if err != nil {
+		klog.Errorf("delete repo error: %v, name: %s", err, repoId)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("delete repo error: %v, name: %s", err, repoId)})
+		return
+	}
+
+	klog.Infof("Repo delete success, user: %s, repo id: %s, result: %s", owner, repoId, string(res))
+
 	resp := new(repos.DeleteReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.DeleteRepoHandler), resp, false)
+	if err = json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
 
 // PatchReposMethod .
@@ -63,10 +147,44 @@ func PatchReposMethod(ctx context.Context, c *app.RequestContext) {
 	var req repos.PatchReposReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(repos.PatchReposResp)
-	handler.CommonConvert(c, http2.CommonHandle(http2.RenameRepoHandler), resp, false)
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	var repoId = req.RepoId
+	var repoName = req.Destination
+
+	if repoId == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "repo id is empty"})
+		return
+	}
+
+	if repoName == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "repo name is empty"})
+		return
+	}
+
+	repoName, err = common.UnescapeURLIfEscaped(repoName)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	klog.Infof("Repo rename repo, user: %s, id: %s, name: %s", owner, repoId, repoName)
+
+	res, err := seahub.HandleRepoPatch(owner, repoId, repoName, "", "rename")
+	if err != nil {
+		klog.Errorf("rename repo error: %v, id: %s, name: %s", err, repoId, repoName)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("rename repo error: %v, id: %s, name: %s", err, repoId, repoName)})
+		return
+	}
+
+	klog.Infof("Repo rename success, user: %s, repo id: %s, repo name: %s, result: %s", owner, repoId, repoName, string(res))
+
+	c.String(consts.StatusOK, string(res))
 }
