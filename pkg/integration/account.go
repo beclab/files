@@ -1,23 +1,24 @@
 package integration
 
 import (
+	"context"
 	"files/pkg/common"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/emicklei/go-restful/v3"
+	authv1 "k8s.io/api/authentication/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 )
 
-var authTokenPatn = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-
-func (i *integration) getAccounts(owner string) ([]*accountsResponseData, error) {
+func (i *integration) getAccounts(owner string, authToken string) ([]*accountsResponseData, error) {
 	settingsUrl := fmt.Sprintf("http://settings.user-system-%s:28080/api/account/all", owner)
 
 	// klog.Infof("fetch integration from settings: %s", settingsUrl)
-	resp, err := i.rest.SetDebug(false).R().SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", i.authToken)).
+	resp, err := i.rest.SetDebug(false).R().SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
 		SetResult(&accountsResponse{}).
 		Get(settingsUrl)
 
@@ -38,14 +39,14 @@ func (i *integration) getAccounts(owner string) ([]*accountsResponseData, error)
 	return accountsResp.Data, nil
 }
 
-func (i *integration) getToken(owner string, accountName string, accountType string) (*accountResponseData, error) {
+func (i *integration) getToken(owner string, accountName string, accountType string, authToken string) (*accountResponseData, error) {
 	settingsUrl := fmt.Sprintf("http://settings.user-system-%s:28080/api/account/retrieve", owner)
 
 	var data = make(map[string]string)
 	data["name"] = i.formatUrl(accountType, accountName)
 	klog.Infof("fetch integration from settings: %s", settingsUrl)
 	resp, err := i.rest.R().SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", i.authToken)).
+		SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
 		SetBody(data).
 		SetResult(&accountResponse{}).
 		Post(settingsUrl)
@@ -87,17 +88,36 @@ func (i *integration) checkExpired(expiredAt int64) bool {
 	return adjustedTimestamp < currentTimestamp
 }
 
-func (i *integration) getAuthToken() error {
-	token, err := os.ReadFile(authTokenPatn)
+func (i *integration) getAuthToken(owner string) (string, error) {
+	at, ok := i.authToken[owner]
+	if ok {
+		if time.Now().Before(at.expire) {
+			return at.token, nil
+		}
+	}
+
+	namespace := fmt.Sprintf("user-system-%s", owner)
+	tr := &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			Audiences:         []string{"https://kubernetes.default.svc.cluster.local"},
+			ExpirationSeconds: ptr.To[int64](86400), // one day
+		},
+	}
+
+	token, err := i.kubeClient.CoreV1().ServiceAccounts(namespace).
+		CreateToken(context.Background(), "user-backend", tr, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("read auth token file error: %v", err)
+		// klog.Errorf("Failed to create token for user %s in namespace %s: %v", owner, namespace, err)
+		return "", fmt.Errorf("failed to create token for user %s in namespace %s: %v", owner, namespace, err)
 	}
 
-	if token == nil || len(token) == 0 {
-		return fmt.Errorf("auth token invalid")
+	if !ok {
+		at = &authToken{}
 	}
+	at.token = token.Status.Token
+	at.expire = time.Now().Add(82800 * time.Second)
 
-	i.authToken = string(token)
+	i.authToken[owner] = at
 
-	return nil
+	return at.token, nil
 }
