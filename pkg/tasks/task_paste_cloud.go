@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"encoding/json"
+	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
@@ -28,31 +29,44 @@ func (t *Task) DownloadFromCloud() error {
 	var src = t.param.Src
 	var dst *models.FileParam
 
-	if t.param.Dst.IsSync() { // copying files to Seahub, the files will first be downloaded to the local
-		srcName, isFile := files.GetFileNameFromPath(src.Path)
-		srcPath := srcName
-		if !isFile {
-			srcPath += "/"
+	if t.wasPaused && t.pausedParam == nil {
+		return errors.New("pause param invalid")
+	}
+
+	if !t.param.Dst.IsSync() && t.wasPaused {
+		t.param.Dst = t.pausedParam
+	}
+
+	if t.param.Dst.IsSync() {
+		if !t.wasPaused {
+			// copying files to Seahub, the files will first be downloaded to the local
+			srcName, isFile := files.GetFileNameFromPath(src.Path)
+			srcPath := srcName
+			if !isFile {
+				srcPath += "/"
+			}
+			var cacheParam = &models.FileParam{
+				Owner:    user,
+				FileType: common.Cache,
+				Extend:   global.CurrentNodeName,
+				Path:     common.DefaultSyncUploadToCloudTempPath + "/" + srcPath,
+			}
+			dst = cacheParam
+		} else {
+			dst = t.pausedParam
 		}
-		var cacheParam = &models.FileParam{
-			Owner:    user,
-			FileType: common.Cache,
-			Extend:   global.CurrentNodeName,
-			Path:     common.DefaultSyncUploadToCloudTempPath + "/" + srcPath,
-		}
-		dst = cacheParam
 	} else {
 		dst = t.param.Dst // posix
 	}
 
 	klog.Infof("[Task] Id: %s, start, downloadFromCloud, user: %s, action: %s, src: %s, dst: %s", t.id, user, action, common.ToJson(src), common.ToJson(dst))
 
+	// check local free space
 	dstUri, err := dst.GetResourceUri()
 	if err != nil {
 		return err
 	}
 
-	// check local free space
 	cloudSize, err := cmd.GetFilesSize(src)
 	if err != nil {
 		klog.Errorf("get cloud size error: %v", err)
@@ -67,11 +81,41 @@ func (t *Task) DownloadFromCloud() error {
 
 	klog.Infof("[Task] Id: %s, check posix space, cloudSize: %d, posixSize: %d", t.id, cloudSize, posixSize)
 
-	t.updateTotalSize(cloudSize)
-
 	requiredSpace, ok := common.IsDiskSpaceEnough(posixSize, cloudSize)
 	if ok {
 		return fmt.Errorf("not enough free space on disk, required: %s, available: %s", common.FormatBytes(requiredSpace), common.FormatBytes(posixSize))
+	}
+
+	t.updateTotalSize(cloudSize)
+
+	if !t.wasPaused {
+		// If the task has not been paused, it is necessary to check for name conflicts.
+		cloudFileName, isFile := files.GetFileNameFromPath(src.Path)
+		posixPrefixPath := files.GetPrefixPath(dst.Path)
+
+		// check duplicated names and generate new name
+		localItems, err := cmd.GetFilesList(dst, true)
+		if err != nil {
+			if !strings.Contains(err.Error(), "directory not found") {
+				return fmt.Errorf("get local files list error: %v", err)
+			}
+
+		}
+		var dupNames []string
+		if localItems != nil && localItems.List != nil && len(localItems.List) > 0 {
+			for _, item := range localItems.List {
+				dupNames = append(dupNames, item.Name)
+			}
+		}
+
+		newPosixName := files.GenerateDupName(dupNames, cloudFileName, t.isFile)
+		klog.Infof("[Task] Id: %s, newPosixName: %s", t.id, newPosixName)
+
+		dst.Path = posixPrefixPath + newPosixName
+		if !isFile {
+			dst.Path += "/"
+		}
+
 	}
 
 	if t.param.Dst.IsSync() {
@@ -84,33 +128,9 @@ func (t *Task) DownloadFromCloud() error {
 		}
 	}
 
-	cloudFileName, isFile := files.GetFileNameFromPath(src.Path)
-	posixPrefixPath := files.GetPrefixPath(dst.Path)
-
-	// check duplicated names and generate new name
-	localItems, err := cmd.GetFilesList(dst, true)
-	if err != nil {
-		return fmt.Errorf("get local files list error: %v", err)
-	}
-	var dupNames []string
-	if localItems != nil && localItems.List != nil && len(localItems.List) > 0 {
-		for _, item := range localItems.List {
-			dupNames = append(dupNames, item.Name)
-		}
-	}
-
-	newPosixName := files.GenerateDupName(dupNames, cloudFileName, t.isFile)
-	klog.Infof("[Task] Id: %s, newPosixName: %s", t.id, newPosixName)
-
-	dst.Path = posixPrefixPath + newPosixName
-	if !isFile {
-		dst.Path += "/"
-	}
-
 	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		if !t.suspend {
-			t.param.Delete = dst
-		}
+		t.pausedParam = dst
+		t.pausedPhase = t.currentPhase
 		return ctxErr
 	}
 
@@ -146,16 +166,18 @@ func (t *Task) DownloadFromCloud() error {
 				klog.Errorf("[Task] Id: %s, clear src error: %v", t.id, e)
 			}
 		} else {
-			if err.Error() == TaskCancel {
-				if !t.suspend {
-					t.param.Delete = dst
-				}
-			} else {
-				if e := cmd.Clear(dst); e != nil {
-					klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
-				}
-			}
+			// if err.Error() == TaskCancel {
+			// 	if !t.suspend {
+			// 		t.param.Delete = dst
+			// 	}
+			// } else {
+			// 	if e := cmd.Clear(dst); e != nil {
+			// 		klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
+			// 	}
+			// }
 
+			t.pausedParam = dst
+			t.pausedPhase = t.currentPhase
 		}
 	} else { // > sync
 		if err == nil {
@@ -167,15 +189,19 @@ func (t *Task) DownloadFromCloud() error {
 			}
 			t.param.Temp = nextPhaseParam
 		} else {
-			if err.Error() == TaskCancel {
-				if !t.suspend {
-					t.param.Delete = dst
-				}
-			} else {
-				if e := cmd.Clear(dst); e != nil {
-					klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
-				}
-			}
+			// if err.Error() == TaskCancel {
+			// 	if !t.suspend {
+			// 		t.param.Delete = dst
+			// 	}
+			// } else {
+			// 	if e := cmd.Clear(dst); e != nil {
+			// 		klog.Errorf("[Task] Id: %s, clear dst error: %v", t.id, e)
+			// 	}
+			// }
+
+			t.pausedParam = dst
+			t.pausedPhase = t.currentPhase
+
 		}
 	}
 
@@ -265,7 +291,7 @@ func (t *Task) UploadToCloud() error {
 
 			} else {
 				if !t.suspend {
-					t.param.Delete = src
+					t.pausedParam = src
 				}
 			}
 		}
@@ -427,7 +453,7 @@ func (t *Task) CopyToCloud() error {
 		err = cmd.Clear(t.param.Dst)
 	} else {
 		if !t.suspend {
-			t.param.Delete = cloudDstParam
+			t.pausedParam = cloudDstParam
 		}
 	}
 
@@ -452,6 +478,11 @@ func (t *Task) checkJobStats(jobId int) (bool, error) {
 		case <-ticker.C:
 			jobCoreStatsResp, err = cmd.GetJob().Stats(jobId)
 			if err != nil {
+				if err.Error() == "job not found" {
+					err = nil
+					done = true
+					break
+				}
 				err = fmt.Errorf("get job core stats error: %v", err)
 				break
 			}
@@ -464,6 +495,11 @@ func (t *Task) checkJobStats(jobId int) (bool, error) {
 
 			jobStatusResp, err = cmd.GetJob().Status(jobId)
 			if err != nil {
+				if err.Error() == "job not found" {
+					err = nil
+					done = true
+					break
+				}
 				err = fmt.Errorf("get job status error: %v", err)
 				break
 			}
@@ -474,7 +510,8 @@ func (t *Task) checkJobStats(jobId int) (bool, error) {
 				break
 			}
 
-			klog.Infof("[Task] Id: %s, get job core stats: %s, status: %s", t.id, common.ToJson(data), common.ToJson(jobStatusData))
+			// klog.Infof("[Task] Id: %s, get job core stats: %s, status: %s", t.id, common.ToJson(data), common.ToJson(jobStatusData))
+			klog.Infof("[Task] Id: %s, get job core stats", t.id)
 
 			var totalTransfers = t.totalSize
 			var transfers = data.Bytes

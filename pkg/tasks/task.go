@@ -29,6 +29,7 @@ type TaskInfo struct {
 	TidyDirs      bool   `json:"tidy_dirs"`
 	Status        string `json:"status"`
 	ErrorMessage  string `json:"failed_reason"`
+	PauseAble     bool   `json:"pause_able"`
 }
 
 type Task struct {
@@ -45,10 +46,13 @@ type Task struct {
 	tidyDirs     bool
 	isFile       bool
 
-	executed bool
-	finished bool
-	suspend  bool
-	paused   bool
+	running bool
+	suspend bool
+
+	wasPaused bool
+
+	pausedParam *models.FileParam
+	pausedPhase int // todo
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc
@@ -69,15 +73,12 @@ func (t *Task) SetTotalSize(size int64) {
 	t.totalSize = size
 }
 
+// ~ Cancel
 func (t *Task) Cancel() {
 	t.ctxCancel()
 
-	if !t.executed {
-		return
-	}
-
 	for {
-		if !t.finished {
+		if t.running {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -85,15 +86,27 @@ func (t *Task) Cancel() {
 	}
 
 	cmd := rclone.Command
+	_ = cmd
 
-	klog.Infof("[Task] Id: %s, Canceled, delete param: %s", t.id, common.ToJson(t.param.Delete))
-	if !t.suspend && t.param.Delete != nil {
-		if e := cmd.Clear(t.param.Delete); e != nil {
-			klog.Errorf("[Task] Id: %s, clear sync dst error: %v", t.id, e)
-		}
+	klog.Infof("[Task] Id: %s, Canceled, delete param: %s", t.id, common.ToJson(t.pausedParam))
+
+	if !t.suspend && t.pausedParam != nil {
+		klog.Infof("[Task] Id: %s, Canceled, delete param done!!!!!!!!!!!", t.id)
+		// if e := cmd.Clear(t.param.Delete); e != nil {
+		// 	klog.Errorf("[Task] Id: %s, clear sync dst error: %v", t.id, e)
+		// }
 	}
+
+	if !t.suspend {
+		t.state = common.Canceled
+	} else {
+		t.state = common.Paused
+	}
+
+	klog.Infof("[Task] Id: %s, Cancel Final, state: %s, running: %v, suspend: %v, wasPaused: %v", t.id, t.state, t.running, t.suspend, t.wasPaused)
 }
 
+// ~ Execute
 func (t *Task) Execute(fs ...func() error) error {
 	userPool := t.manager.getOrCreateUserPool(t.param.Owner)
 	_, loaded := userPool.tasks.LoadOrStore(t.id, t)
@@ -107,21 +120,22 @@ func (t *Task) Execute(fs ...func() error) error {
 		var err error
 
 		defer func() {
-			klog.Infof("[Task] Id: %s done! status: %s, progress: %d, size: %d, transfer: %d, elapse: %d, error: %v",
+			klog.Infof("[Task] Id: %s defer! status: %s, progress: %d, size: %d, transfer: %d, elapse: %d, error: %v",
 				t.id, t.state, t.progress, t.totalSize, t.transfer, time.Since(t.execAt), err)
 
 			t.endAt = time.Now()
-			t.finished = true
+			t.running = false
 		}()
 
-		if t.state == common.Canceled || t.state == common.Paused {
+		if common.ListContains([]string{common.Canceled, common.Paused, common.Failed, common.Running, common.Completed}, t.state) {
 			return
 		}
 
 		t.totalPhases = len(fs)
 		t.execAt = time.Now()
 		t.state = common.Running
-		t.executed = true
+		// t.executed = true
+		t.running = true
 
 		for phase, f := range t.funcs {
 			t.currentPhase = phase + 1
@@ -130,7 +144,7 @@ func (t *Task) Execute(fs ...func() error) error {
 			err = f()
 
 			if err != nil {
-				klog.Errorf("[Task] Id: %s, exec error: %v", t.id, err)
+				klog.Errorf("[Task] Id: %s, exec failed, suspend: %v, error: %v", t.id, t.suspend, err)
 				if err.Error() == TaskCancel {
 					if t.suspend {
 						t.state = common.Paused
@@ -140,6 +154,19 @@ func (t *Task) Execute(fs ...func() error) error {
 					t.state = common.Canceled
 				} else {
 					t.state = common.Failed
+
+					if t.pausedParam != nil { // todo delete data
+
+						cmd := rclone.Command
+						_ = cmd
+						klog.Infof("[Task] Id: %s, exec failed, delete param done!!!!!!!!!!! parm: %s", t.id, common.ToJson(t.pausedParam))
+						// if e := cmd.Clear(t.param.Delete); e != nil {
+						// 	klog.Errorf("[Task] Id: %s, exec failed, delete param: %s, error: %v", t.id, common.ToJson(t.param.Delete), e)
+						// } else {
+						// 	klog.Infof("[Task] Id: %s, exec failed, delete param done! delete param: %s", t.id, common.ToJson(t.param.Delete))
+						// }
+
+					}
 				}
 				t.message = err.Error()
 				return

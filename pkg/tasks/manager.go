@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alitto/pond/v2"
+	"k8s.io/klog/v2"
 )
 
 var TaskManager *taskManager
@@ -71,6 +72,7 @@ func (t *taskManager) getOrCreateUserPool(owner string) *userPool {
 	return userPool
 }
 
+// create
 func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 
 	var ctx, cancel = context.WithCancel(context.Background())
@@ -91,10 +93,9 @@ func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 
 }
 
-/**
- * PauseTask
- */
-func (t *taskManager) PauseTask(owner, taskId string) error {
+// resume
+func (t *taskManager) ResumeTask(owner, taskId string) error {
+	klog.Infof("[Task] Id: %s, Resume, user: %s", taskId, owner)
 	userPool := t.getOrCreateUserPool(owner)
 
 	val, ok := userPool.tasks.Load(taskId)
@@ -103,27 +104,13 @@ func (t *taskManager) PauseTask(owner, taskId string) error {
 	}
 
 	var task = val.(*Task)
-	task.suspend = true
-	task.paused = true
-	task.Cancel()
 
-	return nil
-}
-
-/**
- * ResumeTask
- */
-func (t *taskManager) ResumeTask(owner, taskId string) error {
-	userPool := t.getOrCreateUserPool(owner)
-
-	val, ok := userPool.tasks.Load(taskId)
-	if !ok {
-		return fmt.Errorf("task %s not found", taskId)
+	if task.state != common.Paused { // todo
+		return fmt.Errorf("task is not paused")
 	}
 
 	var ctx, cancel = context.WithCancel(context.Background())
 
-	var task = val.(*Task)
 	task.ctx = ctx
 	task.ctxCancel = cancel
 	task.suspend = false
@@ -132,7 +119,32 @@ func (t *taskManager) ResumeTask(owner, taskId string) error {
 	return task.Execute(task.funcs...)
 }
 
+// pause
+func (t *taskManager) PauseTask(owner, taskId string) error {
+	klog.Infof("[Task] Id: %s, Pause, user: %s", taskId, owner)
+	userPool := t.getOrCreateUserPool(owner)
+
+	val, ok := userPool.tasks.Load(taskId)
+	if !ok {
+		return fmt.Errorf("task %s not found", taskId)
+	}
+
+	var task = val.(*Task)
+
+	if task.state != common.Pending && task.state != common.Running {
+		return fmt.Errorf("task is not pending or running")
+	}
+
+	task.suspend = true
+	task.wasPaused = true
+	go task.Cancel()
+
+	return nil
+}
+
+// cancel
 func (t *taskManager) CancelTask(owner, taskId string, all string) {
+	klog.Infof("[Task] Id: %s, Cancel, user: %s", taskId, owner)
 	userPool := t.getOrCreateUserPool(owner)
 
 	if all == "1" {
@@ -150,6 +162,7 @@ func (t *taskManager) CancelTask(owner, taskId string, all string) {
 	}
 
 	task := val.(*Task)
+	task.suspend = false
 	go task.Cancel()
 }
 
@@ -194,6 +207,7 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 		TidyDirs:      task.tidyDirs,
 		Status:        task.state,
 		ErrorMessage:  task.message,
+		PauseAble:     true,
 	}
 
 	tasks = append(tasks, res)
