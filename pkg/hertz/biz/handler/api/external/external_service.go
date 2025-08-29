@@ -8,6 +8,7 @@ import (
 	http2 "files/pkg/http"
 
 	external "files/pkg/hertz/biz/model/api/external"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
@@ -76,4 +77,12 @@ func DeleteSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 
 	resp := new(external.DeleteSmbHistoryResp)
 	handler.CommonConvert(c, http2.MonkeyHandle(http2.SmbHistoryDeleteHandler, "/api/smb_history"), resp, true)
+}
+
+// AccountsMethod .
+// @router /api/accounts [GET]
+func AccountsMethod(ctx context.Context, c *app.RequestContext) {
+	resp := new(external.AccountsResp)
+	// c.JSON(consts.StatusOK, resp)
+	handler.CommonConvert(c, http2.CommonHandle(http2.AccountsGetHandler), resp, false)
 }

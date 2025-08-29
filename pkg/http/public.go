@@ -6,6 +6,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/global"
+	"files/pkg/integration"
 	"files/pkg/models"
 	"net/http"
 
@@ -170,6 +171,24 @@ func NodesGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
 	var result = make(map[string]interface{})
 	result["code"] = http.StatusOK
 	result["data"] = data
+
+	res, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func AccountsGetHandler(contextQueryArgs *models.QueryParam) ([]byte, error) {
+	var result = make(map[string]interface{})
+
+	var accounts, err = integration.IntegrationManager().GetAccounts(contextQueryArgs.Owner)
+	if err != nil {
+		return nil, err
+	}
+
+	result["code"] = http.StatusOK
+	result["data"] = accounts
 
 	res, err := json.Marshal(result)
 	if err != nil {

@@ -65,3 +65,8 @@ func _unmountmethodMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _accountsmethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
