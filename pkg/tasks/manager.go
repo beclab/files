@@ -104,6 +104,7 @@ func (t *taskManager) PauseTask(owner, taskId string) error {
 
 	var task = val.(*Task)
 	task.suspend = true
+	task.paused = true
 	task.Cancel()
 
 	return nil

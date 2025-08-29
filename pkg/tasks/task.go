@@ -48,6 +48,7 @@ type Task struct {
 	executed bool
 	finished bool
 	suspend  bool
+	paused   bool
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc

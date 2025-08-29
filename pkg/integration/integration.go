@@ -4,6 +4,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/config"
+	"files/pkg/hertz/biz/model/api/external"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -100,6 +101,34 @@ func (i *integration) HandlerEvent() cache.ResourceEventHandler {
 			},
 		},
 	}
+}
+
+func (i *integration) GetAccounts(owner string) ([]*external.AccountInfo, error) {
+	at, err := i.getAuthToken(owner)
+	if err != nil {
+		klog.Errorf("get auth token error: %v", err)
+		return nil, err
+	}
+
+	accounts, err := i.getAccounts(owner, at)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*external.AccountInfo
+
+	for _, ac := range accounts {
+		var ai = &external.AccountInfo{
+			Name:      ac.Name,
+			Type:      ac.Type,
+			Available: ac.Available,
+			CreateAt:  ac.CreateAt,
+			ExpiresAt: ac.ExpiresAt,
+		}
+		result = append(result, ai)
+	}
+
+	return result, nil
 }
 
 func (i *integration) GetIntegrations() error {
