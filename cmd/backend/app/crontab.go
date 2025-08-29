@@ -4,6 +4,7 @@ import (
 	"files/pkg/drivers/posix/upload"
 	"files/pkg/global"
 	"files/pkg/redisutils"
+	"files/pkg/tasks"
 	"sync"
 	"time"
 
@@ -20,6 +21,8 @@ func InitCrontabs() {
 		cleanupMux.Lock()
 		defer cleanupMux.Unlock()
 		redisutils.CleanupOldFilesAndRedisEntries(7 * 24 * time.Hour)
+
+		tasks.TaskManager.ClearTasks()
 	})
 	if err != nil {
 		klog.Fatalf("AddFunc CleanupOldFilesAndRedisEntries err:%v", err)

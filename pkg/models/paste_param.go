@@ -15,5 +15,4 @@ type PasteParam struct {
 	Src           *FileParam
 	Dst           *FileParam
 	Temp          *FileParam
-	Delete        *FileParam
 }

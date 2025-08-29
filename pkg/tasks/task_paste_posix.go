@@ -43,8 +43,9 @@ func (t *Task) Rsync() error {
 
 	t.updateTotalSize(pathMeta.Size)
 
-	klog.Infof("[Task] Id: %s, srcPath: %s, srcMeta: %s", t.id, srcPath, common.ToJson(pathMeta))
+	klog.Infof("[Task] Id: %s, srcPath: %s, dstUri: %s, srcMeta: %s", t.id, srcPath, dstUri, common.ToJson(pathMeta))
 
+	// check free space
 	dstFree, dstUsedPercent, err := files.GetSpaceSize(dstUri)
 	if err != nil {
 		return fmt.Errorf("get dst space size error: %v", err)
@@ -58,29 +59,48 @@ func (t *Task) Rsync() error {
 		return fmt.Errorf("not enough free space on target disk, required: %s, available: %s", common.FormatBytes(pathMeta.Size), common.FormatBytes(int64(dstFree)))
 	}
 
-	klog.Infof("[Task] Id: %s, srcPath: %s, dstUri: %s, dstFree: %d, dstUsed: %.2f%%", t.id, srcPath, dstUri, dstFree, dstUsedPercent)
+	klog.Infof("[Task] Id: %s, dstFree: %d, dstUsed: %.2f%%", t.id, dstFree, dstUsedPercent)
 
-	generatedDstNewName, generatedDstNewPath, err := t.generateNewName(pathMeta)
-	if err != nil {
-		return fmt.Errorf("generate dst name error: %v", err)
+	if !t.wasPaused {
+		generatedDstNewName, generatedDstNewPath, err := t.generateNewName(pathMeta)
+		if err != nil {
+			return fmt.Errorf("generate dst name error: %v", err)
+		}
+
+		if generatedDstNewName != "" {
+			t.param.Dst.Path = generatedDstNewPath
+		}
 	}
 
-	klog.Infof("[Task] Id: %s, generated, name: %s, path: %s", t.id, generatedDstNewName, generatedDstNewPath)
-
-	if generatedDstNewName != "" {
-		t.param.Dst.Path = generatedDstNewPath
-	}
+	klog.Infof("[Task] Id: %s, src: %s, dst: %s", t.id, common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
 
 	if t.param.Action == common.ActionMove {
-		return t.move()
+		if err = t.move(); err != nil { // move
+			klog.Errorf("[Task] Id: %s, move dst error: %v", t.id, err)
+
+			return err
+		}
+
+		klog.Infof("[Task] Id: %s, move done!", t.id)
+		t.details = append(t.details, "move done")
+
+		return nil
 	}
 
-	return t.rsync()
+	err = t.rsync() // rsync
+	if err != nil {
+		klog.Errorf("[Task] Id: %s, copy dst error: %v", t.id, err)
+		t.pausedParam = t.param.Dst
+		return err
+	}
+
+	klog.Infof("[Task] Id: %s, copy done!", t.id)
+
+	return nil
 }
 
+// ~ rsync
 func (t *Task) rsync() error {
-	klog.Infof("[Task] Id: %s, condition rsync, user: %s, action: %s, src: %s, dst: %s", t.id, t.param.Owner, t.param.Action, common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
-
 	rsync, err := common.GetCommand("rsync")
 	if err != nil {
 		return fmt.Errorf("get command rsync error: %v", err)
@@ -99,7 +119,7 @@ func (t *Task) rsync() error {
 	srcPath := src + t.param.Src.Path
 	dstPath := dst + t.param.Dst.Path
 
-	klog.Infof("[Task] Id: %s, conditon rsync, user: %s, srcPath: %s, dstPath: %s", t.id, t.param.Owner, srcPath, dstPath)
+	klog.Infof("[Task] Id: %s, conditon rsync, srcPath: %s, dstPath: %s", t.id, srcPath, dstPath)
 
 	var args = []string{
 		"-av",
@@ -110,7 +130,6 @@ func (t *Task) rsync() error {
 	}
 
 	_, err = common.ExecRsync(t.ctx, rsync, args, t.updateProgress)
-
 	if err != nil {
 		klog.Errorf("exec rsync error: %v", err)
 		return err
@@ -119,9 +138,8 @@ func (t *Task) rsync() error {
 	return nil
 }
 
+// ~ move
 func (t *Task) move() error {
-	klog.Infof("[Task] Id: %s, condition move, owner: %s, action: %s, src: %s, dst: %s", t.id, t.param.Owner, t.param.Action, common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
-
 	mv, err := common.GetCommand("mv")
 	if err != nil {
 		return fmt.Errorf("get command mv error: %v", err)
@@ -140,7 +158,8 @@ func (t *Task) move() error {
 	srcPath := src + t.param.Src.Path
 	dstPath := dst + t.param.Dst.Path
 
-	klog.Infof("[Task] Id: %s, conditon move, user: %s, srcPath: %s, dstPath: %s", t.id, t.param.Owner, srcPath, dstPath)
+	klog.Infof("[Task] Id: %s, conditon move, srcPath: %s, dstPath: %s", t.id, srcPath, dstPath)
+	t.details = append(t.details, fmt.Sprintf("move %s -> %s", srcPath, dstPath))
 
 	var args = []string{srcPath, dstPath}
 

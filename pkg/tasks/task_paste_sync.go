@@ -32,37 +32,79 @@ import (
  */
 func (t *Task) DownloadFromSync() error {
 	// sync > posix; sync > cloud
+
+	var cmd = rclone.Command
 	var user = t.param.Owner
 	var action = t.param.Action
 	var src = t.param.Src
-	var dst = t.param.Dst
-	var tempParam *models.FileParam
-	var cmd = rclone.Command
 
-	if t.param.Dst.IsCloud() {
-		srcName, isFile := files.GetFileNameFromPath(src.Path)
-		srcPath := srcName
-		if !isFile {
-			srcPath += "/"
+	var tempParam *models.FileParam
+	var dst *models.FileParam
+
+	if t.param.Dst.IsCloud() { // sync->cloud, if phase 1 complete
+		if t.pausedPhase == t.totalPhases {
+			klog.Infof("[Task] Id: %s, resume phase: %d", t.id, t.pausedPhase)
+			return nil
 		}
-		tempParam = &models.FileParam{
-			Owner:    user,
-			FileType: common.Cache,
-			Extend:   global.CurrentNodeName,
-			Path:     common.DefaultSyncUploadToCloudTempPath + "/" + srcPath,
-		}
-		dst = tempParam
 	}
 
-	klog.Infof("[Task] Id: %s, start, downloadFormSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst))
+	if t.wasPaused && t.pausedParam == nil {
+		klog.Errorf("[Task] Id: %s, paused param invalid", t.id)
+		return errors.New("pause param invalid")
+	}
 
-	totalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
+	if !t.param.Dst.IsCloud() && t.wasPaused {
+		t.param.Dst = t.pausedParam
+		t.pausedParam = nil
+	}
+
+	if t.param.Dst.IsCloud() {
+		if !t.wasPaused {
+			srcName, isFile := files.GetFileNameFromPath(src.Path)
+			srcPath := srcName
+			if !isFile {
+				srcPath += "/"
+			}
+			tempParam = &models.FileParam{
+				Owner:    user,
+				FileType: common.Cache,
+				Extend:   global.CurrentNodeName,
+				Path:     common.DefaultSyncUploadToCloudTempPath + "/" + srcPath,
+			}
+			dst = tempParam
+		} else {
+			dst = t.pausedParam
+			t.pausedParam = nil
+		}
+	} else {
+		dst = t.param.Dst
+	}
+
+	klog.Infof("[Task] Id: %s, start, downloadFormSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s, psrc: %s, pdst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst), common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
+
+	// check local free space
+	srcTotalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
 	if err != nil {
 		klog.Errorf("[Task] Id: %s, getFromSyncFileCount error: %v", t.id, err)
 		return err
 	}
 
-	t.updateTotalSize(totalSize)
+	dstSize, err := cmd.GetSpaceSize(dst)
+	if err != nil {
+		klog.Errorf("get posix free space size error: %v", err)
+		return err
+	}
+
+	klog.Infof("[Task] Id: %s, check posix space, syncSize: %d, posixSize: %d", t.id, srcTotalSize, dstSize)
+
+	requiredSpace, ok := common.IsDiskSpaceEnough(dstSize, srcTotalSize)
+	if ok {
+		return fmt.Errorf("not enough free space on disk, required: %s, available: %s", common.FormatBytes(requiredSpace), common.FormatBytes(dstSize))
+	}
+
+	t.updateTotalSize(srcTotalSize)
+
+	// todo need to check dupname and mkdir first
 
 	defer func() {
 		klog.Infof("[Task] Id: %s, defer, error: %v", t.id, err)
@@ -83,19 +125,14 @@ func (t *Task) DownloadFromSync() error {
 	}
 
 	if err != nil {
-		if err.Error() == TaskCancel && !t.suspend {
-			t.param.Delete = dst
-		} else {
-			if e := cmd.Clear(dst); e != nil { // cache
-				klog.Errorf("[Task] Id: %s, clear sync dst error: %v", t.id, e)
-			}
-		}
+		t.pausedParam = dst
+		t.pausedPhase = t.currentPhase
 		return err
-	} else {
-		if !t.param.Dst.IsCloud() && t.param.Action == common.ActionMove {
-			if err = seahub.HandleDelete(t.param.Src); err != nil {
-				return err
-			}
+	}
+
+	if !t.param.Dst.IsCloud() && t.param.Action == common.ActionMove {
+		if err = seahub.HandleDelete(t.param.Src); err != nil {
+			return err
 		}
 	}
 
@@ -103,7 +140,7 @@ func (t *Task) DownloadFromSync() error {
 	t.updateProgress(100, transferred)
 
 	if t.param.Dst.IsCloud() {
-		t.param.Temp = tempParam
+		t.param.Temp = dst
 	}
 
 	return nil
@@ -117,11 +154,23 @@ func (t *Task) UploadToSync() error {
 	var cmd = rclone.Command
 	var user = t.param.Owner
 	var action = t.param.Action
-	var dst = t.param.Dst
 
 	var src *models.FileParam
-	if t.param.Temp != nil {
-		src = t.param.Temp
+	var dst *models.FileParam
+
+	if t.pausedParam != nil {
+		dst = t.pausedParam
+		t.pausedParam = nil
+	} else {
+		dst = t.param.Dst
+	}
+
+	if t.param.Src.IsCloud() {
+		if t.param.Temp == nil {
+			return fmt.Errorf("[Task] Id: %s, param invalid", t.id)
+		} else {
+			src = t.param.Temp
+		}
 	} else {
 		src = t.param.Src
 	}
@@ -138,9 +187,8 @@ func (t *Task) UploadToSync() error {
 	t.updateTotalSize(posixSize)
 
 	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		if t.param.Src.IsCloud() && !t.suspend {
-			t.param.Delete = src
-		}
+		t.pausedParam = dst
+		t.pausedPhase = t.currentPhase
 		return ctxErr
 	}
 
@@ -158,20 +206,12 @@ func (t *Task) UploadToSync() error {
 	}
 
 	if err != nil {
-		if t.param.Src.IsCloud() {
-			if err.Error() == TaskCancel {
-				if !t.suspend {
-					t.param.Delete = src
-				}
-			} else {
-				if e := cmd.Clear(src); e != nil {
-					klog.Errorf("[Task] Id: %s, clear sync temps error: %v", t.id, err)
-				}
-			}
-		}
-
+		t.pausedParam = dst
+		t.pausedPhase = t.currentPhase
 		return err
 	}
+
+	klog.Infof("[Task] Id: %s done! error: %v", t.id, err)
 
 	if t.param.Action == common.ActionMove {
 		srcUri := ""
@@ -196,14 +236,31 @@ func (t *Task) UploadToSync() error {
  * ~ SyncCopy
  */
 func (t *Task) SyncCopy() error {
+	var user = t.param.Owner
+	var action = t.param.Action
+	var src *models.FileParam
+	var dst *models.FileParam
+
+	src = t.param.Src
+
+	if t.pausedParam != nil {
+		dst = t.pausedParam
+		t.pausedParam = nil
+	} else {
+		dst = t.param.Dst
+	}
+
 	totalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
 	if err != nil {
 		klog.Errorf("DownloadFromSync - GetFromSyncFileCount - %v", err)
 		return err
 	}
+
+	klog.Infof("[Task] Id: %s, start, syncCopy, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
+
 	t.updateTotalSize(totalSize)
 
-	err = t.DoSyncCopy(nil, nil)
+	err = t.DoSyncCopy(src, dst, true)
 	if err != nil {
 		klog.Errorf("DownloadFromSync - DoSyncCopy - %v", err)
 		return err
@@ -299,9 +356,8 @@ func (t *Task) GetFromSyncFileCount(countType string) (int64, error) {
 }
 
 func (t *Task) DownloadDirFromSync(src, dst *models.FileParam) error {
-	canceled, err := t.isCancel()
-	if canceled {
-		return err
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		return ctxErr
 	}
 
 	klog.Infof("[Task] Id: %s, dir, src: %s, dst: %s", t.id, common.ToJson(src), common.ToJson(dst))
@@ -355,9 +411,8 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam) error {
 	}
 
 	for _, item := range direntList {
-		canceled, _ = t.isCancel()
-		if canceled {
-			return nil
+		if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+			return ctxErr
 		}
 
 		fsrc := filepath.Join(src.Path, item["name"].(string))
@@ -391,9 +446,8 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam) error {
 }
 
 func (t *Task) DownloadFileFromSync(src, dst *models.FileParam) error {
-	canceled, err := t.isCancel()
-	if canceled {
-		return err
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		return ctxErr
 	}
 
 	klog.Infof("[Task] Id: %s, file, src: %s, dst: %s", t.id, common.ToJson(src), common.ToJson(dst))
@@ -565,10 +619,6 @@ func (t *Task) GetToSyncFileCount(countType string) (int64, error) {
 }
 
 func (t *Task) UploadDirToSync(src, dst *models.FileParam) error {
-	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		return ctxErr
-	}
-
 	srcUri, err := src.GetResourceUri()
 	if err != nil {
 		return err
@@ -583,7 +633,7 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam) error {
 
 	dstFullPath = AddVersionSuffix(dstFullPath, dst, true)
 
-	var fdstBase string = strings.TrimPrefix(dstFullPath, dstUri)
+	var fdstBase = strings.TrimPrefix(dstFullPath, dstUri)
 
 	res, err := seahub.HandleDirOperation(src.Owner, dst.Extend, fdstBase, "", "mkdir")
 	if err != nil {
@@ -601,8 +651,8 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam) error {
 	var errs []error
 
 	for _, obj := range obs {
-		if ctxCancel, _ := t.isCancel(); ctxCancel {
-			return nil
+		if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+			return ctxErr
 		}
 
 		fsrc := filepath.Join(src.Path, obj.Name())
@@ -647,10 +697,6 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam) error {
 }
 
 func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
-	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		return ctxErr
-	}
-
 	srcUri, err := src.GetResourceUri()
 	if err != nil {
 		return err
@@ -701,10 +747,6 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 
 	var chunkStart int64 = 0
 	for chunkNumber := int64(1); chunkNumber <= totalChunks; chunkNumber++ {
-		if ctxCancel, _ := t.isCancel(); ctxCancel {
-			return nil
-		}
-
 		status, _, transferred, _ := t.GetProgress()
 		if status != "running" && status != "pending" {
 			return nil
@@ -949,12 +991,17 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		klog.Infof("Chunk %d/%d from of bytes %d-%d/%d successfully transferred.", chunkNumber, totalChunks, chunkStart, chunkStart+int64(bytesRead)-1, diskSize)
 		t.updateProgress(finalProgress, transferred+chunkSize)
 
+		if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+			return ctxErr
+		}
+
 		time.Sleep(150 * time.Millisecond)
 	}
 	klog.Infoln("upload file to sync success!")
 
 	_, _, transferred, _ := t.GetProgress()
 	t.updateProgress(right, transferred)
+
 	return nil
 }
 
@@ -992,17 +1039,11 @@ func (t *Task) CalculateSyncProgressRange(currentFileSize int64) (left, mid, rig
 	return left, mid, right
 }
 
-func (t *Task) DoSyncCopy(src, dst *models.FileParam) error {
-	canceled, _ := t.isCancel()
-	if canceled {
-		return nil
-	}
-
-	if src == nil {
-		src = t.param.Src
-	}
-	if dst == nil {
-		dst = t.param.Dst
+func (t *Task) DoSyncCopy(src, dst *models.FileParam, root bool) error {
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		t.pausedParam = dst
+		t.pausedPhase = t.currentPhase
+		return ctxErr
 	}
 
 	go t.SimulateProgress(0, 99, 50000000)
@@ -1014,14 +1055,23 @@ func (t *Task) DoSyncCopy(src, dst *models.FileParam) error {
 	if t.param.Action == common.ActionCopy {
 		_, err = seahub.HandleBatchCopy(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
 		if err != nil {
-			return err
+			// return err
+			klog.Errorf("[Task] Id: %s, batch copy error: %v", t.id, err)
 		}
 	} else {
 		_, err = seahub.HandleBatchMove(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
 		if err != nil {
-			return err
+			klog.Errorf("[Task] Id: %s, batch move error: %v", t.id, err)
+			// return err
 		}
 	}
+
+	if err != nil {
+		t.pausedParam = dst
+		t.pausedPhase = t.currentPhase
+		return err
+	}
+
 	_, _, _, size := t.GetProgress()
 	t.updateProgress(100, size)
 	return err
