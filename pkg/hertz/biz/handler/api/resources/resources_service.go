@@ -82,7 +82,7 @@ func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	res, err := handler.Create(contextArg)
+	_, err = handler.Create(contextArg)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
 			"code":    1,
@@ -92,11 +92,6 @@ func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.PostResourcesResp)
-	if err := json.Unmarshal(res, &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-		return
-	}
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -131,7 +126,7 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	res, err := handler.Rename(contextArg)
+	_, err = handler.Rename(contextArg)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
 			"code":    1,
@@ -141,11 +136,6 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.PatchResourcesResp)
-	if err = json.Unmarshal(res, &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-		return
-	}
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -256,10 +246,5 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(resources.DeleteResourcesResp)
-	if err = json.Unmarshal(res, &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
-		return
-	}
 	c.JSON(consts.StatusOK, resp)
 }
