@@ -20,7 +20,7 @@ struct UploadChunksReq {
     3: required i32 resumableChunkSize (api.form="resumableChunkSize");
     4: required i32 resumableCurrentChunkSize (api.form="resumableCurrentChunkSize");
     5: required i64 resumableTotalSize (api.form="resumableTotalSize");
-    6: required string resumableType (api.form="resumableType");
+    6: string resumableType (api.form="resumableType");
     7: required string resumableIdentifier (api.form="resumableIdentifier");
     8: required string resumableFilename (api.form="resumableFilename");
     9: required string resumableRelativePath (api.form="resumableRelativePath");
