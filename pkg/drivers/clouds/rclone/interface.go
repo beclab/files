@@ -24,7 +24,9 @@ type Interface interface {
 
 	Copy(src, dst *models.FileParam) (*operations.OperationsAsyncJobResp, error)
 	Delete(param *models.FileParam, dirents []string) ([]string, error)
+
 	Clear(param *models.FileParam) error
+	ClearTaskCaches(param *models.FileParam, taskId string) error
 
 	StopJobs() error
 }
