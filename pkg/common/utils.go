@@ -251,3 +251,9 @@ func IsDiskSpaceEnough(diskSize, fileSize int64) (int64, bool) {
 	requiredSpace := int64(float64(fileSize) * 1.05)
 	return requiredSpace, diskSize < requiredSpace
 }
+
+func RemoveBlank(s string) string {
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	return s
+}

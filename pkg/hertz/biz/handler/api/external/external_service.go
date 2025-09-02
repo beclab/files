@@ -14,15 +14,16 @@ import (
 	"files/pkg/models"
 	"files/pkg/redisutils"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/go-redis/redis"
-	"io/ioutil"
 	"k8s.io/klog/v2"
-	"net/http"
-	"strings"
-	"time"
 )
 
 // MountedMethod .
@@ -448,7 +449,7 @@ func AccountsMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(external.AccountsResp)
-	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+	if err = json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
 		return

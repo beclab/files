@@ -12,6 +12,7 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -452,6 +453,21 @@ func (r *rclone) Copy(src, dst *models.FileParam) (*operations.OperationsAsyncJo
 	}
 
 	return jobResp, nil
+}
+
+func (r *rclone) ClearTaskCaches(param *models.FileParam, taskId string) error {
+	var taskCachedPath = fmt.Sprintf("%s/%s", common.DefaultSyncUploadToCloudTempPath, taskId)
+
+	if param.FileType != common.Cache {
+		return fmt.Errorf("file type %s invalid", param.FileType)
+	}
+
+	srcUri, err := param.GetResourceUri()
+	if err != nil {
+		return err
+	}
+	var p = fmt.Sprintf("%s%s", srcUri, taskCachedPath)
+	return os.RemoveAll(p)
 }
 
 func (r *rclone) Clear(param *models.FileParam) error {

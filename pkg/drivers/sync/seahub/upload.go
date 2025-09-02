@@ -8,10 +8,11 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"io"
-	"k8s.io/klog/v2"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"k8s.io/klog/v2"
 )
 
 var FILE_SERVER_ROOT = "/seafhttp"
@@ -141,4 +142,53 @@ func GetUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, err
 		"uploadedBytes": uploadedBytes,
 	}
 	return common.ToBytes(response), nil
+}
+
+func GetUploadFile(fileParam *models.FileParam) (string, error) {
+	repoId := fileParam.Extend
+
+	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
+	if err != nil {
+		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
+		return "", err
+	}
+	if repo == nil {
+		klog.Errorf("fail to get repo id %s", repoId)
+		return "", errors.New("library not found")
+	}
+
+	fileId, err := seaserv.GlobalSeafileAPI.GetFileIdByPath(repoId, fileParam.Path)
+	if fileId == "" || err != nil {
+		klog.Errorf("fail to check file exists %s, err=%s", fileParam.Path, err)
+		return "", errors.New("file not found")
+	}
+
+	return fileId, nil
+}
+
+func GetUploadDir(fileParam *models.FileParam) (string, error) {
+	repoId := fileParam.Extend
+
+	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
+	if err != nil {
+		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
+		return "", err
+	}
+	if repo == nil {
+		klog.Errorf("fail to get repo id %s", repoId)
+		return "", errors.New("library not found")
+	}
+
+	parentDir := fileParam.Path
+	if parentDir == "" {
+		parentDir = "/"
+	}
+
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	if dirId == "" || err != nil {
+		klog.Errorf("fail to check dir exists %s, err=%s", parentDir, err)
+		return "", errors.New("folder not found")
+	}
+
+	return dirId, nil
 }
