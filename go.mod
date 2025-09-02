@@ -31,7 +31,6 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
-	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
 	golang.org/x/image v0.29.0
 	golang.org/x/text v0.27.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1

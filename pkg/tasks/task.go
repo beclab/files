@@ -52,8 +52,9 @@ type Task struct {
 
 	wasPaused bool
 
-	pausedParam *models.FileParam // used for dst
-	pausedPhase int
+	pausedParam     *models.FileParam // used for dst
+	pausedPhase     int
+	pausedSyncMkdir bool
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc

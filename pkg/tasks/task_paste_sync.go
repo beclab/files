@@ -179,12 +179,6 @@ func (t *Task) UploadToSync() error {
 	}
 	t.updateTotalSize(posixSize)
 
-	// if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-	// 	t.pausedParam = dst
-	// 	t.pausedPhase = t.currentPhase
-	// 	return ctxErr
-	// }
-
 	_, isFile := src.IsFile()
 	if isFile {
 		err = t.UploadFileToSync(src, dst)
@@ -201,6 +195,7 @@ func (t *Task) UploadToSync() error {
 	if err != nil {
 		t.pausedParam = dst
 		t.pausedPhase = t.currentPhase
+		t.pausedSyncMkdir = true
 		return err
 	}
 
@@ -641,24 +636,23 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 
 	var fdstBase = strings.TrimPrefix(dstFullPath, dstUri)
 
-	if !t.wasPaused && root {
-
-		dstFullPath = AddVersionSuffix(dstFullPath, dst, true)
-		fdstBase = strings.TrimPrefix(dstFullPath, dstUri)
+	if root {
+		if !t.wasPaused || !t.pausedSyncMkdir {
+			dstFullPath = AddVersionSuffix(dstFullPath, dst, true)
+			fdstBase = strings.TrimPrefix(dstFullPath, dstUri)
+		}
 	}
 
 	var created bool = true
-	if t.wasPaused {
-		var getUploadDirParam = &models.FileParam{
-			Owner:    dst.Owner,
-			FileType: dst.FileType,
-			Extend:   dst.Extend,
-			Path:     fdstBase,
-		}
-		dirId, _ := seahub.GetUploadDir(getUploadDirParam)
-		if dirId != "" {
-			created = false
-		}
+	var getUploadDirParam = &models.FileParam{
+		Owner:    dst.Owner,
+		FileType: dst.FileType,
+		Extend:   dst.Extend,
+		Path:     fdstBase,
+	}
+	dirId, _ := seahub.GetUploadDir(getUploadDirParam)
+	if dirId != "" {
+		created = false
 	}
 
 	if created {
