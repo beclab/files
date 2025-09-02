@@ -191,6 +191,10 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 
 	var pauseAble bool = true
 
+	if src.IsSync() && dst.IsSync() {
+		pauseAble = false
+	}
+
 	var res = &TaskInfo{
 		Id:            task.id,
 		Action:        task.param.Action,
