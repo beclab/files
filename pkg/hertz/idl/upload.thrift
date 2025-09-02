@@ -15,7 +15,7 @@ struct UploadedBytesResp {
 }
 
 struct UploadChunksReq {
-    1: required bool retJson (api.query="ret-json");
+    1: i32 retJson (api.query="ret-json");
     2: required i32 resumableChunkNumber (api.form="resumableChunkNumber");
     3: required i32 resumableChunkSize (api.form="resumableChunkSize");
     4: required i32 resumableCurrentChunkSize (api.form="resumableCurrentChunkSize");
@@ -26,11 +26,11 @@ struct UploadChunksReq {
     9: required string resumableRelativePath (api.form="resumableRelativePath");
     10: required i32 resumableTotalChunks (api.form="resumableTotalChunks");
     11: required string parent_dir (api.form="parent_dir");
-    12: required string fullPath (api.form="fullPath");
-    13: required string pathname (api.form="pathname");
-    14: optional string repoId (api.form="repoId");
-    15: required string driveType (api.form="driveType");
-    16: required string node (api.form="node");
+    12: string fullPath (api.form="fullPath");
+    13: string pathname (api.form="pathname");
+    14: string repoId (api.form="repoId");
+    15: string driveType (api.form="driveType");
+    16: string node (api.form="node");
     17: optional string md5 (api.form="md5");
     18: binary file (api.form="file");
 }

@@ -140,9 +140,11 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	var req upload.UploadChunksReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
+		klog.Errorf("bind and validate error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+	req.RetJson = 1
 
 	node := c.Param("node")
 	uid := c.Param("uid")
