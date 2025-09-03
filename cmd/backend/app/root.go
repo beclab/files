@@ -176,12 +176,13 @@ user created with the credentials from options "username" and "password".`,
 		// step10: task manager
 		tasks.NewTaskManager()
 
-		// step11: run hertz server
-		hertz.HertzServer()
-
-		// step12: Crontab
+		// step11: Crontab
 		// .	- CleanupOldFilesAndRedisEntries
 		InitCrontabs()
+
+		// step12: run hertz server
+		hertz.HertzServer()
+
 	}, pythonConfig{allowNoDB: true}),
 }
 
