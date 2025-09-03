@@ -127,7 +127,7 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(upload.UploadedBytesResp)
 	if err = json.Unmarshal(respBytes, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -215,7 +215,7 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		resp.Items = make([]*upload.UploadChunksFileItem, 0)
 		if err = json.Unmarshal(respBytes, &resp.Items); err != nil {
 			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 			return
 		}
 	} else {
@@ -223,7 +223,7 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		resp.Success = new(upload.UploadChunksSuccess)
 		if err = json.Unmarshal(respBytes, &resp.Success); err != nil {
 			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 			return
 		}
 	}

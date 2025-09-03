@@ -39,7 +39,7 @@ func MountedMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(external.MountedResp)
 	if err := json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -156,7 +156,7 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(external.MountResp)
 	if err := json.Unmarshal(common.ToBytes(res), &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -276,7 +276,7 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(external.UnmountResp)
 	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -326,7 +326,7 @@ func GetSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(external.GetSmbHistoryResp)
 	if err := json.Unmarshal(common.ToBytes(res), &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -451,7 +451,7 @@ func AccountsMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(external.AccountsResp)
 	if err = json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)

@@ -50,7 +50,7 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(repos.GetReposResp)
 	if err = json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -92,7 +92,7 @@ func PostReposMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(repos.PostReposResp)
 	if err = json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -134,7 +134,7 @@ func DeleteReposMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(repos.DeleteReposResp)
 	if err = json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)

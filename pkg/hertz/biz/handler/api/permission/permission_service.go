@@ -68,7 +68,7 @@ func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(permission.GetPermissionResp)
 	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
