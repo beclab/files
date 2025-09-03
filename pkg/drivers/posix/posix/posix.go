@@ -175,7 +175,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	dstFileOrDirName, isFile := files.GetFileNameFromPath(fileParam.Path)
 	dstPrefixPath := files.GetPrefixPath(fileParam.Path)
-	dstFileExt := filepath.Ext(dstFileOrDirName)
+	_, dstFileExt := common.SplitNameExt(dstFileOrDirName)
 
 	resourceUri, err := contextArgs.FileParam.GetResourceUri()
 	if err != nil {
@@ -201,7 +201,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	for _, entry := range entries {
 		infoName := entry.Name()
 		if isFile {
-			infoExt := filepath.Ext(infoName)
+			_, infoExt := common.SplitNameExt(infoName)
 			if infoExt != dstFileExt {
 				continue
 			}
@@ -342,10 +342,10 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	var srcFilenameExt, dstFilenameExt string
 
 	if isSrcFile {
-		srcFilenameExt = filepath.Ext(srcName)
+		_, srcFilenameExt = common.SplitNameExt(srcName)
 		srcFilenamePrefix = strings.TrimSuffix(srcFilenamePrefix, srcFilenameExt)
 
-		dstFilenameExt = filepath.Ext(dstName)
+		_, dstFilenameExt = common.SplitNameExt(dstName)
 		dstFilenamePrefix = strings.TrimSuffix(dstFilenamePrefix, dstFilenameExt)
 	}
 
@@ -401,7 +401,7 @@ func (s *PosixStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHa
 		return nil, fmt.Errorf("path %s is not file", fileParam.Path)
 	}
 
-	var fileExt = filepath.Ext(fileName)
+	var _, fileExt = common.SplitNameExt(fileName)
 	if fileExt != ".txt" {
 		return nil, fmt.Errorf("file %s not supported", fileName)
 	}

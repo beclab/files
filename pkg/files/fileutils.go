@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	e "errors"
+	"files/pkg/common"
 	"fmt"
 	"io"
 	"io/fs"
@@ -621,7 +622,7 @@ func GenerateDupName(existNames []string, targetName string, isFile bool) string
 
 	var targetExt string
 	if isFile {
-		targetExt = filepath.Ext(targetName)
+		_, targetExt = common.SplitNameExt(targetName)
 	}
 
 	var targetPrefix = strings.TrimSuffix(targetName, targetExt)
@@ -629,7 +630,7 @@ func GenerateDupName(existNames []string, targetName string, isFile bool) string
 	var dupNames []string
 	for _, name := range existNames {
 		if isFile {
-			var tmpExt = filepath.Ext(name)
+			var _, tmpExt = common.SplitNameExt(name)
 			if tmpExt != targetExt {
 				continue
 			}
@@ -664,7 +665,7 @@ func GenerateDupName(existNames []string, targetName string, isFile bool) string
 
 		if find {
 			count++
-			searchName = fmt.Sprintf("%s(%d)", targetPrefix, count)
+			searchName = fmt.Sprintf("%s (%d)", targetPrefix, count)
 			continue
 		} else {
 			matchedCount = count
@@ -676,7 +677,7 @@ func GenerateDupName(existNames []string, targetName string, isFile bool) string
 	if matchedCount == 0 {
 		newFileName = targetPrefix
 	} else {
-		newFileName = fmt.Sprintf("%s(%d)", targetPrefix, matchedCount)
+		newFileName = fmt.Sprintf("%s (%d)", targetPrefix, matchedCount)
 	}
 
 	return newFileName + targetExt

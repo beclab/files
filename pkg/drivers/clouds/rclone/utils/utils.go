@@ -63,8 +63,9 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 			return err
 		}
 		defer resp.Body.Close()
-
-		klog.Infof("[request] url: %s, code: %d, elapsed: %s", u, resp.StatusCode, time.Since(start))
+		if strings.Contains(u, "operations/") || strings.Contains(u, "sync/") {
+			klog.Infof("[request] url: %s, code: %d, elapsed: %s", u, resp.StatusCode, time.Since(start))
+		}
 
 		body, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -98,16 +99,14 @@ func FormatError(resp []byte) error {
 		return nil
 	default:
 		switch errMsg.Path {
-		case "operations/purge":
-			if strings.Contains(errMsg.Error, "directory not found") {
-				return nil
-			}
 		case
-			"operations/deletefile",
-			"operations/list",
+			"operations/deletefile", "operations/movefile",
+			"operations/list", "operations/stat",
+			"operations/purge",
 			"config/create",
 			"job/list", "job/stop", "job/status",
-			"core/stats":
+			"core/stats",
+			"sync/copy", "sync/move":
 			return fmt.Errorf("%s", errMsg.Error)
 		}
 		return fmt.Errorf("%s", string(resp))

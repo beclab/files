@@ -3,16 +3,12 @@ package seahub
 import (
 	"bytes"
 	"errors"
+	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
 	"fmt"
-	_ "github.com/chai2010/tiff" // 注册TIFF解码器
-	"github.com/disintegration/imaging"
-	"github.com/rwcarlsen/goexif/exif"
-	_ "golang.org/x/image/webp" // 注册WEBP解码器
 	"image"
 	"io"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,6 +16,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	_ "github.com/chai2010/tiff" // Register TIFF decoder
+	"github.com/disintegration/imaging"
+	"github.com/rwcarlsen/goexif/exif"
+	_ "golang.org/x/image/webp" // Register WEBP decoder
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -81,7 +83,8 @@ func GetThumbnail(fileParam *models.FileParam, previewSize string) ([]byte, erro
 	success, statusCode := generateThumbnail(username, repoId, strconv.Itoa(size), path)
 	if success {
 		thumbnailDir := filepath.Join(THUMBNAIL_ROOT, strconv.Itoa(size))
-		thumbext := strings.ToLower(filepath.Ext(fileParam.Path))
+		_, thumbext := common.SplitNameExt(fileParam.Path)
+		thumbext = strings.ToLower(thumbext)
 		if !(thumbext == ".jpg" || thumbext == ".jpeg" || thumbext == ".png") {
 			thumbext = THUMBNAIL_EXTENSION
 		}
@@ -349,7 +352,8 @@ func createThumbnailCommon(srcFile, thumbnailFile string, size int) (bool, int) 
 		return false, http.StatusInternalServerError
 	}
 
-	ext := strings.ToLower(filepath.Ext(thumbnailFile))
+	_, ext := common.SplitNameExt(thumbnailFile)
+	ext = strings.ToLower(ext)
 	var saveErr error
 	switch ext {
 	case ".jpg", ".jpeg":

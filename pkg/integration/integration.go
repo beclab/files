@@ -137,6 +137,7 @@ func (i *integration) GetIntegrations() error {
 
 	users, err := i.getUsers()
 	if err != nil {
+		klog.Errorf("get users error: %v", err)
 		return err
 	}
 
@@ -259,10 +260,6 @@ func (i *integration) GetIntegrations() error {
 			}
 
 		}
-	}
-
-	if len(configs) == 0 {
-		return nil
 	}
 
 	// klog.Infof("integration new configs: %d", len(configs))

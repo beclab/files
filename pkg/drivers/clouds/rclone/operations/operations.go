@@ -9,12 +9,13 @@ import (
 	"files/pkg/drivers/clouds/rclone/utils"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"k8s.io/klog/v2"
 )
 
 type Interface interface {
-	List(fs string, opts *OperationsOpt) (*OperationsList, error)
+	List(fs string, opts *OperationsOpt, filter *OperationsFilter) (*OperationsList, error)
 	Stat(fs string, remote string, opts *OperationsOpt) (*OperationsStat, error)
 	About(fs string) (*OperationsAboutResp, error)
 	Mkdir(fs string, dirName string) error
@@ -64,7 +65,7 @@ func (o *operations) Size(fs string) (*OperationsSizeResp, error) {
 		return nil, err
 	}
 
-	klog.Infof("[rclone] operations size done, resp: %s, fs: %s", string(resp), fs)
+	klog.Infof("[rclone] operations size done, resp: %s, fs: %s", commonutils.ToJson(data), fs)
 
 	return data, nil
 }
@@ -89,7 +90,7 @@ func (o *operations) Stat(fs string, remote string, opts *OperationsOpt) (*Opera
 
 	var data *OperationsStat
 	if err := json.Unmarshal(resp, &data); err != nil {
-		klog.Errorf("[rclone] operations stat unmarshal error: %v, fs: %s", err, fs)
+		klog.Errorf("[rclone] operations stat unmarshal error: %v, fs: %s, data: %s", err, fs, string(resp))
 		return nil, err
 	}
 
@@ -194,12 +195,16 @@ func (o *operations) Mkdir(fs string, dirName string) error {
 	return nil
 }
 
-func (o *operations) List(fs string, opts *OperationsOpt) (*OperationsList, error) {
+func (o *operations) List(fs string, opts *OperationsOpt, filter *OperationsFilter) (*OperationsList, error) {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, ListPath)
 	var param = OperationsReq{
 		Fs:     fs,
 		Remote: "",
 		Opt:    opts,
+	}
+
+	if filter != nil {
+		param.Filter = filter
 	}
 
 	klog.Infof("[rclone] operations list param: %s", commonutils.ToJson(param))
@@ -302,6 +307,10 @@ func (o *operations) Purge(fs string, remote string) error {
 	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
 	if err != nil {
 		klog.Errorf("[rclone] operations purge error: %v, fs: %s, remote: %s", err, fs, remote)
+		if strings.Contains(err.Error(), "directory not found") || strings.Contains(err.Error(), "path_lookup/not_found/") {
+			return nil
+		}
+
 		return err
 	}
 

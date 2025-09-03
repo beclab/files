@@ -57,7 +57,8 @@ type OperationsReq struct {
 	Async     *bool  `json:"_async,omitempty"`
 	LeaveRoot *bool  `json:"leaveRoot,omitempty"`
 
-	Opt *OperationsOpt `json:"opt,omitempty"`
+	Opt    *OperationsOpt    `json:"opt,omitempty"`
+	Filter *OperationsFilter `json:"_filter,omitempty"`
 }
 
 type OperationsOpt struct {
@@ -68,6 +69,17 @@ type OperationsOpt struct {
 	FilesOnly  bool `json:"filesOnly"`
 	ShowHash   bool `json:"showHash"`
 	Metadata   bool `json:"metadata"`
+}
+
+type OperationsFilter struct {
+	MaxSize     string   `json:"MaxSize,omitempty"`
+	MinSize     string   `json:"MinSize,omitempty"`
+	MaxAge      string   `json:"MaxAge,omitempty"`
+	MinAge      string   `json:"MinAge,omitempty"`
+	IncludeRule []string `json:"IncludeRule,omitempty"`
+	ExcludeRule []string `json:"ExcludeRule,omitempty"`
+	FilterRule  []string `json:"FilterRule,omitempty"`
+	IgnoreCase  bool     `json:"IgnoreCase"`
 }
 
 type OperationsCopyFileResp struct {

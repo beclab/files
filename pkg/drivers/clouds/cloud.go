@@ -262,7 +262,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Cloud create, user: %s, param: %s, prefixPath: %s, name: %s, isFile: %v", owner, fileParam.Json(), prefixPath, fileName, isFile)
 
-	dstFileExt := filepath.Ext(fileName)
+	_, dstFileExt := common.SplitNameExt(fileName)
 
 	fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
 	if err != nil {
@@ -282,7 +282,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	klog.Infof("Cloud create, user: %s, list fs: %s, isFile: %v", owner, fs, isFile)
-	lists, err := s.service.command.GetOperation().List(fs, opts)
+	lists, err := s.service.command.GetOperation().List(fs, opts, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +290,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	var dupNames []string
 	if lists != nil && lists.List != nil && len(lists.List) > 0 {
 		for _, item := range lists.List {
-			var tmpExt = filepath.Ext(item.Name)
+			var _, tmpExt = common.SplitNameExt(item.Name)
 			if tmpExt != dstFileExt {
 				continue
 			}
@@ -517,7 +517,7 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListResponse, error) {
 	res, err := s.service.List(fileParam)
 	if err != nil {
-		return nil, fmt.Errorf("service list error: %v", err)
+		return nil, fmt.Errorf("Query failed. Please check whether the integration account has been added. If it has been added, the integration account may be in the process of being configured. Please try again later.")
 	}
 
 	return res, nil

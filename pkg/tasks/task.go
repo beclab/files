@@ -2,11 +2,13 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/models"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -182,16 +184,28 @@ func (t *Task) Execute(fs ...func() error) error {
 						if e := rclone.Command.Clear(t.param.Temp); e != nil {
 							klog.Errorf("[Task] Id: %s, exec failed, delete temp result error: %v", t.id, e)
 						}
+
+						if strings.Contains(t.param.Temp.Path, t.id) {
+							if e := rclone.Command.ClearTaskCaches(t.param.Temp, t.id); e != nil {
+								klog.Errorf("[Task] Id: %s, exec failed, delete task cached result error: %v", t.id, e)
+							}
+						}
 					}
 					if t.pausedParam != nil {
 						if e := rclone.Command.Clear(t.pausedParam); e != nil {
 							klog.Errorf("[Task] Id: %s, exec failed, delete pause result error: %v", t.id, e)
 						}
+
+						if strings.Contains(t.pausedParam.Path, t.id) {
+							if e := rclone.Command.ClearTaskCaches(t.pausedParam, t.id); e != nil {
+								klog.Errorf("[Task] Id: %s, exec failed, delete task cached result error: %v", t.id, e)
+							}
+						}
 					}
 
 					klog.Infof("[Task] Id: %s, exec failed, clear result done!", t.id)
 				}
-				t.message = err.Error()
+				t.message = errmsg
 				return
 			}
 		}
@@ -235,4 +249,16 @@ func (t *Task) isCancel() (bool, error) {
 	default:
 	}
 	return false, nil
+}
+
+func (t *Task) formatJobStatusError(s string) error {
+	var result string
+	if strings.Contains(s, "is a directory") {
+		var pos = strings.Index(s, t.id)
+		result = s[pos+len(t.id):]
+		result = strings.TrimSuffix(result, ": is a directory")
+		return errors.New(fmt.Sprintf("There may be folders and files with the same name, so the data cannot be copied to the disk. Please check and rename the corresponding folders or files: %s", result))
+	}
+
+	return errors.New(s)
 }
