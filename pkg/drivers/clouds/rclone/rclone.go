@@ -303,7 +303,7 @@ func (r *rclone) GetFilesList(param *models.FileParam, getPrefix bool) (*operati
 		fs = fsPrefix + param.Path
 	}
 
-	lists, err := r.operation.List(fs, opt)
+	lists, err := r.operation.List(fs, opt, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (r *rclone) CreateEmptyDirectories(src, target *models.FileParam) error {
 		Metadata:   false,
 	}
 	var srcFs = srcFsPrefix + src.Path
-	srcDirItems, err := r.GetOperation().List(srcFs, srcOpt)
+	srcDirItems, err := r.GetOperation().List(srcFs, srcOpt, nil)
 	if err != nil {
 		return err
 	}
@@ -390,6 +390,36 @@ func (r *rclone) CreateEmptyDirectories(src, target *models.FileParam) error {
 	return nil
 }
 
+// lock dst file or dir
+func (r *rclone) CreatePlaceHolder(dst *models.FileParam) error {
+	var localFs, localRemote = fmt.Sprintf("%s:%s", common.Local, common.DefaultLocalRootPath), common.DefaultKeepFileName
+
+	dstFsPrefix, err := r.GetFsPrefix(dst)
+	if err != nil {
+		return err
+	}
+
+	dstPrefix := files.GetPrefixPath(dst.Path)
+	dstName, isFile := files.GetFileNameFromPath(dst.Path)
+
+	var dstFs, dstRemote string = dstFsPrefix, ""
+	dstRemote = dstPrefix + dstName
+
+	if isFile {
+		dstRemote = strings.TrimPrefix(dstRemote, "/")
+		if err = r.GetOperation().Copyfile(localFs, localRemote, dstFs, dstRemote); err != nil {
+			return fmt.Errorf("copyfile failed, dstFs: %s, dstRemote: %s, error: %v", dstFs, dstRemote, err)
+		}
+	} else {
+		dstRemote = strings.Trim(dstRemote, "/")
+		if err = r.GetOperation().Mkdir(dstFs, dstRemote); err != nil {
+			return fmt.Errorf("mkdir failed, dstFs: %s, dstRemote: %s, error: %v", dstFs, dstRemote, err)
+		}
+	}
+
+	return nil
+}
+
 func (r *rclone) Copy(src, dst *models.FileParam) (*operations.OperationsAsyncJobResp, error) {
 	_, isFile := files.GetFileNameFromPath(src.Path)
 	srcFsPrefix, err := r.GetFsPrefix(src)
@@ -435,7 +465,7 @@ func (r *rclone) Copy(src, dst *models.FileParam) (*operations.OperationsAsyncJo
 
 		// copy dir
 		srcFs := srcFsPrefix + src.Path
-		dstFs := dstFsPrefix + dstPrefix + dstFileName
+		dstFs := dstFsPrefix + dstPrefix + dstFileName + "/"
 
 		klog.Infof("[rclone] copy dir, srcFs: %s, dstFs: %s", srcFs, dstFs)
 

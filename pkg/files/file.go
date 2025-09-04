@@ -161,7 +161,7 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 
 		if resp.StatusCode >= 400 {
 			klog.Errorf("Failed to mount by %s to %s", url, TerminusdHost)
-			klog.Infof("response status: %d, response body: %v", resp.Status, responseMap)
+			klog.Infof("response status: %s, response body: %v", resp.Status, responseMap)
 			continue
 		}
 
@@ -264,6 +264,7 @@ func stat(opts FileOptions) (*FileInfo, error) {
 		if err != nil {
 			return nil, err
 		}
+		_, fext := common.SplitNameExt(info.Name())
 		file = &FileInfo{
 			Fs:        opts.Fs,
 			FsType:    opts.FsType,
@@ -275,7 +276,7 @@ func stat(opts FileOptions) (*FileInfo, error) {
 			IsDir:     info.IsDir(),
 			IsSymlink: IsSymlink(info.Mode()),
 			Size:      info.Size(),
-			Extension: filepath.Ext(info.Name()),
+			Extension: fext,
 			Token:     opts.Token,
 		}
 	}
@@ -302,6 +303,7 @@ func stat(opts FileOptions) (*FileInfo, error) {
 		return file, nil
 	}
 
+	_, fext := common.SplitNameExt(info.Name())
 	file = &FileInfo{
 		Fs:        opts.Fs,
 		FsType:    opts.FsType,
@@ -312,7 +314,7 @@ func stat(opts FileOptions) (*FileInfo, error) {
 		Mode:      info.Mode(),
 		IsDir:     info.IsDir(),
 		Size:      info.Size(),
-		Extension: filepath.Ext(info.Name()),
+		Extension: fext,
 		Token:     opts.Token,
 	}
 
@@ -456,7 +458,7 @@ func (i *FileInfo) detectSubtitles() {
 	}
 
 	i.Subtitles = []string{}
-	ext := filepath.Ext(i.Path)
+	_, ext := common.SplitNameExt(i.Path)
 
 	// detect multiple languages. Base*.vtt
 	parentDir := strings.TrimRight(i.Path, i.Name)
@@ -562,6 +564,7 @@ func (i *FileInfo) readListing(readHeader bool) error {
 			}
 		}
 
+		_, fext := common.SplitNameExt(name)
 		file := &FileInfo{
 			Fs:        i.Fs,
 			FsType:    i.FsType,
@@ -573,7 +576,7 @@ func (i *FileInfo) readListing(readHeader bool) error {
 			Mode:      f.Mode(),
 			IsDir:     f.IsDir(),
 			IsSymlink: isSymlink,
-			Extension: filepath.Ext(name),
+			Extension: fext,
 		}
 
 		if file.IsDir {

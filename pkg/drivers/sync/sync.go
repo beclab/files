@@ -148,7 +148,8 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 			return nil, errors.New("file not found")
 		}
 	} else {
-		ext := strings.ToLower(filepath.Ext(fileName))
+		_, ext := common.SplitNameExt(fileName)
+		ext = strings.ToLower(ext)
 		if queryParam.RawInline == "true" && (ext == ".txt" || ext == ".log" || ext == ".md") {
 			rawData, err := seahub.ViewLibFile(fileParam, "dict")
 			if err != nil {

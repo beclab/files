@@ -28,6 +28,8 @@ type Interface interface {
 	Clear(param *models.FileParam) error
 	ClearTaskCaches(param *models.FileParam, taskId string) error
 
+	CreatePlaceHolder(dst *models.FileParam) error
+
 	StopJobs() error
 }
 

@@ -275,7 +275,7 @@ func AddVersionSuffix(source string, fs afero.Fs, isDir bool) string {
 	ext := ""
 	base := name
 	if !isDir {
-		ext = filepath.Ext(name)
+		_, ext = common.SplitNameExt(name)
 		base = strings.TrimSuffix(name, ext)
 	}
 

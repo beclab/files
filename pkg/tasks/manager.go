@@ -2,10 +2,16 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"files/pkg/common"
+	"files/pkg/drivers/clouds/rclone"
+	"files/pkg/drivers/clouds/rclone/operations"
+	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
 	"files/pkg/models"
+	"files/pkg/redisutils"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -17,30 +23,17 @@ import (
 
 var TaskManager *taskManager
 
-type TaskType int
-
-const (
-	TypeRsync TaskType = iota
-
-	TypeDownloadFromFiles
-	TypeDownloadFromSync
-	TypeDownloadFromCloud
-
-	TypeUploadToSync
-	TypeUploadToCloud
-
-	TypeSyncCopy
-	TypeCloudCopy
+var (
+	lockTTL      = 10 * time.Second
+	maxWait      = 10 * time.Second
+	waitInterval = 100 * time.Millisecond
 )
 
 var TaskCancel = "context canceled"
 
-type TaskManagerInterface interface {
-	CreateTask(taskType TaskType, param *models.PasteParam) *Task
-}
-
 type taskManager struct {
 	userPools sync.Map
+	sync.RWMutex
 }
 
 type userPool struct {
@@ -77,9 +70,11 @@ func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 
 	var ctx, cancel = context.WithCancel(context.Background())
 	var _, isFile = param.Src.IsFile()
+	// var dstName, _ = files.GetFileNameFromPath(param.Dst.Path)
+	// var dstPrefixPath = files.GetPrefixPath(param.Dst.Path)
 
 	var task = &Task{
-		id:        t.generateTaskId(),
+		id:        common.GenerateTaskId(),
 		param:     param,
 		state:     common.Pending,
 		ctx:       ctx,
@@ -309,8 +304,253 @@ func (t *taskManager) ClearTasks() {
 	})
 }
 
-func (t *taskManager) generateTaskId() string {
-	var n = time.Now()
-	var id = n.UnixNano()
-	return fmt.Sprintf("task%d", id)
+func (t *taskManager) GetCloudOrPosixDupNames(taskId string, src, dst, orgSrc, orgDst *models.FileParam) (string, error) {
+	t.Lock()
+	defer t.Unlock()
+
+	var err error
+
+	var newDstPath string
+
+	var cmd = rclone.Command
+	var orgSrcName, isOrgFile = files.GetFileNameFromPath(orgSrc.Path)
+	var orgSrcExt, orgSrcNamePrefix string
+	var dstPrefix = files.GetPrefixPath(dst.Path)
+
+	var keyPath = fmt.Sprintf("%s_%s_%s_%s", dst.Owner, dst.FileType, dst.Extend, dst.Path)
+	var key = common.Md5String(keyPath)
+
+	if isOrgFile {
+		_, orgSrcExt = common.SplitNameExt(orgSrcName)
+	}
+
+	orgSrcNamePrefix = strings.TrimSuffix(orgSrcName, orgSrcExt)
+
+	klog.Infof("[Task] Id: %s, get lock prepare, srcName: %s, dstPrefix: %s, dst: %s", taskId, orgSrcName, dstPrefix, common.ToJson(dst))
+
+	start := time.Now()
+	for {
+		ok, err := redisutils.RedisClient.SetNX(key, 1, lockTTL).Result()
+		if err != nil {
+			err = fmt.Errorf("get lock error: %v", err)
+			break
+		}
+		if ok {
+			var fsPrefix string
+			klog.Infof("[Task] Id: %s, get the lock succeed", taskId)
+
+			fsPrefix, err = cmd.GetFsPrefix(dst)
+			if err != nil {
+				break
+			}
+
+			var fs = fsPrefix + dstPrefix
+			var opts = &operations.OperationsOpt{
+				Recurse:    false,
+				NoModTime:  true,
+				NoMimeType: true,
+				Metadata:   false,
+			}
+			var filterRules = t.formatCharFilter(orgSrcNamePrefix)
+			var filter = &operations.OperationsFilter{}
+			if filterRules != nil {
+				klog.Infof("[Task] Id: %s, lock, list filter: %v", taskId, filterRules)
+				filter.FilterRule = filterRules
+			}
+
+			var lists *operations.OperationsList
+
+			lists, err = cmd.GetOperation().List(fs, opts, filter)
+			if err != nil {
+				break
+			}
+
+			var dupNames []string
+			if lists != nil && lists.List != nil && len(lists.List) > 0 {
+				for _, i := range lists.List {
+					var tmpName = i.Name
+					if isOrgFile {
+						tmpName = strings.TrimSuffix(tmpName, orgSrcExt)
+					}
+					if strings.Contains(tmpName, orgSrcNamePrefix) {
+						dupNames = append(dupNames, i.Name)
+					}
+				}
+			}
+
+			newDstName := files.GenerateDupName(dupNames, orgSrcName, isOrgFile)
+			klog.Infof("[Task] Id: %s, lock, new dup dst name: %s", taskId, newDstName)
+			newDstPath = dstPrefix + newDstName
+			if !isOrgFile {
+				if !strings.HasSuffix(newDstPath, "/") {
+					newDstPath += "/"
+				}
+			}
+
+			var newDst = &models.FileParam{
+				Owner:    dst.Owner,
+				FileType: dst.FileType,
+				Extend:   dst.Extend,
+				Path:     newDstPath,
+			}
+
+			if err = rclone.Command.CreatePlaceHolder(newDst); err != nil {
+				err = fmt.Errorf("[Task] Id: %s, lock, create placeholder error: %v", taskId, err)
+				break
+			}
+
+			break
+		}
+
+		if time.Since(start) > maxWait {
+			err = errors.New("get lock timeout")
+			break
+		}
+		time.Sleep(waitInterval)
+	}
+
+	released, e := redisutils.RedisClient.Del(key).Result()
+	klog.Infof("[Task] Id: %s, released lock result: %d, error: %v", taskId, released, e)
+
+	if err != nil {
+		return "", err
+	}
+
+	return newDstPath, nil
+}
+
+// sync
+func (t *taskManager) GetSyncDupName(taskId string, src, dst, orgSrc, orgDst *models.FileParam) (string, error) {
+	t.Lock()
+	defer t.Unlock()
+
+	var err error
+
+	var newDstPath string
+
+	var orgSrcName, isOrgFile = files.GetFileNameFromPath(orgSrc.Path)
+	var orgSrcExt, orgSrcNamePrefix string
+	var dstPrefix = files.GetPrefixPath(dst.Path)
+
+	var keyPath = fmt.Sprintf("%s_%s_%s_%s", dst.Owner, dst.FileType, dst.Extend, dst.Path)
+	var key = common.Md5String(keyPath)
+
+	if isOrgFile {
+		_, orgSrcExt = common.SplitNameExt(orgSrcName)
+	}
+
+	orgSrcNamePrefix = strings.TrimSuffix(orgSrcName, orgSrcExt)
+
+	klog.Infof("[Task] Id: %s, get lock prepare, srcName: %s, dstPrefix: %s, dst: %s", taskId, orgSrcName, dstPrefix, common.ToJson(dst))
+
+	start := time.Now()
+	for {
+		ok, err := redisutils.RedisClient.SetNX(key, 1, lockTTL).Result()
+		if err != nil {
+			err = fmt.Errorf("get lock error: %v", err)
+			break
+		}
+		if ok {
+
+			klog.Infof("[Task] Id: %s, get the lock succeed", taskId)
+
+			var checkName string = orgSrcName
+			counter := 0
+			for {
+				var exists bool
+
+				if counter > 0 {
+					checkName = fmt.Sprintf("%s (%d)%s", orgSrcNamePrefix, counter, orgSrcExt)
+				}
+
+				if isOrgFile {
+					uploadedParam := &models.FileParam{
+						Owner:    dst.Owner,
+						FileType: dst.FileType,
+						Extend:   dst.Extend,
+						Path:     filepath.Dir(dst.Path),
+					}
+					var resp []byte
+					resp, err = seahub.GetUploadedBytes(uploadedParam, checkName)
+					klog.Infof("[Task] Id: %s, check sync file %s, resp: %s, err: %v", taskId, checkName, string(resp), err)
+					if err == nil {
+						if string(resp) == "{\"uploadedBytes\":0}" {
+							exists = false
+						} else {
+							exists = true
+						}
+					}
+					var syncPrefixPath = files.GetPrefixPath(dst.Path)
+					fileInfo := seahub.GetFileInfo(dst.Extend, syncPrefixPath+checkName)
+					var syncObjId = fileInfo["obj_id"]
+					if syncObjId != nil && syncObjId.(string) != "" {
+						exists = true
+					}
+				}
+
+				if !exists {
+					break
+				}
+				counter++
+			}
+
+			if err != nil {
+				break
+			}
+
+			newDstPath = dstPrefix + checkName
+			if !isOrgFile {
+				if !strings.HasSuffix(newDstPath, "/") {
+					newDstPath += "/"
+				}
+			}
+
+			break
+		}
+
+		if time.Since(start) > maxWait {
+			err = errors.New("get lock timeout")
+			break
+		}
+		time.Sleep(waitInterval)
+	}
+
+	released, e := redisutils.RedisClient.Del(key).Result()
+	klog.Infof("[Task] Id: %s, released lock result: %d, error: %v", taskId, released, e)
+
+	if err != nil {
+		return "", err
+	}
+
+	return newDstPath, nil
+
+}
+
+func (t *taskManager) formatCharFilter(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	var r []string
+	var c = s[0]
+	if c == '*' {
+		r = append(r, fmt.Sprintf("+ \\*%s*/", s))
+		r = append(r, fmt.Sprintf("+ /\\*%s*", s))
+	} else {
+		r = append(r, fmt.Sprintf("+ %s*/", s))
+		r = append(r, fmt.Sprintf("+ /%s*", s))
+	}
+
+	r = append(r, "- *")
+	return r
+
+}
+
+func (t *taskManager) formatFilePathWithoutTask(s string, taskId string) string {
+	if !strings.Contains(s, taskId) {
+		return s
+	}
+
+	var pos = strings.Index(s, taskId)
+	return s[pos+len(taskId):]
 }

@@ -67,3 +67,28 @@ type SyncDeleteResponse struct {
 	Success  bool   `json:"success"`
 	CommitID string `json:"commit_id"`
 }
+
+type SyncItems struct {
+	DirId    string      `json:"dir_id"`
+	Items    []*SyncItem `json:"dirent_list"`
+	UserPerm string      `json:"user_perm"`
+	FsType   string      `json:"fileType"`
+	FsExtend string      `json:"fileExtend"`
+	FsPath   string      `json:"filePath"`
+}
+
+type SyncItem struct {
+	Id            string `json:"id"`
+	Name          string `json:"name"`
+	FsType        string `json:"fileType"`
+	FsExtend      string `json:"fileExtend"`
+	FsPath        string `json:"filePath"`
+	NumDirs       int    `json:"numDirs"`
+	NumFiles      int    `json:"numFiles"`
+	NumTotalFiles int    `json:"numTotalFiles"`
+	ParentDir     string `json:"parent_dir"`
+	Path          string `json:"path"`
+	Permission    string `json:"permission"`
+	Size          int64  `json:"size"`
+	Type          string `json:"type"`
+}

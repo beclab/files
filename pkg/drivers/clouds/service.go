@@ -275,7 +275,7 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 
 	klog.Infof("[service] list, fs: %s, param: %s", fs, common.ToJson(fileParam))
 
-	data, err := s.command.GetOperation().List(fs, opts)
+	data, err := s.command.GetOperation().List(fs, opts, nil)
 	if err != nil {
 		return nil, err
 	}

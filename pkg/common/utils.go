@@ -257,3 +257,22 @@ func RemoveBlank(s string) string {
 	s = strings.ReplaceAll(s, "\r", "")
 	return s
 }
+
+func GenerateTaskId() string {
+	var n = time.Now()
+	var id = n.UnixMicro()
+	return fmt.Sprintf("task%d", id)
+}
+
+func SplitNameExt(filename string) (name, ext string) {
+	for _, e := range multiExts {
+		if strings.HasSuffix(filename, e) {
+			return filename[:len(filename)-len(e)], e
+		}
+	}
+	idx := strings.LastIndex(filename, ".")
+	if idx > 0 {
+		return filename[:idx], filename[idx:]
+	}
+	return filename, ""
+}

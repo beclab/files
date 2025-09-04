@@ -72,3 +72,13 @@ var (
 	DefaultUploadTempDir             = ".uploadstemp"
 	DefaultUploadToCloudTempPath     = "/files_cache/" + DefaultUploadTempDir
 )
+
+var (
+	multiExts = []string{
+		".pb.go", ".pb.cc", ".pb.h", ".user.js", ".test.js", ".spec.js", ".min.js", ".min.css",
+		".tar.gz", ".tar.bz2", ".tar.xz", ".tar.Z", ".tar.lz", ".tar.lzma", ".tar.lzo", ".tar.sz", ".tar.zst", ".tar.br",
+		".cpio.gz", ".cpio.bz2", ".cpio.xz",
+		".csv.gz", ".json.gz", ".xml.gz", ".log.gz", ".tsv.gz", ".sqlite.gz",
+		".d.ts",
+	}
+)
