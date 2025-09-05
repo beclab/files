@@ -26,7 +26,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	var req share.CreateSharePathReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -90,7 +90,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 	var req share.ListSharePathReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -164,12 +164,18 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	var req share.DeleteSharePathReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	err = postgres.DeleteSharePath(req.PathId)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
 
 	resp := new(share.DeleteSharePathResp)
-
+	resp.Success = true
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -180,7 +186,7 @@ func GenerateToken(ctx context.Context, c *app.RequestContext) {
 	var req share.GenerateTokenReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -196,7 +202,7 @@ func RevokeToken(ctx context.Context, c *app.RequestContext) {
 	var req share.RevokeTokenReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -212,7 +218,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 	var req share.AddShareMemberReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -228,7 +234,7 @@ func ListShareMember(ctx context.Context, c *app.RequestContext) {
 	var req share.ListShareMemberReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -244,7 +250,7 @@ func UpdateShareMemberPermission(ctx context.Context, c *app.RequestContext) {
 	var req share.UpdateShareMemberPermissionReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -260,7 +266,7 @@ func RemoveShareMember(ctx context.Context, c *app.RequestContext) {
 	var req share.RemoveShareMemberReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -268,29 +274,6 @@ func RemoveShareMember(ctx context.Context, c *app.RequestContext) {
 
 	c.JSON(consts.StatusOK, resp)
 }
-
-//func AdjustExpire(expireIn, expireTime int64) (int64, int64) {
-//	currentTime := time.Now().UnixMilli()
-//
-//	if expireIn == 0 && expireTime == 0 {
-//		return 0, 0
-//	}
-//
-//	if expireIn != 0 && expireTime == 0 {
-//		return expireIn, currentTime + expireIn
-//	}
-//
-//	if expireIn == 0 && expireTime != 0 {
-//		return expireTime - currentTime, expireTime
-//	}
-//
-//	calculatedExpireTime := currentTime + expireIn
-//	if calculatedExpireTime > expireTime {
-//		return expireIn, calculatedExpireTime
-//	} else {
-//		return expireTime - currentTime, expireTime
-//	}
-//}
 
 func AdjustExpire(expireIn int64, expireTime string) (int64, string) {
 	currentTime := time.Now()
