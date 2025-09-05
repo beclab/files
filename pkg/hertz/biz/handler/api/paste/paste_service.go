@@ -64,7 +64,7 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 
 	task, err := handler.Paste(pasteParam)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,
 			"message": err.Error(),
 		})
@@ -77,7 +77,7 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(paste.PasteResp)
 	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -124,7 +124,7 @@ func GetTaskMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(paste.GetTaskResp)
 	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -162,7 +162,7 @@ func DeleteTaskMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(paste.DeleteTaskResp)
 	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -198,7 +198,7 @@ func PauseResumeTaskMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(paste.PauseResumeTaskResp)
 	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
