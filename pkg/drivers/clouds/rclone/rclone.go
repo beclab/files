@@ -311,6 +311,36 @@ func (r *rclone) GetFilesList(param *models.FileParam, getPrefix bool) (*operati
 	return lists, nil
 }
 
+func (r *rclone) CreateEmptyDirectory(param *models.FileParam) error {
+	var localFs, localRemote string = fmt.Sprintf("%s:%s", common.Local, common.DefaultLocalRootPath), common.DefaultKeepFileName
+
+	var dstFsPrefix, err = r.GetFsPrefix(param)
+	if err != nil {
+		return err
+	}
+
+	var dstFs, dstRemote string
+
+	dstFs = dstFsPrefix
+	dstRemote = param.Path
+
+	if param.FileType == common.AwsS3 || param.FileType == common.TencentCos {
+		dstRemote = strings.TrimPrefix(dstRemote, "/")
+		if err = r.GetOperation().Copyfile(localFs, localRemote, dstFs, dstRemote); err != nil {
+			return fmt.Errorf("fs: %s, remote: %s, error: %v", dstFs, dstRemote, err)
+		}
+	} else {
+		dstRemote = strings.Trim(dstRemote, "/")
+		if err = r.GetOperation().Mkdir(dstFs, dstRemote); err != nil {
+			return fmt.Errorf("fs: %s, remote: %s, error: %v", dstFs, dstRemote, err)
+		}
+	}
+
+	klog.Infof("[rclone] create empty dir done! <<< dstFs: %s, dstRemote: %s", dstFs, dstRemote)
+
+	return nil
+}
+
 func (r *rclone) CreateEmptyDirectories(src, target *models.FileParam) error {
 	var srcFsPrefix, err = r.GetFsPrefix(src)
 	if err != nil {
@@ -649,4 +679,34 @@ func (r *rclone) StopJobs() error {
 	klog.Infof("[rclone] stop running jobs done! jobs: %v", stopIds)
 
 	return nil
+}
+
+func (r *rclone) GetMatchedItems(fs string, opt *operations.OperationsOpt, filter *operations.OperationsFilter) (*operations.OperationsList, error) {
+	// get matched file or dir exsits
+	return r.GetOperation().List(fs, opt, filter)
+
+}
+
+func (r *rclone) FormatFilter(s string, fuzzy bool) []string {
+	if s == "" {
+		return nil
+	}
+
+	var l = ""
+	if fuzzy {
+		l = "*"
+	}
+
+	var result []string
+	var c = s[0]
+	if c == '*' {
+		result = append(result, fmt.Sprintf("+ \\*%s%s/", s, l))
+		result = append(result, fmt.Sprintf("+ /\\*%s%s", s, l))
+	} else {
+		result = append(result, fmt.Sprintf("+ %s%s/", s, l))
+		result = append(result, fmt.Sprintf("+ /%s%s", s, l))
+	}
+
+	result = append(result, "- *")
+	return result
 }

@@ -133,7 +133,7 @@ user created with the credentials from options "username" and "password".`,
 		// step3-0: clean buffer
 		err := os.RemoveAll("/data/buffer")
 		if err != nil {
-			klog.Fatal("clean buffer failed: %v", err)
+			klog.Fatalf("clean buffer failed: %v", err)
 		}
 
 		// Step3-1: Build IMG service

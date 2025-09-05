@@ -3,6 +3,7 @@ package preview
 import (
 	"bytes"
 	"context"
+	"files/pkg/common"
 	"files/pkg/diskcache"
 	"files/pkg/files"
 	"files/pkg/img"
@@ -103,7 +104,7 @@ func CreatePreview(owner string, key string,
 	}
 
 	// store
-	if err = fileCache.Store(context.TODO(), owner, key, diskcache.CacheThumb, buf.Bytes()); err != nil {
+	if err = fileCache.Store(context.TODO(), owner, key, common.CacheThumb, buf.Bytes()); err != nil {
 		klog.Errorf("preview store failed, user: %s, error: %v", owner, err)
 	}
 

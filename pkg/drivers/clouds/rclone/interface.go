@@ -20,6 +20,7 @@ type Interface interface {
 
 	GetFilesSize(fileParam *models.FileParam) (int64, error)
 	GetFilesList(param *models.FileParam, getPrefix bool) (*operations.OperationsList, error)
+	CreateEmptyDirectory(param *models.FileParam) error
 	CreateEmptyDirectories(src, target *models.FileParam) error
 
 	Copy(src, dst *models.FileParam) (*operations.OperationsAsyncJobResp, error)
@@ -31,6 +32,10 @@ type Interface interface {
 	CreatePlaceHolder(dst *models.FileParam) error
 
 	StopJobs() error
+
+	GetMatchedItems(fs string, opt *operations.OperationsOpt, filter *operations.OperationsFilter) (*operations.OperationsList, error)
+
+	FormatFilter(s string, fuzzy bool) []string
 }
 
 const (

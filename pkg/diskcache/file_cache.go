@@ -3,6 +3,7 @@ package diskcache
 import (
 	"context"
 	"errors"
+	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/global"
 	"io"
@@ -92,7 +93,7 @@ func (f *FileCache) Delete(ctx context.Context, owner string, key string, tag st
 }
 
 func (f *FileCache) formatPath(owner string, tag string) string {
-	var p = filepath.Join(global.GlobalData.GetPvcCache(owner), DefaultRootPath, tag)
+	var p = filepath.Join(global.GlobalData.GetPvcCache(owner), common.DefaultLocalFileCachePath, tag)
 	return p + "/"
 }
 

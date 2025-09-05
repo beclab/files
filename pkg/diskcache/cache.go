@@ -12,12 +12,6 @@ import (
 	"time"
 )
 
-var (
-	DefaultRootPath = "files_cache"
-	CacheBuffer     = "buffer"
-	CacheThumb      = "thumb"
-)
-
 type Interface interface {
 	Store(ctx context.Context, owner string, key string, tag string, value []byte) error
 	Load(ctx context.Context, owner string, key string, tag string) (value []byte, exist bool, err error)
@@ -41,7 +35,7 @@ func GenerateCacheBufferPath(owner string, filePath string) string {
 
 	var fileNamePathMapping string = fmt.Sprintf("%d_%s", timeStamp, strings.Trim(fileName, "/"))
 
-	bufferFolderPath := filepath.Join(common.CACHE_PREFIX, global.GlobalData.GetPvcCache(owner), DefaultRootPath, CacheBuffer, fileNamePathMapping, prefixPath)
+	bufferFolderPath := filepath.Join(common.CACHE_PREFIX, global.GlobalData.GetPvcCache(owner), common.DefaultLocalFileCachePath, common.CacheBuffer, fileNamePathMapping, prefixPath)
 	if !strings.HasSuffix(bufferFolderPath, "/") {
 		bufferFolderPath += "/"
 	}

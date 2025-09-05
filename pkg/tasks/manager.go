@@ -8,9 +8,12 @@ import (
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
+	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/redisutils"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -25,7 +28,7 @@ var TaskManager *taskManager
 
 var (
 	lockTTL      = 10 * time.Second
-	maxWait      = 10 * time.Second
+	maxWait      = 15 * time.Second
 	waitInterval = 100 * time.Millisecond
 )
 
@@ -70,8 +73,6 @@ func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 
 	var ctx, cancel = context.WithCancel(context.Background())
 	var _, isFile = param.Src.IsFile()
-	// var dstName, _ = files.GetFileNameFromPath(param.Dst.Path)
-	// var dstPrefixPath = files.GetPrefixPath(param.Dst.Path)
 
 	var task = &Task{
 		id:        common.GenerateTaskId(),
@@ -100,7 +101,7 @@ func (t *taskManager) ResumeTask(owner, taskId string) error {
 
 	var task = val.(*Task)
 
-	if task.state != common.Paused { // todo
+	if task.state != common.Paused {
 		return fmt.Errorf("task is not paused")
 	}
 
@@ -197,9 +198,7 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 		FileName:      srcFileName,
 		Dst:           dstUri,
 		DstPath:       dstFileName,
-		DstFileType:   dst.FileType,
 		Src:           srcUri,
-		SrcFileType:   src.FileType,
 		CurrentPhase:  task.currentPhase,
 		TotalPhases:   task.totalPhases,
 		Progress:      task.progress,
@@ -254,9 +253,7 @@ func (t *taskManager) GetTasksByStatus(owner, status string) []*TaskInfo {
 			FileName:      srcFileName,
 			Dst:           dstUri,
 			DstPath:       dstFileName,
-			DstFileType:   dst.FileType,
 			Src:           srcUri,
-			SrcFileType:   src.FileType,
 			CurrentPhase:  task.currentPhase,
 			TotalPhases:   task.totalPhases,
 			Progress:      task.progress,
@@ -304,20 +301,58 @@ func (t *taskManager) ClearTasks() {
 	})
 }
 
-func (t *taskManager) GetCloudOrPosixDupNames(taskId string, src, dst, orgSrc, orgDst *models.FileParam) (string, error) {
+func (t *taskManager) GetCloudOrPosixDupNames(taskId string, action string, uploadParentPath string, src, dst, orgSrc, orgDst *models.FileParam) (string, error) {
 	t.Lock()
 	defer t.Unlock()
 
+	var ok bool
 	var err error
 
 	var newDstPath string
 
 	var cmd = rclone.Command
-	var orgSrcName, isOrgFile = files.GetFileNameFromPath(orgSrc.Path)
+	var orgSrcName string
+	var isOrgFile bool
 	var orgSrcExt, orgSrcNamePrefix string
-	var dstPrefix = files.GetPrefixPath(dst.Path)
 
-	var keyPath = fmt.Sprintf("%s_%s_%s_%s", dst.Owner, dst.FileType, dst.Extend, dst.Path)
+	var uploadFullPathFirstDir, uploadFullPathSuffix string
+	_ = uploadFullPathSuffix
+
+	var dstTemp *models.FileParam
+
+	if action == common.ActionUpload { // upload file to Cloud
+		dstTemp = dst
+		dstUri, _ := dstTemp.GetResourceUri()
+		// /google/ACCOUNT
+		var uploadSrcRootPath = strings.TrimPrefix(uploadParentPath, dstUri) // /google/ACCOUNT/RootPath/ , /google/ACCOUNT  ==> /RootPath/
+
+		var uploadSplitPath = strings.TrimPrefix(dstTemp.Path, uploadSrcRootPath) // RootPath/s1/s2/file
+		uploadSplitPath = strings.TrimPrefix(uploadSplitPath, "/")
+
+		if strings.Contains(uploadSplitPath, "/") {
+			var splitPos = strings.Index(uploadSplitPath, "/")
+			uploadFullPathFirstDir = uploadSplitPath[:splitPos]       // firstdir
+			uploadFullPathSuffix = uploadSplitPath[splitPos:]         // /dir1/dir2/file.suf
+			dstTemp.Path = uploadSrcRootPath + uploadFullPathFirstDir // short path, like  /google/ACCOUNT/RootPath/first/
+			if !strings.HasSuffix(dstTemp.Path, "/") {
+				dstTemp.Path += "/"
+			}
+		} else {
+			dstTemp = dst
+		}
+	} else {
+		dstTemp = dst
+	}
+
+	var dstPrefix = files.GetPrefixPath(dstTemp.Path)
+
+	if action == common.ActionUpload {
+		orgSrcName, isOrgFile = files.GetFileNameFromPath(dstTemp.Path)
+	} else {
+		orgSrcName, isOrgFile = files.GetFileNameFromPath(orgSrc.Path)
+	}
+
+	var keyPath = fmt.Sprintf("%s_%s_%s_%s", dstTemp.Owner, dstTemp.FileType, dstTemp.Extend, dstTemp.Path)
 	var key = common.Md5String(keyPath)
 
 	if isOrgFile {
@@ -326,20 +361,26 @@ func (t *taskManager) GetCloudOrPosixDupNames(taskId string, src, dst, orgSrc, o
 
 	orgSrcNamePrefix = strings.TrimSuffix(orgSrcName, orgSrcExt)
 
-	klog.Infof("[Task] Id: %s, get lock prepare, srcName: %s, dstPrefix: %s, dst: %s", taskId, orgSrcName, dstPrefix, common.ToJson(dst))
+	klog.Infof("[Task] Id: %s, get lock prepare, srcName: %s, dstPrefix: %s, dst: %s", taskId, orgSrcName, dstPrefix, common.ToJson(dstTemp))
 
 	start := time.Now()
 	for {
-		ok, err := redisutils.RedisClient.SetNX(key, 1, lockTTL).Result()
+		if time.Since(start) > maxWait {
+			err = errors.New("get lock timeout")
+			break
+		}
+
+		ok, err = redisutils.RedisClient.SetNX(key, 1, lockTTL).Result()
 		if err != nil {
 			err = fmt.Errorf("get lock error: %v", err)
 			break
 		}
+
 		if ok {
 			var fsPrefix string
 			klog.Infof("[Task] Id: %s, get the lock succeed", taskId)
 
-			fsPrefix, err = cmd.GetFsPrefix(dst)
+			fsPrefix, err = cmd.GetFsPrefix(dstTemp)
 			if err != nil {
 				break
 			}
@@ -351,7 +392,7 @@ func (t *taskManager) GetCloudOrPosixDupNames(taskId string, src, dst, orgSrc, o
 				NoMimeType: true,
 				Metadata:   false,
 			}
-			var filterRules = t.formatCharFilter(orgSrcNamePrefix)
+			var filterRules = cmd.FormatFilter(orgSrcNamePrefix, true)
 			var filter = &operations.OperationsFilter{}
 			if filterRules != nil {
 				klog.Infof("[Task] Id: %s, lock, list filter: %v", taskId, filterRules)
@@ -379,20 +420,30 @@ func (t *taskManager) GetCloudOrPosixDupNames(taskId string, src, dst, orgSrc, o
 			}
 
 			newDstName := files.GenerateDupName(dupNames, orgSrcName, isOrgFile)
+
 			klog.Infof("[Task] Id: %s, lock, new dup dst name: %s", taskId, newDstName)
+
 			newDstPath = dstPrefix + newDstName
-			if !isOrgFile {
-				if !strings.HasSuffix(newDstPath, "/") {
-					newDstPath += "/"
+
+			if action == common.ActionUpload {
+				// /google/ACCOUNT/RootDir/first (1)/s1/s2/10M.jpg
+				newDstPath += uploadFullPathSuffix
+			} else {
+				if !isOrgFile {
+					if !strings.HasSuffix(newDstPath, "/") {
+						newDstPath += "/"
+					}
 				}
 			}
 
 			var newDst = &models.FileParam{
-				Owner:    dst.Owner,
-				FileType: dst.FileType,
-				Extend:   dst.Extend,
+				Owner:    dstTemp.Owner,
+				FileType: dstTemp.FileType,
+				Extend:   dstTemp.Extend,
 				Path:     newDstPath,
 			}
+
+			klog.Infof("[Task] Id: %s, lock, create placeholder param: %s", taskId, common.ToJson(newDst))
 
 			if err = rclone.Command.CreatePlaceHolder(newDst); err != nil {
 				err = fmt.Errorf("[Task] Id: %s, lock, create placeholder error: %v", taskId, err)
@@ -402,15 +453,13 @@ func (t *taskManager) GetCloudOrPosixDupNames(taskId string, src, dst, orgSrc, o
 			break
 		}
 
-		if time.Since(start) > maxWait {
-			err = errors.New("get lock timeout")
-			break
-		}
 		time.Sleep(waitInterval)
 	}
 
-	released, e := redisutils.RedisClient.Del(key).Result()
-	klog.Infof("[Task] Id: %s, released lock result: %d, error: %v", taskId, released, e)
+	if ok {
+		released, e := redisutils.RedisClient.Del(key).Result()
+		klog.Infof("[Task] Id: %s, released lock result: %d, error: %v", taskId, released, e)
+	}
 
 	if err != nil {
 		return "", err
@@ -424,6 +473,7 @@ func (t *taskManager) GetSyncDupName(taskId string, src, dst, orgSrc, orgDst *mo
 	t.Lock()
 	defer t.Unlock()
 
+	var ok bool
 	var err error
 
 	var newDstPath string
@@ -445,7 +495,12 @@ func (t *taskManager) GetSyncDupName(taskId string, src, dst, orgSrc, orgDst *mo
 
 	start := time.Now()
 	for {
-		ok, err := redisutils.RedisClient.SetNX(key, 1, lockTTL).Result()
+		if time.Since(start) > maxWait {
+			err = errors.New("get lock timeout")
+			break
+		}
+
+		ok, err = redisutils.RedisClient.SetNX(key, 1, lockTTL).Result()
 		if err != nil {
 			err = fmt.Errorf("get lock error: %v", err)
 			break
@@ -508,15 +563,13 @@ func (t *taskManager) GetSyncDupName(taskId string, src, dst, orgSrc, orgDst *mo
 			break
 		}
 
-		if time.Since(start) > maxWait {
-			err = errors.New("get lock timeout")
-			break
-		}
 		time.Sleep(waitInterval)
 	}
 
-	released, e := redisutils.RedisClient.Del(key).Result()
-	klog.Infof("[Task] Id: %s, released lock result: %d, error: %v", taskId, released, e)
+	if ok {
+		released, e := redisutils.RedisClient.Del(key).Result()
+		klog.Infof("[Task] Id: %s, released lock result: %d, error: %v", taskId, released, e)
+	}
 
 	if err != nil {
 		return "", err
@@ -526,23 +579,96 @@ func (t *taskManager) GetSyncDupName(taskId string, src, dst, orgSrc, orgDst *mo
 
 }
 
-func (t *taskManager) formatCharFilter(s string) []string {
-	if s == "" {
-		return nil
-	}
+func (t *taskManager) ClearCacheFiles() {
+	klog.Infof("Task remove cache files")
+	users := global.GlobalData.GetGlobalUsers()
 
-	var r []string
-	var c = s[0]
-	if c == '*' {
-		r = append(r, fmt.Sprintf("+ \\*%s*/", s))
-		r = append(r, fmt.Sprintf("+ /\\*%s*", s))
-	} else {
-		r = append(r, fmt.Sprintf("+ %s*/", s))
-		r = append(r, fmt.Sprintf("+ /%s*", s))
-	}
+	var files []string
+	var uploadCacheExpired = time.Now().AddDate(0, 0, -2)
+	var downloadCacheExpired = time.Now().AddDate(0, 0, -2)
+	var thumbCacheExpired = time.Now().AddDate(0, 0, -30)
+	var bufferCacheExpired = time.Now().AddDate(0, 0, -5)
 
-	r = append(r, "- *")
-	return r
+	for _, user := range users {
+
+		// clear expired upload
+		files = nil
+		var pvcname = global.GlobalData.GetPvcCache(user)
+		var uploadPath = fmt.Sprintf("%s/%s%s", common.CACHE_PREFIX, pvcname, common.DefaultUploadToCloudTempPath)
+		filepath.Walk(uploadPath, func(path string, info fs.FileInfo, err error) error {
+			if info.ModTime().Before(uploadCacheExpired) {
+				files = append(files, path)
+			}
+			return nil
+		})
+
+		if len(files) > 0 {
+			for _, f := range files {
+				if err := os.Remove(f); err != nil {
+					klog.Errorf("remove file %s error: %v", err, f)
+				}
+			}
+		}
+
+		// clear expired download
+		files = nil
+		var downloadPath = fmt.Sprintf("%s/%s%s", common.CACHE_PREFIX, pvcname, common.DefaultSyncUploadToCloudTempPath)
+		filepath.Walk(downloadPath, func(path string, info fs.FileInfo, err error) error {
+			if info.IsDir() {
+				if info.ModTime().Before(downloadCacheExpired) {
+					files = append(files, path)
+				}
+			}
+			return nil
+		})
+
+		if len(files) > 0 {
+			for _, f := range files {
+				if err := os.RemoveAll(f); err != nil {
+					klog.Errorf("remove dir %s error: %v", err, f)
+				}
+			}
+		}
+
+		// clear expired thumb
+		files = nil
+		var thumbPath = fmt.Sprintf("%s/%s%s%s", common.CACHE_PREFIX, pvcname, common.DefaultLocalFileCachePath, common.CacheThumb)
+		filepath.Walk(thumbPath, func(path string, info fs.FileInfo, err error) error {
+			if info.ModTime().Before(thumbCacheExpired) {
+				files = append(files, path)
+			}
+			return nil
+		})
+
+		if len(files) > 0 {
+			for _, f := range files {
+				if err := os.Remove(f); err != nil {
+					klog.Errorf("remove file %s error: %v", err, f)
+				}
+			}
+		}
+
+		// clear expired buffer
+		files = nil
+		var bufferPath = fmt.Sprintf("%s/%s%s%s", common.CACHE_PREFIX, pvcname, common.DefaultLocalFileCachePath, common.CacheBuffer)
+		filepath.Walk(bufferPath, func(path string, info fs.FileInfo, err error) error {
+			if info.IsDir() {
+				if info.ModTime().Before(bufferCacheExpired) {
+					files = append(files, path)
+				}
+			}
+			return nil
+		})
+
+		if len(files) > 0 {
+			for _, f := range files {
+				if err := os.RemoveAll(f); err != nil {
+					klog.Errorf("remove dir %s error: %v", err, f)
+				}
+			}
+		}
+
+	}
 
 }
 

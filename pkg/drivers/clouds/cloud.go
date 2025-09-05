@@ -9,6 +9,7 @@ import (
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
+	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/preview"
 	"files/pkg/tasks"
@@ -102,7 +103,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 
 	var previewCacheName = fileParam.FileType + fileParam.Extend + fileMeta.Item.Path + fileMeta.Item.ModTime + queryParam.PreviewSize
 	var key = diskcache.GenerateCacheKey(previewCacheName)
-	cachedData, ok, err := preview.GetPreviewCache(owner, key, diskcache.CacheThumb)
+	cachedData, ok, err := preview.GetPreviewCache(owner, key, common.CacheThumb)
 	if err != nil {
 		klog.Errorf("Cloud preview, get cache failed, user: %s, error: %v", owner, err)
 
@@ -262,54 +263,44 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Cloud create, user: %s, param: %s, prefixPath: %s, name: %s, isFile: %v", owner, fileParam.Json(), prefixPath, fileName, isFile)
 
-	_, dstFileExt := common.SplitNameExt(fileName)
+	var createName, createExt string
+	_, isDstFile := fileParam.IsFile()
+
+	if isDstFile {
+		createName, createExt = common.SplitNameExt(fileName)
+	}
 
 	fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
 	if err != nil {
 		return nil, err
 	}
 
-	var fs = fsPrefix + "/" + strings.TrimPrefix(prefixPath, "/")
 	var opts = &operations.OperationsOpt{
-		Metadata:   false,
+		Recurse:    false,
 		NoModTime:  true,
 		NoMimeType: true,
+		Metadata:   false,
 	}
-	if isFile {
-		opts.FilesOnly = true
-	} else {
-		opts.DirsOnly = true
+	var filter = &operations.OperationsFilter{
+		FilterRule: s.service.command.FormatFilter(createName, true),
 	}
 
-	klog.Infof("Cloud create, user: %s, list fs: %s, isFile: %v", owner, fs, isFile)
-	lists, err := s.service.command.GetOperation().List(fs, opts, nil)
+	existsItems, err := s.service.command.GetMatchedItems(fsPrefix+prefixPath, opts, filter)
 	if err != nil {
+		klog.Errorf("Cloud create, user: %s, get dst matched items error: %v", owner, err)
 		return nil, err
 	}
 
 	var dupNames []string
-	if lists != nil && lists.List != nil && len(lists.List) > 0 {
-		for _, item := range lists.List {
-			var _, tmpExt = common.SplitNameExt(item.Name)
-			if tmpExt != dstFileExt {
-				continue
-			}
-			if isFile {
-				if strings.Contains(strings.TrimSuffix(item.Name, tmpExt), strings.TrimSuffix(fileName, dstFileExt)) {
-					dupNames = append(dupNames, strings.TrimSuffix(item.Name, tmpExt))
-				}
-			} else {
-				if strings.Contains(item.Name, fileName) {
-					dupNames = append(dupNames, item.Name)
-				}
-			}
-
+	if existsItems != nil && existsItems.List != nil && len(existsItems.List) > 0 {
+		for _, l := range existsItems.List {
+			dupNames = append(dupNames, l.Name)
 		}
 	}
 
 	newName := files.GenerateDupName(dupNames, fileName, isFile)
 	if newName != "" {
-		newName = newName + dstFileExt
+		newName = newName + createExt
 	} else {
 		newName = fileName
 	}
@@ -432,15 +423,30 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		Path:     dstRemote,
 	}
 
-	dstStat, err := s.service.Stat(dstParam)
+	fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
 	if err != nil {
-		klog.Errorf("Cloud rename, user: %s, stat error: %v", owner, err)
+		klog.Errorf("Cloud rename, user: %s, fs prefix not found, error: %v", owner, err)
 		return nil, err
 	}
 
-	klog.Infof("Cloud rename, user: %s, isSrcFile: %v, srcPrefixPath: %s, stat: %s", owner, isSrcFile, srcPrefixPath, common.ToJson(dstStat))
+	var opts = &operations.OperationsOpt{
+		Recurse:    false,
+		NoModTime:  true,
+		NoMimeType: true,
+		Metadata:   false,
+	}
 
-	if dstStat != nil && dstStat.Item != nil {
+	var filter = &operations.OperationsFilter{
+		FilterRule: s.service.command.FormatFilter(dstName, false),
+	}
+
+	dstItems, err := s.service.command.GetMatchedItems(fsPrefix+srcPrefixPath, opts, filter)
+	if err != nil {
+		klog.Errorf("Cloud rename, user: %s, get dst matched items error: %v", owner, err)
+		return nil, err
+	}
+
+	if dstItems != nil && dstItems.List != nil && len(dstItems.List) > 0 {
 		return nil, fmt.Errorf("The name %s already exists. Please choose another name.", dstName)
 	}
 
@@ -554,21 +560,49 @@ func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
  * UploadChunks
  */
 func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	var param = fileUploadArg.FileParam
 	var uploadId = fileUploadArg.UploadId
 	var chunkInfo = fileUploadArg.ChunkInfo
+	var ranges = fileUploadArg.Ranges
 	var lastChunk = chunkInfo.ResumableChunkNumber == chunkInfo.ResumableTotalChunks
 
-	klog.Infof("Cloud uploadChunks, uploadId: %s, param: %s", fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Cloud uploadChunks, uploadId: %s, param: %s", uploadId, common.ToJson(param))
 
-	ok, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
-
-	_ = ok
+	_, fileInfo, err := upload.HandleUploadChunks(param, uploadId, *chunkInfo, ranges)
 	if err != nil {
 		return nil, err
 	}
 
 	if fileInfo == nil && !lastChunk {
 		return common.ToBytes(&upload.FileUploadSucced{Success: true}), nil
+	}
+
+	if fileInfo == nil {
+		uri, err := param.GetResourceUri()
+		if err != nil {
+			return nil, err
+		}
+
+		uploadPath := uri + param.Path
+		fullPath := filepath.Join(uploadPath, chunkInfo.ResumableRelativePath)
+		innerIdentifier := upload.MakeUid(fullPath)
+		exist, info := upload.FileInfoManager.ExistFileInfo(innerIdentifier)
+		if !exist {
+			return nil, fmt.Errorf("upload file not exists")
+		}
+
+		var cachePvcPath = global.GlobalData.GetPvcCache(param.Owner)
+		if cachePvcPath == "" {
+			return nil, fmt.Errorf("pvc cache not found")
+		}
+
+		fileInfo = &upload.FileUploadState{
+			Name:           chunkInfo.ResumableFilename,
+			Id:             innerIdentifier,
+			Size:           info.FileSize,
+			UploadTempPath: filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath),
+			FileInfo:       &info,
+		}
 	}
 
 	klog.Infof("Cloud uploadChunks, phase done, tempPath: %s, data: %s", fileInfo.UploadTempPath, common.ToJson(fileInfo))
@@ -582,8 +616,12 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	srcParam.Path = srcParam.Path + fileInfo.Id
 
 	var dstParam = fileUploadArg.FileParam
+	if !strings.HasSuffix(dstParam.Path, "/") {
+		dstParam.Path += "/"
+	}
+	dstParam.Path += chunkInfo.ResumableRelativePath
 
-	uploadParam, err := s.service.createUploadParam(srcParam, dstParam, fileInfo.Name, fileInfo.FileInfo.FileRelativePath)
+	uploadParam, err := s.service.createUploadParam(srcParam, dstParam, fileInfo.Name, chunkInfo.ParentDir, fileInfo.FileInfo.FileRelativePath)
 	if err != nil {
 		klog.Errorf("Cloud uploadChunks, uploadId: %s, create copy param error: %v", uploadId, err)
 		return nil, err

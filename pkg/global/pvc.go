@@ -128,6 +128,10 @@ func (g *Data) getGlobalData() error {
 	return nil
 }
 
+func (g *Data) GetGlobalUsers() []string {
+	return g.getUsers()
+}
+
 func (g *Data) getPvc(user string) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

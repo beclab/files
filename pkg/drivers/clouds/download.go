@@ -114,7 +114,7 @@ func (d *Download) download() error {
 func (d *Download) generateBufferFolder() (string, error) {
 	var owner = d.fileParam.Owner
 	var exists = false
-	var bufferFolder = path.Join("/", "data", "buffer", owner)
+	var bufferFolder = path.Join(common.ROOT_PREFIX, common.CacheBuffer, owner)
 	if files.FilePathExists(bufferFolder) {
 		exists = true
 	}

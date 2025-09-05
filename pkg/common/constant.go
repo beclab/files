@@ -67,10 +67,14 @@ const (
 
 var (
 	DefaultLocalRootPath             = "/data/"
+	DefaultLocalFileCachePath        = "/files_cache/"
 	DefaultKeepFileName              = ".keep"
-	DefaultSyncUploadToCloudTempPath = "/files_cache/.downloadstemp"
+	DefaultSyncUploadToCloudTempPath = DefaultLocalFileCachePath + ".downloadstemp"
 	DefaultUploadTempDir             = ".uploadstemp"
-	DefaultUploadToCloudTempPath     = "/files_cache/" + DefaultUploadTempDir
+	DefaultUploadToCloudTempPath     = DefaultLocalFileCachePath + DefaultUploadTempDir
+
+	CacheBuffer = "buffer"
+	CacheThumb  = "thumb"
 )
 
 var (
