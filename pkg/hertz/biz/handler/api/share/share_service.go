@@ -385,10 +385,7 @@ func UpdateShareMemberPermission(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	err = postgres.UpdateShareMemberFields(req.MemberId, map[string]interface{}{
-		"permission":  req.Permission,
-		"update_time": time.Now().UTC().Format(time.RFC3339Nano),
-	})
+	err = postgres.UpdateShareMember(req.MemberId, map[string]interface{}{"permission": req.Permission})
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
