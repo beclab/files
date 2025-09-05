@@ -218,7 +218,7 @@ func GenerateShareToken(ctx context.Context, c *app.RequestContext) {
 	shareToken := &share.ShareToken{
 		PathID:   req.PathId,
 		Token:    uuid.New().String(),
-		ExpireAt: req.ExpireAt,
+		ExpireAt: ParseTime(req.ExpireAt),
 	}
 	res, err := postgres.CreateShareToken([]*share.ShareToken{shareToken})
 	if err != nil {
@@ -416,6 +416,21 @@ func RemoveShareMember(ctx context.Context, c *app.RequestContext) {
 	resp := new(share.RemoveShareMemberResp)
 	resp.Success = true
 	c.JSON(consts.StatusOK, resp)
+}
+
+func ParseTime(t string) string {
+	var expireTimeMillis int64
+	if _, err := strconv.ParseInt(t, 10, 64); err == nil {
+		val, _ := strconv.ParseInt(t, 10, 64)
+		expireTimeMillis = val
+	} else {
+		parsedTime, err := time.Parse(time.RFC3339, t)
+		if err != nil {
+			return ""
+		}
+		expireTimeMillis = parsedTime.UnixMilli()
+	}
+	return time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
 }
 
 func AdjustExpire(expireIn int64, expireTime string) (int64, string) {
