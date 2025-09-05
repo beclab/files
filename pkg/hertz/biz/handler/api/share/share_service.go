@@ -298,7 +298,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 	queryParams := &postgres.QueryParams{}
 	queryParams.AND = []postgres.Filter{}
 	postgres.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &queryParams.AND, true)
-	_, total, err := postgres.QuerySharePath(queryParams, 0, 0, "share_members.id", "ASC", nil)
+	_, total, err := postgres.QuerySharePath(queryParams, 0, 0, "", "", nil)
 	if err != nil {
 		klog.Errorf("QuerySharePath error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -359,7 +359,7 @@ func ListShareMember(ctx context.Context, c *app.RequestContext) {
 	postgres.BuildStringQueryParam(req.ShareMember, "share_members.share_member", "=", &queryParams.AND, false)
 	postgres.BuildIntQueryParam(req.Permission, "share_members.permission", "=", &queryParams.AND, false)
 
-	res, total, err := postgres.QueryShareMember(queryParams, 0, 0, "", "", nil)
+	res, total, err := postgres.QueryShareMember(queryParams, 0, 0, "share_members.id", "ASC", nil)
 	if err != nil {
 		klog.Errorf("QueryShareMember error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
