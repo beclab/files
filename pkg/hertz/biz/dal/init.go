@@ -18,7 +18,7 @@ func migration(table interface{}, tableName string) {
 func Init() {
 	postgres.Init()
 
-	migration(&share.SharePath{}, "share_path")
-	migration(&share.ShareToken{}, "share_token")
-	migration(&share.ShareMember{}, "share_member")
+	migration(&share.SharePath{}, "share_paths")
+	migration(&share.ShareToken{}, "share_tokens")
+	migration(&share.ShareMember{}, "share_members")
 }
