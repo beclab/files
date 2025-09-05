@@ -13,11 +13,20 @@ import (
 	"github.com/google/uuid"
 	"k8s.io/klog/v2"
 	"strconv"
+	"strings"
 	"time"
 
 	share "files/pkg/hertz/biz/model/share"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+)
+
+const (
+	PERMISSION_NONE = iota
+	PERMISSION_VIEW
+	PERMISSION_UPLOAD
+	PERMISSION_EDIT
+	PERMISSION_ADMIN
 )
 
 // CreateSharePath .
@@ -331,6 +340,17 @@ func ListShareMember(ctx context.Context, c *app.RequestContext) {
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
+	}
+
+	if req.Permission != "" {
+		permissions := strings.Split(req.Permission, ",")
+		for _, permission := range permissions {
+			p, err := strconv.Atoi(permission)
+			if p < PERMISSION_NONE || p > PERMISSION_ADMIN || err != nil {
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Permission out of range"})
+				return
+			}
+		}
 	}
 
 	queryParams := &postgres.QueryParams{}

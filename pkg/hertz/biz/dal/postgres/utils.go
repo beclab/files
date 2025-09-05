@@ -49,13 +49,16 @@ func BuildIntQueryParam(reqValue interface{}, dbField, op string, params *[]Filt
 			Value:    reqValue.(int),
 		})
 	} else {
-		values := strings.Split(reqValue.(string), ",")
-		for _, v := range values {
-			*params = append(*params, Filter{
-				Field:    dbField,
-				Operator: op,
-				Value:    strconv.Atoi(v),
-			})
+		if reqValue.(string) != "" {
+			values := strings.Split(reqValue.(string), ",")
+			for _, v := range values {
+				vInt, _ := strconv.Atoi(v)
+				*params = append(*params, Filter{
+					Field:    dbField,
+					Operator: op,
+					Value:    vInt,
+				})
+			}
 		}
 	}
 }
