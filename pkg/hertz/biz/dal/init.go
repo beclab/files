@@ -3,23 +3,8 @@ package dal
 import (
 	"files/pkg/hertz/biz/dal/postgres"
 	"files/pkg/hertz/biz/model/api/share"
-	"gorm.io/gorm"
 	"k8s.io/klog/v2"
 )
-
-func RebuildTable(model interface{}, tableName string) error {
-	return postgres.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Migrator().DropTable(model); err != nil {
-			klog.Warningf("Table %s did not exist before rebuild", tableName)
-		}
-		if err := tx.AutoMigrate(model); err != nil {
-			klog.Errorf("Failed to create table %s: %v", tableName, err)
-			return err
-		}
-		klog.Infof("Successfully rebuilt table %s", tableName)
-		return nil
-	})
-}
 
 func migration(table interface{}, tableName string) {
 	err := postgres.DB.AutoMigrate(table)
