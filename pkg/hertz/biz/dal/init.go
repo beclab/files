@@ -2,7 +2,7 @@ package dal
 
 import (
 	"files/pkg/hertz/biz/dal/postgres"
-	"files/pkg/hertz/biz/model/share"
+	"files/pkg/hertz/biz/model/api/share"
 	"k8s.io/klog/v2"
 )
 
