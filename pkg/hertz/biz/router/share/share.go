@@ -44,8 +44,9 @@ func Register(r *server.Hertz) {
 				_share_token := _share.Group("/share_token", _share_tokenMw()...)
 				{
 					_node1 := _share_token.Group("/:node", _node1Mw()...)
-					_node1.DELETE("/", append(_revoketokenMw(), share.RevokeToken)...)
-					_node1.POST("/", append(_generatetokenMw(), share.GenerateToken)...)
+					_node1.DELETE("/", append(_revokesharetokenMw(), share.RevokeShareToken)...)
+					_node1.GET("/", append(_listsharetokenMw(), share.ListShareToken)...)
+					_node1.POST("/", append(_generatesharetokenMw(), share.GenerateShareToken)...)
 				}
 			}
 		}

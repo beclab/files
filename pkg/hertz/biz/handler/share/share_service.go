@@ -10,6 +10,7 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/google/uuid"
 	"k8s.io/klog/v2"
 	"strconv"
 	"time"
@@ -68,7 +69,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	res, err := postgres.CreateSharePath([]*share.SharePath{sharePath})
 	if err != nil {
 		klog.Errorf("postgres.CreateSharePath error: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
 
@@ -76,7 +77,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	resp.SharePath = new(share.ViewSharePath)
 	if err = json.Unmarshal(common.ToBytes(res[0]), &resp.SharePath); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	resp.SharePath.SharedByMe = true
@@ -102,18 +103,18 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 
 	queryParams := &postgres.QueryParams{}
 	queryParams.AND = []postgres.Filter{}
-	postgres.BuildQueryParam(req.PathId, "share_paths.path_id", "=", &queryParams.AND, false)
-	postgres.BuildQueryParam(req.Owner, "share_paths.owner", "=", &queryParams.AND, false)
-	postgres.BuildQueryParam(req.FileType, "share_paths.file_type", "=", &queryParams.AND, false)
-	postgres.BuildQueryParam(req.Extend, "share_paths.extend", "=", &queryParams.AND, false)
-	postgres.BuildQueryParam(req.Path, "share_paths.path", "=", &queryParams.AND, false)
-	postgres.BuildQueryParam(req.ShareType, "share_paths.share_type", "=", &queryParams.AND, false)
-	postgres.BuildQueryParam(req.Name, "share_paths.name", "=", &queryParams.AND, false)
+	postgres.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &queryParams.AND, false)
+	postgres.BuildStringQueryParam(req.Owner, "share_paths.owner", "=", &queryParams.AND, false)
+	postgres.BuildStringQueryParam(req.FileType, "share_paths.file_type", "=", &queryParams.AND, false)
+	postgres.BuildStringQueryParam(req.Extend, "share_paths.extend", "=", &queryParams.AND, false)
+	postgres.BuildStringQueryParam(req.Path, "share_paths.path", "=", &queryParams.AND, false)
+	postgres.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "=", &queryParams.AND, false)
+	postgres.BuildStringQueryParam(req.Name, "share_paths.name", "=", &queryParams.AND, false)
 
 	if req.ExpireIn != 0 {
 		currentTime := time.Now()
 		expireTime := currentTime.Add(time.Duration(req.ExpireIn) * time.Millisecond).Format(time.RFC3339)
-		postgres.BuildQueryParam(expireTime, "share_paths.expire_time", "<=", &queryParams.AND, true)
+		postgres.BuildStringQueryParam(expireTime, "share_paths.expire_time", "<=", &queryParams.AND, true)
 	}
 
 	joinConditions := []*postgres.JoinCondition{}
@@ -124,10 +125,10 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 			JoinTable: "share_members",
 			JoinField: "share_members.share_id",
 		})
-		postgres.BuildQueryParam(owner, "share_members.share_member", "=", &queryParams.AND, true)
+		postgres.BuildStringQueryParam(owner, "share_members.share_member", "=", &queryParams.AND, true)
 	}
 	if req.SharedByMe {
-		postgres.BuildQueryParam(owner, "share_paths.owner", "=", &queryParams.AND, true)
+		postgres.BuildStringQueryParam(owner, "share_paths.owner", "=", &queryParams.AND, true)
 	}
 
 	res, total, err := postgres.QuerySharePath(queryParams, 0, 0, "", "", joinConditions)
@@ -146,7 +147,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		viewPath := new(share.ViewSharePath)
 		if err = json.Unmarshal(common.ToBytes(sharePath), &viewPath); err != nil {
 			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 			return
 		}
 		if sharePath.Owner == owner {
@@ -179,35 +180,98 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// GenerateToken .
-// @router /share/share_token/:node/ [POST]
-func GenerateToken(ctx context.Context, c *app.RequestContext) {
+// GenerateShareToken .
+// @router /api/share/share_token/:node/ [POST]
+func GenerateShareToken(ctx context.Context, c *app.RequestContext) {
 	var err error
-	var req share.GenerateTokenReq
+	var req share.GenerateShareTokenReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(share.GenerateTokenResp)
+	queryParams := &postgres.QueryParams{}
+	queryParams.AND = []postgres.Filter{}
+	postgres.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &queryParams.AND, true)
+	_, total, err := postgres.QuerySharePath(queryParams, 0, 0, "", "", nil)
+	if err != nil {
+		klog.Errorf("QuerySharePath error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	if total == 0 {
+		klog.Errorf("No SharePath found for pathId: %s", req.PathId)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "SharePath not found"})
+		return
+	}
 
+	shareToken := &share.ShareToken{
+		PathID:   req.PathId,
+		Token:    uuid.New().String(),
+		ExpireAt: req.ExpireAt,
+	}
+	res, err := postgres.CreateShareToken([]*share.ShareToken{shareToken})
+	if err != nil {
+		klog.Errorf("postgres.CreateSharePath error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	resp := new(share.GenerateShareTokenResp)
+	resp.ShareToken = res[0]
 	c.JSON(consts.StatusOK, resp)
 }
 
-// RevokeToken .
-// @router /share/share_token/:node/ [DELETE]
-func RevokeToken(ctx context.Context, c *app.RequestContext) {
+// ListShareToken .
+// @router /api/share/share_token/:node/ [GET]
+func ListShareToken(ctx context.Context, c *app.RequestContext) {
 	var err error
-	var req share.RevokeTokenReq
+	var req share.ListShareTokenReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	resp := new(share.RevokeTokenResp)
+	queryParams := &postgres.QueryParams{}
+	queryParams.AND = []postgres.Filter{}
+	postgres.BuildStringQueryParam(req.PathId, "share_tokens.path_id", "=", &queryParams.AND, true)
 
+	res, total, err := postgres.QueryShareToken(queryParams, 0, 0, "", "", nil)
+	if err != nil {
+		klog.Errorf("QueryShareToken error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	klog.Infof("~~~Debug log: QueryShareToken total: %d", total)
+	klog.Infof("~~~Debug log: QueryShareToken result: %+v", res)
+
+	resp := new(share.ListShareTokenResp)
+	resp.Total = int32(total)
+	resp.ShareTokens = res
+	c.JSON(consts.StatusOK, resp)
+}
+
+// RevokeShareToken .
+// @router /api/share/share_token/:node/ [DELETE]
+func RevokeShareToken(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.RevokeShareTokenReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	err = postgres.DeleteShareToken(req.Token)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	resp := new(share.RevokeShareTokenResp)
+	resp.Success = true
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -222,8 +286,39 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(share.AddShareMemberResp)
+	queryParams := &postgres.QueryParams{}
+	queryParams.AND = []postgres.Filter{}
+	postgres.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &queryParams.AND, true)
+	_, total, err := postgres.QuerySharePath(queryParams, 0, 0, "", "", nil)
+	if err != nil {
+		klog.Errorf("QuerySharePath error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	if total == 0 {
+		klog.Errorf("No SharePath found for pathId: %s", req.PathId)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "SharePath not found"})
+		return
+	}
 
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	shareMember := &share.ShareMember{
+		PathID:      req.PathId,
+		ShareMember: req.ShareMember,
+		Permission:  req.Permission,
+		CreateTime:  now,
+		UpdateTime:  now,
+	}
+	res, err := postgres.CreateShareMember([]*share.ShareMember{shareMember})
+	if err != nil {
+		klog.Errorf("postgres.CreateShareMember error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	resp := new(share.AddShareMemberResp)
+	resp.ShareMember = res[0]
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -238,8 +333,24 @@ func ListShareMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(share.ListShareMemberResp)
+	queryParams := &postgres.QueryParams{}
+	queryParams.AND = []postgres.Filter{}
+	postgres.BuildStringQueryParam(req.PathId, "share_members.path_id", "=", &queryParams.AND, false)
+	postgres.BuildStringQueryParam(req.ShareMember, "share_members.share_member", "=", &queryParams.AND, false)
+	postgres.BuildIntQueryParam(req.Permission, "share_members.permission", "=", &queryParams.AND, false)
 
+	res, total, err := postgres.QueryShareMember(queryParams, 0, 0, "", "", nil)
+	if err != nil {
+		klog.Errorf("QueryShareMember error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	klog.Infof("~~~Debug log: QueryShareMember total: %d", total)
+	klog.Infof("~~~Debug log: QueryShareMember result: %+v", res)
+
+	resp := new(share.ListShareMemberResp)
+	resp.Total = int32(total)
+	resp.ShareMembers = res
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -254,8 +365,14 @@ func UpdateShareMemberPermission(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(share.UpdateShareMemberPermissionResp)
+	err = postgres.UpdateShareMemberFields(req.MemberId, map[string]interface{}{"permission": req.Permission})
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
 
+	resp := new(share.UpdateShareMemberPermissionResp)
+	resp.Success = true
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -270,8 +387,14 @@ func RemoveShareMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(share.RemoveShareMemberResp)
+	err = postgres.DeleteShareMember(req.MemberId)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
 
+	resp := new(share.RemoveShareMemberResp)
+	resp.Success = true
 	c.JSON(consts.StatusOK, resp)
 }
 

@@ -21,7 +21,7 @@ struct ShareToken {
     1: required i64 id (go.tag = 'gorm:"column:id;primaryKey;autoIncrement"')
     2: required string path_id (go.tag = 'gorm:"column:path_id;type:uuid;not null"')
     3: required string token (go.tag = 'gorm:"column:token;type:uuid;not null;default:gen_random_uuid();uniqueIndex:idx_share_token_token"')
-    4: required i64 expire_at (go.tag = 'gorm:"column:expire_at;not null"')
+    4: required string expire_at (go.tag = 'gorm:"column:expire_at;type:timestamptz;not null"')
 }
 
 struct ShareMember {
@@ -90,27 +90,36 @@ struct DeleteSharePathResp {
     1: bool success;
 }
 
-struct GenerateTokenReq {
+struct GenerateShareTokenReq {
     1: required string PathId (api.body="path_id");
     2: required string ExpireAt (api.body="expire_at");
 }
 
-struct GenerateTokenResp {
+struct GenerateShareTokenResp {
     1: ShareToken share_token;
 }
 
-struct RevokeTokenReq {
+struct ListShareTokenReq {
+    1: required string PathId (api.query="path_id");
+}
+
+struct ListShareTokenResp {
+    1: i32 total;
+    2: list<ShareToken> share_tokens;
+}
+
+struct RevokeShareTokenReq {
     1: required string Token (api.query="token");
 }
 
-struct RevokeTokenResp {
+struct RevokeShareTokenResp {
     1: bool success;
 }
 
 struct AddShareMemberReq {
     1: required string PathId (api.body="path_id");
     2: required string ShareMember (api.body="share_member");
-    3: required i32 Permission (api.body="permission");
+    3: required i32 Permission (api.body="permission", api.vd="$>=0 && $<=4");
 }
 
 struct AddShareMemberResp {
@@ -120,17 +129,17 @@ struct AddShareMemberResp {
 struct ListShareMemberReq {
     1: required string PathId (api.query="path_id");
     2: string ShareMember (api.query="share_member");
-    3: i32 Permission (api.query="permission");
+    3: string Permission (api.query="permission");  // for multi-filtering
 }
 
 struct ListShareMemberResp {
-    1: list<ShareMember> share_members;
+    1: i32 total;
+    2: list<ShareMember> share_members;
 }
 
 struct UpdateShareMemberPermissionReq {
-    1: required string PathId (api.body="path_id");
-    2: required string ShareMember (api.body="share_member");
-    3: required i32 Permission (api.body="permission");
+    1: required i64 MemberId (api.body="member_id");
+    2: required i32 Permission (api.body="permission", api.vd="$>=0 && $<=4");
 }
 
 struct UpdateShareMemberPermissionResp {
@@ -138,8 +147,7 @@ struct UpdateShareMemberPermissionResp {
 }
 
 struct RemoveShareMemberReq {
-    1: required string PathId (api.query="path_id");
-    2: required string ShareMember (api.query="share_member");
+    1: required i64 MemberId (api.query="member_id");
 }
 
 struct RemoveShareMemberResp {
@@ -152,8 +160,9 @@ service ShareService {
     ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/:node/");
     DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/:node/");
 
-    GenerateTokenResp GenerateToken(1: GenerateTokenReq request) (api.post="/api/share/share_token/:node/");
-    RevokeTokenResp RevokeToken(1: RevokeTokenReq request) (api.delete="/api/share/share_token/:node/");
+    GenerateShareTokenResp GenerateShareToken(1: GenerateShareTokenReq request) (api.post="/api/share/share_token/:node/");
+    ListShareTokenResp ListShareToken(1: ListShareTokenReq request) (api.get="/api/share/share_token/:node/");
+    RevokeShareTokenResp RevokeShareToken(1: RevokeShareTokenReq request) (api.delete="/api/share/share_token/:node/");
 
     AddShareMemberResp AddShareMember(1: AddShareMemberReq request) (api.post="/api/share/share_member/:node/");
     ListShareMemberResp ListShareMember(1: ListShareMemberReq request) (api.get="/api/share/share_member/:node/");

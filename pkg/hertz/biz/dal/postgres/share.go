@@ -33,18 +33,6 @@ func UpdateSharePath(path *share.SharePath) error {
 }
 
 func QuerySharePath(params *QueryParams, page, pageSize int64, orderBy, order string, joinParams []*JoinCondition) ([]*share.SharePath, int64, error) {
-	//var sharePathValidator = map[string]bool{
-	//	"id":          true,
-	//	"owner":       true,
-	//	"file_type":   true,
-	//	"extend":      true,
-	//	"path":        true,
-	//	"share_type":  true,
-	//	"name":        true,
-	//	"expire_in":   true,
-	//	"create_time": true,
-	//}
-
 	var res []*share.SharePath
 	total, err := QueryData(&share.SharePath{}, &res, params, page, pageSize, orderBy, order, joinParams)
 	if err != nil {
@@ -96,8 +84,13 @@ func CheckSharePathExpired(pathID string) (bool, error) {
 
 // share_token
 
-func CreateShareToken(tokens []*share.ShareToken) error {
-	return DB.Create(tokens).Error
+func CreateShareToken(tokens []*share.ShareToken) ([]*share.ShareToken, error) {
+	result := DB.Create(tokens)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return tokens, nil
 }
 
 func DeleteShareToken(token string) error {
@@ -111,16 +104,9 @@ func UpdateShareToken(token *share.ShareToken) error {
 		Updates(token).Error
 }
 
-func QueryShareToken(params *QueryParams, page, pageSize int64, orderBy, order string) ([]*share.ShareToken, int64, error) {
-	//var shareTokenValidator = map[string]bool{
-	//	"id":        true,
-	//	"path_id":   true,
-	//	"token":     true,
-	//	"expire_at": true,
-	//}
-
+func QueryShareToken(params *QueryParams, page, pageSize int64, orderBy, order string, joinParams []*JoinCondition) ([]*share.ShareToken, int64, error) {
 	var res []*share.ShareToken
-	total, err := QueryData(&share.ShareToken{}, &res, params, page, pageSize, orderBy, order, nil)
+	total, err := QueryData(&share.ShareToken{}, &res, params, page, pageSize, orderBy, order, joinParams)
 	if err != nil {
 		klog.Error(err)
 		return nil, 0, err
@@ -136,8 +122,13 @@ func UpdateShareTokenFields(tokenID int64, updates map[string]interface{}) error
 
 // share member
 
-func CreateShareMember(members []*share.ShareMember) error {
-	return DB.Create(members).Error
+func CreateShareMember(members []*share.ShareMember) ([]*share.ShareMember, error) {
+	result := DB.Create(members)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return members, nil
 }
 
 func DeleteShareMember(memberID int64) error {
@@ -152,17 +143,9 @@ func UpdateShareMember(member *share.ShareMember) error {
 		Updates(member).Error
 }
 
-func QueryShareMember(params *QueryParams, page, pageSize int64, orderBy, order string) ([]*share.ShareMember, int64, error) {
-	//var shareMemberValidator = map[string]bool{
-	//	"id":           true,
-	//	"path_id":      true,
-	//	"share_member": true,
-	//	"permission":   true,
-	//	"create_time":  true,
-	//}
-
+func QueryShareMember(params *QueryParams, page, pageSize int64, orderBy, order string, joinParams []*JoinCondition) ([]*share.ShareMember, int64, error) {
 	var res []*share.ShareMember
-	total, err := QueryData(&share.ShareMember{}, &res, params, page, pageSize, orderBy, order, nil)
+	total, err := QueryData(&share.ShareMember{}, &res, params, page, pageSize, orderBy, order, joinParams)
 	if err != nil {
 		klog.Error(err)
 		return nil, 0, err

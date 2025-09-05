@@ -95,3 +95,18 @@ func _apiMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _revokesharetokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listsharetokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _generatesharetokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

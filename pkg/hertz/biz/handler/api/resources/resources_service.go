@@ -37,13 +37,13 @@ func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
 	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
 		return
 	}
 
 	res, err := handler.List(contextArg)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,
 			"message": err.Error(),
 		})
@@ -53,7 +53,7 @@ func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	resp := new(map[string]interface{}) // different disk type with different responses
 	if err := json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Failed to unmarshal response body"})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -78,13 +78,13 @@ func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
 	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
 		return
 	}
 
 	_, err = handler.Create(contextArg)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,
 			"message": err.Error(),
 		})
@@ -122,13 +122,13 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
 	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
 		return
 	}
 
 	_, err = handler.Rename(contextArg)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,
 			"message": err.Error(),
 		})
@@ -166,13 +166,13 @@ func PutResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
 	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
 		return
 	}
 
 	res, err := handler.Edit(contextArg)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,
 			"message": err.Error(),
 		})
@@ -227,7 +227,7 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	var handler = drivers.Adaptor.NewFileHandler(deleteArg.FileParam.FileType, handlerParam)
 	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", deleteArg.FileParam.FileType)})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", deleteArg.FileParam.FileType)})
 		return
 	}
 
@@ -237,7 +237,7 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		if res != nil {
 			json.Unmarshal(res, &deleteFailedPaths)
 		}
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,
 			"data":    deleteFailedPaths,
 			"message": err.Error(),

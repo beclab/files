@@ -3,6 +3,7 @@ package postgres
 import (
 	"fmt"
 	"gorm.io/gorm/clause"
+	"strconv"
 	"strings"
 )
 
@@ -24,7 +25,7 @@ type JoinCondition struct {
 	JoinField string
 }
 
-func BuildQueryParam(reqValue, dbField, op string, params *[]Filter, single bool) {
+func BuildStringQueryParam(reqValue, dbField, op string, params *[]Filter, single bool) {
 	if reqValue != "" {
 		values := []string{reqValue}
 		if !single {
@@ -35,6 +36,25 @@ func BuildQueryParam(reqValue, dbField, op string, params *[]Filter, single bool
 				Field:    dbField,
 				Operator: op,
 				Value:    v,
+			})
+		}
+	}
+}
+
+func BuildIntQueryParam(reqValue interface{}, dbField, op string, params *[]Filter, single bool) {
+	if single {
+		*params = append(*params, Filter{
+			Field:    dbField,
+			Operator: op,
+			Value:    reqValue.(int),
+		})
+	} else {
+		values := strings.Split(reqValue.(string), ",")
+		for _, v := range values {
+			*params = append(*params, Filter{
+				Field:    dbField,
+				Operator: op,
+				Value:    strconv.Atoi(v),
 			})
 		}
 	}
