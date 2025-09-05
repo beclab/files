@@ -1,6 +1,9 @@
 FROM ubuntu:24.04
 
 RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository -y universe && \
+    apt-get update && \
     apt-get install -y poppler-utils wv unrtf tidy && \
     apt-get install -y inotify-tools && \
     apt-get install -y ca-certificates mailcap curl && \

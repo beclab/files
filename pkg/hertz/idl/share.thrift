@@ -78,7 +78,8 @@ struct ListSharePathReq {
 }
 
 struct ListSharePathResp {
-    1: list<ViewSharePath> share_paths;
+    1: i32 total;
+    2: list<ViewSharePath> share_paths;
 }
 
 struct DeleteSharePathReq {

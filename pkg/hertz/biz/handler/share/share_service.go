@@ -140,6 +140,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("~~~Debug log: QuerySharePath result: %+v", res)
 
 	resp := new(share.ListSharePathResp)
+	resp.Total = int32(total)
 	resp.SharePaths = []*share.ViewSharePath{}
 	for _, sharePath := range res {
 		viewPath := new(share.ViewSharePath)
