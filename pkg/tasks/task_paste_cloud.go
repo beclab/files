@@ -25,6 +25,7 @@ func (t *Task) DownloadFromCloud() error {
 	var cmd = rclone.Command
 	var user = t.param.Owner
 	var action = t.param.Action
+	var parentPath = t.param.UploadToCloudParentPath
 	var src = t.param.Src
 	var dst *models.FileParam
 
@@ -101,7 +102,7 @@ func (t *Task) DownloadFromCloud() error {
 	if !t.wasPaused {
 		if t.currentPhase == t.totalPhases {
 			var newDstPath string
-			newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, src, dst, t.param.Src, t.param.Dst)
+			newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, action, parentPath, src, dst, t.param.Src, t.param.Dst)
 			if err != nil {
 				klog.Errorf("[Task] Id: %s, get dup name by lock error: %v", t.id, err)
 				return err
@@ -190,7 +191,8 @@ func (t *Task) UploadToCloud() error {
 	var err error
 	var cmd = rclone.Command
 	var user = t.param.Owner
-	var action = t.param.Action // copy, move, upload
+	var action = t.param.Action                            // copy, move, upload
+	var uploadParentPath = t.param.UploadToCloudParentPath // if not upload ,it's empty
 
 	var jobId int
 
@@ -214,7 +216,11 @@ func (t *Task) UploadToCloud() error {
 		src = t.param.Src
 	}
 
-	klog.Infof("[Task] Id: %s, start, uploadToCloud, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst))
+	klog.Infof("[Task] Id: %s, start, uploadToCloud, phase: %d/%d, user: %s, action: %s, uploadParentPath: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, uploadParentPath, common.ToJson(src), common.ToJson(dst))
+
+	if action == common.ActionUpload && uploadParentPath == "" {
+		return fmt.Errorf("uploaded parent path invalid")
+	}
 
 	t.updateProgress(0, 0)
 
@@ -233,7 +239,7 @@ func (t *Task) UploadToCloud() error {
 		// check duplicated names and generate new name
 		klog.Infof("[Task] Id: %s, check dup name, wasPaused: %v, pausedPhase: %d", t.id, t.wasPaused, t.pausedPhase)
 		var newDstPath string
-		newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, src, dst, t.param.Src, t.param.Dst)
+		newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, action, uploadParentPath, src, dst, t.param.Src, t.param.Dst) // uploadToCloud
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, get dup name by lock error: %v", t.id, err)
 			return err
@@ -303,7 +309,7 @@ func (t *Task) UploadToCloud() error {
 			}
 		}
 
-		if t.param.Action == common.ActionMove {
+		if t.param.Action == common.ActionMove || t.param.Action == common.ActionUpload {
 			if e := cmd.Clear(t.param.Src); e != nil {
 				klog.Errorf("[Task] Id: %s, clear src error: %v", t.id, e)
 			}
@@ -322,6 +328,7 @@ func (t *Task) CopyToCloud() error {
 	var cmd = rclone.Command
 	var user = t.param.Owner
 	var action = t.param.Action
+	var parentPath = t.param.UploadToCloudParentPath
 	var src = t.param.Src
 	var dst = t.param.Dst
 
@@ -343,7 +350,7 @@ func (t *Task) CopyToCloud() error {
 	if !t.wasPaused {
 		klog.Infof("[Task] Id: %s, check dup name, wasPaused: %v, pausedPhase: %d", t.id, t.wasPaused, t.pausedPhase)
 		var newDstPath string
-		newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, src, dst, t.param.Src, t.param.Dst)
+		newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, action, parentPath, src, dst, t.param.Src, t.param.Dst)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, get dup name by lock error: %v", t.id, err)
 			return err
@@ -382,18 +389,17 @@ func (t *Task) CopyToCloud() error {
 		_, _ = cmd.GetJob().Stop(jobId)
 	}
 
-	// clear files
-	if err == nil {
-
-		if t.param.Action == common.ActionMove {
-			if e := cmd.Clear(t.param.Src); e != nil {
-				klog.Errorf("[Task] Id: %s, clear src error: %v", t.id, e)
-			}
-		}
-
-	} else {
+	if err != nil {
 		t.pausedParam = dst
 		t.pausedPhase = t.currentPhase
+		return err
+	}
+
+	// clear files
+	if t.param.Action == common.ActionMove {
+		if e := cmd.Clear(t.param.Src); e != nil {
+			klog.Errorf("[Task] Id: %s, clear src error: %v", t.id, e)
+		}
 	}
 
 	klog.Infof("[Task] Id: %s done! done: %v, phase: %d, error: %v", t.id, done, t.currentPhase, err)

@@ -27,6 +27,7 @@ func NewService() *service {
 func (s *service) Stat(param *models.FileParam) (*operations.OperationsStat, error) {
 	_, isFile := files.GetFileNameFromPath(param.Path)
 	var opts = &operations.OperationsOpt{
+		Recurse:    false,
 		NoModTime:  true,
 		NoMimeType: true,
 		Metadata:   false,
@@ -212,9 +213,23 @@ func (s *service) Rename(srcParam, dstParam *models.FileParam) ([]byte, error) {
 
 		klog.Infof("[service] rename dir, srcFs: %s, dstFs: %s", srcFs, dstFs)
 
-		if err := s.command.GetOperation().Move(srcFs, dstFs); err != nil {
-			klog.Errorf("[service] rename dir failed, srcFs: %s, dstFs: %s, error: %v", srcFs, dstFs, err)
-			return nil, err
+		var opts = &operations.OperationsOpt{
+			Recurse:    false,
+			NoModTime:  true,
+			NoMimeType: true,
+			Metadata:   false,
+		}
+
+		srcItems, _ := s.command.GetOperation().List(srcFs, opts, nil)
+		if srcItems == nil || srcItems.List == nil || len(srcItems.List) == 0 {
+			if err := s.command.CreateEmptyDirectory(dstParam); err != nil {
+				klog.Errorf("[service] rename dir, create empty dir failed, error: %v", err)
+			}
+		} else {
+			if err := s.command.GetOperation().Move(srcFs, dstFs); err != nil {
+				klog.Errorf("[service] rename dir failed, srcFs: %s, dstFs: %s, error: %v", srcFs, dstFs, err)
+				return nil, err
+			}
 		}
 
 		var purgeFs, purgeRemote string
@@ -317,90 +332,14 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 	return result, nil
 }
 
-func (s *service) createUploadParam(src, dst *models.FileParam, uploadFileName string, newFileRelativePath string) (*models.PasteParam, error) {
-	var cmd = rclone.Command
-
+func (s *service) createUploadParam(src, dst *models.FileParam, uploadFileName string, parentPath string, newFileRelativePath string) (*models.PasteParam, error) {
 	klog.Infof("[service] upload, start, uploadFileName: %s, relativePath: %s, src: %s, dst: %s", uploadFileName, newFileRelativePath, common.ToJson(src), common.ToJson(dst))
 
-	if !strings.HasPrefix(newFileRelativePath, "/") {
-		newFileRelativePath = "/" + newFileRelativePath // /xxx.yyy  /f1/f2/xxx.yyy
-	}
-
-	// dst.FileType
-	// dst.Extend
-	// dst.Path       /hello1/sub1/
-	// real dst.Path  /hello1/sub1/one file/a/b/1.jpg     // 11.jpg
-
-	var srcFsPrefix, err = cmd.GetFsPrefix(src)
-	_ = srcFsPrefix
-	if err != nil {
-		return nil, err
-	}
-	dstFsPrefix, err := cmd.GetFsPrefix(dst)
-	_ = dstFsPrefix
-	if err != nil {
-		return nil, err
-	}
-
-	dstFirstLevelDir := files.GetFirstLevelDir(newFileRelativePath) // ~ dstFirstLevelDir may be nil
-	var dstFirstPathTmp = dst.Path
-	if dstFirstLevelDir != "" {
-		dstFirstPathTmp += dstFirstLevelDir + "/"
-	}
-
-	var dstFirstLevelPathParam = &models.FileParam{
-		Owner:    dst.Owner,
-		FileType: dst.FileType,
-		Extend:   dst.Extend,
-		Path:     dstFirstPathTmp,
-	}
-
-	dstItems, err := cmd.GetFilesList(dstFirstLevelPathParam, false)
-	if err != nil {
-		if !strings.Contains(err.Error(), "directory not found") {
-			klog.Errorf("[service] upload, get lists failed, path: %s, error: %v", dst.Path, err)
-			return nil, fmt.Errorf("get dst files list error: %v", err)
-		}
-	}
-
-	var dupNames []string
-	if dstItems != nil && dstItems.List != nil && len(dstItems.List) > 0 {
-		for _, item := range dstItems.List {
-			dupNames = append(dupNames, item.Name)
-		}
-	}
-
-	var isFile bool
-	var compareTargetName string
-	if dstFirstLevelDir == "" {
-		isFile = true
-		compareTargetName = uploadFileName
-	} else {
-		isFile = false
-		compareTargetName = dstFirstLevelDir
-	}
-
-	klog.Infof("[service] upload, dupNames: %d, dstFirstLevelDir: %s, compareTargetName: %s, isFile: %v", len(dupNames), dstFirstLevelDir, compareTargetName, isFile)
-
-	// newFileOrFirstLevelDirName
-	newFileOrFirstLevelDirName := files.GenerateDupName(dupNames, compareTargetName, isFile)
-
-	klog.Infof("[service] upload, newDirName: %s", newFileOrFirstLevelDirName)
-
-	// generate new first level dir
-	// update dst path
-	var newFirstLevelPath string
-	if !isFile {
-		newFirstLevelPath = files.UpdateFirstLevelDirToPath(newFileRelativePath, newFileOrFirstLevelDirName)
-		dst.Path = dst.Path + strings.TrimPrefix(newFirstLevelPath, "/")
-	} else {
-		dst.Path = dst.Path + newFileOrFirstLevelDirName
-	}
-
 	var data = &models.PasteParam{
-		Owner:         src.Owner,
-		Action:        common.ActionUpload,
-		UploadToCloud: true,
+		Owner:                   src.Owner,
+		Action:                  common.ActionUpload,
+		UploadToCloud:           true,
+		UploadToCloudParentPath: parentPath,
 		Src: &models.FileParam{
 			Owner:    src.Owner,
 			FileType: src.FileType,

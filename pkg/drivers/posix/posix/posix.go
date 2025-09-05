@@ -81,7 +81,7 @@ func (s *PosixStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	klog.Infof("Posix preview, user: %s, fileType: %s, ext: %s, name: %s", owner, fileData.Type, fileData.Extension, fileData.Name)
 
 	// get cache
-	cachedData, ok, err := preview.GetPreviewCache(owner, key, diskcache.CacheThumb)
+	cachedData, ok, err := preview.GetPreviewCache(owner, key, common.CacheThumb)
 	if err != nil {
 		klog.Errorf("Posix preview, get cache failed, user: %s, error: %v", owner, err)
 

@@ -9,10 +9,11 @@ type PasteReq struct {
 }
 
 type PasteParam struct {
-	Owner         string `json:"owner"`
-	Action        string `json:"action"`
-	UploadToCloud bool   `json:"uploadToCloud"`
-	Src           *FileParam
-	Dst           *FileParam
-	Temp          *FileParam
+	Owner                   string `json:"owner"`
+	Action                  string `json:"action"`
+	UploadToCloud           bool   `json:"uploadToCloud"`
+	UploadToCloudParentPath string `json:"uploadToCloudParentPath"`
+	Src                     *FileParam
+	Dst                     *FileParam
+	Temp                    *FileParam
 }

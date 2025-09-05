@@ -21,9 +21,7 @@ type TaskInfo struct {
 	FileName      string `json:"filename"`
 	Dst           string `json:"dest"`
 	DstPath       string `json:"dst_filename"`
-	DstFileType   string `json:"dst_type"`
 	Src           string `json:"source"`
-	SrcFileType   string `json:"src_type"`
 	CurrentPhase  int    `json:"current_phase"`
 	TotalPhases   int    `json:"total_phases"`
 	Progress      int    `json:"progress"`

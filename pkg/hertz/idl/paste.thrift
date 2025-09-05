@@ -23,18 +23,16 @@ struct TaskInfo {
     4: string filename,
     5: string dest,
     6: string dst_filename,
-    7: string dst_type,
-    8: string source,
-    9: string src_type,
-    10: i32 current_phase,
-    11: i32 total_phases,
-    12: i32 progress,
-    13: i64 transferred,
-    14: i64 total_file_size,
-    15: bool tidy_dirs,
-    16: string status,
-    17: string failed_reason,
-    18: bool pause_able
+    7: string source,
+    8: i32 current_phase,
+    9: i32 total_phases,
+    10: i32 progress,
+    11: i64 transferred,
+    12: i64 total_file_size,
+    13: bool tidy_dirs,
+    14: string status,
+    15: string failed_reason,
+    16: bool pause_able
 }
 
 struct GetTaskResp {

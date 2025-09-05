@@ -23,6 +23,7 @@ func InitCrontabs() {
 		redisutils.CleanupOldFilesAndRedisEntries(7 * 24 * time.Hour)
 
 		tasks.TaskManager.ClearTasks()
+		tasks.TaskManager.ClearCacheFiles()
 	})
 	if err != nil {
 		klog.Fatalf("AddFunc CleanupOldFilesAndRedisEntries err:%v", err)

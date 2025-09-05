@@ -718,6 +718,7 @@ func GetFirstLevelDir(s string) string {
 	return dirs[0]
 }
 
+// /*/
 func GetPrefixPath(s string) string {
 	// /a/b/hello.txt   > /a/b/
 	// /a/b/c/          > /a/b/
