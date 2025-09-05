@@ -247,7 +247,7 @@ func ListShareToken(ctx context.Context, c *app.RequestContext) {
 	queryParams.AND = []postgres.Filter{}
 	postgres.BuildStringQueryParam(req.PathId, "share_tokens.path_id", "=", &queryParams.AND, true)
 
-	res, total, err := postgres.QueryShareToken(queryParams, 0, 0, "", "", nil)
+	res, total, err := postgres.QueryShareToken(queryParams, 0, 0, "share_tokens.id", "ASC", nil)
 	if err != nil {
 		klog.Errorf("QueryShareToken error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -298,7 +298,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 	queryParams := &postgres.QueryParams{}
 	queryParams.AND = []postgres.Filter{}
 	postgres.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &queryParams.AND, true)
-	_, total, err := postgres.QuerySharePath(queryParams, 0, 0, "", "", nil)
+	_, total, err := postgres.QuerySharePath(queryParams, 0, 0, "share_members.id", "ASC", nil)
 	if err != nil {
 		klog.Errorf("QuerySharePath error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})

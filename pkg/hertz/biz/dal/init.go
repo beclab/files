@@ -34,7 +34,6 @@ func Init() {
 	postgres.Init()
 
 	migration(&share.SharePath{}, "share_paths")
-	RebuildTable(&share.ShareToken{}, "share_tokens")
-	//migration(&share.ShareToken{}, "share_tokens")
+	migration(&share.ShareToken{}, "share_tokens")
 	migration(&share.ShareMember{}, "share_members")
 }
