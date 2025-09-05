@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	share "files/pkg/hertz/biz/model/share"
+	share "files/pkg/hertz/biz/model/api/share"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )

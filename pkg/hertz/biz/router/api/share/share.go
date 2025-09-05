@@ -3,7 +3,7 @@
 package share
 
 import (
-	share "files/pkg/hertz/biz/handler/share"
+	share "files/pkg/hertz/biz/handler/api/share"
 	"github.com/cloudwego/hertz/pkg/app/server"
 )
 

@@ -131,10 +131,6 @@ func QueryData(
 	return total, db.Find(result).Error
 }
 
-func isValidField(field string, validator map[string]bool) bool {
-	return validator[field]
-}
-
 func buildCondition(field, op string, value interface{}) (string, []interface{}, error) {
 	switch op {
 	case "=", ">", "<", ">=", "<=", "!=":

@@ -11,6 +11,11 @@ func rootMw() []app.HandlerFunc {
 	return nil
 }
 
+func _apiMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
 func _shareMw() []app.HandlerFunc {
 	// your code...
 	return nil
@@ -77,21 +82,6 @@ func _share_tokenMw() []app.HandlerFunc {
 }
 
 func _node1Mw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _revoketokenMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _generatetokenMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _apiMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

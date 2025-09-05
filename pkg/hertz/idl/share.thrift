@@ -1,4 +1,4 @@
-namespace go share
+namespace go api.share
 
 // gorm models
 struct SharePath {

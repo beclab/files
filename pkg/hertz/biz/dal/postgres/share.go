@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"files/pkg/common"
-	"files/pkg/hertz/biz/model/share"
+	"files/pkg/hertz/biz/model/api/share"
 	"fmt"
 	"k8s.io/klog/v2"
 	"strconv"
