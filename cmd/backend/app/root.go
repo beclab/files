@@ -177,6 +177,7 @@ user created with the credentials from options "username" and "password".`,
 
 		// step10: task manager
 		tasks.NewTaskManager()
+		tasks.TaskManager.GenerateKeepFile()
 
 		// step11: Crontab
 		// .	- CleanupOldFilesAndRedisEntries
