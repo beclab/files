@@ -672,6 +672,13 @@ func (t *taskManager) ClearCacheFiles() {
 
 }
 
+func (t *taskManager) GenerateKeepFile() {
+	var keepFilePath = common.DefaultLocalRootPath + common.DefaultKeepFileName
+	if err := files.CheckKeepFile(keepFilePath); err != nil {
+		klog.Errorf("generate keep file error: %v", err)
+	}
+}
+
 func (t *taskManager) formatFilePathWithoutTask(s string, taskId string) string {
 	if !strings.Contains(s, taskId) {
 		return s
