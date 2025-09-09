@@ -153,6 +153,16 @@ func ShareMiddleware() app.HandlerFunc {
 		}
 
 		klog.Infof("[share] share params: %s", common.ToJson(shareParam))
+		if strings.HasPrefix(path, "/api/share/share_path/") ||
+			strings.HasPrefix(path, "/api/share/share_token/") ||
+			strings.HasPrefix(path, "/api/share/share_member/") {
+			c.Next(ctx)
+			return
+		}
+
+		var download, upload bool
+		_ = download
+		_ = upload
 
 		shared, err := checkSharePath(shareParam.Extend)
 		if err != nil {

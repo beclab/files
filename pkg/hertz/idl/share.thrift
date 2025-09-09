@@ -100,7 +100,7 @@ struct GenerateShareTokenResp {
 }
 
 struct ListShareTokenReq {
-    1: required string PathId (api.query="path_id");
+    1: string PathId (api.query="path_id");
 }
 
 struct ListShareTokenResp {
@@ -127,7 +127,7 @@ struct AddShareMemberResp {
 }
 
 struct ListShareMemberReq {
-    1: required string PathId (api.query="path_id");
+    1: string PathId (api.query="path_id");
     2: string ShareMember (api.query="share_member");
     3: string Permission (api.query="permission");  // for multi-filtering
 }
@@ -157,15 +157,15 @@ struct RemoveShareMemberResp {
 // services
 service ShareService {
     CreateSharePathResp CreateSharePath(1: CreateSharePathReq request) (api.post="/api/share/share_path/*path");
-    ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/:node/");
-    DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/:node/");
+    ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/");
+    DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/");
 
-    GenerateShareTokenResp GenerateShareToken(1: GenerateShareTokenReq request) (api.post="/api/share/share_token/:node/");
-    ListShareTokenResp ListShareToken(1: ListShareTokenReq request) (api.get="/api/share/share_token/:node/");
-    RevokeShareTokenResp RevokeShareToken(1: RevokeShareTokenReq request) (api.delete="/api/share/share_token/:node/");
+    GenerateShareTokenResp GenerateShareToken(1: GenerateShareTokenReq request) (api.post="/api/share/share_token/");
+    ListShareTokenResp ListShareToken(1: ListShareTokenReq request) (api.get="/api/share/share_token/");
+    RevokeShareTokenResp RevokeShareToken(1: RevokeShareTokenReq request) (api.delete="/api/share/share_token/");
 
-    AddShareMemberResp AddShareMember(1: AddShareMemberReq request) (api.post="/api/share/share_member/:node/");
-    ListShareMemberResp ListShareMember(1: ListShareMemberReq request) (api.get="/api/share/share_member/:node/");
-    UpdateShareMemberPermissionResp UpdateShareMemberPermission(1: UpdateShareMemberPermissionReq request) (api.put="/api/share/share_member/:node/");
-    RemoveShareMemberResp RemoveShareMember(1: RemoveShareMemberReq request) (api.delete="/api/share/share_member/:node/");
+    AddShareMemberResp AddShareMember(1: AddShareMemberReq request) (api.post="/api/share/share_member/");
+    ListShareMemberResp ListShareMember(1: ListShareMemberReq request) (api.get="/api/share/share_member/");
+    UpdateShareMemberPermissionResp UpdateShareMemberPermission(1: UpdateShareMemberPermissionReq request) (api.put="/api/share/share_member/");
+    RemoveShareMemberResp RemoveShareMember(1: RemoveShareMemberReq request) (api.delete="/api/share/share_member/");
 }

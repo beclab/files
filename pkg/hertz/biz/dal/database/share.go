@@ -4,6 +4,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/hertz/biz/model/api/share"
 	"fmt"
+	"gorm.io/gorm"
 	"strconv"
 	"time"
 
@@ -12,8 +13,8 @@ import (
 
 // share_path
 
-func CreateSharePath(paths []*share.SharePath) ([]*share.SharePath, error) {
-	result := DB.Create(paths)
+func CreateSharePath(paths []*share.SharePath, db *gorm.DB) ([]*share.SharePath, error) {
+	result := db.Create(paths)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -21,15 +22,15 @@ func CreateSharePath(paths []*share.SharePath) ([]*share.SharePath, error) {
 	return paths, nil
 }
 
-func DeleteSharePath(pathID string) error {
-	return DB.Where("id = ?", pathID).Delete(&share.SharePath{}).Error
+func DeleteSharePath(pathID string, db *gorm.DB) error {
+	return db.Where("id = ?", pathID).Delete(&share.SharePath{}).Error
 }
 
-func UpdateSharePath(pathID string, updates map[string]interface{}) error {
+func UpdateSharePath(pathID string, updates map[string]interface{}, db *gorm.DB) error {
 	if updates["update_time"] == nil {
 		updates["update_time"] = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	return DB.Model(&share.SharePath{}).
+	return db.Model(&share.SharePath{}).
 		Where("id = ?", pathID).
 		Updates(updates).Error
 }
@@ -80,8 +81,8 @@ func CheckSharePathExpired(pathID string) (bool, error) {
 
 // share_token
 
-func CreateShareToken(tokens []*share.ShareToken) ([]*share.ShareToken, error) {
-	result := DB.Create(tokens)
+func CreateShareToken(tokens []*share.ShareToken, db *gorm.DB) ([]*share.ShareToken, error) {
+	result := db.Create(tokens)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -89,12 +90,12 @@ func CreateShareToken(tokens []*share.ShareToken) ([]*share.ShareToken, error) {
 	return tokens, nil
 }
 
-func DeleteShareToken(token string) error {
-	return DB.Where("token = ?", token).Delete(&share.ShareToken{}).Error
+func DeleteShareToken(token string, db *gorm.DB) error {
+	return db.Where("token = ?", token).Delete(&share.ShareToken{}).Error
 }
 
-func UpdateShareToken(tokenID int64, updates map[string]interface{}) error {
-	return DB.Model(&share.ShareToken{}).
+func UpdateShareToken(tokenID int64, updates map[string]interface{}, db *gorm.DB) error {
+	return db.Model(&share.ShareToken{}).
 		Where("id = ?", tokenID).
 		Updates(updates).Error
 }
@@ -111,8 +112,8 @@ func QueryShareToken(params *QueryParams, page, pageSize int64, orderBy, order s
 
 // share member
 
-func CreateShareMember(members []*share.ShareMember) ([]*share.ShareMember, error) {
-	result := DB.Create(members)
+func CreateShareMember(members []*share.ShareMember, db *gorm.DB) ([]*share.ShareMember, error) {
+	result := db.Create(members)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -120,15 +121,15 @@ func CreateShareMember(members []*share.ShareMember) ([]*share.ShareMember, erro
 	return members, nil
 }
 
-func DeleteShareMember(memberID int64) error {
-	return DB.Where("id = ?", memberID).Delete(&share.ShareMember{}).Error
+func DeleteShareMember(memberID int64, db *gorm.DB) error {
+	return db.Where("id = ?", memberID).Delete(&share.ShareMember{}).Error
 }
 
-func UpdateShareMember(memberID int64, updates map[string]interface{}) error {
+func UpdateShareMember(memberID int64, updates map[string]interface{}, db *gorm.DB) error {
 	if updates["update_time"] == nil {
 		updates["update_time"] = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	return DB.Model(&share.ShareMember{}).
+	return db.Model(&share.ShareMember{}).
 		Where("id = ?", memberID).
 		Updates(updates).Error
 }

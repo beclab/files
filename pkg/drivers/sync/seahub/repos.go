@@ -1,6 +1,7 @@
 package seahub
 
 import (
+	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/searpc"
@@ -11,6 +12,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -34,8 +36,10 @@ func getSystemDefaultRepoId() string {
 
 func HandleReposGet(owner string, types []string) ([]byte, error) {
 	filterBy := map[string]bool{
-		"mine":   false,
-		"shared": false,
+		"mine":         false,
+		"shared":       false,
+		"shared_by_me": false,
+		"shared_to_me": false,
 	}
 
 	if len(types) == 0 {
@@ -66,12 +70,29 @@ func HandleReposGet(owner string, types []string) ([]byte, error) {
 		}
 	}
 
-	if filterBy["shared"] {
-		sharedRepos, err := seaserv.GlobalSeafileAPI.GetShareInRepoList(username, -1, -1)
+	if filterBy["shared_to_me"] {
+		sharedInRepos, err := seaserv.GlobalSeafileAPI.GetShareInRepoList(username, -1, -1)
 		if err != nil {
 			klog.Errorln(err)
 		} else {
-			processSharedRepos(sharedRepos, username, &repoInfoList, usernameCache, nicknameCache)
+			processSharedInRepos(sharedInRepos, username, &repoInfoList, usernameCache, nicknameCache)
+		}
+	}
+
+	if filterBy["shared"] || filterBy["shared_by_me"] {
+		sharedOutRepos, err := GetSharedOutRepos(username)
+		if err != nil {
+			klog.Errorln(err)
+		}
+		sharedOutFolders, err := GetSharedOutFolders(username)
+		if err != nil {
+			klog.Errorln(err)
+		} else {
+			sharedOutRepos = append(sharedOutRepos, sharedOutFolders...)
+		}
+		if err = json.Unmarshal(common.ToBytes(sharedOutRepos), &repoInfoList); err != nil {
+			klog.Errorf("Failed to unmarshal response body: %v", err)
+			return nil, fmt.Errorf("failed to unmarshal response body: %v", err)
 		}
 	}
 
@@ -141,7 +162,7 @@ func processRepos(repos []map[string]string, username string,
 	}
 }
 
-func processSharedRepos(sharedRepos []map[string]string, username string,
+func processSharedInRepos(sharedRepos []map[string]string, username string,
 	repoInfoList *[]map[string]interface{}, usernameCache, nicknameCache map[string]string) {
 
 	owners := make(map[string]bool)
@@ -179,7 +200,7 @@ func processSharedRepos(sharedRepos []map[string]string, username string,
 
 		repoInfo := map[string]interface{}{
 			"type":                   "shared",
-			"repo_id":                repo["repo_id"],
+			"repo_id":                strings.Trim(repo["repo_id"], " "),
 			"repo_name":              repo["repo_name"],
 			"last_modified":          TimestampToISO(repo["last_modify"]),
 			"modifier_email":         repo["last_modifier"],
@@ -190,7 +211,7 @@ func processSharedRepos(sharedRepos []map[string]string, username string,
 			"owner_contact_email":    ownerContact,
 			"size":                   repo["size"],
 			"encrypted":              repo["encrypted"],
-			"permission":             repo["permission"],
+			"permission":             strings.Trim(repo["permission"], " "),
 			"status":                 NormalizeRepoStatusCode(repo["status"]),
 			"salt":                   getSalt(repo),
 		}
