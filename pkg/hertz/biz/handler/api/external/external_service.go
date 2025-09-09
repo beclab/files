@@ -324,12 +324,12 @@ func GetSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(external.GetSmbHistoryResp)
-	if err := json.Unmarshal(common.ToBytes(res), &resp); err != nil {
+	if err := json.Unmarshal(common.ToBytes(res), &resp.Data); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
-	c.JSON(consts.StatusOK, resp)
+	c.JSON(consts.StatusOK, resp.Data)
 }
 
 // PutSmbHistoryMethod .
@@ -337,7 +337,7 @@ func GetSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 func PutSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req external.PutSmbHistoryReq
-	err = c.BindAndValidate(&req)
+	err = c.BindAndValidate(&req.Data)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
@@ -384,7 +384,7 @@ func PutSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 func DeleteSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req external.DeleteSmbHistoryReq
-	err = c.BindAndValidate(&req)
+	err = c.BindAndValidate(&req.Data)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
