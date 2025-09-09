@@ -93,6 +93,8 @@ jobs:
               hz update -idl idl/tree.thrift
               echo "upload.thrift"
               hz update -idl idl/upload.thrift
+              echo "share.thrift"
+              hz update -idl idl/share.thrift
           
               cd ../..
               go mod tidy
