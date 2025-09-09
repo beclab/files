@@ -47,7 +47,7 @@ func FileTypeName(ft FileType) string {
 }
 
 var PREVIEW_FILE_EXT = map[FileType][]string{
-	IMAGE:       {"gif", "jpeg", "jpg", "png", "ico", "bmp", "tif", "tiff", "psd"},
+	IMAGE:       {"gif", "jpeg", "jpg", "png", "ico", "bmp", "tif", "tiff", "psd", "avif", "webp", "heic"},
 	DOCUMENT:    {"doc", "docx", "docxf", "oform", "ppt", "pptx", "odt", "fodt", "odp", "fodp"},
 	SPREADSHEET: {"xls", "xlsx", "ods", "fods"},
 	SVG:         {"svg"},

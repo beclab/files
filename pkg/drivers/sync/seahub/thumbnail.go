@@ -7,6 +7,8 @@ import (
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
 	"fmt"
+	"github.com/gen2brain/heic"
+	"github.com/srwiley/rasterx"
 	"image"
 	"io"
 	"net/http"
@@ -19,7 +21,9 @@ import (
 
 	_ "github.com/chai2010/tiff" // Register TIFF decoder
 	"github.com/disintegration/imaging"
+	"github.com/gen2brain/avif"
 	"github.com/rwcarlsen/goexif/exif"
+	"github.com/srwiley/oksvg"
 	_ "golang.org/x/image/webp" // Register WEBP decoder
 	"k8s.io/klog/v2"
 )
@@ -85,7 +89,7 @@ func GetThumbnail(fileParam *models.FileParam, previewSize string) ([]byte, erro
 		thumbnailDir := filepath.Join(THUMBNAIL_ROOT, strconv.Itoa(size))
 		_, thumbext := common.SplitNameExt(fileParam.Path)
 		thumbext = strings.ToLower(thumbext)
-		if !(thumbext == ".jpg" || thumbext == ".jpeg" || thumbext == ".png") {
+		if !(thumbext == ".jpg" || thumbext == ".jpeg" || thumbext == ".png" || thumbext == ".gif") {
 			thumbext = THUMBNAIL_EXTENSION
 		}
 		thumbnailFile := filepath.Join(thumbnailDir, fileId+thumbext)
@@ -301,7 +305,18 @@ func createThumbnailCommon(srcFile, thumbnailFile string, size int) (bool, int) 
 	klog.Infof("3. MIME type: %s", contentType)
 
 	var img image.Image
-	if img, err = ImageDecode(srcFile); err != nil {
+	if fileType == "AVIF" {
+		img, err = decodeAVIF(srcFile)
+	} else if fileType == "HEIC" {
+		img, err = decodeHEIC(srcFile)
+	} else if fileType == "GIF" {
+		img, err = imaging.Open(srcFile)
+	} else if fileType == "SVG" {
+		img, err = decodeSVG(srcFile)
+	} else {
+		img, err = ImageDecode(srcFile)
+	}
+	if err != nil {
 		klog.Errorf("4. Image decode test failed: %v", err)
 		return false, http.StatusBadRequest
 	} else {
@@ -346,16 +361,26 @@ func createThumbnailCommon(srcFile, thumbnailFile string, size int) (bool, int) 
 		}
 	}
 
-	thumb := imaging.Thumbnail(img, size, size, imaging.Lanczos)
-	if thumb == nil {
-		klog.Errorf("Thumbnail generation failed: nil image returned")
-		return false, http.StatusInternalServerError
+	var thumb image.Image
+	if fileType == "GIF" {
+		thumb = img
+	} else {
+		thumb = imaging.Thumbnail(img, size, size, imaging.Lanczos)
+		if thumb == nil {
+			klog.Errorf("Thumbnail generation failed: nil image returned")
+			return false, http.StatusInternalServerError
+		}
 	}
 
 	_, ext := common.SplitNameExt(thumbnailFile)
 	ext = strings.ToLower(ext)
 	var saveErr error
 	switch ext {
+	case ".gif":
+		saveErr = os.Link(srcFile, thumbnailFile)
+		if saveErr != nil {
+			saveErr = copyGifFile(srcFile, thumbnailFile)
+		}
 	case ".jpg", ".jpeg":
 		saveErr = imaging.Save(thumb, thumbnailFile, imaging.JPEGQuality(90))
 	case ".png":
@@ -415,7 +440,107 @@ func detectFileType(header []byte) string {
 		return "TIFF"
 	}
 
+	// AVIF
+	if len(header) >= 8 {
+		ftyp := string(header[:8])
+		if ftyp == "ftypavif" || ftyp == "ftypavis" {
+			return "AVIF"
+		}
+	}
+
+	// HEIC
+	if len(header) >= 8 {
+		ftyp := string(header[:8])
+		if ftyp == "ftypheic" || ftyp == "ftypmif1" || ftyp == "ftypmsf1" {
+			return "HEIC"
+		}
+	}
+
+	// SVG
+	if len(header) >= 5 {
+		start := 0
+		if len(header) >= 3 &&
+			header[0] == 0xEF &&
+			header[1] == 0xBB &&
+			header[2] == 0xBF {
+			start = 3
+		}
+
+		if len(header) >= start+5 &&
+			header[start] == '<' &&
+			header[start+1] == '?' &&
+			bytes.Contains(header[start:], []byte("xml")) {
+			return "SVG"
+		}
+
+		svgSignatures := [][]byte{
+			[]byte("<svg"), []byte("<SVG"), []byte("<Svg"),
+			[]byte("<sVg"), []byte("<svG"), []byte("<SVG "),
+		}
+
+		for _, sig := range svgSignatures {
+			if len(header) >= start+len(sig) &&
+				bytes.Equal(header[start:start+len(sig)], sig) {
+				return "SVG"
+			}
+		}
+	}
+
 	return "Unknown"
+}
+
+func copyGifFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(dst, data, 0644)
+	return err
+}
+
+func decodeAVIF(srcFile string) (image.Image, error) {
+	file, err := os.Open(srcFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	img, err := avif.Decode(file)
+	return img, err
+}
+
+func decodeHEIC(srcFile string) (image.Image, error) {
+	file, err := os.Open(srcFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	img, err := heic.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
+func decodeSVG(filename string) (image.Image, error) {
+	svgIcon, err := oksvg.ReadIcon(filename, oksvg.WarnErrorMode)
+	if err != nil {
+		return nil, err
+	}
+
+	width := int(svgIcon.ViewBox.W)
+	height := int(svgIcon.ViewBox.H)
+
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	scanner := rasterx.NewScannerGV(width, height, img, image.Rect(0, 0, width, height))
+	dasher := rasterx.NewDasher(width, height, scanner)
+
+	svgIcon.Draw(dasher, 1.0)
+
+	return img, nil
 }
 
 func ImageDecode(filePath string) (image.Image, error) {
@@ -428,7 +553,7 @@ func ImageDecode(filePath string) (image.Image, error) {
 	if _, format, err := image.DecodeConfig(file); err != nil {
 		return nil, fmt.Errorf("pre-decode check failed: %v", err)
 	} else {
-		klog.Infof("Detected format: %s", format) // 记录实际格式
+		klog.Infof("Detected format: %s", format)
 	}
 
 	if _, err := file.Seek(0, 0); err != nil {
