@@ -94,6 +94,11 @@ func (c *SeafServerThreadedRpcClient) SeafileGetDirentByPath(repoId, path string
 		repoId, path)
 }
 
+func (c *SeafServerThreadedRpcClient) SeafileListRepoSharedTo(fromUser, repoId string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_list_repo_shared_to", "objlist", []string{"string", "string"})(
+		fromUser, repoId)
+}
+
 func (c *SeafServerThreadedRpcClient) SeafileRenameFile(repoId, parentDir, oldname, newname, user string) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_rename_file", "int", []string{"string", "string", "string", "string", "string"})(
 		repoId, parentDir, oldname, newname, user)
@@ -146,14 +151,53 @@ func (c *SeafServerThreadedRpcClient) SeafileIsValidFilename(repoId string, file
 		repoId, filename)
 }
 
+func (c *SeafServerThreadedRpcClient) GetSharedRepoByPath(repoId, path, sharedTo string, isOrg int) (interface{}, error) {
+	return CreateRPCMethod(c, "get_shared_repo_by_path", "object", []string{"string", "string", "string", "int"})(
+		repoId, path, sharedTo, isOrg)
+}
+
 func (c *SeafServerThreadedRpcClient) SeafileRemoveShare(repoId, fromEmail, toEmail string) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_remove_share", "int", []string{"string", "string", "string"})(
 		repoId, fromEmail, toEmail)
 }
 
+func (c *SeafServerThreadedRpcClient) SetSharePermission(repoId, fromEmail, toEmail, permission string) (interface{}, error) {
+	return CreateRPCMethod(c, "set_share_permission", "int", []string{"string", "string", "string", "string"})(
+		repoId, fromEmail, toEmail, permission)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileGetSharedUsersForSubdir(repoId, path, fromUser string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_shared_users_for_subdir", "objlist", []string{"string", "string", "string"})(
+		repoId, path, fromUser)
+}
+
+func (c *SeafServerThreadedRpcClient) SeafileAddShare(repoId, fromEmail, toEmail, permission string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_add_share", "string", []string{"string", "string", "string", "string"})(
+		repoId, fromEmail, toEmail, permission)
+}
+
 func (c *SeafServerThreadedRpcClient) SeafileListShareRepos(email, queryCol string, start, limit int) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_list_share_repos", "objlist", []string{"string", "string", "int", "int"})(
 		email, queryCol, start, limit)
+}
+
+func (c *SeafServerThreadedRpcClient) ShareSubdirToUser(repoId, path, owner, shareUser, permission, passwd string) (interface{}, error) {
+	return CreateRPCMethod(c, "share_subdir_to_user", "string", []string{"string", "string", "string", "string", "string", "string"})(
+		repoId, path, owner, shareUser, permission, passwd)
+}
+
+func (c *SeafServerThreadedRpcClient) UnshareSubdirForUser(repoId, path, owner, shareUser string) (interface{}, error) {
+	return CreateRPCMethod(c, "unshare_subdir_for_user", "int", []string{"string", "string", "string", "string"})(
+		repoId, path, owner, shareUser)
+}
+
+func (c *SeafServerThreadedRpcClient) UpdateShareSubdirPermForUser(repoId, path, owner, shareUser, permission string) (interface{}, error) {
+	return CreateRPCMethod(c, "update_share_subdir_perm_for_user", "int", []string{"string", "string", "string", "string", "string"})(
+		repoId, path, owner, shareUser, permission)
+}
+
+func (c *SeafServerThreadedRpcClient) ListInnerPubReposByOwner(user string) (interface{}, error) {
+	return CreateRPCMethod(c, "list_inner_pub_repos_by_owner", "objlist", []string{"string"})(user)
 }
 
 func (c *SeafServerThreadedRpcClient) IsInnerPubRepo(repoId string) (interface{}, error) {

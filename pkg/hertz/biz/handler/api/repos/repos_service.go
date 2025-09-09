@@ -26,18 +26,32 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	var res []byte
-	if req.Type != nil && (*req.Type == "shared" || *req.Type == "share_to_me") {
-		res = common.ToBytes(map[string][]string{
-			"repos": {},
-		})
-	} else {
-		owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
-		if owner == "" {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
-			return
-		}
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
 
+	var res []byte
+	if req.Type != nil {
+		if *req.Type == "shared" {
+			res, err = seahub.HandleReposGet(owner, []string{"shared_by_me"})
+			if err != nil {
+				klog.Errorf("get repos error: %v", err)
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get repos error: %v", err)})
+				return
+			}
+			klog.Infof("get repos: %s", string(res))
+		} else if *req.Type == "share_to_me" {
+			res, err = seahub.HandleReposGet(owner, []string{"shared_to_me"})
+			if err != nil {
+				klog.Errorf("get repos error: %v", err)
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get repos error: %v", err)})
+				return
+			}
+			klog.Infof("get repos: %s", string(res))
+		}
+	} else {
 		res, err = seahub.HandleReposGet(owner, []string{"mine"})
 		if err != nil {
 			klog.Errorf("get repos error: %v", err)
@@ -47,8 +61,8 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 		klog.Infof("get repos: %s", string(res))
 	}
 
-	resp := new(repos.GetReposResp)
-	if err = json.Unmarshal(res, &resp); err != nil {
+	resp := new(map[string]interface{}) // different share type with different responses
+	if err := json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
