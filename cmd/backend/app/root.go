@@ -10,6 +10,7 @@ import (
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/global"
 	"files/pkg/hertz"
+	"files/pkg/hertz/biz/dal"
 	"files/pkg/img"
 	"files/pkg/integration"
 	"files/pkg/redisutils"
@@ -120,6 +121,7 @@ user created with the credentials from options "username" and "password".`,
 
 		// Step1：Init postgres (including migration).
 		// For share, search and other features in the future
+		dal.Init()
 
 		// Step2: Init redis
 		// For watcher, preview, smb and other features in the future
