@@ -47,20 +47,20 @@ struct UnmountResp {
 }
 
 struct SmbInfo {
-    1: optional string url;
-    2: optional string username;
-    3: optional string password;
-    4: optional i64 timestamp;
+    1: string url;
+    2: string username;
+    3: string password;
+    4: i64 timestamp;
 }
 
 struct GetSmbHistoryResp {
-    1: optional list<SmbInfo> data;
+    1: list<SmbInfo> data;
 }
 
 struct SmbHistoryInfo {
     1: required string url (api.data="url");
-    2: optional string username (api.data="username");
-    3: optional string password (api.data="password");
+    2: string username (api.data="username");
+    3: string password (api.data="password");
 }
 
 struct PutSmbHistoryReq {
