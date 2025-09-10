@@ -465,6 +465,16 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 
 			klog.Infof("[Task] Id: %s, get job core stats: %s, status: %s", t.id, common.ToJson(data), common.ToJson(jobStatusData))
 
+			if jobStatusData.Success && jobStatusData.Finished {
+				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)
+				var progress = 100
+				transferFinished = true
+				t.updateProgress(int(progress), data.TotalBytes)
+				done = true
+				err = nil
+				break
+			}
+
 			var totalTransfers = t.totalSize
 			var transfers = data.Bytes
 
