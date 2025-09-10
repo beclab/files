@@ -304,10 +304,9 @@ func (t *taskManager) ClearTasks() {
 func (t *taskManager) GetCloudOrPosixDupNames(taskId string, action string, uploadParentPath string, src, dst, orgSrc, orgDst *models.FileParam) (string, error) {
 	t.Lock()
 	defer t.Unlock()
-
 	var ok bool
-	var err error
 
+	var err error
 	var newDstPath string
 
 	var cmd = rclone.Command
@@ -385,7 +384,6 @@ func (t *taskManager) GetCloudOrPosixDupNames(taskId string, action string, uplo
 			if err != nil {
 				break
 			}
-
 			var fs = fsPrefix + dstPrefix
 			var opts = &operations.OperationsOpt{
 				Recurse:    false,
@@ -404,7 +402,9 @@ func (t *taskManager) GetCloudOrPosixDupNames(taskId string, action string, uplo
 
 			lists, err = cmd.GetOperation().List(fs, opts, filter)
 			if err != nil {
-				break
+				if !strings.Contains(err.Error(), "directory not found") {
+					break
+				}
 			}
 
 			var dupNames []string
