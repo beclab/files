@@ -10,13 +10,14 @@ import (
 	raw "files/pkg/hertz/biz/model/api/raw"
 	"files/pkg/models"
 	"fmt"
+	"mime"
+	"strings"
+	"time"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"mime"
-	"strings"
-	"time"
 )
 
 // RawMethod .
@@ -74,6 +75,8 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 	if rawInline == "true" {
 		if rawMeta == "true" {
 			c.SetContentType("application/json; charset=utf-8")
+		} else {
+			c.SetContentType(common.MimeTypeByExtension(file.FileName))
 		}
 		c.Header("Cache-Control", "private")
 		c.Header("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
@@ -93,7 +96,6 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if !file.IsCloud {
-		c.Header("Content-Disposition", "attachment; filename="+file.FileName)
 		c.Header("Last-Modified", file.FileModified.UTC().Format(time.RFC1123))
 		ifMatch := string(c.GetHeader("If-Modified-Since"))
 		if ifMatch != "" {
