@@ -11,12 +11,14 @@ import (
 	preview "files/pkg/hertz/biz/model/api/preview"
 	"files/pkg/models"
 	"fmt"
+	"mime"
+	"strings"
+	"time"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"strings"
-	"time"
 )
 
 // PreviewMethod .
@@ -72,10 +74,11 @@ func PreviewMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	c.Header("Content-Disposition", "inline")
+	c.Header("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
+		"filename": fileData.FileName,
+	}))
 
 	if !fileData.IsCloud {
-		c.Header("Content-Disposition", "attachment; filename="+fileData.FileName)
 		c.Header("Last-Modified", fileData.FileModified.UTC().Format(time.RFC1123))
 		ifMatch := string(c.GetHeader("If-Modified-Since"))
 		if ifMatch != "" {
@@ -87,6 +90,7 @@ func PreviewMethod(ctx context.Context, c *app.RequestContext) {
 				return
 			}
 		}
+		c.SetContentType(common.MimeTypeByExtension(fileData.FileName)) // todo temp
 		c.SetBodyStream(bytes.NewReader(fileData.Data), len(fileData.Data))
 	} else {
 		for k, vs := range fileData.RespHeader {
@@ -94,6 +98,7 @@ func PreviewMethod(ctx context.Context, c *app.RequestContext) {
 				c.Header(k, v)
 			}
 		}
+		c.SetContentType(common.MimeTypeByExtension(fileData.FileName))
 		c.SetStatusCode(fileData.StatusCode)
 		c.SetBodyStream(bytes.NewReader(fileData.Data), len(fileData.Data))
 	}
