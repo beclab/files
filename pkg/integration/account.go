@@ -10,6 +10,8 @@ import (
 	"github.com/emicklei/go-restful/v3"
 	authv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 )
@@ -17,26 +19,45 @@ import (
 func (i *integration) getAccounts(owner string, authToken string) ([]*accountsResponseData, error) {
 	settingsUrl := fmt.Sprintf("http://settings.user-system-%s:28080/api/account/all", owner)
 
-	// klog.Infof("fetch integration from settings: %s", settingsUrl)
-	resp, err := i.rest.SetDebug(false).R().SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
-		SetResult(&accountsResponse{}).
-		Get(settingsUrl)
-
-	if err != nil {
-		return nil, err
+	var backoff = wait.Backoff{
+		Duration: 2 * time.Second,
+		Factor:   2,
+		Jitter:   0.1,
+		Steps:    3,
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("request status invalid, status code: %d, msg: %s", resp.StatusCode(), string(resp.Body()))
+	var result *accountsResponse
+
+	if e := retry.OnError(backoff, func(err error) bool {
+		return true
+	}, func() error {
+		// klog.Infof("fetch integration from settings: %s", settingsUrl)
+		resp, err := i.rest.SetDebug(false).R().SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
+			SetResult(&accountsResponse{}).
+			Get(settingsUrl)
+
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode() != http.StatusOK {
+			klog.Errorf("request accounts invalid, user: %s, status: %d, body: %s", owner, resp.StatusCode(), string(resp.Body()))
+			return fmt.Errorf("request status invalid, code: %d, msg: %s", resp.StatusCode(), string(resp.Body()))
+		}
+
+		result = resp.Result().(*accountsResponse)
+
+		if result.Code != 0 {
+			klog.Errorf("get accounts failed, user: %s, code: %d, body: %s", owner, result.Code, string(resp.Body()))
+			return fmt.Errorf("code %d invalid, msg: %s", result.Code, string(resp.Body()))
+		}
+
+		return nil
+	}); e != nil {
+		return nil, fmt.Errorf("get accounts failed, error: %v", e)
 	}
 
-	accountsResp := resp.Result().(*accountsResponse)
-
-	if accountsResp.Code != 0 {
-		return nil, fmt.Errorf("get accounts failed, code:  %d, msg: %s", accountsResp.Code, string(resp.Body()))
-	}
-
-	return accountsResp.Data, nil
+	return result.Data, nil
 }
 
 func (i *integration) getToken(owner string, accountName string, accountType string, authToken string) (*accountResponseData, error) {
