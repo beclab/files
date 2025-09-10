@@ -32,9 +32,15 @@ struct MountReq {
     4: required string externalType (api.query="external_type");
 }
 
+struct MountPath {
+    1: bool mounted;
+    2: string path;
+}
+
 struct MountResp {
     1: i32 code;
     2: string message;
+    3: list<MountPath> data;
 }
 
 struct UnmountReq {
