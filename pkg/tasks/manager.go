@@ -316,30 +316,31 @@ func (t *taskManager) GetCloudOrPosixDupNames(taskId string, action string, uplo
 	var orgSrcExt, orgSrcNamePrefix string
 
 	var uploadFullPathFirstDir, uploadFullPathSuffix string
+	_ = uploadFullPathFirstDir
 	_ = uploadFullPathSuffix
 
 	var dstTemp *models.FileParam
 
 	if action == common.ActionUpload { // upload file to Cloud
 		dstTemp = dst
-		dstUri, _ := dstTemp.GetResourceUri()
-		// /google/ACCOUNT
-		var uploadSrcRootPath = strings.TrimPrefix(uploadParentPath, dstUri) // /google/ACCOUNT/RootPath/ , /google/ACCOUNT  ==> /RootPath/
+		// dstUri, _ := dstTemp.GetResourceUri()
+		// // /google/ACCOUNT
+		// var uploadSrcRootPath = strings.TrimPrefix(uploadParentPath, dstUri) // /google/ACCOUNT/RootPath/ , /google/ACCOUNT  ==> /RootPath/
 
-		var uploadSplitPath = strings.TrimPrefix(dstTemp.Path, uploadSrcRootPath) // RootPath/s1/s2/file
-		uploadSplitPath = strings.TrimPrefix(uploadSplitPath, "/")
+		// var uploadSplitPath = strings.TrimPrefix(dstTemp.Path, uploadSrcRootPath) // RootPath/s1/s2/file
+		// uploadSplitPath = strings.TrimPrefix(uploadSplitPath, "/")
 
-		if strings.Contains(uploadSplitPath, "/") {
-			var splitPos = strings.Index(uploadSplitPath, "/")
-			uploadFullPathFirstDir = uploadSplitPath[:splitPos]       // firstdir
-			uploadFullPathSuffix = uploadSplitPath[splitPos:]         // /dir1/dir2/file.suf
-			dstTemp.Path = uploadSrcRootPath + uploadFullPathFirstDir // short path, like  /google/ACCOUNT/RootPath/first/
-			if !strings.HasSuffix(dstTemp.Path, "/") {
-				dstTemp.Path += "/"
-			}
-		} else {
-			dstTemp = dst
-		}
+		// if strings.Contains(uploadSplitPath, "/") {
+		// 	var splitPos = strings.Index(uploadSplitPath, "/")
+		// 	uploadFullPathFirstDir = uploadSplitPath[:splitPos]       // firstdir
+		// 	uploadFullPathSuffix = uploadSplitPath[splitPos:]         // /dir1/dir2/file.suf
+		// 	dstTemp.Path = uploadSrcRootPath + uploadFullPathFirstDir // short path, like  /google/ACCOUNT/RootPath/first/
+		// 	if !strings.HasSuffix(dstTemp.Path, "/") {
+		// 		dstTemp.Path += "/"
+		// 	}
+		// } else {
+		// 	dstTemp = dst
+		// }
 	} else {
 		dstTemp = dst
 	}
