@@ -68,10 +68,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	var fileParam = contextArgs.FileParam
 	var queryParam = contextArgs.QueryParam
 	var owner = fileParam.Owner
-	var path, err = url.PathUnescape(fileParam.Path)
-	if err != nil {
-		return nil, fmt.Errorf("path %s urldecode error: %v", fileParam.Path, err)
-	}
+	var path = fileParam.Path
 
 	var _, isFile = files.GetFileNameFromPath(path)
 
@@ -176,22 +173,18 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
  */
 func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
 	var err error
+
 	var fileParam = contextArgs.FileParam
 	var user = fileParam.Owner
-	fileParam.Path, err = url.PathUnescape(fileParam.Path)
-	if err != nil {
-		return nil, err
-	}
 	var pathPrefix = files.GetPrefixPath(fileParam.Path)
 	var fileName, isFile = files.GetFileNameFromPath(fileParam.Path)
-
 	if !isFile {
 		return nil, fmt.Errorf("not a file")
 	}
 
 	fileParam.Path = pathPrefix + fileName
 
-	var path = pathPrefix + fileName
+	var path = pathPrefix + url.PathEscape(fileName)
 
 	klog.Infof("Cloud raw, user: %s, path: %s, args: %s", user, path, common.ToJson(contextArgs))
 

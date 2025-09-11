@@ -11,7 +11,6 @@ import (
 	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -607,32 +606,26 @@ func (r *rclone) Delete(param *models.FileParam, dirents []string) ([]string, er
 	for current, dp := range dirents {
 		dp = strings.TrimSpace(dp) //  /path/ or /file
 
-		dpd, err := url.PathUnescape(dp)
-		if err != nil {
-			klog.Errorf("[rclone] delete, path unescape error: %v, path: %s", err, dp)
-			deleteFailedPaths = append(deleteFailedPaths, dp)
-			continue
-		}
-
-		klog.Infof("[rclone] delete, delete (%d/%d), user: %s, file: %s", current+1, total, user, dpd)
+		klog.Infof("[rclone] delete, delete (%d/%d), user: %s, file: %s", current+1, total, user, dp)
 
 		fsPrefix, err := r.GetFsPrefix(param)
-		_, isFile := files.GetFileNameFromPath(dpd)
+		_, isFile := files.GetFileNameFromPath(dp)
 
 		var fs, remote string
 
 		if isFile {
 			fs = fsPrefix + param.Path
-			remote = strings.TrimPrefix(dpd, "/")
+			remote = strings.TrimPrefix(dp, "/")
 			if err = r.GetOperation().Deletefile(fs, remote); err != nil {
 				deleteFailedPaths = append(deleteFailedPaths, dp)
 			}
 
 		} else {
 			fs = fsPrefix + param.Path
-			remote = strings.Trim(dpd, "/")
+			remote = strings.Trim(dp, "/")
 
 			if err = r.GetOperation().Purge(fs, remote); err != nil {
+				// if err = r.DeleteDir(fs, remote); err != nil { // todo replace purge, google drive
 				deleteFailedPaths = append(deleteFailedPaths, dp)
 			}
 		}
@@ -709,4 +702,18 @@ func (r *rclone) FormatFilter(s string, fuzzy bool) []string {
 
 	result = append(result, "- *")
 	return result
+}
+
+func (r *rclone) DeleteDir(fs, remote string) error {
+	fs = fs + remote
+	remote = ""
+	if err := r.operation.Delete(fs, remote); err != nil {
+		return err
+	}
+
+	if err := r.operation.RmDirs(fs, remote); err != nil {
+		return err
+	}
+
+	return nil
 }
