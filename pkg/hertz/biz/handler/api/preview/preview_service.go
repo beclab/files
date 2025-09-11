@@ -95,7 +95,7 @@ func PreviewMethod(ctx context.Context, c *app.RequestContext) {
 		} else {
 			name, ext := common.SplitNameExt(fileData.FileName)
 			ext = strings.ToLower(ext)
-			if ext == ".jpg" || ext == ".jpeg" || ext == ".gif" {
+			if ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".tiff" || ext == ".heic" {
 				c.SetContentType(common.MimeTypeByExtension(fileData.FileName))
 			} else {
 				c.SetContentType(common.MimeTypeByExtension(name + ".png"))
