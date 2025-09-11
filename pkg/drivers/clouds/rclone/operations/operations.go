@@ -26,7 +26,11 @@ type Interface interface {
 	Copy(srcFs, dstFs string) error // copy a directory,no suit for files
 	Move(srcFs, dstFs string) error // move a directory, no suit for files
 
+	Delete(fs string, remote string) error
 	Deletefile(fs string, remote string) error
+
+	RmDirs(fs string, remote string) error
+
 	Purge(fs string, remote string) error
 
 	Size(fs string) (*OperationsSizeResp, error)
@@ -274,6 +278,27 @@ func (o *operations) Move(srcFs, dstFs string) error {
 
 }
 
+func (o *operations) Delete(fs string, remote string) error {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, DeletePath)
+
+	var param = OperationsReq{
+		Fs:     fs,
+		Remote: remote,
+	}
+
+	klog.Infof("[rclone] operations delete, param: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations delete error: %v, fs: %s, remote: %s", err, fs, remote)
+		return err
+	}
+
+	klog.Infof("[rclone] operations delete done! resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
+
+	return nil
+}
+
 func (o *operations) Deletefile(fs string, remote string) error {
 	var url = fmt.Sprintf("%s/%s", common.ServeAddr, DeletefilePath)
 
@@ -291,6 +316,28 @@ func (o *operations) Deletefile(fs string, remote string) error {
 	}
 
 	klog.Infof("[rclone] operations deletefile done! resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
+
+	return nil
+}
+
+func (o *operations) RmDirs(fs string, remote string) error {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, RmDirsPath)
+	var leaveRoot = true
+	var param = OperationsReq{
+		Fs:        fs,
+		Remote:    remote,
+		LeaveRoot: &leaveRoot,
+	}
+
+	klog.Infof("[rclone] operations rmdirs, param: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations rmdirs error: %v, fs: %s, remote: %s", err, fs, remote)
+		return err
+	}
+
+	klog.Infof("[rclone] operations rmdirs done! resp: %s, fs: %s, remote: %s", string(resp), fs, remote)
 
 	return nil
 }
