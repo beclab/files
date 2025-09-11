@@ -597,7 +597,7 @@ func (t *taskManager) ClearCacheFiles() {
 		var pvcname = global.GlobalData.GetPvcCache(user)
 		var uploadPath = fmt.Sprintf("%s/%s%s", common.CACHE_PREFIX, pvcname, common.DefaultUploadToCloudTempPath)
 		filepath.Walk(uploadPath, func(path string, info fs.FileInfo, err error) error {
-			if info.ModTime().Before(uploadCacheExpired) {
+			if info != nil && info.ModTime().Before(uploadCacheExpired) {
 				files = append(files, path)
 			}
 			return nil
@@ -615,7 +615,7 @@ func (t *taskManager) ClearCacheFiles() {
 		files = nil
 		var downloadPath = fmt.Sprintf("%s/%s%s", common.CACHE_PREFIX, pvcname, common.DefaultSyncUploadToCloudTempPath)
 		filepath.Walk(downloadPath, func(path string, info fs.FileInfo, err error) error {
-			if info.IsDir() {
+			if info != nil && info.IsDir() {
 				if info.ModTime().Before(downloadCacheExpired) {
 					files = append(files, path)
 				}
@@ -635,7 +635,7 @@ func (t *taskManager) ClearCacheFiles() {
 		files = nil
 		var thumbPath = fmt.Sprintf("%s/%s%s%s", common.CACHE_PREFIX, pvcname, common.DefaultLocalFileCachePath, common.CacheThumb)
 		filepath.Walk(thumbPath, func(path string, info fs.FileInfo, err error) error {
-			if info.ModTime().Before(thumbCacheExpired) {
+			if info != nil && info.ModTime().Before(thumbCacheExpired) {
 				files = append(files, path)
 			}
 			return nil
@@ -653,7 +653,7 @@ func (t *taskManager) ClearCacheFiles() {
 		files = nil
 		var bufferPath = fmt.Sprintf("%s/%s%s%s", common.CACHE_PREFIX, pvcname, common.DefaultLocalFileCachePath, common.CacheBuffer)
 		filepath.Walk(bufferPath, func(path string, info fs.FileInfo, err error) error {
-			if info.IsDir() {
+			if info != nil && info.IsDir() {
 				if info.ModTime().Before(bufferCacheExpired) {
 					files = append(files, path)
 				}
