@@ -89,7 +89,11 @@ func GetThumbnail(fileParam *models.FileParam, previewSize string) ([]byte, erro
 		thumbnailDir := filepath.Join(THUMBNAIL_ROOT, strconv.Itoa(size))
 		_, thumbext := common.SplitNameExt(fileParam.Path)
 		thumbext = strings.ToLower(thumbext)
-		if !(thumbext == ".jpg" || thumbext == ".jpeg" || thumbext == ".png" || thumbext == ".gif") {
+		if thumbext == ".heic" || thumbext == ".tiff" {
+			if size == 128 {
+				thumbext = THUMBNAIL_EXTENSION
+			}
+		} else if !(thumbext == ".jpg" || thumbext == ".jpeg" || thumbext == ".png" || thumbext == ".gif") {
 			thumbext = THUMBNAIL_EXTENSION
 		}
 		thumbnailFile := filepath.Join(thumbnailDir, fileId+thumbext)
@@ -380,6 +384,16 @@ func createThumbnailCommon(srcFile, thumbnailFile string, size int) (bool, int) 
 		saveErr = os.Link(srcFile, thumbnailFile)
 		if saveErr != nil {
 			saveErr = copyGifFile(srcFile, thumbnailFile)
+		}
+	case ".heic", ".tiff": // TODO: temp
+		if size == 128 {
+			saveErr = imaging.Save(thumb, strings.TrimSuffix(thumbnailFile, ext)+THUMBNAIL_EXTENSION, imaging.PNGCompressionLevel(6))
+			klog.Warningf("Unknown format %s, saved as PNG", ext)
+		} else {
+			saveErr = os.Link(srcFile, thumbnailFile)
+			if saveErr != nil {
+				saveErr = copyGifFile(srcFile, thumbnailFile)
+			}
 		}
 	case ".jpg", ".jpeg":
 		saveErr = imaging.Save(thumb, thumbnailFile, imaging.JPEGQuality(90))
