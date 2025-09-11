@@ -288,6 +288,8 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 		Metadata:   false,
 	}
 
+	filePathName, _ := files.GetFileNameFromPath(fileParam.Path)
+
 	klog.Infof("[service] list, fs: %s, param: %s", fs, common.ToJson(fileParam))
 
 	data, err := s.command.GetOperation().List(fs, opts, nil)
@@ -296,6 +298,10 @@ func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, 
 	}
 
 	var result = &models.CloudListResponse{
+		FileType:   fileParam.FileType,
+		FileExtend: fileParam.Extend,
+		FilePath:   fileParam.Path,
+		Name:       filePathName,
 		StatusCode: "SUCCESS",
 	}
 

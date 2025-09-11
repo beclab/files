@@ -684,7 +684,11 @@ func GenerateDupName(existNames []string, targetName string, isFile bool) string
 }
 
 func GetFileNameFromPath(s string) (string, bool) {
-
+	if s == "/" {
+		return "", false
+	} else if s == "" {
+		return "", true
+	}
 	var isFile = strings.HasSuffix(s, "/")
 	var tmp = strings.TrimSuffix(s, "/")
 	var p = strings.LastIndex(tmp, "/")

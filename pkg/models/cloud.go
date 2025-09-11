@@ -35,6 +35,10 @@ type CloudListResponse struct {
 	StatusCode string               `json:"status_code"`
 	FailReason *string              `json:"fail_reason,omitempty"`
 	Data       []*CloudResponseData `json:"data"`
+	FileType   string               `json:"fileType"`
+	FileExtend string               `json:"fileExtend"`
+	FilePath   string               `json:"filePath"`
+	Name       string               `json:"name"`
 	sync.Mutex
 }
 
