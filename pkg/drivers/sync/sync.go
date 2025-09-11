@@ -34,6 +34,7 @@ type Files struct {
 	FsType   string  `json:"fileType"`
 	FsExtend string  `json:"fileExtend"`
 	FsPath   string  `json:"filePath"`
+	Name     string  `json:"name"`
 }
 
 type File struct {
@@ -423,9 +424,12 @@ func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 		return nil, err
 	}
 
+	fileName, _ := files.GetFileNameFromPath(fileParam.Path)
+
 	data.FsType = fileParam.FileType
 	data.FsExtend = fileParam.Extend
 	data.FsPath = fileParam.Path
+	data.Name = fileName
 
 	if data.Items != nil && len(data.Items) > 0 {
 		for _, item := range data.Items {
