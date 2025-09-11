@@ -372,45 +372,23 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		return false, nil, errors.New("Unsupported file size")
 	}
 
-	const maxRetries = 100
-	for retry := 0; retry < maxRetries; retry++ {
-		if info.Offset-offsetEnd > 0 {
-			return true, nil, nil
+	if info.Offset-offsetEnd > 0 {
+		return true, nil, nil
+	}
+
+	if info.Offset == offsetStart || (info.Offset-offsetEnd < 0 && info.Offset-offsetStart > 0) {
+		klog.Infof("resumableInfo.MD5=%s", resumableInfo.MD5)
+		fileSize, chunkMd5, err := SaveFile(fileHeader, filepath.Join(uploadTempPath, tmpName), newFile, offsetStart, resumableInfo.MD5 != "")
+		if err != nil {
+			klog.Warningf("[upload] uploadId: %s, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, err)
+			return false, nil, err
 		}
-
-		if info.Offset == offsetStart || (info.Offset-offsetEnd < 0 && info.Offset-offsetStart > 0) {
-			if resumableInfo.MD5 != "" {
-				md5, err := common.MD5FileHeader(fileHeader)
-				if err != nil {
-					return false, nil, err
-				}
-				if md5 != resumableInfo.MD5 {
-					msg := fmt.Sprintf("Invalid MD5, accepted %s, calculated %s", resumableInfo.MD5, md5)
-					return false, nil, errors.New(msg)
-				}
-			}
-
-			fileSize, err := SaveFile(fileHeader, filepath.Join(uploadTempPath, tmpName), newFile, offsetStart)
-			if err != nil {
-				klog.Warningf("[upload] uploadId: %s, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, err)
-				return false, nil, err
-			}
-			info.Offset = fileSize
-			FileInfoManager.UpdateInfo(innerIdentifier, info)
-			break
+		if resumableInfo.MD5 != "" && chunkMd5 != resumableInfo.MD5 {
+			msg := fmt.Sprintf("Invalid MD5, accepted %s, calculated %s", resumableInfo.MD5, chunkMd5)
+			return false, nil, errors.New(msg)
 		}
-
-		time.Sleep(1000 * time.Millisecond)
-
-		if retry < maxRetries-1 {
-			exist, info = FileInfoManager.ExistFileInfo(innerIdentifier)
-			if !exist {
-				return false, nil, errors.New("invalid innerIdentifier")
-			}
-			continue
-		}
-
-		return false, nil, errors.New("Failed to match offset after multiple retries")
+		info.Offset = fileSize
+		FileInfoManager.UpdateInfo(innerIdentifier, info)
 	}
 
 	if err = UpdateFileInfo(info, uploadTempPath); err != nil {

@@ -156,7 +156,7 @@ func ParseContentRange(ranges string) (int64, int64, bool) {
 	return firstByte, lastByte, true
 }
 
-func SaveFile(fileHeader *multipart.FileHeader, filePath string, newFile bool, offset int64) (int64, error) {
+func SaveFile(fileHeader *multipart.FileHeader, filePath string, newFile bool, offset int64, calMD5 bool) (int64, string, error) {
 	startTime := time.Now()
 	klog.Infof("--- Function SaveFile started at: %s\n", startTime)
 
@@ -165,16 +165,12 @@ func SaveFile(fileHeader *multipart.FileHeader, filePath string, newFile bool, o
 		klog.Infof("--- Function SaveFile ended at: %s\n", endTime)
 	}()
 
-	localStartTime := time.Now()
-	klog.Infof("------ fileHeader.Open() started at: %s\n", localStartTime)
 	// Open source file
 	file, err := fileHeader.Open()
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	defer file.Close()
-	localEndTime := time.Now()
-	klog.Infof("------ fileHeader.Open() ended at: %s\n", localEndTime)
 
 	// Determine file open flags based on newFile parameter
 	var flags int
@@ -184,51 +180,53 @@ func SaveFile(fileHeader *multipart.FileHeader, filePath string, newFile bool, o
 		flags = os.O_WRONLY | os.O_CREATE | os.O_APPEND
 	}
 
-	localStartTime = time.Now()
-	klog.Infof("------ OpenFile() started at: %s\n", localStartTime)
 	// Create target file with appropriate flags
 	dstFile, err := os.OpenFile(filePath, flags, 0644)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	defer dstFile.Close()
-	localEndTime = time.Now()
-	klog.Infof("------ OpenFile() ended at: %s\n", localEndTime)
 
-	localStartTime = time.Now()
-	klog.Infof("------ Seek() started at: %s\n", localStartTime)
 	// Seek to the specified offset if not creating a new file
 	if !newFile {
 		_, err = dstFile.Seek(offset, io.SeekStart)
 		if err != nil {
-			return 0, err
+			return 0, "", err
 		}
 	}
-	localEndTime = time.Now()
-	klog.Infof("------ Seek() ended at: %s\n", localEndTime)
 
-	localStartTime = time.Now()
-	klog.Infof("------ io.Copy() started at: %s\n", localStartTime)
 	// Write the contents of the source file to the target file
-	_, err = io.Copy(dstFile, file)
-	if err != nil {
-		return 0, err
-	}
-	localEndTime = time.Now()
-	klog.Infof("------ io.Copy() ended at: %s\n", localEndTime)
+	var (
+		written  int64
+		chunkMD5 string
+	)
 
-	localStartTime = time.Now()
-	klog.Infof("------ getFileSize started at: %s\n", localStartTime)
+	if calMD5 {
+		hashObj := md5.New()
+
+		tee := io.TeeReader(file, hashObj)
+		written, err = io.Copy(dstFile, tee)
+		if err != nil {
+			return 0, "", err
+		}
+
+		chunkMD5 = hex.EncodeToString(hashObj.Sum(nil))
+	} else {
+		written, err = io.Copy(dstFile, file)
+		if err != nil {
+			return 0, "", err
+		}
+		chunkMD5 = ""
+	}
+
 	// Get new file size
 	fileInfo, err := dstFile.Stat()
 	if err != nil {
-		return 0, err
+		return written, chunkMD5, err
 	}
 	fileSize := fileInfo.Size()
-	localEndTime = time.Now()
-	klog.Infof("------ getFileSize ended at: %s\n", localEndTime)
 
-	return fileSize, nil
+	return fileSize, chunkMD5, nil
 }
 
 func UpdateFileInfo(fileInfo FileInfo, uploadsDir string) error {

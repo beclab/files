@@ -154,9 +154,10 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	uploadArg.Node = node
 	uploadArg.UploadId = uid
 	uploadArg.ChunkInfo = new(models.ResumableInfo)
-	if err = c.BindAndValidate(uploadArg.ChunkInfo); err != nil {
-		klog.Errorf("Bind error: %v", err)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "bind error"})
+	err = json.Unmarshal(common.ToBytes(req), &uploadArg.ChunkInfo)
+	if err != nil {
+		klog.Errorf("Parse to upload arg error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "parse to upload arg error"})
 		return
 	}
 
