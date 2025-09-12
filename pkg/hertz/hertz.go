@@ -20,7 +20,6 @@ func HertzServer() {
 		server.WithKeepAliveTimeout(3*time.Minute),
 		server.WithStreamBody(true),
 		server.WithReadBufferSize(64*1024),
-		server.WithH2C(true),
 		server.WithALPN(true),
 		server.WithIdleTimeout(200*time.Second),
 	)

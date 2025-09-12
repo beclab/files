@@ -165,16 +165,16 @@ func SaveFile(fileHeader *multipart.FileHeader, filePath string, newFile bool, o
 		klog.Infof("--- Function SaveFile ended at: %s\n", endTime)
 	}()
 
-	localStartTime := time.Now()
-	klog.Infof("------ fileHeader.Open() started at: %s\n", localStartTime)
+	//localStartTime := time.Now()
+	//klog.Infof("------ fileHeader.Open() started at: %s\n", localStartTime)
 	// Open source file
 	file, err := fileHeader.Open()
 	if err != nil {
 		return 0, err
 	}
 	defer file.Close()
-	localEndTime := time.Now()
-	klog.Infof("------ fileHeader.Open() ended at: %s\n", localEndTime)
+	//localEndTime := time.Now()
+	//klog.Infof("------ fileHeader.Open() ended at: %s\n", localEndTime)
 
 	// Determine file open flags based on newFile parameter
 	var flags int
@@ -184,19 +184,19 @@ func SaveFile(fileHeader *multipart.FileHeader, filePath string, newFile bool, o
 		flags = os.O_WRONLY | os.O_CREATE | os.O_APPEND
 	}
 
-	localStartTime = time.Now()
-	klog.Infof("------ OpenFile() started at: %s\n", localStartTime)
+	//localStartTime = time.Now()
+	//klog.Infof("------ OpenFile() started at: %s\n", localStartTime)
 	// Create target file with appropriate flags
 	dstFile, err := os.OpenFile(filePath, flags, 0644)
 	if err != nil {
 		return 0, err
 	}
 	defer dstFile.Close()
-	localEndTime = time.Now()
-	klog.Infof("------ OpenFile() ended at: %s\n", localEndTime)
+	//localEndTime = time.Now()
+	//klog.Infof("------ OpenFile() ended at: %s\n", localEndTime)
 
-	localStartTime = time.Now()
-	klog.Infof("------ Seek() started at: %s\n", localStartTime)
+	//localStartTime = time.Now()
+	//klog.Infof("------ Seek() started at: %s\n", localStartTime)
 	// Seek to the specified offset if not creating a new file
 	if !newFile {
 		_, err = dstFile.Seek(offset, io.SeekStart)
@@ -204,29 +204,29 @@ func SaveFile(fileHeader *multipart.FileHeader, filePath string, newFile bool, o
 			return 0, err
 		}
 	}
-	localEndTime = time.Now()
-	klog.Infof("------ Seek() ended at: %s\n", localEndTime)
+	//localEndTime = time.Now()
+	//klog.Infof("------ Seek() ended at: %s\n", localEndTime)
 
-	localStartTime = time.Now()
-	klog.Infof("------ io.Copy() started at: %s\n", localStartTime)
+	//localStartTime = time.Now()
+	//klog.Infof("------ io.Copy() started at: %s\n", localStartTime)
 	// Write the contents of the source file to the target file
 	_, err = io.Copy(dstFile, file)
 	if err != nil {
 		return 0, err
 	}
-	localEndTime = time.Now()
-	klog.Infof("------ io.Copy() ended at: %s\n", localEndTime)
+	//localEndTime = time.Now()
+	//klog.Infof("------ io.Copy() ended at: %s\n", localEndTime)
 
-	localStartTime = time.Now()
-	klog.Infof("------ getFileSize started at: %s\n", localStartTime)
+	//localStartTime = time.Now()
+	//klog.Infof("------ getFileSize started at: %s\n", localStartTime)
 	// Get new file size
 	fileInfo, err := dstFile.Stat()
 	if err != nil {
 		return 0, err
 	}
 	fileSize := fileInfo.Size()
-	localEndTime = time.Now()
-	klog.Infof("------ getFileSize ended at: %s\n", localEndTime)
+	//localEndTime = time.Now()
+	//klog.Infof("------ getFileSize ended at: %s\n", localEndTime)
 
 	return fileSize, nil
 }
