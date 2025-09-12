@@ -5,7 +5,7 @@ package hertz
 import (
 	"files/pkg/hertz/biz/router"
 	"github.com/cloudwego/hertz/pkg/app/server"
-	"github.com/cloudwego/hertz/pkg/network/netpoll"
+	"github.com/cloudwego/hertz/pkg/network/standard"
 	"k8s.io/klog/v2"
 	"time"
 )
@@ -14,7 +14,7 @@ func HertzServer() {
 	h := server.Default(
 		server.WithHostPorts("127.0.0.1:8080"),
 		server.WithMaxRequestBodySize(20<<20),
-		server.WithTransport(netpoll.NewTransporter),
+		server.WithTransport(standard.NewTransporter),
 		server.WithReadTimeout(5*time.Minute),
 		server.WithWriteTimeout(5*time.Minute),
 		server.WithKeepAliveTimeout(3*time.Minute),
