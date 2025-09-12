@@ -31,6 +31,7 @@ type TaskInfo struct {
 	Status        string `json:"status"`
 	ErrorMessage  string `json:"failed_reason"`
 	PauseAble     bool   `json:"pause_able"`
+	DriveId       string `json:"drive_id"`
 }
 
 type Task struct {
@@ -67,6 +68,7 @@ type Task struct {
 	manager *taskManager
 
 	details []string
+	driveId string
 }
 
 func (t *Task) Id() string {
@@ -251,11 +253,17 @@ func (t *Task) isCancel() (bool, error) {
 
 func (t *Task) formatJobStatusError(s string) error {
 	var result string
-	if strings.Contains(s, "is a directory") {
-		var pos = strings.Index(s, t.id)
-		result = s[pos+len(t.id):]
-		result = strings.TrimSuffix(result, ": is a directory")
-		return errors.New(fmt.Sprintf("There may be folders and files with the same name, so the data cannot be copied to the disk. Please check and rename the corresponding folders or files: %s", result))
+	if (t.param.Dst.IsSync() && t.param.Src.IsCloud()) || (t.param.Src.IsCloud() && t.param.Dst.IsSync()) {
+		if strings.Contains(s, "is a directory") {
+			var pos = strings.Index(s, t.id)
+			result = s[pos+len(t.id):]
+			result = strings.TrimSuffix(result, ": is a directory")
+			return errors.New(fmt.Sprintf("There may be folders and files with the same name, so the data cannot be copied to the disk. Please check and rename the corresponding folders or files: %s", result))
+		}
+	} else {
+		if strings.Contains(s, "path/insufficient_space") {
+			return errors.New("Insufficient storage space. Please free up some space and try again.")
+		}
 	}
 
 	return errors.New(s)

@@ -32,7 +32,8 @@ struct TaskInfo {
     13: bool tidy_dirs,
     14: string status,
     15: string failed_reason,
-    16: bool pause_able
+    16: bool pause_able,
+    17: string drive_id
 }
 
 struct GetTaskResp {

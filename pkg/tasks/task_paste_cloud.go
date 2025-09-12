@@ -409,12 +409,15 @@ func (t *Task) CopyToCloud() error {
 }
 
 func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
+	var action = t.param.Action
 	var cmd = rclone.Command
 	var jobCoreStatsResp []byte
 	var jobStatusResp []byte
 	var err error
 	var transferFinished bool
 	var done bool
+	var _, isFile = t.param.Src.IsFile()
+
 	var ticker = time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -457,18 +460,15 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 
 			if jobStatusData.Error != "" {
 				klog.Errorf("[Task] Id: %s, job status error: %s", t.id, jobStatusData.Error)
-				if (t.param.Dst.IsSync() && t.param.Src.IsCloud()) || (t.param.Src.IsCloud() && t.param.Dst.IsSync()) {
-					err = t.formatJobStatusError(jobStatusData.Error)
-				}
+				err = t.formatJobStatusError(jobStatusData.Error)
 				break
 			}
 
 			klog.Infof("[Task] Id: %s, get job core stats: %s, status: %s", t.id, common.ToJson(data), common.ToJson(jobStatusData))
 
-			if jobStatusData.Success && jobStatusData.Finished {
+			if jobStatusData.Finished {
 				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)
 				var progress = 100
-				transferFinished = true
 				t.updateProgress(int(progress), data.TotalBytes)
 				done = true
 				err = nil
@@ -512,6 +512,27 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 		}
 
 		break
+	}
+
+	if done {
+		var queryId bool
+		if action == common.ActionUpload {
+			// todo It is necessary to distinguish between file upload and folder upload
+		} else {
+			if t.param.Dst.FileType == common.GoogleDrive && isFile {
+				queryId = true
+			}
+		}
+
+		if queryId {
+			resp, err := rclone.Command.GetStat(t.param.Dst)
+			if err != nil {
+				klog.Errorf("[Task] Id: %s, get drive id error: %v", t.id, err)
+			} else {
+				klog.Infof("[Task] Id: %s, get drive stat %s", t.id, common.ToJson(resp))
+				t.driveId = resp.Item.ID
+			}
+		}
 	}
 
 	return done, err

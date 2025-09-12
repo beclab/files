@@ -208,6 +208,7 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 		Status:        task.state,
 		ErrorMessage:  task.message,
 		PauseAble:     pauseAble,
+		DriveId:       task.driveId,
 	}
 
 	tasks = append(tasks, res)
@@ -262,6 +263,7 @@ func (t *taskManager) GetTasksByStatus(owner, status string) []*TaskInfo {
 			TidyDirs:      task.tidyDirs,
 			Status:        task.state,
 			ErrorMessage:  task.message,
+			DriveId:       task.driveId,
 		}
 
 		result = append(result, res)

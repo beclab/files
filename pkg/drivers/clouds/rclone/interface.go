@@ -18,6 +18,7 @@ type Interface interface {
 	GetServe() serve.Interface
 	GetJob() job.Interface
 
+	GetStat(param *models.FileParam) (*operations.OperationsStat, error)
 	GetFilesSize(fileParam *models.FileParam) (int64, error)
 	GetFilesList(param *models.FileParam, getPrefix bool) (*operations.OperationsList, error)
 	CreateEmptyDirectory(param *models.FileParam) error

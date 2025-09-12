@@ -233,6 +233,29 @@ func (r *rclone) checkChangedConfigs(configs []*config.Config) *config.CreateCon
 	return changed
 }
 
+func (r *rclone) GetStat(param *models.FileParam) (*operations.OperationsStat, error) {
+	var fsPrefix, _ = r.GetFsPrefix(param)
+
+	filesName, _ := files.GetFileNameFromPath(param.Path)
+	prefixPath := files.GetPrefixPath(param.Path)
+	var fs, remote string
+	var opts = &operations.OperationsOpt{
+		NoModTime:  true,
+		NoMimeType: true,
+		Metadata:   false,
+	}
+	fs = fsPrefix + prefixPath
+	remote = filesName
+	resp, err := r.GetOperation().Stat(fs, remote, opts)
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || resp.Item == nil {
+		return nil, fmt.Errorf("% not found", param.Path)
+	}
+	return resp, nil
+}
+
 func (r *rclone) GetSpaceSize(fileParam *models.FileParam) (int64, error) {
 	var fsPrefix, err = r.GetFsPrefix(fileParam)
 	if err != nil {
