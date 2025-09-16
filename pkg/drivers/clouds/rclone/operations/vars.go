@@ -17,7 +17,9 @@ var (
 	SyncCopyPath = "sync/copy"
 	SyncMovePath = "sync/move"
 
-	FsCacheClearPath = "fscache/clear"
+	FsCacheClearPath   = "fscache/clear"
+	CoreCommandPath    = "core/command"
+	BackendCommandPath = "backend/command"
 )
 
 type OperationsStat struct {
@@ -90,6 +92,18 @@ type OperationsCopyFileResp struct {
 
 type OperationsAsyncJobResp struct {
 	JobId *int `json:"jobid,omitempty"`
+}
+
+type CoreCommandReq struct {
+	Command string   `json:"command"`
+	Args    []string `json:"arg"`
+}
+
+type BackendCommandReq struct {
+	Command string   `json:"command"`
+	Fs      string   `json:"fs"`
+	Args    []string `json:"arg"`
+	Async   *bool    `json:"_async,omitempty"`
 }
 
 /*

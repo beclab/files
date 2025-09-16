@@ -34,13 +34,15 @@ type Interface interface {
 	Purge(fs string, remote string) error
 
 	Size(fs string) (*OperationsSizeResp, error)
-
+	CopyIdAsync(fs string, args []string) (*OperationsAsyncJobResp, error)
 	CopyfileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error)
 	MovefileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error)
 	CopyAsync(srcFs, dstFs string) (*OperationsAsyncJobResp, error) // copy a directory,no suit for files
 	MoveAsync(srcFs, dstFs string) (*OperationsAsyncJobResp, error) // move a directory, no suit for files
 
 	FsCacheClear() error
+	CoreCommand(command string, args []string) error
+	BackendCommand(command string, fs string, args []string, async bool) (*OperationsAsyncJobResp, error)
 }
 
 type operations struct {
@@ -383,6 +385,81 @@ func (o *operations) FsCacheClear() error {
 	// klog.Info("[rclone] operations fscacheClear done!")
 
 	return nil
+}
+
+func (o *operations) CoreCommand(command string, args []string) error {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, CoreCommandPath)
+	var param = CoreCommandReq{
+		Command: command,
+		Args:    args,
+	}
+
+	klog.Infof("[rclone] operations corecommand, param: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations corecommand error: %v", err)
+		return err
+	}
+
+	klog.Infof("[rclone] operations corecommand done, resp: %s", string(resp))
+
+	return nil
+}
+
+func (o *operations) BackendCommand(command string, fs string, args []string, async bool) (*OperationsAsyncJobResp, error) {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, BackendCommandPath)
+	var param = BackendCommandReq{
+		Command: command,
+		Fs:      fs,
+		Args:    args,
+		Async:   &async,
+	}
+
+	klog.Infof("[rclone] operations backencommand, param: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations backencommand error: %v", err)
+		return nil, err
+	}
+
+	var job *OperationsAsyncJobResp
+	if err := json.Unmarshal(resp, &job); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations backencommand done, resp: %s", string(resp))
+
+	return job, nil
+}
+
+func (o *operations) CopyIdAsync(fs string, args []string) (*OperationsAsyncJobResp, error) {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, BackendCommandPath)
+	var async = true
+	var param = BackendCommandReq{
+		Command: "copyid",
+		Fs:      fs,
+		Args:    args,
+		Async:   &async,
+	}
+
+	klog.Infof("[rclone] operations copyid, param: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations copyid error: %v", err)
+		return nil, err
+	}
+
+	var job *OperationsAsyncJobResp
+	if err := json.Unmarshal(resp, &job); err != nil {
+		return nil, err
+	}
+
+	klog.Infof("[rclone] operations copyid done, resp: %s", string(resp))
+
+	return job, nil
 }
 
 func (o *operations) CopyfileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error) {

@@ -224,7 +224,8 @@ func (t *Task) Execute(fs ...func() error) error {
 
 func (t *Task) updateProgress(progress int, transfer int64) {
 	t.progress = progress
-	t.transfer = transfer
+	// t.transfer = transfer
+	t.transfer += transfer
 	t.details = append(t.details, fmt.Sprintf("rsync files progress: %d, transfer: %d", progress, transfer))
 }
 

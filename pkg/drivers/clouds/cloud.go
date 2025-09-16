@@ -275,7 +275,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		Metadata:   false,
 	}
 	var filter = &operations.OperationsFilter{
-		FilterRule: s.service.command.FormatFilter(createName, true),
+		FilterRule: s.service.command.FormatFilter(createName, true, true, true),
 	}
 
 	existsItems, err := s.service.command.GetMatchedItems(fsPrefix+prefixPath, opts, filter)
@@ -430,7 +430,7 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	var filter = &operations.OperationsFilter{
-		FilterRule: s.service.command.FormatFilter(dstName, false),
+		FilterRule: s.service.command.FormatFilter(dstName, false, true, true),
 	}
 
 	dstItems, err := s.service.command.GetMatchedItems(fsPrefix+srcPrefixPath, opts, filter)

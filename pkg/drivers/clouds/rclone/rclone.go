@@ -680,7 +680,7 @@ func (r *rclone) GetMatchedItems(fs string, opt *operations.OperationsOpt, filte
 
 }
 
-func (r *rclone) FormatFilter(s string, fuzzy bool) []string {
+func (r *rclone) FormatFilter(s string, fuzzy bool, containsDir, containsFile bool) []string {
 	if s == "" {
 		return nil
 	}
@@ -693,11 +693,21 @@ func (r *rclone) FormatFilter(s string, fuzzy bool) []string {
 	var result []string
 	var c = s[0]
 	if c == '*' {
-		result = append(result, fmt.Sprintf("+ \\*%s%s/", s, l))
-		result = append(result, fmt.Sprintf("+ /\\*%s%s", s, l))
+		if containsDir {
+			result = append(result, fmt.Sprintf("+ \\*%s%s/", s, l))
+		}
+		if containsFile {
+			result = append(result, fmt.Sprintf("+ /\\*%s%s", s, l))
+		}
+
 	} else {
-		result = append(result, fmt.Sprintf("+ %s%s/", s, l))
-		result = append(result, fmt.Sprintf("+ /%s%s", s, l))
+		if containsDir {
+			result = append(result, fmt.Sprintf("+ %s%s/", s, l))
+		}
+		if containsFile {
+			result = append(result, fmt.Sprintf("+ /%s%s", s, l))
+		}
+
 	}
 
 	result = append(result, "- *")
@@ -716,4 +726,42 @@ func (r *rclone) DeleteDir(fs, remote string) error {
 	}
 
 	return nil
+}
+
+func (r *rclone) FormatDriveFs(fsPrefix string, rootFolderId string) string {
+	var fs = strings.TrimRight(fsPrefix, ":")
+	fs = fs + ",root_folder_id=" + rootFolderId + ":"
+	return fs
+}
+
+func (r *rclone) CheckGoogleDriveDupNames(param *models.FileParam) (bool, string, error) {
+	fsPrefix, err := r.GetFsPrefix(param)
+	if err != nil {
+		return false, "", err
+	}
+
+	fileName, isFile := files.GetFileNameFromPath(param.Path)
+	pathPrefix := files.GetPrefixPath(param.Path)
+
+	var fs string = fsPrefix + pathPrefix
+
+	var filter = r.FormatFilter(fileName, false, !isFile, isFile)
+	srcLists, err := r.GetOperation().List(fs, &operations.OperationsOpt{
+		NoModTime: true, NoMimeType: true, Metadata: false,
+	}, &operations.OperationsFilter{
+		FilterRule: filter,
+	})
+	if err != nil {
+		return false, "", err
+	}
+	if srcLists == nil || len(srcLists.List) == 0 {
+		return false, "", fmt.Errorf("src not found")
+	}
+
+	if len(srcLists.List) > 1 {
+		return true, "", nil
+	}
+
+	return false, srcLists.List[0].ID, nil
+
 }

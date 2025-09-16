@@ -34,8 +34,8 @@ type Interface interface {
 	StopJobs() error
 
 	GetMatchedItems(fs string, opt *operations.OperationsOpt, filter *operations.OperationsFilter) (*operations.OperationsList, error)
-
-	FormatFilter(s string, fuzzy bool) []string
+	CheckGoogleDriveDupNames(param *models.FileParam) (bool, string, error)
+	FormatFilter(s string, fuzzy bool, containsDir, containsFile bool) []string
 }
 
 const (
