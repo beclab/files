@@ -7,6 +7,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/network/standard"
 	"k8s.io/klog/v2"
+	"time"
 )
 
 func HertzServer() {
@@ -14,6 +15,13 @@ func HertzServer() {
 		server.WithHostPorts("127.0.0.1:8080"),
 		server.WithMaxRequestBodySize(20<<20),
 		server.WithTransport(standard.NewTransporter),
+		server.WithReadTimeout(5*time.Minute),
+		server.WithWriteTimeout(5*time.Minute),
+		server.WithKeepAliveTimeout(3*time.Minute),
+		server.WithStreamBody(true),
+		server.WithReadBufferSize(64*1024),
+		server.WithALPN(true),
+		server.WithIdleTimeout(200*time.Second),
 	)
 
 	h.Use(router.TimingMiddleware())

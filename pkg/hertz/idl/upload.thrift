@@ -31,8 +31,7 @@ struct UploadChunksReq {
     14: string repoId (api.form="repoId");
     15: string driveType (api.form="driveType");
     16: string node (api.form="node");
-    17: optional string md5 (api.form="md5");
-    18: binary file (api.form="file");
+    17: string md5 (api.form="md5");
 }
 
 union UploadChunksResp {
