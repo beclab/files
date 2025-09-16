@@ -552,6 +552,11 @@ func (i *FileInfo) readListing(readHeader bool) error {
 	for _, f := range dir {
 		name := f.Name()
 		fPath := path.Join(i.Path, name)
+		if f.IsDir() {
+			if !strings.HasSuffix(fPath, "/") {
+				fPath += "/"
+			}
+		}
 
 		isSymlink, isInvalidLink := false, false
 		if IsSymlink(f.Mode()) {

@@ -4,9 +4,10 @@ import (
 	"files/pkg/common"
 	"files/pkg/hertz/biz/model/api/share"
 	"fmt"
-	"k8s.io/klog/v2"
 	"strconv"
 	"time"
+
+	"k8s.io/klog/v2"
 )
 
 // share_path
@@ -140,4 +141,29 @@ func QueryShareMember(params *QueryParams, page, pageSize int64, orderBy, order 
 		return nil, 0, err
 	}
 	return res, total, nil
+}
+
+func QueryShareById(shareId string) (*share.SharePath, error) {
+	var res *share.SharePath
+	if err := DB.Table("share_paths").Where("id = ?", shareId).First(&res).Error; err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func QueryShareMemberById(shareId string) (*share.ShareMember, error) {
+	var res *share.ShareMember
+	if err := DB.Table("share_members").Where("path_id = ?", shareId).First(&res).Error; err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func QueryShareExternalById(shareId string) (*share.ShareToken, error) {
+	var res *share.ShareToken
+	if err := DB.Table("share_tokens").Where("path_id = ?", shareId).First(&res).Error; err != nil {
+		return nil, err
+	}
+	return res, nil
 }

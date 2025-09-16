@@ -10,6 +10,8 @@ const (
 	ROOT_PREFIX     = "/data"
 	CACHE_PREFIX    = "/appcache"
 	EXTERNAL_PREFIX = "/data/External"
+
+	SERVER_HOST = "127.0.0.1:8080"
 )
 
 const (
@@ -41,6 +43,7 @@ const (
 	GoogleDrive = "google"
 	DropBox     = "dropbox"
 	TencentCos  = "tencent"
+	Share       = "share"
 
 	RcloneTypeLocal   = "local"
 	RcloneTypeS3      = "s3"
@@ -75,6 +78,12 @@ var (
 
 	CacheBuffer = "buffer"
 	CacheThumb  = "thumb"
+)
+
+var (
+	ShareTypeInternal = "internal"
+	ShareTypeExternal = "external"
+	ShareTypeSMB      = "smb"
 )
 
 var (
