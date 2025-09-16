@@ -391,7 +391,7 @@ func (t *taskManager) GetCloudOrPosixDupNames(taskId string, action string, uplo
 				NoMimeType: true,
 				Metadata:   false,
 			}
-			var filterRules = cmd.FormatFilter(orgSrcNamePrefix, true)
+			var filterRules = cmd.FormatFilter(orgSrcNamePrefix, true, true, true)
 			var filter = &operations.OperationsFilter{}
 			if filterRules != nil {
 				klog.Infof("[Task] Id: %s, lock, list filter: %v", taskId, filterRules)

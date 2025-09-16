@@ -6,12 +6,15 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/job"
+	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -128,26 +131,48 @@ func (t *Task) DownloadFromCloud() error {
 		return ctxErr
 	}
 
-	// create download job
-	jobResp, err := cmd.Copy(src, dst)
-	if err != nil {
-		klog.Errorf("[Task] Id: %s, copy error: %v", t.id, err)
-		return fmt.Errorf("copy error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
-	}
-
-	if jobResp.JobId == nil {
-		klog.Errorf("[Task] Id: %s, job invalid", t.id)
-		return fmt.Errorf("job invalid")
-	}
-
 	var done bool
-	var jobId = *jobResp.JobId
 
-	// check job stats
-	done, err = t.checkJobStats(jobId, dst.Path) // todo Continuously monitor the remaining local storage space
+	if t.param.Src.IsGoogleDrive() {
+		var existDups bool
+		var driveId string
+		existDups, driveId, err = cmd.CheckGoogleDriveDupNames(src)
+		if err != nil {
+			klog.Errorf("[Task] Id: %s, check google drive dups error: %v", t.id, err)
+			return err
+		}
 
-	if err != nil && jobId > 0 {
-		_, _ = cmd.GetJob().Stop(jobId)
+		if existDups {
+			return errors.New("There is a folder or file with the same name as the current operation. Please log in to Google Drive to rename the object and ensure its name is unique.")
+		}
+
+		if err = t.copyId(src, dst, driveId); err != nil {
+			klog.Errorf("[Task] Id: %s, copyid error: %v", t.id, err)
+			return fmt.Errorf("copyid error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
+		}
+		done = true
+
+	} else {
+
+		jobResp, err := cmd.Copy(src, dst)
+		if err != nil {
+			klog.Errorf("[Task] Id: %s, copy error: %v", t.id, err)
+			return fmt.Errorf("copy error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
+		}
+
+		if jobResp.JobId == nil {
+			klog.Errorf("[Task] Id: %s, job invalid", t.id)
+			return fmt.Errorf("job invalid")
+		}
+
+		var jobId = *jobResp.JobId
+
+		// check job stats
+		done, err = t.checkJobStats(jobId, dst.Path) // todo Continuously monitor the remaining local storage space
+
+		if err != nil && jobId > 0 {
+			_, _ = cmd.GetJob().Stop(jobId)
+		}
 	}
 
 	if err != nil {
@@ -367,26 +392,47 @@ func (t *Task) CopyToCloud() error {
 		return ctxErr
 	}
 
-	// create download job
-	jobResp, err := cmd.Copy(src, dst)
-	if err != nil {
-		klog.Errorf("[Task] Id: %s, copy error: %v", t.id, err)
-		return fmt.Errorf("copy error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
-	}
-
-	if jobResp.JobId == nil {
-		klog.Errorf("[Task] Id: %s, job invalid", t.id)
-		return fmt.Errorf("job invalid")
-	}
-
 	var done bool
-	var jobId = *jobResp.JobId
 
-	// check job stats
-	done, err = t.checkJobStats(jobId, dst.Path)
+	if t.param.Src.IsGoogleDrive() {
+		var existDups bool
+		var driveId string
+		existDups, driveId, err = cmd.CheckGoogleDriveDupNames(src)
+		if err != nil {
+			klog.Errorf("[Task] Id: %s, check google drive dups error: %v", t.id, err)
+			return err
+		}
 
-	if err != nil && jobId > 0 {
-		_, _ = cmd.GetJob().Stop(jobId)
+		if existDups {
+			return errors.New("There is a folder or file with the same name as the current operation. Please log in to Google Drive to rename the object and ensure its name is unique.")
+		}
+
+		if err = t.copyId(src, dst, driveId); err != nil {
+			klog.Errorf("[Task] Id: %s, copyid error: %v", t.id, err)
+			return fmt.Errorf("copyid error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
+		}
+		done = true
+	} else {
+		// create download job
+		jobResp, err := cmd.Copy(src, dst)
+		if err != nil {
+			klog.Errorf("[Task] Id: %s, copy error: %v", t.id, err)
+			return fmt.Errorf("copy error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
+		}
+
+		if jobResp.JobId == nil {
+			klog.Errorf("[Task] Id: %s, job invalid", t.id)
+			return fmt.Errorf("job invalid")
+		}
+
+		var jobId = *jobResp.JobId
+
+		// check job stats
+		done, err = t.checkJobStats(jobId, dst.Path)
+
+		if err != nil && jobId > 0 {
+			_, _ = cmd.GetJob().Stop(jobId)
+		}
 	}
 
 	if err != nil {
@@ -415,6 +461,10 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 	var err error
 	var transferFinished bool
 	var done bool
+
+	var totalSize = t.totalSize
+	var preTransfered int64 = 0
+
 	var ticker = time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -463,33 +513,43 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 				break
 			}
 
+			var transfers int64
+			if preTransfered == 0 {
+				preTransfered = data.Bytes
+			} else {
+				transfers = data.Bytes - preTransfered
+				// if transfers == 0 {
+				// 	transfers = data.Bytes
+				// }
+				preTransfered = data.Bytes
+			}
+
 			klog.Infof("[Task] Id: %s, get job core stats: %s, status: %s", t.id, common.ToJson(data), common.ToJson(jobStatusData))
+
+			var totalTransfers = t.transfer
 
 			if jobStatusData.Success && jobStatusData.Finished {
 				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)
-				var progress = 100
+				var progress = (totalTransfers * 100) / totalSize
 				transferFinished = true
-				t.updateProgress(int(progress), data.TotalBytes)
+				t.updateProgress(int(progress), transfers)
 				done = true
 				err = nil
 				break
 			}
 
-			var totalTransfers = t.totalSize
-			var transfers = data.Bytes
-
-			if transfers != totalTransfers {
-				var progress = transfers * 100 / totalTransfers
-				klog.Infof("[Task] Id: %s, dst: %s, progress: %d (%s/%s)", t.id, dstPath, progress, common.FormatBytes(transfers), common.FormatBytes(totalTransfers))
-				t.updateProgress(int(progress), data.Bytes)
+			if transfers != totalSize {
+				var progress = (totalTransfers * 100) / totalSize
+				klog.Infof("[Task] Id: %s, dst: %s, progress: %d (%s/%s)", t.id, dstPath, progress, common.FormatBytes(totalTransfers), common.FormatBytes(totalSize))
+				t.updateProgress(int(progress), transfers)
 				continue
 			}
 
-			if transfers == totalTransfers && data.Transferring == nil && data.Bytes == data.TotalBytes {
+			if transfers == totalSize && data.Transferring == nil && data.Bytes == data.TotalBytes {
 				klog.Infof("[Task] Id: %s, upload success, dst: %s", t.id, dstPath)
-				var progress = 100
+				var progress = (totalTransfers * 100) / totalSize
 				transferFinished = true
-				t.updateProgress(int(progress), data.TotalBytes)
+				t.updateProgress(int(progress), transfers)
 			}
 
 			if !jobStatusData.Finished {
@@ -515,4 +575,174 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 	}
 
 	return done, err
+}
+
+// new version
+type DriveDir struct {
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	Id    string `json:"id"`
+	IsDir bool   `json:"isDir"`
+	Size  int64  `json:"size"`
+}
+
+func (t *Task) copyId(src, dst *models.FileParam, driveId string) error {
+	var cmd = rclone.Command
+	var err error
+	var fsPrefix, fs string
+
+	fsPrefix, err = cmd.GetFsPrefix(src)
+	if err != nil {
+		return err
+	}
+
+	var dstFsPrefix string
+	dstFsPrefix, err = cmd.GetFsPrefix(dst)
+	if err != nil {
+		return err
+	}
+
+	srcName, isSrcFile := files.GetFileNameFromPath(src.Path)
+
+	dstFsPrefix = dstFsPrefix + dst.Path // /xx/xx/
+
+	if isSrcFile {
+
+		var done bool
+		var fs = fsPrefix
+		var args = []string{
+			driveId,
+			dstFsPrefix,
+		}
+		jobCopyAsyncJob, err := cmd.GetOperation().CopyIdAsync(fs, args)
+		if err != nil {
+			return err
+		}
+		var jobId = *jobCopyAsyncJob.JobId
+		done, err = t.checkJobStats(jobId, dst.Path)
+		_ = done
+		if err != nil && jobId > 0 {
+			_, _ = cmd.GetJob().Stop(jobId)
+		}
+	} else {
+		fs = strings.TrimRight(fsPrefix, ":") + ",root_folder_id=" + driveId + ":"
+		if err = t.loopDriveDirs(fs, driveId, srcName, dstFsPrefix, fsPrefix); err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
+func (t *Task) loopDriveDirs(fs string, parentId, parentName, dstFsPrefix string, srcFsPrefix string) error {
+	var err error
+	var cmd = rclone.Command
+	srcDirs, e := cmd.GetOperation().List(fs, &operations.OperationsOpt{
+		Recurse:    false,
+		NoModTime:  true,
+		NoMimeType: true,
+		Metadata:   false,
+	}, nil)
+	if e != nil {
+		return e
+	}
+
+	if srcDirs == nil || srcDirs.List == nil || len(srcDirs.List) == 0 {
+		return nil
+	}
+
+	var items []DriveDir
+	for _, item := range srcDirs.List {
+		var i = DriveDir{
+			Path:  item.Path,
+			Name:  item.Name,
+			Id:    item.ID,
+			IsDir: item.IsDir,
+			Size:  item.Size,
+		}
+		items = append(items, i)
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Name < items[j].Name
+	})
+
+	newDriveDriList := t.encodeDuplicateNames(items)
+
+	for _, item := range newDriveDriList {
+		if !item.IsDir {
+			var fs = strings.TrimRight(srcFsPrefix, ":") + ",root_folder_id=" + parentId + ":"
+			var args = []string{
+				item.Id,
+				dstFsPrefix + item.Name,
+			}
+			var e error
+			var jobStatusResp *operations.OperationsAsyncJobResp
+			jobStatusResp, e = cmd.GetOperation().CopyIdAsync(fs, args)
+			if e != nil {
+				err = e
+				break
+			}
+
+			var done bool
+			var jobId = *jobStatusResp.JobId
+			done, e = t.checkJobStats(jobId, dstFsPrefix+item.Name)
+			if e != nil && jobId > 0 {
+				_, _ = cmd.GetJob().Stop(jobId)
+			}
+			_ = done
+
+			if e != nil {
+				err = e
+				return err
+			}
+
+			continue
+		}
+
+		var dstDirFs = dstFsPrefix
+		if err = cmd.GetOperation().Mkdir(dstDirFs, item.Name); err != nil {
+			return err
+		}
+
+		subFs := strings.TrimRight(srcFsPrefix, ":") + ",root_folder_id=" + item.Id + ":"
+
+		if err = t.loopDriveDirs(subFs, item.Id, dstDirFs, dstDirFs+item.Name+"/", srcFsPrefix); err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
+func (t *Task) encodeDuplicateNames(dirs []DriveDir) []DriveDir {
+	parentNameCount := make(map[string]map[string]int)
+
+	result := make([]DriveDir, len(dirs))
+
+	for i, dir := range dirs {
+		parent := dir.Path
+		name := dir.Name
+		if parentNameCount[parent] == nil {
+			parentNameCount[parent] = make(map[string]int)
+		}
+		count := parentNameCount[parent][name]
+		if count == 0 {
+			result[i] = dir
+		} else {
+			var createName, createExt string
+			if !dir.IsDir {
+				createName, createExt = common.SplitNameExt(name)
+			} else {
+				createName = name
+			}
+
+			newName := fmt.Sprintf("%s (%d)%s", createName, count, createExt)
+			newDir := dir
+			newDir.Name = newName
+			result[i] = newDir
+		}
+		parentNameCount[parent][name]++
+	}
+	return result
 }

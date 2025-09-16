@@ -207,6 +207,10 @@ func (r *FileParam) GetFileParam(uri string) error {
 	return nil
 }
 
+func (r *FileParam) IsGoogleDrive() bool {
+	return r.FileType == common.GoogleDrive
+}
+
 func (r *FileParam) IsCloud() bool {
 	return common.ListContains([]string{common.AwsS3, common.TencentCos, common.DropBox, common.GoogleDrive}, r.FileType)
 }
