@@ -101,6 +101,12 @@ func (p *FileParam) convert(url string) (err error) {
 		p.Extend = extend
 		p.Path = subPath
 
+	} else if fileType == common.Share {
+
+		p.FileType = common.Share
+		p.Extend = extend
+		p.Path = subPath
+
 	}
 	return nil
 }
