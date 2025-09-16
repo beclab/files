@@ -5,7 +5,7 @@ struct SharePath {
     1: required string id (go.tag = 'gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"')
     2: required string owner (go.tag = 'gorm:"column:owner;type:text;not null"')
     3: required string file_type (go.tag = 'gorm:"column:file_type;type:varchar(10);not null"')
-    4: required string extend (go.tag = 'gorm:"column:extend;type:varchar(32);uniqueIndex:idx_share_path_extend"')
+    4: required string extend (go.tag = 'gorm:"column:extend;type:text;uniqueIndex:idx_share_path_extend"')
     5: required string path (go.tag = 'gorm:"column:path;type:text;not null"')
     6: required string share_type (go.tag = 'gorm:"column:share_type;type:varchar(10);not null"')
     7: required string name (go.tag = 'gorm:"column:name;type:text"')

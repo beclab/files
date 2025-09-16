@@ -64,8 +64,8 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	sharePath := &share.SharePath{
 		Owner:       owner,
 		FileType:    fileParam.FileType,
-		Extend:      common.Md5String(fmt.Sprintf("%s%d", p, time.Now().UnixNano())),
-		Path:        p,
+		Extend:      fileParam.Extend,
+		Path:        fileParam.Path,
 		ShareType:   req.ShareType,
 		Name:        req.Name,
 		PasswordMd5: common.Md5String(req.Password),
