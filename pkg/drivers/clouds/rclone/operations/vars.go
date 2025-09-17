@@ -100,10 +100,11 @@ type CoreCommandReq struct {
 }
 
 type BackendCommandReq struct {
-	Command string   `json:"command"`
-	Fs      string   `json:"fs"`
-	Args    []string `json:"arg"`
-	Async   *bool    `json:"_async,omitempty"`
+	Command string            `json:"command"`
+	Fs      string            `json:"fs"`
+	Args    []string          `json:"arg"`
+	Opt     map[string]string `json:"opt"`
+	Async   *bool             `json:"_async,omitempty"`
 }
 
 /*

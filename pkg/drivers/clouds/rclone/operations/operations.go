@@ -441,7 +441,18 @@ func (o *operations) CopyIdAsync(fs string, args []string) (*OperationsAsyncJobR
 		Command: "copyid",
 		Fs:      fs,
 		Args:    args,
-		Async:   &async,
+		Opt: map[string]string{
+			"ignore_size":           "true",
+			"no_traverse":           "true",
+			"ignore_times":          "true",
+			"ignore_checksum":       "true",
+			"ignore_existing":       "true",
+			"no_check_dest":         "true",
+			"no_update_dir_modtime": "true",
+			"no_update_modtime":     "true",
+			"size_only":             "true",
+		},
+		Async: &async,
 	}
 
 	klog.Infof("[rclone] operations copyid, param: %s", commonutils.ToJson(param))
