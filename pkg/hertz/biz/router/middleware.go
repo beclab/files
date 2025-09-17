@@ -1,8 +1,10 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"files/pkg/common"
+	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/models"
 	"fmt"
@@ -63,23 +65,48 @@ func ShareMiddleware() app.HandlerFunc {
 		}
 
 		var preview, raw bool
-		var download, upload bool
+		var download bool
+		var upload, uploadLink, uploadBytes, uploadChunk bool
 		_ = download
 		_ = upload
 
+		var uploadLinkId, uploadParentDir, uploadFileName, uploadRetJson string
+		_ = uploadParentDir
+
 		var paths = strings.TrimPrefix(path, "/api/share")
+
+		var shareUrlPath string
 
 		if strings.HasPrefix(paths, "/preview/") {
 			preview = true
-			paths = strings.TrimPrefix(paths, "/preview")
+			shareUrlPath = strings.TrimPrefix(paths, "/preview")
 		} else if strings.HasPrefix(paths, "/raw/") {
 			raw = true
-			paths = strings.TrimPrefix(paths, "/raw/")
+			shareUrlPath = strings.TrimPrefix(paths, "/raw/")
 		} else if strings.HasPrefix(paths, "/upload/") {
 			upload = true
+
+			if strings.Contains(paths, "/file-uploaded-bytes/") {
+				uploadBytes = true
+				shareUrlPath = c.Query("parent_dir")
+				uploadFileName = c.Query("file_name")
+			} else {
+				shareUrlPath = c.Query("file_path")
+
+				if method == http.MethodGet {
+					uploadLink = true
+				} else {
+					uploadChunk = true
+					uploadRetJson = c.Query("ret-json")
+					var lp = strings.LastIndex(paths, "/")
+					uploadLinkId = paths[lp+1:]
+				}
+			}
+		} else {
+			shareUrlPath = paths
 		}
 
-		var shareParam, err = models.CreateFileParam(bflName, paths)
+		var shareParam, err = models.CreateFileParam(bflName, shareUrlPath)
 		if err != nil {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
@@ -93,6 +120,8 @@ func ShareMiddleware() app.HandlerFunc {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
 		}
+
+		klog.Infof("share path: %s", common.ToJson(shared))
 
 		if !((shared.FileType == common.Drive && shared.Extend == common.Home) || shared.FileType == common.Sync) {
 			klog.Errorf("share path invalid, fileType: %s, extend: %s", shared.FileType, shared.Extend)
@@ -162,18 +191,30 @@ func ShareMiddleware() app.HandlerFunc {
 		} else if raw {
 			rewritePrefix = "/api/raw/"
 		} else if upload {
-			// todo upload
-			// rewritePrefix = ""
+			rewritePrefix = "/upload/upload-link/" + global.GlobalNode.GetMasterNode() + "/"
 		} else {
 			rewritePrefix = "/api/resources/"
 		}
 
-		var url = host + rewritePrefix + pathRewrite
-		if query != "" {
-			url = url + "?" + query
+		var url string
+		if upload { // upload
+			shareOwner = bflName
+
+			if uploadLink {
+				url = host + rewritePrefix + "?file_path=" + "/" + pathRewrite + "&from=" + c.Query("from")
+			} else if uploadBytes {
+				url = host + rewritePrefix + "?parent_dir=" + "/" + pathRewrite + "&file_name=" + uploadFileName
+			} else if uploadChunk {
+				url = host + rewritePrefix + uploadLinkId + "?ret-json=" + uploadRetJson
+			}
+		} else {
+			url = host + rewritePrefix + pathRewrite
+			if query != "" {
+				url = url + "?" + query
+			}
 		}
 
-		klog.Infof("share rewrite url: %s", url)
+		klog.Infof("share rewrite url: %s, rewrite user: %s", url, shareOwner)
 
 		req, _ := http.NewRequest(string(c.Request.Method()), url, nil)
 
@@ -181,6 +222,15 @@ func ShareMiddleware() app.HandlerFunc {
 			req.Header.Set(string(key), string(value))
 		})
 		req.Header.Set(common.REQUEST_HEADER_OWNER, shareOwner)
+
+		body, err := io.ReadAll(c.Request.BodyStream())
+		if err != nil {
+			c.String(500, "failed to read request body: %v", err)
+			return
+		}
+
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		req.ContentLength = int64(len(body))
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -195,8 +245,8 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 		}
 		c.Status(resp.StatusCode)
-		body, _ := io.ReadAll(resp.Body)
-		c.Write(body)
+		bodyRes, _ := io.ReadAll(resp.Body)
+		c.Write(bodyRes)
 	}
 }
 
