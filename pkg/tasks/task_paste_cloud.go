@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -145,12 +146,10 @@ func (t *Task) DownloadFromCloud() error {
 		if existDups {
 			return errors.New("There is a folder or file with the same name as the current operation. Please log in to Google Drive to rename the object and ensure its name is unique.")
 		}
-
-		if err = t.copyId(src, dst, driveId); err != nil {
-			klog.Errorf("[Task] Id: %s, copyid error: %v", t.id, err)
-			return fmt.Errorf("copyid error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
+		err = t.copyId(src, dst, driveId)
+		if err == nil {
+			done = true
 		}
-		done = true
 
 	} else {
 
@@ -404,14 +403,13 @@ func (t *Task) CopyToCloud() error {
 		}
 
 		if existDups {
-			return errors.New("There is a folder or file with the same name as the current operation. Please log in to Google Drive to rename the object and ensure its name is unique.")
+			return errors.New("There is a folder or file with the same name as the current operation. Please rename the object and ensure its name is unique.")
 		}
 
-		if err = t.copyId(src, dst, driveId); err != nil {
-			klog.Errorf("[Task] Id: %s, copyid error: %v", t.id, err)
-			return fmt.Errorf("copyid error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
+		err = t.copyId(src, dst, driveId)
+		if err == nil {
+			done = true
 		}
-		done = true
 	} else {
 		// create download job
 		jobResp, err := cmd.Copy(src, dst)
@@ -465,7 +463,7 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 	var totalSize = t.totalSize
 	var preTransfered int64 = 0
 
-	var ticker = time.NewTicker(2 * time.Second)
+	var ticker = time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -516,15 +514,16 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 			var transfers int64
 			if preTransfered == 0 {
 				preTransfered = data.Bytes
+				transfers = data.Bytes
 			} else {
-				transfers = data.Bytes - preTransfered
-				// if transfers == 0 {
-				// 	transfers = data.Bytes
-				// }
-				preTransfered = data.Bytes
+				if data.Bytes > 0 {
+					transfers = data.Bytes - preTransfered
+					preTransfered = data.Bytes
+				}
 			}
 
-			klog.Infof("[Task] Id: %s, get job core stats: %s, status: %s", t.id, common.ToJson(data), common.ToJson(jobStatusData))
+			klog.Infof("[Task] Id: %s, job: %d, core stats: %s, status: %s", t.id, jobStatusData.Id, common.ToJson(data), common.ToJson(jobStatusData))
+			klog.Infof("[Task] Id: %s, job: %d, totalTransfer: %s(%s)", t.id, jobStatusData.Id, common.FormatBytes(t.transfer), common.FormatBytes(t.totalSize))
 
 			var totalTransfers = t.transfer
 
@@ -669,34 +668,21 @@ func (t *Task) loopDriveDirs(fs string, parentId, parentName, dstFsPrefix string
 
 	newDriveDriList := t.encodeDuplicateNames(items)
 
+	var filesList []DriveDir
 	for _, item := range newDriveDriList {
 		if !item.IsDir {
-			var fs = strings.TrimRight(srcFsPrefix, ":") + ",root_folder_id=" + parentId + ":"
-			var args = []string{
-				item.Id,
-				dstFsPrefix + item.Name,
-			}
-			var e error
-			var jobStatusResp *operations.OperationsAsyncJobResp
-			jobStatusResp, e = cmd.GetOperation().CopyIdAsync(fs, args)
-			if e != nil {
-				err = e
-				break
-			}
+			filesList = append(filesList, item)
+		}
+	}
 
-			var done bool
-			var jobId = *jobStatusResp.JobId
-			done, e = t.checkJobStats(jobId, dstFsPrefix+item.Name)
-			if e != nil && jobId > 0 {
-				_, _ = cmd.GetJob().Stop(jobId)
-			}
-			_ = done
+	if len(filesList) > 0 {
+		if err = t.parallelCopyDriveDirs(filesList, parentId, dstFsPrefix, srcFsPrefix, 8); err != nil {
+			return err
+		}
+	}
 
-			if e != nil {
-				err = e
-				return err
-			}
-
+	for _, item := range newDriveDriList {
+		if !item.IsDir {
 			continue
 		}
 
@@ -713,6 +699,86 @@ func (t *Task) loopDriveDirs(fs string, parentId, parentName, dstFsPrefix string
 	}
 
 	return err
+}
+
+/**
+ * This function downloads a folder from Google Drive to the local system.
+ * Considering that there may be files or directories with the same name within the folder,
+ * it employs a multi-tasking approach to copy files one by one to avoid name conflicts and ensure completeness
+ */
+func (t *Task) parallelCopyDriveDirs(fileItems []DriveDir, parentId, dstFsPrefix, srcFsPrefix string, workerNum int) error {
+	var wg sync.WaitGroup
+	tasks := make(chan DriveDir, len(fileItems))
+	errors := make(chan error, len(fileItems))
+	var cmd = rclone.Command
+	var cancelOnce sync.Once
+	cancelErr := error(nil)
+
+	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+		return ctxErr
+	}
+
+	for i := 0; i < workerNum; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+				// errors <- ctxErr
+				cancelOnce.Do(func() {
+					cancelErr = ctxErr
+				})
+				return
+			}
+
+			for item := range tasks {
+				fs := strings.TrimRight(srcFsPrefix, ":") + ",root_folder_id=" + parentId + ":"
+				args := []string{
+					item.Id,
+					dstFsPrefix + item.Name,
+				}
+				jobStatusResp, e := cmd.GetOperation().CopyIdAsync(fs, args)
+				if e != nil {
+					errors <- e
+					continue
+				}
+
+				if jobStatusResp != nil && jobStatusResp.JobId != nil {
+					jobId := *jobStatusResp.JobId
+					done, e := t.checkJobStats(jobId, dstFsPrefix+item.Name)
+					if e != nil && jobId > 0 {
+						_, _ = cmd.GetJob().Stop(jobId)
+					}
+					_ = done
+				}
+			}
+		}()
+	}
+
+	for _, item := range fileItems {
+		if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
+			cancelOnce.Do(func() {
+				cancelErr = ctxErr
+			})
+			break
+		}
+		tasks <- item
+	}
+	close(tasks)
+
+	wg.Wait()
+	close(errors)
+
+	if cancelErr != nil {
+		return cancelErr
+	}
+
+	for e := range errors {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 func (t *Task) encodeDuplicateNames(dirs []DriveDir) []DriveDir {
