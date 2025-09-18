@@ -412,6 +412,20 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 			return true, data, nil
 		}
 
+		if resumableInfo.Share != "" { // upload to shared directory
+			sharedParam, err := models.CreateFileParam(resumableInfo.ShareOwner, resumableInfo.ShareParentDir)
+			if err != nil {
+				return false, data, err
+			}
+
+			uri, err := sharedParam.GetResourceUri()
+			if err != nil {
+				return false, data, err
+			}
+
+			info.FullPath = uri + sharedParam.Path + resumableInfo.ResumableFilename
+		}
+
 		if err = MoveFileByInfo(info, uploadTempPath); err != nil {
 			klog.Warningf("[upload] uploadId: %s, move by, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, err)
 			return false, nil, err

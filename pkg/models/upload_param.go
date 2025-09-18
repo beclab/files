@@ -20,6 +20,9 @@ type ResumableInfo struct {
 	ParentDir                 string                `json:"parent_dir" form:"parent_dir"`
 	MD5                       string                `json:"md5,omitempty" form:"md5"`
 	File                      *multipart.FileHeader `json:"file" form:"file" binding:"required"`
+	Share                     string                `json:"share" form:"share"` // val = 1
+	ShareOwner                string                `json:"shareOwner" form:"shareOwner"`
+	ShareParentDir            string                `json:"shareParentDir" form:"shareParentDir"`
 }
 
 type FileUploadArgs struct {
