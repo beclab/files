@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -333,6 +334,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
  * ~ Delete
  */
 func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, error) {
+	var cmd = s.service.command
 	var fileParam = fileDeleteArg.FileParam
 	var fileType = fileParam.FileType
 	_ = fileType
@@ -340,7 +342,7 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	var dirents = fileDeleteArg.Dirents
 	var deleteFailedPaths []string
 
-	klog.Infof("Cloud delete, user: %s, param: %s", user, common.ToJson(fileParam))
+	klog.Infof("Cloud delete, user: %s, param: %s, dirents: %v", user, common.ToJson(fileParam), dirents)
 
 	// todo need to copy .keep file in fileParam.Path first
 
@@ -356,6 +358,64 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 
 	if len(invalidPaths) > 0 {
 		return common.ToBytes(invalidPaths), fmt.Errorf("invalid path")
+	}
+
+	if fileParam.IsGoogleDrive() {
+		fsPrefix, err := cmd.GetFsPrefix(fileParam)
+		if err != nil {
+			return nil, err
+		}
+
+		var fs string
+		fs = fsPrefix + fileParam.Path
+
+		items, err := cmd.GetOperation().List(fs, &operations.OperationsOpt{
+			Recurse:    false,
+			NoModTime:  true,
+			NoMimeType: true,
+			Metadata:   false,
+		}, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		if items == nil || items.List == nil || len(items.List) == 0 {
+			return nil, fmt.Errorf("object not found")
+		}
+
+		sort.Slice(items.List, func(i, j int) bool {
+			return items.List[i].Name < items.List[j].Name
+		})
+
+		var existsDupname bool
+		var existsName string
+		for _, dirent := range dirents {
+			var count int
+
+			var isDir = strings.HasSuffix(dirent, "/")
+			for _, item := range items.List {
+				if count >= 2 {
+					existsDupname = true
+					break
+				}
+				if item.IsDir != isDir {
+					continue
+				}
+				var tmp = strings.Trim(dirent, "/")
+				if tmp == item.Name {
+					count = count + 1
+					existsName = item.Name
+				}
+			}
+
+			if existsDupname {
+				break
+			}
+		}
+
+		if existsDupname {
+			return nil, fmt.Errorf("There is a folder or file with the same name %s as the current operation. Please rename the object and ensure its name is unique.", existsName)
+		}
 	}
 
 	deleteFailedPaths, _ = s.service.command.Delete(fileParam, dirents)
@@ -391,6 +451,40 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	if srcName == dstName {
 		klog.Infof("Cloud rename, name not changed, user: %s, srcName: %s, dstName: %s", owner, srcName, dstName)
 		return nil, nil
+	}
+
+	if fileParam.IsGoogleDrive() {
+		fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
+		if err != nil {
+			return nil, err
+		}
+		fsName, _ := files.GetFileNameFromPath(fileParam.Path)
+		fsPathPrefix := files.GetPrefixPath(fileParam.Path)
+		var fs = fsPrefix + fsPathPrefix
+		var fileter = s.service.command.FormatFilter(fsName, false, true, true)
+		items, err := s.service.command.GetOperation().List(fs, &operations.OperationsOpt{
+			NoModTime:  true,
+			NoMimeType: true,
+			Metadata:   false,
+		}, &operations.OperationsFilter{
+			FilterRule: fileter,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		var count int
+		if items != nil && items.List != nil && len(items.List) > 0 {
+			for _, item := range items.List {
+				if fsName == item.Name {
+					count = count + 1
+				}
+			}
+		}
+
+		if count >= 2 {
+			return nil, fmt.Errorf("The file or folder you selected has multiple objects with the same name. Please log in to the Google Drive website to modify the name and ensure its uniqueness.")
+		}
 	}
 
 	srcStat, err := s.service.Stat(fileParam)
@@ -516,7 +610,12 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListResponse, error) {
 	res, err := s.service.List(fileParam)
 	if err != nil {
-		return nil, fmt.Errorf("Query failed. Please check whether the integration account has been added. If it has been added, the integration account may be in the process of being configured. Please try again later.")
+		if strings.Contains(err.Error(), "config not found,") {
+			return nil, fmt.Errorf("Query failed. Please check whether the integration account has been added. If it has been added, the integration account may be in the process of being configured. Please try again later.")
+		}
+		if strings.Contains(err.Error(), "directory not found") {
+			return nil, fmt.Errorf("Directory does not exist.")
+		}
 	}
 
 	return res, nil
