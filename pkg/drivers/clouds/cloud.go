@@ -610,7 +610,12 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListResponse, error) {
 	res, err := s.service.List(fileParam)
 	if err != nil {
-		return nil, fmt.Errorf("Query failed. Please check whether the integration account has been added. If it has been added, the integration account may be in the process of being configured. Please try again later.")
+		if strings.Contains(err.Error(), "config not found,") {
+			return nil, fmt.Errorf("Query failed. Please check whether the integration account has been added. If it has been added, the integration account may be in the process of being configured. Please try again later.")
+		}
+		if strings.Contains(err.Error(), "directory not found") {
+			return nil, fmt.Errorf("Directory does not exist.")
+		}
 	}
 
 	return res, nil
