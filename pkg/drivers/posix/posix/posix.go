@@ -2,6 +2,7 @@ package posix
 
 import (
 	"encoding/json"
+	"errors"
 	"files/pkg/common"
 	"files/pkg/diskcache"
 	"files/pkg/drivers/base"
@@ -47,6 +48,9 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
+		if strings.Contains(err.Error(), "no such file or directory") {
+			return nil, errors.New("Directory not exist")
+		}
 		return nil, err
 	}
 
@@ -72,6 +76,9 @@ func (s *PosixStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
+		if strings.Contains(err.Error(), "no such file or directory") {
+			return nil, errors.New("File not exist")
+		}
 		return nil, err
 	}
 
@@ -123,6 +130,9 @@ func (s *PosixStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 
 	fileData, err := s.getFiles(fileParam, NoExpand, NoContent)
 	if err != nil {
+		if strings.Contains(err.Error(), "no such file or directory") {
+			return nil, errors.New("File not exist")
+		}
 		return nil, err
 	}
 
