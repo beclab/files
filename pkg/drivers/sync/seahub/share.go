@@ -708,12 +708,14 @@ func GetSharedOutFolders(username string) ([]map[string]string, error) {
 		}
 
 		result := map[string]string{
-			"repo_id":          repo["origin_repo_id"],
-			"repo_name":        repo["origin_repo_name"],
+			//"repo_id":          repo["origin_repo_id"],
+			//"repo_name":        repo["origin_repo_name"],
+			"repo_id":          repo["repo_id"],
+			"repo_name":        repo["repo_name"],
 			"path":             repo["origin_path"],
 			"folder_name":      repo["name"],
 			"share_type":       repo["share_type"],
-			"share_permission": repo["permission"],
+			"share_permission": strings.Trim(repo["permission"], " "),
 		}
 
 		if repo["share_type"] == "personal" {
