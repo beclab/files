@@ -137,7 +137,7 @@ func buildCondition(field, op string, value interface{}) (string, []interface{},
 		return fmt.Sprintf("%s %s ?", field, op), []interface{}{value}, nil
 
 	case "LIKE", "ILIKE":
-		return fmt.Sprintf("%s LIKE ?", field), []interface{}{"%" + fmt.Sprint(value) + "%"}, nil
+		return fmt.Sprintf("%s LIKE ?", field), []interface{}{fmt.Sprint(value)}, nil // "%" needs to be added manually
 
 	case "IN":
 		if slice, ok := value.([]interface{}); ok {

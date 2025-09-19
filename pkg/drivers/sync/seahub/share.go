@@ -132,13 +132,6 @@ func HandleGetDirSharedItems(sharePath *share.SharePath, shareType string) ([]by
 			return nil, err
 		}
 	}
-	// TODO： Group
-	//if sharedToGroup {
-	//	ret, err = listGroupSharedItems(pathId, repoId, path)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//}
 	return common.ToBytes(ret), nil
 }
 
@@ -171,22 +164,6 @@ func isRepoAdmin(sharePathId, username, repoId string) bool {
 	if username == repoOwner {
 		return true
 	}
-
-	// TODO: group
-	// Check department admin scenario
-	//if strings.Contains(repoOwner, "@seafile_group") {
-	//	parts := strings.Split(repoOwner, "@")
-	//	if len(parts) > 0 {
-	//		groupID, parseErr := strconv.Atoi(parts[0])
-	//		if parseErr != nil {
-	//			logger.Error(parseErr)
-	//			return false
-	//		}
-	//		if isGroupAdmin(groupID, username) {
-	//			return true
-	//		}
-	//	}
-	//}
 
 	return false
 }
@@ -278,8 +255,6 @@ func HandlePostDirSharedItems(sharePath *share.SharePath, shareMember *share.Sha
 
 		UpdateUserDirPermission(repoId, path, repoOwner, sharedTo, permission)
 	}
-
-	// TODO: group
 
 	return common.ToBytes(map[string]interface{}{"success": true}), nil
 }
@@ -470,7 +445,6 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 			}()
 		}
 	}
-	// TODO: group
 
 	return common.ToBytes(result), nil
 }
@@ -558,7 +532,6 @@ func HandleDeleteDirSharedItems(sharePath *share.SharePath, shareMember *share.S
 			}
 		}
 	}
-	// TODO: group
 
 	return common.ToBytes(map[string]interface{}{"success": true}), nil
 }
@@ -572,8 +545,6 @@ func GetSharedOutRepos(username string) ([]map[string]string, error) {
 		return nil, err
 	}
 	sharedOutRepos = append(sharedOutRepos, repos...)
-
-	// TODO: group
 
 	pubRepos, err := seaserv.GlobalSeafileAPI.ListInnerPubReposByOwner(username)
 	if err != nil {
@@ -661,7 +632,6 @@ func GetSharedOutRepos(username string) ([]map[string]string, error) {
 			result["contact_email"] = seaserv.Email2ContactEmail(userEmail)
 		}
 
-		// TODO: group
 		returnedResult = append(returnedResult, result)
 	}
 

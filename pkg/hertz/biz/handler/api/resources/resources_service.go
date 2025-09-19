@@ -8,7 +8,10 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	"files/pkg/drivers/sync/seahub"
+	"files/pkg/hertz/biz/dal/database"
 	resources "files/pkg/hertz/biz/model/api/resources"
+	"files/pkg/hertz/biz/model/api/share"
 	"files/pkg/models"
 	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -220,6 +223,103 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	deleteArg.Dirents = req.Dirents
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", deleteArg.FileParam.Owner, deleteArg.FileParam.FileType, c.Method(), common.ToJson(deleteArg))
+
+	if deleteArg.FileParam.FileType == "drive" || deleteArg.FileParam.FileType == "sync" {
+		var unsharePaths []string
+		for _, dirent := range deleteArg.Dirents {
+			if strings.HasSuffix(dirent, "/") {
+				unsharePaths = append(unsharePaths, dirent)
+			}
+		}
+		pathQueryParams := &database.QueryParams{}
+		pathQueryParams.AND = []database.Filter{}
+		database.BuildStringQueryParam(deleteArg.FileParam.Owner, "share_paths.owner", "=", &pathQueryParams.AND, true)
+		database.BuildStringQueryParam(deleteArg.FileParam.FileType, "share_paths.file_type", "=", &pathQueryParams.AND, true)
+		database.BuildStringQueryParam(deleteArg.FileParam.Extend, "share_paths.extend", "=", &pathQueryParams.AND, true)
+		pathQueryParams.OR = []database.Filter{}
+		for _, dirent := range unsharePaths {
+			database.BuildStringQueryParam(dirent+"%", "share_paths.path", "LIKE", &pathQueryParams.OR, true)
+		}
+		pathRes, pathTotal, err := database.QuerySharePath(pathQueryParams, 0, 0, "", "", nil)
+		if err != nil {
+			klog.Errorf("QuerySharePath error: %v", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+		klog.Infof("pathTotal: %d", pathTotal)
+
+		var internalSharePaths []*share.SharePath
+		var externalSharePaths []*share.SharePath
+		for _, sharePath := range pathRes {
+			if sharePath.ShareType == "internal" {
+				internalSharePaths = append(internalSharePaths, sharePath)
+			} else if sharePath.ShareType == "external" {
+				externalSharePaths = append(externalSharePaths, sharePath)
+			}
+		}
+
+		tokenQueryParams := &database.QueryParams{}
+		tokenQueryParams.OR = []database.Filter{}
+		for _, sharePath := range externalSharePaths {
+			database.BuildStringQueryParam(sharePath.ID, "share_tokens.path_id", "=", &tokenQueryParams.OR, true)
+		}
+		tokenRes, tokenTotal, err := database.QueryShareToken(tokenQueryParams, 0, 0, "", "", nil)
+		if err != nil {
+			klog.Errorf("QueryShareToken error: %v", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+		klog.Infof("tokenTotal: %d", tokenTotal)
+		for _, shareToken := range tokenRes {
+			err = database.DeleteShareToken(shareToken.Token)
+			if err != nil {
+				klog.Errorf("DeleteShareToken error: %v", err)
+				continue
+			}
+		}
+
+		memberQueryParams := &database.QueryParams{}
+		memberQueryParams.OR = []database.Filter{}
+		for _, sharePath := range internalSharePaths {
+			database.BuildStringQueryParam(sharePath.ID, "share_members.path_id", "=", &memberQueryParams.OR, true)
+		}
+		memberRes, memberTotal, err := database.QueryShareMember(memberQueryParams, 0, 0, "", "", nil)
+		if err != nil {
+			klog.Errorf("QueryShareMember error: %v", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+		klog.Infof("memberTotal: %d", memberTotal)
+		if deleteArg.FileParam.FileType == "sync" {
+			for _, sharePath := range internalSharePaths {
+				for _, shareMember := range memberRes {
+					if sharePath.ID == shareMember.PathID {
+						seaResp, err := seahub.HandleDeleteDirSharedItems(sharePath, shareMember, "user")
+						if err != nil {
+							klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", err)
+							continue
+						}
+						klog.Infof("postgres.HandleDeleteDirSharedItems response: %+v", seaResp)
+					}
+				}
+			}
+		}
+		for _, shareMember := range memberRes {
+			err = database.DeleteShareMember(shareMember.ID)
+			if err != nil {
+				klog.Errorf("DeleteShareMember error: %v", err)
+				continue
+			}
+		}
+
+		for _, sharePath := range pathRes {
+			err = database.DeleteSharePath(sharePath.ID)
+			if err != nil {
+				klog.Errorf("DeleteSharePath error: %v", err)
+				continue
+			}
+		}
+	}
 
 	var handlerParam = &base.HandlerParam{
 		Ctx:   ctx,
