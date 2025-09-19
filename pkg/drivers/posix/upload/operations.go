@@ -248,6 +248,7 @@ func UpdateFileInfo(fileInfo FileInfo, uploadsDir string) error {
 	return nil
 }
 
+// dst, src
 func MoveFileByInfo(fileInfo FileInfo, uploadsDir string) error {
 	// Construct file path
 	filePath := filepath.Join(uploadsDir, fileInfo.ID)

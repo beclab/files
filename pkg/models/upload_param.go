@@ -11,6 +11,7 @@ type ResumableInfo struct {
 	ResumableTotalSize        int64                 `json:"resumableTotalSize" form:"resumableTotalSize"`
 	ResumableType             string                `json:"resumableType" form:"resumableType"`
 	ResumableIdentifier       string                `json:"resumableIdentifier" form:"resumableIdentifier"`
+	ResumableIdenty           string                `json:"resumableIdenty" form:"resumableIdenty"`
 	ResumableFilename         string                `json:"resumableFilename" form:"resumableFilename"`
 	ResumableRelativePath     string                `json:"resumableRelativePath" form:"resumableRelativePath"`
 	ResumableTotalChunks      int                   `json:"resumableTotalChunks" form:"resumableTotalChunks"`
@@ -21,16 +22,21 @@ type ResumableInfo struct {
 	MD5                       string                `json:"md5,omitempty" form:"md5"`
 	File                      *multipart.FileHeader `json:"file" form:"file" binding:"required"`
 	Share                     string                `json:"share" form:"share"` // val = 1
-	ShareOwner                string                `json:"shareOwner" form:"shareOwner"`
-	ShareParentDir            string                `json:"shareParentDir" form:"shareParentDir"`
+	ShareType                 string                `json:"sharetype" form:"sharetype"`
+	Shareby                   string                `json:"shareby" form:"shareby"`
+	SharebyPath               string                `json:"sharebyPath" form:"sharebyPath"`
 }
 
 type FileUploadArgs struct {
-	Node      string         `json:"node"` // node name
-	FileParam *FileParam     `json:"fileParam"`
-	FileName  string         `json:"fileName,omitempty"`
-	From      string         `json:"from,omitempty"`
-	UploadId  string         `json:"uploadId,omitempty"`
-	Ranges    string         `json:"ranges,omitempty"`
-	ChunkInfo *ResumableInfo `json:"chunkInfo,omitempty"`
+	Node          string         `json:"node"` // node name
+	FileParam     *FileParam     `json:"fileParam"`
+	FileName      string         `json:"fileName,omitempty"`
+	From          string         `json:"from,omitempty"`
+	Identy        string         `json:"identy"`
+	Share         string         `json:"share"`
+	ShareType     string         `json:"sharetype"`
+	UploadId      string         `json:"uploadId,omitempty"`
+	Ranges        string         `json:"ranges,omitempty"`
+	UserAgentHash string         `json:"userAgentHash"`
+	ChunkInfo     *ResumableInfo `json:"chunkInfo,omitempty"`
 }

@@ -3,7 +3,6 @@ package upload
 import (
 	"errors"
 	"files/pkg/common"
-	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
 	"fmt"
@@ -43,14 +42,14 @@ func HandleUploadLink(fileParam *models.FileParam, from string) ([]byte, error) 
 		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
 	}
 
-	if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
-		if !CheckDirExist(uploadPath) {
-			if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm); err != nil {
-				klog.Error("err:", err)
-				return nil, err
-			}
-		}
-	}
+	// if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
+	// 	if !CheckDirExist(uploadPath) {
+	// 		if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm); err != nil {
+	// 			klog.Error("err:", err)
+	// 			return nil, err
+	// 		}
+	// 	}
+	// }
 
 	uploadID := MakeUid(uploadPath + from)
 	uploadLink := fmt.Sprintf("/upload/upload-link/%s/%s", common.NodeName, uploadID)
@@ -63,7 +62,7 @@ func HandleUploadLink(fileParam *models.FileParam, from string) ([]byte, error) 
 /**
  * ~ HandleUploadedBytes
  */
-func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, error) {
+func HandleUploadedBytes(fileParam *models.FileParam, fileName string, fileIdenty string, reqUA string) ([]byte, error) {
 	var user = fileParam.Owner
 	klog.Infof("[upload] uploadedBytes, user: %s, fileName: %s, param: %s", user, fileName, common.ToJson(fileParam))
 
@@ -88,14 +87,14 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
 	}
 
-	if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
-		if !common.PathExists(uploadPath) {
-			if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm); err != nil {
-				klog.Error("err:", err)
-				return nil, err
-			}
-		}
-	}
+	// if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
+	// 	if !common.PathExists(uploadPath) {
+	// 		if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm); err != nil {
+	// 			klog.Error("err:", err)
+	// 			return nil, err
+	// 		}
+	// 	}
+	// }
 
 	responseData := make(map[string]interface{})
 	responseData["uploadedBytes"] = 0
@@ -105,17 +104,18 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 
 	klog.Infof("[upload] uploadedBytes, fullPath: %s, dirPath: %s", fullPath, dirPath)
 
-	if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
-		if !common.PathExists(dirPath) {
-			return common.ToBytes(responseData), errors.New("storage path is not exist or is not a dir")
-		}
-	}
+	// if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
+	// 	if !common.PathExists(dirPath) {
+	// 		return common.ToBytes(responseData), errors.New("storage path is not exist or is not a dir")
+	// 	}
+	// }
 
 	if strings.HasSuffix(fileName, "/") {
 		return nil, errors.New(fmt.Sprintf("full path %s is a dir", fullPath))
 	}
 
-	innerIdentifier := MakeUid(fullPath)
+	// todo add identy
+	innerIdentifier := MakeUid(fullPath) // real upload file temp name
 	tmpName := innerIdentifier
 	UploadsFiles[innerIdentifier] = filepath.Join(uploadTempPath, tmpName)
 
@@ -161,10 +161,15 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, 
 /**
  * ~ HandleUploadChunks
  */
-func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableInfo models.ResumableInfo, ranges string) (bool, *FileUploadState, error) {
+func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableInfo models.ResumableInfo, reqUA string, ranges string) (bool, *FileUploadState, error) {
 	var user = fileParam.Owner
 	var uploadPath string
 	var uploadTempPath string
+	var share = resumableInfo.Share
+	var shareType = resumableInfo.ShareType
+	var shareby = resumableInfo.Shareby
+	var sharebyPath = resumableInfo.SharebyPath
+	_, _, _, _ = share, shareType, shareby, sharebyPath
 
 	klog.Infof("[upload] uploadedChunks, user: %s, uploadId: %s, param: %s", user, uploadId, common.ToJson(fileParam))
 
@@ -185,8 +190,6 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		return false, nil, err
 	}
 
-	uploadPath = uri + fileParam.Path
-
 	if fileParam.FileType == common.External {
 		uploadTempPath = filepath.Join(uri, fileParam.Path, common.DefaultUploadTempDir)
 	} else {
@@ -205,8 +208,23 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		p = p + "/"
 	}
 
+	// dst storage path, if shared, fileParam must be sharedby Param
+	// uploadPath = uri + fileParam.Path
+	if share != "" {
+		shareParam, err := models.CreateFileParam(shareby, sharebyPath)
+		if err != nil {
+			return false, nil, err
+		}
+		sharebyUri, err := shareParam.GetResourceUri()
+		if err != nil {
+			return false, nil, err
+		}
+		uploadPath = sharebyUri + shareParam.Path
+	} else {
+		uploadPath = uri + fileParam.Path
+	}
 	fullPath := filepath.Join(uploadPath, resumableInfo.ResumableRelativePath)
-	innerIdentifier := MakeUid(fullPath)
+	innerIdentifier := MakeUid(fullPath) // todo add resumableInfo.ResumableIdenty
 	tmpName := innerIdentifier
 	UploadsFiles[innerIdentifier] = filepath.Join(uploadTempPath, tmpName)
 
@@ -221,6 +239,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		RemoveTempFileAndInfoFile(tmpName, uploadTempPath)
 
 		dirPath := filepath.Dir(fullPath)
+		_ = dirPath
 
 		if info.Offset != 0 {
 			info.Offset = 0
@@ -233,12 +252,12 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 				return false, nil, errors.New("parent dir is not exist or is not a dir")
 			}
 
-			if !CheckDirExist(dirPath) {
-				if err = files.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
-					klog.Error("err:", err)
-					return false, nil, err
-				}
-			}
+			// if !CheckDirExist(dirPath) { // + todo comment
+			// 	if err = files.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
+			// 		klog.Error("err:", err)
+			// 		return false, nil, err
+			// 	}
+			// }
 		}
 
 		if resumableInfo.ResumableRelativePath == "" {
@@ -261,7 +280,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 
 				var data = &FileUploadState{
 					Name:           resumableInfo.ResumableFilename,
-					Id:             MakeUid(info.FullPath),
+					Id:             MakeUid(info.FullPath), // todo
 					UploadTempPath: uploadTempPath,
 					FileInfo:       &info,
 				}
@@ -363,7 +382,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		if info.Offset == info.FileSize {
 			var data = &FileUploadState{
 				Name:     resumableInfo.ResumableFilename,
-				Id:       MakeUid(info.FullPath),
+				Id:       MakeUid(info.FullPath), // todo
 				Size:     info.FileSize,
 				FileInfo: &info,
 			}
@@ -401,7 +420,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 	if offsetEnd == info.FileSize-1 {
 		var data = &FileUploadState{
 			Name:           resumableInfo.ResumableFilename,
-			Id:             MakeUid(info.FullPath),
+			Id:             MakeUid(info.FullPath), // todo
 			Size:           info.FileSize,
 			State:          common.Completed,
 			UploadTempPath: uploadTempPath,
@@ -413,7 +432,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		}
 
 		if resumableInfo.Share != "" { // upload to shared directory
-			sharedParam, err := models.CreateFileParam(resumableInfo.ShareOwner, resumableInfo.ShareParentDir)
+			sharedParam, err := models.CreateFileParam(resumableInfo.Shareby, resumableInfo.SharebyPath)
 			if err != nil {
 				return false, data, err
 			}
@@ -423,8 +442,10 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 				return false, data, err
 			}
 
-			info.FullPath = uri + sharedParam.Path + resumableInfo.ResumableFilename
+			info.FullPath = uri + sharedParam.Path + resumableInfo.ResumableRelativePath //resumableInfo.ResumableFilename
 		}
+
+		klog.Infof("[upload] uploadId: %s, move by, src: %s, dst: %s", uploadId, uploadTempPath, info.FullPath)
 
 		if err = MoveFileByInfo(info, uploadTempPath); err != nil {
 			klog.Warningf("[upload] uploadId: %s, move by, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, err)
