@@ -708,8 +708,8 @@ func GetSharedOutFolders(username string) ([]map[string]string, error) {
 		}
 
 		result := map[string]string{
-			//"repo_id":          repo["origin_repo_id"],
-			//"repo_name":        repo["origin_repo_name"],
+			"origin_repo_id":   repo["origin_repo_id"],
+			"origin_repo_name": repo["origin_repo_name"],
 			"repo_id":          repo["repo_id"],
 			"repo_name":        repo["repo_name"],
 			"path":             repo["origin_path"],
