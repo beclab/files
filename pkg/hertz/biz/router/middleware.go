@@ -3,9 +3,11 @@ package router
 import (
 	"bytes"
 	"context"
+	"errors"
 	"files/pkg/common"
 	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
+	"files/pkg/hertz/biz/model/api/share"
 	"files/pkg/models"
 	"fmt"
 	"io"
@@ -18,6 +20,25 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
+)
+
+type ShareAccess struct {
+	Method   string
+	Resource bool
+	Preview  bool
+	Raw      bool
+	Download bool
+	Upload   bool
+}
+
+var (
+	ShareHostPrefix        = "share."
+	ShareApiResourcesPath  = "/api/resources"
+	ShareApiPreviewPath    = "/api/preview"
+	ShareApiRawPath        = "/api/raw"
+	ShareApiUploadPath     = "/upload"
+	ShareApiUploadLinkPath = "/upload/upload-link"
+	ShareApiUploadedPath   = "/upload/file-uploaded-bytes"
 )
 
 func TimingMiddleware() app.HandlerFunc {
@@ -54,82 +75,78 @@ func CookieMiddleware() app.HandlerFunc {
 	}
 }
 
+// + share
 func ShareMiddleware() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var bflName = string(c.GetHeader("X-Bfl-User"))
 		var method = string(c.Request.Method())
+		var host = string(c.Request.Host())
 		var path = string(c.Request.Path())
-		if !strings.HasPrefix(path, "/api/share/") {
+
+		var paramPath string
+		var urlShareType string
+		var shareAccess = &ShareAccess{
+			Method: method,
+		}
+
+		if strings.HasPrefix(host, ShareHostPrefix) {
+			urlShareType = common.ShareTypeExternal
+		} else {
+			urlShareType = common.ShareTypeInternal
+		}
+
+		if strings.HasPrefix(path, ShareApiResourcesPath) {
+			paramPath = strings.TrimPrefix(path, ShareApiResourcesPath)
+			shareAccess.Resource = true
+		} else if strings.HasPrefix(path, ShareApiPreviewPath) {
+			paramPath = strings.TrimPrefix(path, ShareApiPreviewPath)
+			shareAccess.Preview = true
+		} else if strings.HasPrefix(path, ShareApiRawPath) {
+			paramPath = strings.TrimPrefix(path, ShareApiRawPath)
+			if c.Query("inline") == "true" {
+				shareAccess.Raw = true
+			} else {
+				shareAccess.Download = true
+			}
+		} else if strings.HasPrefix(path, ShareApiUploadPath) {
+			shareAccess.Upload = true
+			if strings.HasPrefix(path, ShareApiUploadLinkPath) {
+				if method == http.MethodGet {
+					paramPath = c.Query("file_path")
+				} else {
+					paramPath = c.Query("file_path") // todo body.parent_id
+				}
+			} else if strings.HasPrefix(path, ShareApiUploadedPath) {
+				paramPath = c.Query("parent_dir")
+			}
+		}
+
+		shareParam, _ := models.CreateFileParam(bflName, paramPath)
+
+		if shareParam == nil || shareParam.FileType != common.Share {
 			c.Next(ctx)
 			return
 		}
 
-		var preview, raw bool
-		var download bool
-		var upload, uploadLink, uploadBytes, uploadChunk bool
-		_ = download
-		_ = upload
+		klog.Infof("[share] share params: %s", common.ToJson(shareParam))
 
-		var uploadLinkId, uploadParentDir, uploadFileName, uploadRetJson string
+		var uploadLink, uploadBytes, uploadChunk bool
+		var uploadLinkId, uploadParentDir, uploadFileName string
 		_ = uploadParentDir
 
-		var paths = strings.TrimPrefix(path, "/api/share")
-
-		var shareUrlPath string
-
-		if strings.HasPrefix(paths, "/preview/") {
-			preview = true
-			shareUrlPath = strings.TrimPrefix(paths, "/preview")
-		} else if strings.HasPrefix(paths, "/raw/") {
-			raw = true
-			shareUrlPath = strings.TrimPrefix(paths, "/raw/")
-		} else if strings.HasPrefix(paths, "/upload/") {
-			upload = true
-
-			if strings.Contains(paths, "/file-uploaded-bytes/") {
-				uploadBytes = true
-				shareUrlPath = c.Query("parent_dir")
-				uploadFileName = c.Query("file_name")
-			} else {
-				shareUrlPath = c.Query("file_path")
-
-				if method == http.MethodGet {
-					uploadLink = true
-				} else {
-					uploadChunk = true
-					uploadRetJson = c.Query("ret-json")
-					var lp = strings.LastIndex(paths, "/")
-					uploadLinkId = paths[lp+1:]
-				}
-			}
-		} else {
-			shareUrlPath = paths
-		}
-
-		var shareParam, err = models.CreateFileParam(bflName, shareUrlPath)
+		shared, err := checkSharePath(shareParam.Extend)
 		if err != nil {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
 		}
 
-		klog.Infof("share params: %s", common.ToJson(shareParam))
-
-		shared, err := database.QueryShareById(shareParam.Extend)
-		if err != nil {
-			klog.Errorf("postgres.QueryShareById error: %v", err)
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		if urlShareType != shared.ShareType {
+			klog.Errorf("url.shareType %s not equal sharePaths.shareType %s", urlShareType, shared.ShareType)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "url invalid"})
 			return
 		}
 
-		klog.Infof("share path: %s", common.ToJson(shared))
-
-		if !((shared.FileType == common.Drive && shared.Extend == common.Home) || shared.FileType == common.Sync) {
-			klog.Errorf("share path invalid, fileType: %s, extend: %s", shared.FileType, shared.Extend)
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "fileType invalid"})
-			return
-		}
-
-		// todo check expired
+		klog.Infof("[share] share path: %s", common.ToJson(shared))
 
 		var sharedPath = shared.Path
 		var shareType = strings.ToLower(shared.ShareType)
@@ -140,37 +157,20 @@ func ShareMiddleware() app.HandlerFunc {
 		_ = shareOwner
 
 		if shareType == common.ShareTypeInternal {
-			shareMember, err := database.QueryShareMemberById(shared.ID)
-			if err != nil {
-				klog.Errorf("postgres.QueryShareMemberById error: %v", err)
-				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			if err = checkInternal(bflName, shared, shareAccess); err != nil {
+				klog.Errorf("check internal error: %v", err)
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
 				return
 			}
-
-			if shareMember.ShareMember == "" {
-				klog.Error("shareMember is nil")
-				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "shareMember is nil"})
+		} else if shareType == common.ShareTypeExternal {
+			if err = checkExternal(bflName, c.Query("token"), shared, shareAccess); err != nil {
+				klog.Errorf("check external error: %v", err)
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
 				return
 			}
+		} else if shareType == common.ShareTypeSMB {
 
-			var matchedMember bool
-			var members = strings.Split(shareMember.ShareMember, ",")
-			for _, m := range members {
-				if m == bflName {
-					matchedMember = true
-					break
-				}
-			}
-
-			if !matchedMember {
-				klog.Error("shareMember is nil")
-				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "shareMember is nil"})
-				return
-			}
-
-		}
-
-		if permit := checkPermission(shared.ShareType, shared.Permission, method, preview, raw, download, upload); !permit {
+		} else {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
 			return
 		}
@@ -182,39 +182,45 @@ func ShareMiddleware() app.HandlerFunc {
 			pathRewrite = sharedPath
 		}
 
-		var host = fmt.Sprintf("http://%s", common.SERVER_HOST)
+		var redirect = fmt.Sprintf("http://%s", common.SERVER_HOST)
 		var query = string(c.Request.QueryString())
 		pathRewrite = filepath.Join(shared.FileType, shared.Extend) + pathRewrite
 		var rewritePrefix string
-		if preview {
-			rewritePrefix = "/api/preview/"
-		} else if raw {
-			rewritePrefix = "/api/raw/"
-		} else if upload {
-			rewritePrefix = "/upload/upload-link/" + global.GlobalNode.GetMasterNode() + "/"
+		if shareAccess.Resource {
+			rewritePrefix = ShareApiResourcesPath
+		} else if shareAccess.Preview {
+			rewritePrefix = ShareApiPreviewPath
+		} else if shareAccess.Raw || shareAccess.Download {
+			rewritePrefix = ShareApiRawPath
+		} else if shareAccess.Upload {
+			rewritePrefix = ShareApiUploadLinkPath + global.GlobalNode.GetMasterNode()
 		} else {
-			rewritePrefix = "/api/resources/"
+			return
+		}
+
+		if !strings.HasSuffix(rewritePrefix, "/") {
+			rewritePrefix += "/"
 		}
 
 		var url string
-		if upload { // upload
+		if shareAccess.Upload { // upload
 			shareOwner = bflName
 
 			if uploadLink {
-				url = host + rewritePrefix + "?file_path=" + "/" + pathRewrite + "&from=" + c.Query("from")
+				url = redirect + rewritePrefix + "?file_path=" + "/" + pathRewrite + "&from=" + c.Query("from")
 			} else if uploadBytes {
-				url = host + rewritePrefix + "?parent_dir=" + "/" + pathRewrite + "&file_name=" + uploadFileName
+				url = redirect + rewritePrefix + "?parent_dir=" + "/" + pathRewrite + "&file_name=" + uploadFileName
 			} else if uploadChunk {
-				url = host + rewritePrefix + uploadLinkId + "?ret-json=" + uploadRetJson
+				url = redirect + rewritePrefix + uploadLinkId + "?ret-json=" + c.Query("ret-json")
 			}
 		} else {
-			url = host + rewritePrefix + pathRewrite
+			url = redirect + rewritePrefix + pathRewrite
 			if query != "" {
 				url = url + "?" + query
 			}
 		}
 
-		klog.Infof("share rewrite url: %s, rewrite user: %s", url, shareOwner)
+		klog.Infof("[share] share rewrite url: %s, rewrite user: %s", url, shareOwner)
 
 		req, _ := http.NewRequest(string(c.Request.Method()), url, nil)
 
@@ -247,30 +253,120 @@ func ShareMiddleware() app.HandlerFunc {
 		c.Status(resp.StatusCode)
 		bodyRes, _ := io.ReadAll(resp.Body)
 		c.Write(bodyRes)
+		c.Abort()
+		return
 	}
 }
 
-func checkPermission(shareType string, permission int32, method string, preview, raw bool, download, upload bool) bool {
+func checkSharePath(shareId string) (*share.SharePath, error) {
+	sharePath, err := database.QueryShareById(shareId)
+	if err != nil {
+		klog.Errorf("postgres.QueryShareById error: %v", err)
+		return nil, err
+	}
+
+	if sharePath == nil {
+		return nil, errors.New("url invalid")
+	}
+
+	if !((sharePath.FileType == common.Drive && sharePath.Extend == common.Home) || sharePath.FileType == common.Sync) {
+		klog.Errorf("share path invalid, type: %s, extend: %s", sharePath.FileType, sharePath.Extend)
+		return nil, errors.New("url invalid")
+	}
+
+	return sharePath, nil
+}
+
+func checkInternal(currentOwner string, sharePaths *share.SharePath, shareAccess *ShareAccess) error {
+	shareMember, err := database.QueryShareMemberById(sharePaths.ID)
+	if err != nil {
+		return fmt.Errorf("postgres.QueryShareMemberById error: %v", err)
+	}
+
+	if shareMember.ShareMember == "" {
+		return errors.New("shareMember not found")
+	}
+
+	var matchedMember bool
+	var members = strings.Split(shareMember.ShareMember, ",")
+	for _, m := range members {
+		if m == currentOwner {
+			matchedMember = true
+			break
+		}
+	}
+
+	if !matchedMember {
+		return errors.New("matchedMember is nil")
+	}
+
+	if permit := checkPermission(currentOwner, sharePaths.Owner, sharePaths.ShareType, sharePaths.Permission, shareAccess); !permit {
+		return errors.New("authorization check failed")
+	}
+	return nil
+}
+
+func checkExternal(currentUser string, token string, sharePaths *share.SharePath, shareAccess *ShareAccess) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return errors.New("token is nil")
+	}
+
+	shareToken, err := database.QueryShareExternalById(sharePaths.ID)
+	if err != nil {
+		return fmt.Errorf("postgres.QueryShareExternalById error: %v", err)
+	}
+
+	if shareToken == nil {
+		return errors.New("shareToken not found")
+	}
+
+	if shareToken.Token != token {
+		return fmt.Errorf("token invalid, shareToken.Token: %s", shareToken.Token)
+	}
+
+	expired, err := time.Parse("2006-01-02 15:04:05", shareToken.ExpireAt)
+	if err != nil {
+		return fmt.Errorf("shareToken expireAt invalid, shareToken.ExpireAt: %s", shareToken.Token)
+	}
+
+	if time.Now().After(expired) {
+		return fmt.Errorf("shareToken expired, shareToken.ExpireAt: %s", shareToken.ExpireAt)
+	}
+
+	if permit := checkPermission(currentUser, sharePaths.Owner, sharePaths.ShareType, sharePaths.Permission, shareAccess); !permit {
+		return errors.New("authorization check failed")
+	}
+
+	return nil
+
+}
+
+// method string, preview, raw bool, download, upload bool
+func checkPermission(currentUser string, shareOwner string, shareType string, permission int32, shareAccess *ShareAccess) bool {
 	/**
 	 * permission
 	 * 0 - no permit
-	 * 1 - view
-	 * 2 - upload only
-	 * 3 - edit
+	 * 1 - view, download
+	 * 2 - upload only (external only)
+	 * 3 - upload, download
 	 * 4 - admin
 	 */
 
-	if shareType == common.ShareTypeInternal {
+	if currentUser == shareOwner {
 		return true
 	}
 
 	switch permission {
 	case 1:
-		return method == http.MethodGet && !upload
-	case 2:
+		return shareAccess.Method == http.MethodGet && !shareAccess.Upload
+	case 2: // only upload
+		if shareType == common.ShareTypeExternal {
+			return shareAccess.Upload
+		}
 		return false
 	case 3:
-		return false
+		return (shareAccess.Resource && shareAccess.Method == http.MethodGet) || shareAccess.Upload || shareAccess.Download
 	case 4:
 		return true
 	default:
