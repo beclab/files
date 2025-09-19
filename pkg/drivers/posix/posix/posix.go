@@ -554,10 +554,11 @@ func (s *PosixStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
  */
 func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	var user = fileUploadArg.FileParam.Owner
+	var chunkInfo = fileUploadArg.ChunkInfo
 
-	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, param: %s", user, fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, param: %s, share: %s %s %s", user, fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam), chunkInfo.Share, chunkInfo.Shareby, chunkInfo.SharebyPath)
 
-	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
+	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, fileUploadArg.Ranges)
 
 	if err != nil {
 		return nil, err

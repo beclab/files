@@ -78,6 +78,7 @@ func CookieMiddleware() app.HandlerFunc {
 // + share
 func ShareMiddleware() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
+		var err error
 		var bflName = string(c.GetHeader("X-Bfl-User"))
 		var method = string(c.Request.Method())
 		var host = string(c.Request.Host())
@@ -94,6 +95,10 @@ func ShareMiddleware() app.HandlerFunc {
 		} else {
 			urlShareType = common.ShareTypeInternal
 		}
+
+		var uploadLink, uploadBytes, uploadChunk bool
+		var uploadLinkId, uploadParentDir, uploadFileName string
+		_ = uploadParentDir
 
 		if strings.HasPrefix(path, ShareApiResourcesPath) {
 			paramPath = strings.TrimPrefix(path, ShareApiResourcesPath)
@@ -113,11 +118,40 @@ func ShareMiddleware() app.HandlerFunc {
 			if strings.HasPrefix(path, ShareApiUploadLinkPath) {
 				if method == http.MethodGet {
 					paramPath = c.Query("file_path")
+					uploadLink = true
 				} else {
-					paramPath = c.Query("file_path") // todo body.parent_id
+					// /upload/upload-link/olares/42c89beb741a78e544241160ab5e3056
+					// tPath = /olares/42c89beb741a78e544241160ab5e3056
+					var tPath = strings.TrimPrefix(path, ShareApiUploadLinkPath)
+					var tPos = strings.LastIndex(tPath, "/")
+					if tPos == 0 {
+						c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "upload-link path invalid"})
+						return
+					}
+					uploadLinkId = tPath[tPos+1:]
+					if uploadLinkId == "" {
+						c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "upload-link path invalid"})
+						return
+					}
+					// + debug
+					if c.Query("share") != "1" {
+						paramPath = "/share/07d72870-d9d6-4cb9-ab91-e007fe029e6e/"
+					}
+					uploadChunk = true
 				}
 			} else if strings.HasPrefix(path, ShareApiUploadedPath) {
 				paramPath = c.Query("parent_dir")
+				uploadFileName = c.Query("file_name")
+				uploadBytes = true
+			}
+		}
+
+		if shareAccess.Upload {
+			if c.Query("share") == "1" { // ! upload debug, rewrite form data
+				c.Next(ctx)
+				return
+			} else {
+				paramPath = "/share/07d72870-d9d6-4cb9-ab91-e007fe029e6e/"
 			}
 		}
 
@@ -129,10 +163,6 @@ func ShareMiddleware() app.HandlerFunc {
 		}
 
 		klog.Infof("[share] share params: %s", common.ToJson(shareParam))
-
-		var uploadLink, uploadBytes, uploadChunk bool
-		var uploadLinkId, uploadParentDir, uploadFileName string
-		_ = uploadParentDir
 
 		shared, err := checkSharePath(shareParam.Extend)
 		if err != nil {
@@ -150,11 +180,7 @@ func ShareMiddleware() app.HandlerFunc {
 
 		var sharedPath = shared.Path
 		var shareType = strings.ToLower(shared.ShareType)
-		var sharePermission = shared.Permission
 		var shareOwner = shared.Owner
-
-		_ = sharePermission
-		_ = shareOwner
 
 		if shareType == common.ShareTypeInternal {
 			if err = checkInternal(bflName, shared, shareAccess); err != nil {
@@ -193,7 +219,12 @@ func ShareMiddleware() app.HandlerFunc {
 		} else if shareAccess.Raw || shareAccess.Download {
 			rewritePrefix = ShareApiRawPath
 		} else if shareAccess.Upload {
-			rewritePrefix = ShareApiUploadLinkPath + global.GlobalNode.GetMasterNode()
+			if uploadBytes {
+				rewritePrefix = ShareApiUploadedPath + "/" + global.GlobalNode.GetMasterNode()
+			} else {
+				rewritePrefix = ShareApiUploadLinkPath + "/" + global.GlobalNode.GetMasterNode()
+			}
+
 		} else {
 			return
 		}
@@ -204,23 +235,24 @@ func ShareMiddleware() app.HandlerFunc {
 
 		var url string
 		if shareAccess.Upload { // upload
-			shareOwner = bflName
-
 			if uploadLink {
-				url = redirect + rewritePrefix + "?file_path=" + "/" + pathRewrite + "&from=" + c.Query("from")
+				url = redirect + rewritePrefix + "?file_path=" + "/" + pathRewrite + "&from=" + c.Query("from") + "&share=1"
 			} else if uploadBytes {
-				url = redirect + rewritePrefix + "?parent_dir=" + "/" + pathRewrite + "&file_name=" + uploadFileName
+				url = redirect + rewritePrefix + "?parent_dir=" + "/" + pathRewrite + "&file_name=" + uploadFileName + "&share=1"
 			} else if uploadChunk {
-				url = redirect + rewritePrefix + uploadLinkId + "?ret-json=" + c.Query("ret-json")
+				url = redirect + rewritePrefix + uploadLinkId + "?&ret-json=" + c.Query("ret-json") + "&share=1" + "&shareby=" + shareOwner + "&shareby_path=" + "/" + pathRewrite
 			}
 		} else {
 			url = redirect + rewritePrefix + pathRewrite
 			if query != "" {
-				url = url + "?" + query
+				url = url + "?" + query + "&share=1"
+			} else {
+				url = url + "&share=1"
 			}
 		}
 
-		klog.Infof("[share] share rewrite url: %s, rewrite user: %s", url, shareOwner)
+		// +
+		klog.Infof("[share] share rewrite url: %s, user: %s, method: %s", url, shareOwner, method)
 
 		req, _ := http.NewRequest(string(c.Request.Method()), url, nil)
 
@@ -229,12 +261,7 @@ func ShareMiddleware() app.HandlerFunc {
 		})
 		req.Header.Set(common.REQUEST_HEADER_OWNER, shareOwner)
 
-		body, err := io.ReadAll(c.Request.BodyStream())
-		if err != nil {
-			c.String(500, "failed to read request body: %v", err)
-			return
-		}
-
+		body := c.Request.Body()
 		req.Body = io.NopCloser(bytes.NewReader(body))
 		req.ContentLength = int64(len(body))
 

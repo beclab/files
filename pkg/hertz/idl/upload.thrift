@@ -32,6 +32,9 @@ struct UploadChunksReq {
     15: string driveType (api.form="driveType");
     16: string node (api.form="node");
     17: string md5 (api.form="md5");
+    18: string share (api.query="share");
+    19: string shareby (api.query="shareby");
+    20: string sharebyPath (api.query="shareby_path");
 }
 
 union UploadChunksResp {

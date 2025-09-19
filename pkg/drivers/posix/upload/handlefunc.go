@@ -413,7 +413,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		}
 
 		if resumableInfo.Share != "" { // upload to shared directory
-			sharedParam, err := models.CreateFileParam(resumableInfo.ShareOwner, resumableInfo.ShareParentDir)
+			sharedParam, err := models.CreateFileParam(resumableInfo.Shareby, resumableInfo.SharebyPath)
 			if err != nil {
 				return false, data, err
 			}

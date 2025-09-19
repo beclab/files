@@ -11,12 +11,13 @@ import (
 	upload "files/pkg/hertz/biz/model/upload"
 	"files/pkg/models"
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"reflect"
-	"strings"
 )
 
 // UploadLinkMethod .
@@ -138,6 +139,7 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req upload.UploadChunksReq
+
 	err = c.BindAndValidate(&req)
 	if err != nil {
 		klog.Errorf("bind and validate error: %v", err)
@@ -168,6 +170,9 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	uploadArg.ChunkInfo.Share = req.Share
+	uploadArg.ChunkInfo.Shareby = req.Shareby
+	uploadArg.ChunkInfo.SharebyPath = req.SharebyPath
 	uploadArg.ChunkInfo.File = header
 
 	p := uploadArg.ChunkInfo.ParentDir

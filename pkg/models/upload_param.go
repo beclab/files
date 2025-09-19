@@ -21,8 +21,8 @@ type ResumableInfo struct {
 	MD5                       string                `json:"md5,omitempty" form:"md5"`
 	File                      *multipart.FileHeader `json:"file" form:"file" binding:"required"`
 	Share                     string                `json:"share" form:"share"` // val = 1
-	ShareOwner                string                `json:"shareOwner" form:"shareOwner"`
-	ShareParentDir            string                `json:"shareParentDir" form:"shareParentDir"`
+	Shareby                   string                `json:"shareby" form:"shareby"`
+	SharebyPath               string                `json:"sharebyPath" form:"sharebyPath"`
 }
 
 type FileUploadArgs struct {
