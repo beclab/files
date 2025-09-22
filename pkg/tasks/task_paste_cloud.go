@@ -505,7 +505,7 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 
 			if jobStatusData.Error != "" {
 				klog.Errorf("[Task] Id: %s, job status error: %s", t.id, jobStatusData.Error)
-				if (t.param.Dst.IsSync() && t.param.Src.IsCloud()) || (t.param.Src.IsCloud() && t.param.Dst.IsSync()) {
+				if (t.param.Src.IsCloud() && t.param.Dst.IsSync()) || t.param.Dst.FileType == common.DropBox {
 					err = t.formatJobStatusError(jobStatusData.Error)
 				}
 				break

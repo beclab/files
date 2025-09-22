@@ -174,6 +174,7 @@ func (t *Task) Execute(fs ...func() error) error {
 
 					t.state = common.Canceled
 				} else {
+					t.message = errmsg
 					t.state = common.Failed
 
 					klog.Errorf("[Task] Id: %s, exec failed, temp result: %s, pause result: %s", t.id, common.ToJson(t.param.Temp), common.ToJson(t.pausedParam))
@@ -203,7 +204,6 @@ func (t *Task) Execute(fs ...func() error) error {
 
 					klog.Infof("[Task] Id: %s, exec failed, clear result done!", t.id)
 				}
-				t.message = errmsg
 				return
 			}
 		}
@@ -257,6 +257,10 @@ func (t *Task) formatJobStatusError(s string) error {
 		result = s[pos+len(t.id):]
 		result = strings.TrimSuffix(result, ": is a directory")
 		return errors.New(fmt.Sprintf("There may be folders and files with the same name, so the data cannot be copied to the disk. Please check and rename the corresponding folders or files: %s", result))
+	}
+
+	if strings.Contains(s, "path/insufficient_space") {
+		return errors.New("Storage space is full.")
 	}
 
 	return errors.New(s)
