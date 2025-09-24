@@ -53,8 +53,8 @@ struct ViewSharePath {
 struct CreateSharePathReq {
     // path is in the URL
     1: required string share_type (api.body="share_type", api.vd="($ == 'internal'||$ == 'external'||$ == 'smb')");
-    2: required string name (api.body="name");
-    3: required string password (api.body="password");
+    2: string name (api.body="name");
+    3: string password (api.body="password");
     4: i64 expire_in (api.body="expire_in");
     5: string expire_time (api.body="expire_time");
     6: required i32 permission (api.body="permission", api.vd="$>=0 && $<=4");
@@ -116,14 +116,20 @@ struct RevokeShareTokenResp {
     1: bool success;
 }
 
+struct AddShareMemberInfo {
+    1: required string ShareMember (api.body="share_member");
+    2: required i32 Permission (api.body="permission", api.vd="$>=0 && $<=4");
+}
+
 struct AddShareMemberReq {
     1: required string PathId (api.body="path_id");
-    2: required string ShareMember (api.body="share_member");
-    3: required i32 Permission (api.body="permission", api.vd="$>=0 && $<=4");
+    2: required list<AddShareMemberInfo> ShareMembers (api.body="share_members");
 }
 
 struct AddShareMemberResp {
-    1: ShareMember share_member;
+    1: list<ShareMember> created;
+    2: list<ShareMember> updated;
+    3: list<ShareMember> existed;
 }
 
 struct ListShareMemberReq {
@@ -137,13 +143,20 @@ struct ListShareMemberResp {
     2: list<ShareMember> share_members;
 }
 
-struct UpdateShareMemberPermissionReq {
+struct UpdateShareMemberInfo {
     1: required i64 MemberId (api.body="member_id");
     2: required i32 Permission (api.body="permission", api.vd="$>=0 && $<=4");
 }
 
+struct UpdateShareMemberPermissionReq {
+    1: required list<UpdateShareMemberInfo> ShareMembers (api.body="share_members");
+}
+
 struct UpdateShareMemberPermissionResp {
-    1: bool success;
+    1: list<ShareMember> updated;
+    2: list<ShareMember> existed;
+    3: list<UpdateShareMemberInfo> not_existed;
+    4: list<UpdateShareMemberInfo> share_deleted;
 }
 
 struct RemoveShareMemberReq {
