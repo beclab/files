@@ -567,14 +567,14 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 		klog.Infof("Cloud tree, firstItem Path: %s", firstItem.Path)
 		klog.Infof("Cloud tree, firstItem Name: %s", firstItem.Name)
 		var firstItemPath string
-		if fileParam.FileType == common.GoogleDrive {
-			firstItemPath = firstItem.Meta.ID
-		} else {
-			firstItemPath = firstItem.Path
-		}
+		firstItemPath = firstItem.Path
 
 		if firstItem.IsDir {
+			if !strings.HasSuffix(firstItemPath, "/") {
+				firstItemPath += "/"
+			}
 			var nestFileParam = &models.FileParam{
+				Owner:    fileParam.Owner,
 				FileType: fileParam.FileType,
 				Extend:   fileParam.Extend,
 				Path:     firstItemPath,
