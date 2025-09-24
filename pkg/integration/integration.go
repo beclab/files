@@ -32,6 +32,7 @@ type integration struct {
 	rest       *resty.Client
 	tokens     map[string]*Integrations
 	authToken  map[string]*authToken
+	users      []*User
 
 	sync.RWMutex
 }
@@ -144,6 +145,8 @@ func (i *integration) GetIntegrations() error {
 	if users == nil || len(users) == 0 {
 		return fmt.Errorf("users not exists")
 	}
+
+	i.users = users
 
 	var configs []*config.Config
 
@@ -267,6 +270,17 @@ func (i *integration) GetIntegrations() error {
 	rclone.Command.StartHttp(configs)
 
 	return nil
+}
+
+func (i *integration) GetUsers() map[string]string {
+	var data = make(map[string]string)
+	for _, user := range i.users {
+		var anno = user.ObjectMeta.Annotations
+		role, _ := anno["bytetrade.io/owner-role"]
+		data[user.Name] = role
+	}
+
+	return data
 }
 
 func (i *integration) parseEndpoint(s string) string {

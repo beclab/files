@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tags:
-        description: 'Release Tags'
+        description: "Release Tags"
 
   push:
     branches:
@@ -12,7 +12,7 @@ on:
       - "dev"
       - "test"
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   update_server:
@@ -23,7 +23,7 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
         with:
           task_types: '["feat","fix","docs","test","ci","refactor","perf","chore","revert","style"]'
-          add_label: 'true'
+          add_label: "true"
 
       - name: Check out the repo
         uses: actions/checkout@v3
@@ -56,8 +56,8 @@ jobs:
         with:
           fallback: latest
 
-#      - name: Build
-#        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
+      #      - name: Build
+      #        run: cd packages/backend/;go mod tidy;export CGO_ENABLED=0;make build-backend;ls
 
       - name: Build
         run: |
@@ -66,13 +66,13 @@ jobs:
             for GOARCH in amd64 arm64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
-          
+
               export GOPATH=~/go
               export PATH=$GOPATH/bin:$PATH
               go install github.com/cloudwego/hertz/cmd/hz@latest
               hz -v
               GO111MODULE=on go install github.com/cloudwego/thriftgo@latest
-          
+
               go mod tidy
               go mod edit -replace github.com/apache/thrift=github.com/apache/thrift@v0.13.0
               go mod tidy
@@ -91,11 +91,12 @@ jobs:
               hz update -idl idl/repos.thrift
               hz update -idl idl/resources.thrift
               hz update -idl idl/tree.thrift
+              hz update -idl idl/user.thrift
               echo "upload.thrift"
               hz update -idl idl/upload.thrift
               echo "share.thrift"
               hz update -idl idl/share.thrift
-          
+
               cd ../..
               go mod tidy
               cd cmd/backend
@@ -112,6 +113,6 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-#          tags: beclab/files-server:${{ github.event.inputs.tags }}
+          #          tags: beclab/files-server:${{ github.event.inputs.tags }}
           tags: beclab/files-server:${{ steps.get-latest-tag.outputs.tag }}
           platforms: linux/amd64,linux/arm64
