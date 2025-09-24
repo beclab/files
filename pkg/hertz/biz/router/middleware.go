@@ -184,10 +184,12 @@ func ShareMiddleware() app.HandlerFunc {
 		var shareBy = shared.Owner
 
 		if shareType == common.ShareTypeInternal {
-			if err = checkInternal(bflName, shared, shareAccess); err != nil {
-				klog.Errorf("check internal error: %v", err)
-				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
-				return
+			if bflName != shared.Owner {
+				if err = checkInternal(bflName, shared, shareAccess); err != nil {
+					klog.Errorf("check internal error: %v", err)
+					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
+					return
+				}
 			}
 		} else if shareType == common.ShareTypeExternal {
 			var token = c.Query("token")
