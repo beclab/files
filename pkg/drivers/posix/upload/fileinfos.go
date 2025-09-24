@@ -103,7 +103,7 @@ func (m *FileInfoMgr) AddFileInfo(id string, info FileInfo) error {
 
 func (m *FileInfoMgr) UpdateInfo(id string, info FileInfo) {
 	if id != info.ID {
-		klog.Errorf("id:%s diff from v:%v", id, info)
+		klog.Warningf("id:%s diff from v:%v", id, info)
 		return
 	}
 

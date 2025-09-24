@@ -625,8 +625,11 @@ func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListR
  * UploadLink
  */
 func (s *CloudStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	var user = fileUploadArg.FileParam.Owner
+	var node = fileUploadArg.Node
+	var from = fileUploadArg.From
 
-	klog.Infof("Cloud uploadLink, param: %s", common.ToJson(fileUploadArg))
+	klog.Infof("Cloud uploadLink, user: %s, node: %s, from: %s, param: %s", user, node, from, common.ToJson(fileUploadArg))
 
 	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
 
@@ -639,9 +642,14 @@ func (s *CloudStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
  * UploadedBytes
  */
 func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	klog.Infof("Cloud uploadBytes, param: %s", common.ToJson(fileUploadArg))
+	var user = fileUploadArg.FileParam.Owner
+	var node = fileUploadArg.Node
+	var identy = fileUploadArg.Identy
+	var ua = fileUploadArg.UserAgentHash
 
-	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
+	klog.Infof("Cloud uploadBytes, user: %s, node: %s, identy: %s, ua: %s, param: %s", user, node, identy, ua, common.ToJson(fileUploadArg))
+
+	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName, identy, ua)
 
 	klog.Infof("Cloud uploadBytes, done! data: %s", string(data))
 
@@ -653,14 +661,17 @@ func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
  */
 func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	var param = fileUploadArg.FileParam
-	var uploadId = fileUploadArg.UploadId
 	var chunkInfo = fileUploadArg.ChunkInfo
+	var uploadId = fileUploadArg.UploadId
+	var identy = chunkInfo.ResumableIdenty
+	var ua = fileUploadArg.UserAgentHash
+
 	var ranges = fileUploadArg.Ranges
 	var lastChunk = chunkInfo.ResumableChunkNumber == chunkInfo.ResumableTotalChunks
 
-	klog.Infof("Cloud uploadChunks, uploadId: %s, param: %s", uploadId, common.ToJson(param))
+	klog.Infof("Cloud uploadChunks, uploadId: %s, identy: %s, ua: %s, param: %s", uploadId, identy, ua, common.ToJson(param))
 
-	_, fileInfo, err := upload.HandleUploadChunks(param, uploadId, *chunkInfo, ranges)
+	_, fileInfo, err := upload.HandleUploadChunks(param, uploadId, *chunkInfo, ua, ranges)
 	if err != nil {
 		return nil, err
 	}

@@ -525,8 +525,10 @@ func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content boo
  */
 func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	var user = fileUploadArg.FileParam.Owner
+	var node = fileUploadArg.Node
+	var from = fileUploadArg.From
 
-	klog.Infof("Posix uploadLink, user: %s, param: %s", user, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Posix uploadLink, user: %s, node: %s, from: %s, share: %s %s, param: %s", user, node, from, fileUploadArg.Share, fileUploadArg.ShareType, common.ToJson(fileUploadArg.FileParam))
 
 	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
 
@@ -539,10 +541,14 @@ func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
  * UploadedBytes
  */
 func (s *PosixStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	var node = fileUploadArg.Node
 	var user = fileUploadArg.FileParam.Owner
-	klog.Infof("Posix uploadBytes, user: %s, param: %s", user, common.ToJson(fileUploadArg.FileParam))
+	var identy = fileUploadArg.Identy
+	var ua = fileUploadArg.UserAgentHash
 
-	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
+	klog.Infof("Posix uploadBytes, user: %s, node: %s, identy: %s, ua: %s, share: %s %s, param: %s", user, node, identy, ua, fileUploadArg.Share, fileUploadArg.ShareType, common.ToJson(fileUploadArg.FileParam))
+
+	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName, identy, ua)
 
 	klog.Infof("Posix uploadBytes, done! data: %s", string(data))
 
@@ -554,10 +560,14 @@ func (s *PosixStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
  */
 func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	var user = fileUploadArg.FileParam.Owner
+	var chunkInfo = fileUploadArg.ChunkInfo
+	var uploadId = fileUploadArg.UploadId
+	var identy = chunkInfo.ResumableIdenty
+	var ua = fileUploadArg.UserAgentHash
 
-	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, param: %s", user, fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, share: %s %s %s", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.Share, chunkInfo.Shareby, chunkInfo.SharebyPath)
 
-	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
+	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
 
 	if err != nil {
 		return nil, err
