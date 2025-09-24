@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/cloudwego/hertz/pkg/app"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/cloudwego/hertz/pkg/app"
 )
 
 type QueryParam struct {
@@ -22,6 +23,7 @@ type QueryParam struct {
 	FileMode                string          `json:"fileMode,omitempty"`
 	RepoName                string          `json:"repoName,omitempty"`
 	RepoId                  string          `json:"repoId,omitempty"`
+	DriveId                 string          `json:"driveid"`
 	Destination             string          `json:"destination,omitempty"`
 	ShareType               string          `json:"shareType,omitempty"`
 	Header                  http.Header     `json:"-"`
@@ -55,6 +57,7 @@ func CreateQueryParam(owner string, ctx context.Context, c *app.RequestContext, 
 		FileMode:                strings.TrimSpace(c.Query("mode")),
 		RepoName:                strings.TrimSpace(c.Query("repoName")),
 		RepoId:                  strings.TrimSpace(c.Query("repoId")),
+		DriveId:                 strings.TrimSpace(c.Query("driveId")),
 		Destination:             strings.TrimSpace(c.Query("destination")),
 		ShareType:               strings.TrimSpace(c.Query("type")), // "mine", "shared", "share_to_me"
 		Header:                  header,

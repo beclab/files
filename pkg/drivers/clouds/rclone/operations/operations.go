@@ -35,6 +35,7 @@ type Interface interface {
 
 	Size(fs string) (*OperationsSizeResp, error)
 	CopyIdAsync(fs string, args []string) (*OperationsAsyncJobResp, error)
+	MoveId(fs string, args []string) error
 	CopyfileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error)
 	MovefileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error)
 	CopyAsync(srcFs, dstFs string) (*OperationsAsyncJobResp, error) // copy a directory,no suit for files
@@ -471,6 +472,29 @@ func (o *operations) CopyIdAsync(fs string, args []string) (*OperationsAsyncJobR
 	klog.Infof("[rclone] operations copyid done, resp: %s", string(resp))
 
 	return job, nil
+}
+
+func (o *operations) MoveId(fs string, args []string) error {
+	var url = fmt.Sprintf("%s/%s", common.ServeAddr, BackendCommandPath)
+	var async = false
+	var param = BackendCommandReq{
+		Command: "moveid",
+		Fs:      fs,
+		Args:    args,
+		Async:   &async,
+	}
+
+	klog.Infof("[rclone] operations moveid, param: %s", commonutils.ToJson(param))
+
+	resp, err := utils.Request(context.Background(), url, http.MethodPost, nil, []byte(commonutils.ToJson(param)))
+	if err != nil {
+		klog.Errorf("[rclone] operations moveid error: %v", err)
+		return err
+	}
+
+	klog.Infof("[rclone] operations moveid done, resp: %s", string(resp))
+
+	return nil
 }
 
 func (o *operations) CopyfileAsync(srcFs string, srcR string, dstFs string, dstR string) (*OperationsAsyncJobResp, error) {

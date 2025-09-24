@@ -9,6 +9,7 @@ replace bytetrade.io/web3os/fs-lib => github.com/beclab/fs-lib v0.0.2
 require (
 	github.com/alitto/pond/v2 v2.3.2
 	github.com/apache/thrift v0.22.0
+	github.com/bytedance/gopkg v0.1.1
 	github.com/chai2010/tiff v0.0.0-20211005095045-4ec2aa243943
 	github.com/cloudwego/hertz v0.10.2
 	github.com/disintegration/imaging v1.6.2
@@ -51,7 +52,6 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bytedance/gopkg v0.1.1 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
