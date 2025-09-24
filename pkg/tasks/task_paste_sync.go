@@ -256,6 +256,9 @@ func (t *Task) SyncCopy() error {
 
 	t.updateTotalSize(totalSize)
 
+	newDstPath := AddVersionSuffix(dst.Path, dst, strings.HasSuffix(dst.Path, "/"), "")
+	dst.Path = newDstPath
+
 	err = t.DoSyncCopy(src, dst, true)
 	if err != nil {
 		klog.Errorf("DownloadFromSync - DoSyncCopy - %v", err)

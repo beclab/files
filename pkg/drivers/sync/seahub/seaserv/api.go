@@ -377,6 +377,14 @@ func (s *SeafileAPI) GetUploadTmpFileOffset(repoId, filePath string) (int, error
 	return ReturnInt(ret)
 }
 
+func (s *SeafileAPI) ShareRepo(repoId, fromUsername, toUsername, permission string) (string, error) {
+	ret, err := s.rpcClient.SeafileAddShare(repoId, fromUsername, toUsername, permission)
+	if err != nil {
+		return "", err
+	}
+	return ReturnString(ret)
+}
+
 func (s *SeafileAPI) RemoveShare(repoId, fromUsername, toUsername string) (int, error) {
 	ret, err := s.rpcClient.SeafileRemoveShare(repoId, fromUsername, toUsername)
 	if err != nil {
@@ -385,8 +393,84 @@ func (s *SeafileAPI) RemoveShare(repoId, fromUsername, toUsername string) (int, 
 	return ReturnInt(ret)
 }
 
+func (s *SeafileAPI) SetSharePermission(repoId, fromUsername, toUsername, permission string) (int, error) {
+	ret, err := s.rpcClient.SetSharePermission(repoId, fromUsername, toUsername, permission)
+	if err != nil {
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) ShareSubdirToUser(repoId, path, owner, shareUser, permission, passwd string) (string, error) {
+	ret, err := s.rpcClient.ShareSubdirToUser(repoId, path, owner, shareUser, permission, passwd)
+	if err != nil {
+		return "", err
+	}
+	return ReturnString(ret)
+}
+
+func (s *SeafileAPI) UnshareSubdirForUser(repoId, path, owner, shareUser string) (int, error) {
+	ret, err := s.rpcClient.UnshareSubdirForUser(repoId, path, owner, shareUser)
+	if err != nil {
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) UpdateShareSubdirPermForUser(repoId, path, owner, shareUser, permission string) (int, error) {
+	ret, err := s.rpcClient.UpdateShareSubdirPermForUser(repoId, path, owner, shareUser, permission)
+	if err != nil {
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) GetSharedRepoByPath(repoId, path, sharedTo string, isOrg bool) (map[string]string, error) {
+	var isOrgInt = 0
+	if isOrg {
+		isOrgInt = 1
+	}
+	ret, err := s.rpcClient.GetSharedRepoByPath(repoId, path, sharedTo, isOrgInt)
+	if err != nil {
+		return nil, err
+	}
+	return ReturnObject(ret)
+}
+
+func (s *SeafileAPI) GetShareOutRepoList(username string, start, limit int) ([]map[string]string, error) {
+	ret, err := s.rpcClient.SeafileListShareRepos(username, "from_email", start, limit)
+	if err != nil {
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
 func (s *SeafileAPI) GetShareInRepoList(username string, start, limit int) ([]map[string]string, error) {
 	ret, err := s.rpcClient.SeafileListShareRepos(username, "to_email", start, limit)
+	if err != nil {
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) ListRepoSharedTo(fromUser, repoId string) ([]map[string]string, error) {
+	ret, err := s.rpcClient.SeafileListRepoSharedTo(fromUser, repoId)
+	if err != nil {
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) GetSharedUsersForSubdir(repoId, path, fromUser string) ([]map[string]string, error) {
+	ret, err := s.rpcClient.SeafileGetSharedUsersForSubdir(repoId, path, fromUser)
+	if err != nil {
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
+func (s *SeafileAPI) ListInnerPubReposByOwner(repoOwner string) ([]map[string]string, error) {
+	ret, err := s.rpcClient.ListInnerPubReposByOwner(repoOwner)
 	if err != nil {
 		return nil, err
 	}

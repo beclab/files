@@ -39,6 +39,7 @@ func CheckFolderPermission(username, repoId, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	result = strings.Trim(result, " ")
 	klog.Infof("%s!!", result)
 	return result, nil
 }
