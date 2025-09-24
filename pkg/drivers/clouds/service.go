@@ -171,7 +171,7 @@ func (s *service) FileStat(fileParam *models.FileParam) ([]byte, error) {
 	return common.ToBytes(data), nil
 }
 
-func (s *service) Rename(srcParam, dstParam *models.FileParam) ([]byte, error) {
+func (s *service) Rename(srcParam, dstParam *models.FileParam, driveId string) ([]byte, error) {
 	srcFsPrefix, err := s.command.GetFsPrefix(srcParam)
 	if err != nil {
 		return nil, err
@@ -197,21 +197,33 @@ func (s *service) Rename(srcParam, dstParam *models.FileParam) ([]byte, error) {
 		dstFs = dstFsPrefix + dstPrefixPath
 		dstRemote = dstFileName
 
-		klog.Infof("[service] rename file, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s", srcFs, srcRemote, dstFs, dstRemote)
+		if srcParam.IsGoogleDrive() && driveId != "" {
+			var fs = srcFsPrefix
+			var args = []string{
+				driveId,
+				dstFs + dstRemote,
+			}
+			klog.Infof("[service] rename file google, fs: %s, args: %v", fs, args)
 
-		if err := s.command.GetOperation().MoveFile(srcFs, srcRemote, dstFs, dstRemote); err != nil {
-			return nil, err
+			if err := s.command.GetOperation().MoveId(fs, args); err != nil {
+				return nil, err
+			}
+
+		} else {
+			klog.Infof("[service] rename file, srcFs: %s, srcR: %s, dstFs: %s, dstR: %s", srcFs, srcRemote, dstFs, dstRemote)
+
+			if err := s.command.GetOperation().MoveFile(srcFs, srcRemote, dstFs, dstRemote); err != nil {
+				return nil, err
+			}
 		}
 
 		klog.Infof("[service] rename file done!")
 
 	} else {
-
+		// ~ directory
 		var srcFs, dstFs string
 		srcFs = srcFsPrefix + srcParam.Path
 		dstFs = dstFsPrefix + dstParam.Path
-
-		klog.Infof("[service] rename dir, srcFs: %s, dstFs: %s", srcFs, dstFs)
 
 		var opts = &operations.OperationsOpt{
 			Recurse:    false,
@@ -220,15 +232,29 @@ func (s *service) Rename(srcParam, dstParam *models.FileParam) ([]byte, error) {
 			Metadata:   false,
 		}
 
+		klog.Infof("[service] rename dir, list first, srcFs: %s, dstFs: %s", srcFs, dstFs)
+
 		srcItems, _ := s.command.GetOperation().List(srcFs, opts, nil)
 		if srcItems == nil || srcItems.List == nil || len(srcItems.List) == 0 {
 			if err := s.command.CreateEmptyDirectory(dstParam); err != nil {
 				klog.Errorf("[service] rename dir, create empty dir failed, error: %v", err)
 			}
 		} else {
+			if dstParam.IsGoogleDrive() && driveId != "" {
+				srcFs = strings.TrimRight(srcFsPrefix, ":") + ",root_folder_id=" + driveId + ":"
+			}
+
+			klog.Infof("[service] rename dir, srcFs: %s, dstFs: %s", srcFs, dstFs)
+
 			if err := s.command.GetOperation().Move(srcFs, dstFs); err != nil {
 				klog.Errorf("[service] rename dir failed, srcFs: %s, dstFs: %s, error: %v", srcFs, dstFs, err)
 				return nil, err
+			}
+
+			if dstParam.IsGoogleDrive() && driveId != "" {
+				if err := s.command.GetOperation().RmDirs(srcFs, ""); err != nil {
+					klog.Warningf("[service] rename dir, google rmdirs failed, fs: %s, err: %v", srcFs, err)
+				}
 			}
 		}
 

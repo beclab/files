@@ -437,8 +437,9 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var owner = contextArgs.FileParam.Owner
 	var fileParam = contextArgs.FileParam
+	var driveId = contextArgs.QueryParam.DriveId
 
-	klog.Infof("Cloud rename, user: %s, param: %s", owner, common.ToJson(contextArgs))
+	klog.Infof("Cloud rename, user: %s, param: %s, driveId: %s", owner, common.ToJson(contextArgs), driveId)
 
 	var srcName, isSrcFile = files.GetFileNameFromPath(fileParam.Path)
 	var srcPrefixPath = files.GetPrefixPath(fileParam.Path)
@@ -453,7 +454,7 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, nil
 	}
 
-	if fileParam.IsGoogleDrive() {
+	if fileParam.IsGoogleDrive() && driveId == "" {
 		fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
 		if err != nil {
 			return nil, err
@@ -485,15 +486,6 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		if count >= 2 {
 			return nil, fmt.Errorf("The file or folder you selected has multiple objects with the same name. Please log in to the Google Drive website to modify the name and ensure its uniqueness.")
 		}
-	}
-
-	srcStat, err := s.service.Stat(fileParam)
-	if err != nil {
-		return nil, err
-	}
-
-	if srcStat == nil || srcStat.Item == nil {
-		return nil, fmt.Errorf("path %s not exists", fileParam.Path)
 	}
 
 	var dstFs, dstRemote string
@@ -530,7 +522,7 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	dstItems, err := s.service.command.GetMatchedItems(fsPrefix+srcPrefixPath, opts, filter)
 	if err != nil {
 		klog.Errorf("Cloud rename, user: %s, get dst matched items error: %v", owner, err)
-		return nil, err
+		return nil, fmt.Errorf("Path %s not found", fileParam.Path)
 	}
 
 	if dstItems != nil && dstItems.List != nil && len(dstItems.List) > 0 {
@@ -538,8 +530,11 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	klog.Infof("Cloud rename, src: %s, dst: %s", common.ToJson(fileParam), common.ToJson(dstParam))
-	resp, err := s.service.Rename(fileParam, dstParam)
+	resp, err := s.service.Rename(fileParam, dstParam, driveId)
 	if err != nil {
+		// + todo
+		// if strings.Contains(err.Error(), "object not found") {
+		// }
 		return nil, err
 	}
 
