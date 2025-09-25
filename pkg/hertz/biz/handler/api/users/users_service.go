@@ -5,6 +5,7 @@ package users
 import (
 	"context"
 
+	"files/pkg/common"
 	users "files/pkg/hertz/biz/model/api/users"
 	"files/pkg/integration"
 
@@ -15,21 +16,24 @@ import (
 // UsersMethod .
 // @router /api/users/ [GET]
 func UsersMethod(ctx context.Context, c *app.RequestContext) {
-	var userData = integration.IntegrationService.GetUsers()
+	var usersdata = integration.IntegrationService.GetUsers()
+	var owner = string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 
 	resp := &users.UsersResp{
 		Data: new(users.UsersData),
 	}
 
 	var usersNodes []*users.UsersNode
-	for k, v := range userData {
+	for _, v := range usersdata {
 		var u = &users.UsersNode{
-			Name: k,
-			Role: v,
+			Name:   v.Name,
+			Role:   v.Role,
+			Status: v.Status,
 		}
 		usersNodes = append(usersNodes, u)
 	}
 
+	resp.Data.Owner = owner
 	resp.Data.Users = usersNodes
 
 	c.JSON(consts.StatusOK, resp)

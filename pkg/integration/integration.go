@@ -5,6 +5,7 @@ import (
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/config"
 	"files/pkg/hertz/biz/model/api/external"
+	"files/pkg/models"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -272,12 +273,21 @@ func (i *integration) GetIntegrations() error {
 	return nil
 }
 
-func (i *integration) GetUsers() map[string]string {
-	var data = make(map[string]string)
+func (i *integration) GetUsers() []models.OwnerInfo {
+	i.Lock()
+	defer i.Unlock()
+
+	var data []models.OwnerInfo
 	for _, user := range i.users {
 		var anno = user.ObjectMeta.Annotations
 		role, _ := anno["bytetrade.io/owner-role"]
-		data[user.Name] = role
+		status, _ := anno["bytetrade.io/wizard-status"]
+		var u = models.OwnerInfo{
+			Name:   user.Name,
+			Role:   role,
+			Status: status,
+		}
+		data = append(data, u)
 	}
 
 	return data
