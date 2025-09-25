@@ -575,8 +575,6 @@ func (r *rclone) Clear(param *models.FileParam) error {
 			return err
 		}
 
-		r.GetOperation().FsCacheClear()
-
 		klog.Infof("[rclone] clear, file done! user: %s, fs: %s, remote: %s", owner, fs, remote)
 
 		return nil
@@ -590,8 +588,6 @@ func (r *rclone) Clear(param *models.FileParam) error {
 		klog.Errorf("[rclone] clear, purge error: %v, user: %s, fs: %s, remote: %s", err, owner, fs, remote)
 		return err
 	}
-
-	r.GetOperation().FsCacheClear()
 
 	klog.Infof("[rclone] clear, purge done! user: %s, fs: %s, remote: %s", owner, fs, remote)
 

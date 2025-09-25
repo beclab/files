@@ -391,13 +391,9 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 		var existsName string
 		for _, dirent := range dirents {
 			var count int
-
 			var isDir = strings.HasSuffix(dirent, "/")
 			for _, item := range items.List {
-				if count >= 2 {
-					existsDupname = true
-					break
-				}
+
 				if item.IsDir != isDir {
 					continue
 				}
@@ -408,7 +404,8 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 				}
 			}
 
-			if existsDupname {
+			if count >= 2 {
+				existsDupname = true
 				break
 			}
 		}
@@ -419,10 +416,6 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	}
 
 	deleteFailedPaths, _ = s.service.command.Delete(fileParam, dirents)
-
-	if err := s.service.command.GetOperation().FsCacheClear(); err != nil {
-		klog.Errorf("Cloud delete, fscache clear error: %v", err)
-	}
 
 	if len(deleteFailedPaths) > 0 {
 		return common.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
@@ -536,10 +529,6 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		// if strings.Contains(err.Error(), "object not found") {
 		// }
 		return nil, err
-	}
-
-	if err := s.service.command.GetOperation().FsCacheClear(); err != nil {
-		klog.Errorf("Cloud rename, fscache clear error: %v", err)
 	}
 
 	klog.Infof("Cloud rename, user: %s, resp: %s", owner, string(resp))
