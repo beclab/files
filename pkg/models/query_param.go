@@ -69,3 +69,9 @@ func (r *QueryParam) Json() string {
 	d, _ := json.Marshal(r)
 	return string(d)
 }
+
+type OwnerInfo struct {
+	Name   string
+	Role   string
+	Status string
+}
