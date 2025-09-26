@@ -5,6 +5,7 @@ package callback
 import (
 	"context"
 	"files/pkg/drivers/sync/seahub"
+	"files/pkg/hertz/biz/handler/api/share"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"k8s.io/klog/v2"
 	"strings"
@@ -64,6 +65,13 @@ func CallbackDeleteMethod(ctx context.Context, c *app.RequestContext) {
 
 	bflName := strings.TrimSpace(req.Name)
 	username := bflName + "@auth.local"
+
+	err = share.RemoveUserRelativeAdjustShare(bflName, nil)
+	if err != nil {
+		klog.Errorf("Delete user relative adjust share for %s failed: %v", bflName, err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
 
 	err = seahub.RemoveUser(username)
 	if err != nil {
