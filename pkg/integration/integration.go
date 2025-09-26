@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/config"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -372,4 +375,25 @@ func (i *integration) checkTokenExpired(user string, tokenName string) (bool, *I
 
 	return i.checkExpired(t.ExpiresAt), t, nil
 
+}
+
+func (i *integration) GetFilesPod(node string) (*corev1.Pod, error) {
+	pods, err := i.kubeClient.CoreV1().Pods("os-framework").List(context.Background(), v1.ListOptions{
+		LabelSelector: "app=files",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if pods == nil || pods.Items == nil || len(pods.Items) == 0 {
+		return nil, fmt.Errorf("files pod not found")
+	}
+
+	for _, pod := range pods.Items {
+		if node == pod.Spec.NodeName {
+			return &pod, nil
+		}
+	}
+
+	return nil, fmt.Errorf("files pod not found")
 }
