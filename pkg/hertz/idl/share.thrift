@@ -57,7 +57,7 @@ struct CreateSharePathReq {
     3: string password (api.body="password");
     4: i64 expire_in (api.body="expire_in");
     5: string expire_time (api.body="expire_time");
-    6: required i32 permission (api.body="permission", api.vd="$>=0 && $<=4");
+    6: i32 permission (api.body="permission", api.vd="$>=0 && $<=4");
 }
 
 struct CreateSharePathResp {
@@ -83,7 +83,7 @@ struct ListSharePathResp {
 }
 
 struct DeleteSharePathReq {
-    1: string PathId (api.query="path_id");
+    1: string PathIds (api.query="path_ids");
 }
 
 struct DeleteSharePathResp {
@@ -160,7 +160,7 @@ struct UpdateShareMemberPermissionResp {
 }
 
 struct RemoveShareMemberReq {
-    1: required i64 MemberId (api.query="member_id");
+    1: required string MemberIds (api.query="member_ids");
 }
 
 struct RemoveShareMemberResp {
