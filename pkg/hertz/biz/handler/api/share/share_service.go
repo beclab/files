@@ -234,6 +234,56 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
+// UpdateSharePath .
+// @router /api/share/share_path/ [PUT]
+func UpdateSharePath(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.UpdateSharePathReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	err = database.UpdateSharePath(req.PathId, map[string]interface{}{"name": req.Name}, database.DB)
+	if err != nil {
+		klog.Errorf("postgres.UpdateShareMember error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	queryParams := &database.QueryParams{}
+	queryParams.AND = []database.Filter{}
+	database.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &queryParams.AND, true)
+	res, total, err := database.QuerySharePath(queryParams, 0, 0, "", "", nil)
+	if err != nil {
+		klog.Errorf("QuerySharePath error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	if total == 0 {
+		klog.Errorf("No SharePath found for pathId: %s", req.PathId)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "SharePath not found"})
+		return
+	}
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	resp := new(share.UpdateSharePathResp)
+	resp.SharePath = new(share.ViewSharePath)
+	if err = json.Unmarshal(common.ToBytes(res[0]), &resp.SharePath); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	resp.SharePath.SharedByMe = res[0].Owner == owner
+	c.JSON(consts.StatusOK, resp)
+}
+
 // DeleteSharePath .
 // @router /share/share_path/:node/ [DELETE]
 func DeleteSharePath(ctx context.Context, c *app.RequestContext) {

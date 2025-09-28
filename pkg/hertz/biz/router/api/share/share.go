@@ -32,6 +32,7 @@ func Register(r *server.Hertz) {
 				_share_path := _share.Group("/share_path", _share_pathMw()...)
 				_share_path.DELETE("/", append(_deletesharepathMw(), share.DeleteSharePath)...)
 				_share_path.GET("/", append(_listsharepathMw(), share.ListSharePath)...)
+				_share_path.PUT("/", append(_updatesharepathMw(), share.UpdateSharePath)...)
 				_share_path.POST("/*path", append(_createsharepathMw(), share.CreateSharePath)...)
 			}
 			{

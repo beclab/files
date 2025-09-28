@@ -82,6 +82,15 @@ struct ListSharePathResp {
     2: list<ViewSharePath> share_paths;
 }
 
+struct UpdateSharePathReq {
+    1: required string PathId (api.body="path_id");
+    2: required string Name (api.body="name");
+}
+
+struct UpdateSharePathResp {
+    1: ViewSharePath share_path;
+}
+
 struct DeleteSharePathReq {
     1: string PathIds (api.query="path_ids");
 }
@@ -171,6 +180,7 @@ struct RemoveShareMemberResp {
 service ShareService {
     CreateSharePathResp CreateSharePath(1: CreateSharePathReq request) (api.post="/api/share/share_path/*path");
     ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/");
+    UpdateSharePathResp UpdateSharePath(1: UpdateSharePathReq request) (api.put="/api/share/share_path/");
     DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/");
 
     GenerateShareTokenResp GenerateShareToken(1: GenerateShareTokenReq request) (api.post="/api/share/share_token/");
