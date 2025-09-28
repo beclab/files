@@ -62,7 +62,7 @@ func CreateQueryParam(owner string, ctx context.Context, c *app.RequestContext, 
 		RepoId:                  strings.TrimSpace(c.Query("repoId")),
 		DriveId:                 strings.TrimSpace(c.Query("driveId")),
 		Destination:             strings.TrimSpace(c.Query("destination")),
-		ShareType:               strings.TrimSpace(c.Query("type")), // "mine", "shared", "share_to_me"
+		ShareType:               strings.TrimSpace(c.Query("type")), // "mine", "shared", "share_with_me"
 		ShareId:                 strings.TrimSpace(c.Query("shareid")),
 		SharePath:               strings.TrimSpace(c.Query("sharepath")),
 		SharePermission:         strings.TrimSpace(c.Query("sharepermission")),
