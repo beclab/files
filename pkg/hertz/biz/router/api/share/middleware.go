@@ -100,3 +100,8 @@ func _generatesharetokenMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _updatesharepathMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
