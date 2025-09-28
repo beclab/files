@@ -44,6 +44,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+	klog.Infof("~~~Debug log: req=%+v", req)
 
 	p := "/" + c.Param("path")
 	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
@@ -80,6 +81,10 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "external share must have a password"})
 			return
 		}
+		if req.Permission == 0 {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "external share must have a permission"})
+			return
+		}
 		if req.ExpireIn == 0 && req.ExpireTime == "" {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "expire time must not be empty"})
 			return
@@ -89,6 +94,10 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	if req.ShareType == "smb" {
 		if req.Password == "" {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "smb share must have a password"})
+			return
+		}
+		if req.Permission == 0 {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "external share must have a permission"})
 			return
 		}
 	}
@@ -236,25 +245,40 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	tx := database.DB.Begin()
-	err = DeleteSharePathRelations(req.PathId, tx)
-	if err != nil {
-		klog.Errorf("DeleteSharePath error: %v", err)
-		tx.Rollback()
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+	pathIds := strings.Split(req.PathIds, ",")
+	failedPathIds := []string{}
+	for _, pathId := range pathIds {
+		// for every share path, it is a individual transaction
+		tx := database.DB.Begin()
+		err = DeleteSharePathRelations(pathId, tx)
+		if err != nil {
+			klog.Errorf("DeleteSharePath error: %v", err)
+			tx.Rollback()
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		err = database.DeleteSharePath(pathId, tx)
+		if err != nil {
+			tx.Rollback()
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		err = tx.Commit().Error
+		if err != nil {
+			klog.Errorf("DeleteSharePath error: %v", err)
+			failedPathIds = append(failedPathIds, pathId)
+		}
+	}
+
+	if len(failedPathIds) == len(pathIds) {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to delete all identified shared paths"})
 		return
 	}
 
-	err = database.DeleteSharePath(req.PathId, tx)
-	if err != nil {
-		tx.Rollback()
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
-	}
-
-	err = tx.Commit().Error
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+	if len(failedPathIds) > 0 {
+		c.AbortWithStatusJSON(consts.StatusOK, utils.H{"msg": "Part of identified shared paths delete failed: " + strings.Join(failedPathIds, ",")})
 		return
 	}
 
@@ -740,56 +764,103 @@ func RemoveShareMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	memberIdsStr := strings.Split(req.MemberIds, ",")
+	memberIds := make([]int64, len(memberIdsStr))
+	for i, memberIdStr := range memberIdsStr {
+		memberId, err := strconv.ParseInt(memberIdStr, 10, 64)
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+			return
+		}
+		memberIds[i] = memberId
+	}
+
 	queryParams := &database.QueryParams{}
-	queryParams.AND = []database.Filter{}
-	database.BuildIntQueryParam(int(req.MemberId), "share_members.id", "=", &queryParams.AND, true)
+	queryParams.OR = []database.Filter{}
+	database.BuildIntQueryParam(req.MemberIds, "share_members.id", "=", &queryParams.OR, false)
 	memberRes, memberTotal, err := database.QueryShareMember(queryParams, 0, 0, "share_members.id", "ASC", nil)
 	if err != nil || memberTotal == 0 {
 		klog.Errorf("QueryShareMember error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	shareMember := memberRes[0]
 
-	queryParams.AND = []database.Filter{}
-	database.BuildStringQueryParam(shareMember.PathID, "share_paths.id", "=", &queryParams.AND, true)
-	pathRes, pathTotal, err := database.QuerySharePath(queryParams, 0, 0, "share_paths.id", "ASC", nil)
+	pathQueryParams := &database.QueryParams{}
+	pathQueryParams.OR = []database.Filter{}
+	for _, shareMember := range memberRes {
+		database.BuildStringQueryParam(shareMember.PathID, "share_paths.id", "=", &pathQueryParams.OR, true)
+	}
+	pathRes, pathTotal, err := database.QuerySharePath(pathQueryParams, 0, 0, "share_paths.id", "ASC", nil)
 	if err != nil || pathTotal == 0 {
 		klog.Errorf("QuerySharePath error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	sharePath := pathRes[0]
 
-	tx := database.DB.Begin()
-
-	if sharePath.FileType == "sync" {
-		seaResp, err := seahub.HandleDeleteDirSharedItems(sharePath, shareMember, "user")
-		if err != nil {
-			klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", err)
-			tx.Rollback()
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-			return
-		}
-		klog.Infof("postgres.HandleDeleteDirSharedItems response: %+v", seaResp)
-	}
-
-	err = database.DeleteShareMember(req.MemberId, tx)
-	if err != nil {
-		if sharePath.FileType == "sync" {
-			_, subErr := seahub.HandlePutDirSharedItems(sharePath, []*share.ShareMember{shareMember}, "user") // rollback
-			if subErr != nil {
-				klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", subErr)
+	var pathMap map[int64]*share.SharePath
+	for _, shareMember := range memberRes {
+		for _, sharePath := range pathRes {
+			if shareMember.PathID == sharePath.ID {
+				pathMap[shareMember.ID] = sharePath
+				break
 			}
 		}
-		tx.Rollback()
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+	}
+
+	failedMemberIds := []int64{}
+	for _, shareMember := range memberRes {
+		if sharePath, exist := pathMap[shareMember.ID]; exist {
+			// for every share member, it is a individual transaction
+			tx := database.DB.Begin()
+			if sharePath.FileType == "sync" {
+				seaResp, err := seahub.HandleDeleteDirSharedItems(sharePath, shareMember, "user")
+				if err != nil {
+					klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", err)
+					tx.Rollback()
+					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+					return
+				}
+				klog.Infof("postgres.HandleDeleteDirSharedItems response: %+v", seaResp)
+			}
+
+			err = database.DeleteShareMember(shareMember.ID, tx)
+			if err != nil {
+				if sharePath.FileType == "sync" {
+					_, subErr := seahub.HandlePutDirSharedItems(sharePath, []*share.ShareMember{shareMember}, "user") // rollback
+					if subErr != nil {
+						klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", subErr)
+					}
+				}
+				tx.Rollback()
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+				return
+			}
+
+			err = tx.Commit().Error
+			if err != nil {
+				klog.Errorf("delete share member %d error: %v", shareMember.ID, err)
+				failedMemberIds = append(failedMemberIds, shareMember.ID)
+			}
+		} else {
+			err = database.DeleteShareMember(shareMember.ID, database.DB)
+			if err != nil {
+				klog.Errorf("delete share member %d error: %v", shareMember.ID, err)
+				failedMemberIds = append(failedMemberIds, shareMember.ID)
+			}
+		}
+	}
+
+	if len(failedMemberIds) == len(memberIds) {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to delete all identified shared members"})
 		return
 	}
 
-	err = tx.Commit().Error
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+	if len(failedMemberIds) > 0 {
+		failedMemberIdsStr := make([]string, len(failedMemberIds))
+		for i, id := range failedMemberIds {
+			failedMemberIdsStr[i] = strconv.FormatInt(id, 10)
+		}
+		c.AbortWithStatusJSON(consts.StatusOK, utils.H{"msg": "Part of identified shared members delete failed: " + strings.Join(failedMemberIdsStr, ",")})
 		return
 	}
 
