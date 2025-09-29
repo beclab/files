@@ -212,12 +212,12 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 	if sharedWithMe {
 		sharedWithMeQueryParams := &database.QueryParams{}
 		sharedWithMeQueryParams.AND = []database.Filter{}
-		database.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &sharedWithMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.FileType, "share_paths.file_type", "=", &sharedWithMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.Extend, "share_paths.extend", "=", &sharedWithMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.Path, "share_paths.path", "=", &sharedWithMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "=", &sharedWithMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.Name, "share_paths.name", "=", &sharedWithMeQueryParams.AND, false)
+		database.BuildStringQueryParam(req.PathId, "share_paths.id", "IN", &sharedWithMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.FileType, "share_paths.file_type", "IN", &sharedWithMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Extend, "share_paths.extend", "IN", &sharedWithMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Path, "share_paths.path", "IN", &sharedWithMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "IN", &sharedWithMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Name, "share_paths.name", "IN", &sharedWithMeQueryParams.AND, true)
 
 		if req.ExpireIn != 0 {
 			currentTime := time.Now()
@@ -252,12 +252,12 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 	if sharedByMe {
 		sharedByMeQueryParams := &database.QueryParams{}
 		sharedByMeQueryParams.AND = []database.Filter{}
-		database.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &sharedByMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.FileType, "share_paths.file_type", "=", &sharedByMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.Extend, "share_paths.extend", "=", &sharedByMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.Path, "share_paths.path", "=", &sharedByMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "=", &sharedByMeQueryParams.AND, false)
-		database.BuildStringQueryParam(req.Name, "share_paths.name", "=", &sharedByMeQueryParams.AND, false)
+		database.BuildStringQueryParam(req.PathId, "share_paths.id", "IN", &sharedByMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.FileType, "share_paths.file_type", "IN", &sharedByMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Extend, "share_paths.extend", "IN", &sharedByMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Path, "share_paths.path", "IN", &sharedByMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "IN", &sharedByMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Name, "share_paths.name", "IN", &sharedByMeQueryParams.AND, true)
 		database.BuildStringQueryParam(req.Permission, "share_paths.permission", "IN", &sharedByMeQueryParams.AND, true)
 
 		if req.ExpireIn != 0 {
@@ -710,9 +710,9 @@ func ListShareMember(ctx context.Context, c *app.RequestContext) {
 
 	queryParams := &database.QueryParams{}
 	queryParams.AND = []database.Filter{}
-	database.BuildStringQueryParam(req.PathId, "share_members.path_id", "=", &queryParams.AND, false)
-	database.BuildStringQueryParam(req.ShareMember, "share_members.share_member", "=", &queryParams.AND, false)
-	database.BuildIntQueryParam(req.Permission, "share_members.permission", "=", &queryParams.AND, false)
+	database.BuildStringQueryParam(req.PathId, "share_members.path_id", "IN", &queryParams.AND, true)
+	database.BuildStringQueryParam(req.ShareMember, "share_members.share_member", "IN", &queryParams.AND, true)
+	database.BuildStringQueryParam(req.Permission, "share_members.permission", "IN", &queryParams.AND, true)
 
 	res, total, err := database.QueryShareMember(queryParams, 0, 0, "share_members.id", "ASC", nil)
 	if err != nil {
