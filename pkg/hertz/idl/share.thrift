@@ -66,15 +66,16 @@ struct CreateSharePathResp {
 
 struct ListSharePathReq {
     1: string PathId (api.query="path_id");
-    2: string ShareRelativeUsers (api.query="share_relative_users");
+    2: string ShareRelativeUser (api.query="share_relative_user");
     3: string FileType (api.query="file_type");
     4: string Extend (api.query="extend");
     5: string Path (api.query="path");
     6: string ShareType (api.query="share_type");
     7: string Name (api.query="name");
-    8: i64 ExpireIn (api.query="expire_in");
-    9: optional bool SharedWithMe (api.query="shared_with_me");
-    10: optional bool SharedByMe (api.query="shared_by_me");
+    8: string Permission (api.query="permission");
+    9: i64 ExpireIn (api.query="expire_in");
+    10: optional bool SharedWithMe (api.query="shared_with_me");
+    11: optional bool SharedByMe (api.query="shared_by_me");
 }
 
 struct ListSharePathResp {
