@@ -43,8 +43,11 @@ func NewPosixStorage(handler *base.HandlerParam) *PosixStorage {
 func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
+	var shareId = contextArgs.QueryParam.ShareId
+	var sharePath = contextArgs.QueryParam.SharePath
+	var sharePermission = contextArgs.QueryParam.SharePermission
 
-	klog.Infof("Posix list, user: %s, args: %s", owner, fileParam.Json())
+	klog.Infof("Posix list, user: %s, args: %s, shareId: %s, sharePath: %s", owner, fileParam.Json(), shareId, sharePath)
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
@@ -55,8 +58,35 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	}
 
 	if fileData.IsDir {
+		if shareId != "" {
+			fileData.FsType = common.Share
+			fileData.FsExtend = shareId
+			fileData.Path = sharePath
+			fileData.Name = sharePath
+			fileData.SharePermission = sharePermission
+			if sharePath == "/" {
+				fileData.Name = ""
+			}
+
+		}
+
 		fileData.Listing.Sorting = files.DefaultSorting
 		fileData.Listing.ApplySort()
+	}
+
+	if fileData.Items != nil && len(fileData.Items) > 0 {
+		if shareId != "" {
+			for _, item := range fileData.Items {
+				item.FsType = common.Share
+				item.FsExtend = shareId
+				item.SharePermission = sharePermission
+				if item.IsDir {
+					item.Path = filepath.Join(sharePath, item.Name) + "/"
+				} else {
+					item.Path = filepath.Join(sharePath, item.Name)
+				}
+			}
+		}
 	}
 
 	res, err := json.Marshal(fileData)
@@ -581,7 +611,7 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	var identy = chunkInfo.ResumableIdenty
 	var ua = fileUploadArg.UserAgentHash
 
-	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, share: %s %s %s", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.Share, chunkInfo.Shareby, chunkInfo.SharebyPath)
+	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s %s", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby, chunkInfo.SharebyPath)
 
 	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
 

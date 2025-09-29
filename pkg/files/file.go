@@ -36,25 +36,26 @@ var DefaultSorting = Sorting{
 // FileInfo describes a file.
 type FileInfo struct {
 	*Listing
-	Fs           afero.Fs          `json:"-"`
-	FsType       string            `json:"fileType"`
-	FsExtend     string            `json:"fileExtend"`
-	Path         string            `json:"path"`
-	Name         string            `json:"name"`
-	Size         int64             `json:"size"`
-	FileSize     int64             `json:"fileSize"`
-	Extension    string            `json:"extension"`
-	ModTime      time.Time         `json:"modified"`
-	Mode         os.FileMode       `json:"mode"`
-	IsDir        bool              `json:"isDir"`
-	IsSymlink    bool              `json:"isSymlink"`
-	Type         string            `json:"type"`
-	Subtitles    []string          `json:"subtitles,omitempty"`
-	Content      string            `json:"content,omitempty"`
-	Checksums    map[string]string `json:"checksums,omitempty"`
-	Token        string            `json:"token,omitempty"`
-	ExternalType string            `json:"externalType,omitempty"`
-	ReadOnly     *bool             `json:"readOnly,omitempty"`
+	Fs              afero.Fs          `json:"-"`
+	FsType          string            `json:"fileType"`
+	FsExtend        string            `json:"fileExtend"`
+	Path            string            `json:"path"`
+	Name            string            `json:"name"`
+	Size            int64             `json:"size"`
+	FileSize        int64             `json:"fileSize"`
+	Extension       string            `json:"extension"`
+	ModTime         time.Time         `json:"modified"`
+	Mode            os.FileMode       `json:"mode"`
+	IsDir           bool              `json:"isDir"`
+	IsSymlink       bool              `json:"isSymlink"`
+	Type            string            `json:"type"`
+	Subtitles       []string          `json:"subtitles,omitempty"`
+	Content         string            `json:"content,omitempty"`
+	Checksums       map[string]string `json:"checksums,omitempty"`
+	Token           string            `json:"token,omitempty"`
+	ExternalType    string            `json:"externalType,omitempty"`
+	ReadOnly        *bool             `json:"readOnly,omitempty"`
+	SharePermission string            `json:"sharePermission,omitempty"`
 }
 
 func (fi *FileInfo) String() string {

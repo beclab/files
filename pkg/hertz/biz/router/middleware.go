@@ -3,16 +3,19 @@ package router
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
+	"files/pkg/hertz/biz/model/api/paste"
 	"files/pkg/hertz/biz/model/api/share"
 	"files/pkg/models"
 	"fmt"
 	"io"
 	"net/http"
+	urlx "net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,14 +32,30 @@ type ShareAccess struct {
 	Preview  bool
 	Raw      bool
 	Download bool
+	Paste    bool
 	Upload   bool
 }
+
+var (
+	nonSharePath = []string{
+		"/api/nodes",
+		"/api/task",
+		"/api/accounts",
+		"/api/users",
+		"/api/share",
+		"/api/mounted",
+		"/api/mount",
+		"/api/unmount",
+		"/api/smb_history",
+	}
+)
 
 var (
 	ShareHostPrefix        = "share."
 	ShareApiResourcesPath  = "/api/resources"
 	ShareApiPreviewPath    = "/api/preview"
 	ShareApiRawPath        = "/api/raw"
+	ShareApiPastePath      = "/api/paste"
 	ShareApiUploadPath     = "/upload"
 	ShareApiUploadLinkPath = "/upload/upload-link"
 	ShareApiUploadedPath   = "/upload/file-uploaded-bytes"
@@ -84,19 +103,23 @@ func ShareMiddleware() app.HandlerFunc {
 		// var cookie = string(c.GetHeader("Cookie")) // todo for external sharing, this field may be empty unless it contains the sharer's cookie.
 		var method = string(c.Request.Method())
 		var host = string(c.Request.Host())
+		_ = host
 		var path = string(c.Request.Path())
+
+		if !checkNonSharedPath(path) {
+			c.Next(ctx)
+			return
+		}
 
 		var paramPath string
 		var urlShareType string
+		_ = urlShareType
 		var shareAccess = &ShareAccess{
 			Method: method,
 		}
 
-		if strings.HasPrefix(host, ShareHostPrefix) {
-			urlShareType = common.ShareTypeExternal
-		} else {
-			urlShareType = common.ShareTypeInternal
-		}
+		var pasteAction, pasteDst string
+		var pasteDstParam *models.FileParam
 
 		var uploadLink, uploadBytes, uploadChunk bool
 		var uploadLinkId, uploadParentDir, uploadFileName string
@@ -115,14 +138,35 @@ func ShareMiddleware() app.HandlerFunc {
 			} else {
 				shareAccess.Download = true
 			}
+		} else if strings.HasPrefix(path, ShareApiPastePath) {
+			shareAccess.Paste = true
+
+			var req paste.PasteReq
+			err = c.BindAndValidate(&req)
+			if err != nil {
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+				return
+			}
+
+			pasteAction = req.Action
+			paramPath = req.Source
+			pasteDst = req.Destination
+
+			pasteDstParam, _ = models.CreateFileParam(bflName, pasteDst)
+
 		} else if strings.HasPrefix(path, ShareApiUploadPath) { // ~ upload
 			shareAccess.Upload = true
 			if strings.HasPrefix(path, ShareApiUploadLinkPath) {
 				if method == http.MethodGet {
 					paramPath = c.Query("file_path")
 					uploadLink = true
-
 				} else {
+					if c.Query("share") == "1" {
+						paramPath = c.Query("shareby_path")
+					} else {
+						paramPath = c.PostForm("parent_dir")
+					}
+
 					var tPath = strings.TrimPrefix(path, ShareApiUploadLinkPath)
 					var tPos = strings.LastIndex(tPath, "/")
 					if tPos == 0 {
@@ -145,17 +189,16 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 		}
 
-		shareParam, _ := models.CreateFileParam(bflName, paramPath)
+		klog.Infof("[share] share param path: %s", paramPath)
 
-		if shareParam == nil || shareParam.FileType != common.Share {
+		if paramPath == "" {
 			c.Next(ctx)
 			return
 		}
 
-		klog.Infof("[share] share params: %s", common.ToJson(shareParam))
-		if strings.HasPrefix(path, "/api/share/share_path/") ||
-			strings.HasPrefix(path, "/api/share/share_token/") ||
-			strings.HasPrefix(path, "/api/share/share_member/") {
+		shareParam, _ := models.CreateFileParam(bflName, paramPath)
+
+		if shareParam == nil || (shareParam.FileType != common.Share && ((pasteDstParam != nil && pasteDstParam.FileType != common.Share) || pasteDstParam == nil)) {
 			c.Next(ctx)
 			return
 		}
@@ -164,6 +207,18 @@ func ShareMiddleware() app.HandlerFunc {
 		_ = download
 		_ = upload
 
+		var pasteDstShared *share.SharePath
+
+		if shareAccess.Paste {
+
+			pasteDstShared, err = checkSharePath(pasteDstParam.Extend)
+			if err != nil {
+				klog.Errorf("check paste dst sharePath error: %v", err)
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
+				return
+			}
+		}
+
 		shared, err := checkSharePath(shareParam.Extend)
 		if err != nil {
 			klog.Errorf("check sharePath error: %v", err)
@@ -171,11 +226,7 @@ func ShareMiddleware() app.HandlerFunc {
 			return
 		}
 
-		if urlShareType != shared.ShareType {
-			klog.Errorf("url.shareType %s not equal sharePaths.shareType %s", urlShareType, shared.ShareType)
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "url invalid"})
-			return
-		}
+		urlShareType = strings.ToLower(shared.ShareType)
 
 		klog.Infof("[share] share path: %s", common.ToJson(shared))
 
@@ -192,14 +243,16 @@ func ShareMiddleware() app.HandlerFunc {
 				}
 			}
 		} else if shareType == common.ShareTypeExternal {
-			var token = c.Query("token")
-			if err = checkExternal(bflName, token, shared, shareAccess); err != nil {
-				klog.Errorf("check external error: %v", err)
-				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
-				return
-			} else {
-				if ok := accessIntercept(c, shared, shareType, shareAccess); ok {
+			if bflName != shared.Owner {
+				var token = c.Query("token")
+				if err = checkExternal(bflName, token, shared, shareAccess); err != nil {
+					klog.Errorf("check external error: %v", err)
+					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
 					return
+				} else {
+					if ok := accessIntercept(c, shared, shareType, shareAccess); ok {
+						return
+					}
 				}
 			}
 		} else if shareType == common.ShareTypeSMB {
@@ -224,6 +277,8 @@ func ShareMiddleware() app.HandlerFunc {
 			rewritePrefix = ShareApiResourcesPath
 		} else if shareAccess.Preview {
 			rewritePrefix = ShareApiPreviewPath
+		} else if shareAccess.Paste { // ~ paste
+			rewritePrefix = ShareApiPastePath + "/" + global.GlobalNode.GetMasterNode()
 		} else if shareAccess.Raw || shareAccess.Download {
 			rewritePrefix = ShareApiRawPath
 		} else if shareAccess.Upload {
@@ -251,36 +306,61 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 
 			if uploadLink {
-				url = redirect + rewritePrefix + "?file_path=" + "/" + pathRewrite + "&from=" + c.Query("from") + "&share=1&sharetype=" + shareType
+				url = fmt.Sprintf("%s%s?file_path=/%s&from=%s&share=1&sharetype=%s", redirect, rewritePrefix, pathRewrite, c.Query("from"), shareType)
 			} else if uploadBytes {
-				url = redirect + rewritePrefix + "?parent_dir=" + "/" + pathRewrite + "&file_name=" + uploadFileName + "&share=1&sharetype=" + shareType
+				url = fmt.Sprintf("%s%s?parent_dir=/%s&file_name=%s&share=1&sharetype=%s", redirect, rewritePrefix, pathRewrite, uploadFileName, shareType)
 			} else if uploadChunk {
-				url = redirect + rewritePrefix + uploadLinkId + "?&ret-json=" + c.Query("ret-json") + "&share=1&sharetype=" + shareType + "&shareby=" + shareBy + "&shareby_path=" + "/" + pathRewrite
+				url = fmt.Sprintf("%s%s%s?&ret-json=%s&share=1&sharetype=%s&shareby=%s&shareby_path=/%s", redirect, rewritePrefix, uploadLinkId, c.Query("ret-json"), shareType, shareBy, pathRewrite)
 			}
+		} else if shareAccess.Paste {
+			accessOwner = bflName
+			url += fmt.Sprintf("%s%s?share=1&sharetype=%s", redirect, rewritePrefix, shareType)
 		} else {
 			accessOwner = shareBy
 
 			url = redirect + rewritePrefix + pathRewrite
 			if query != "" {
-				url = url + "?" + query + "&share=1&sharetype=" + shareType
+				url += fmt.Sprintf("?%s&share=1&sharetype=%s", query, shareType)
 			} else {
-				url = url + "?share=1&sharetype=" + shareType
+				url += fmt.Sprintf("?share=1&sharetype=%s", shareType)
+			}
+			if shareAccess.Resource && method == http.MethodGet {
+				url += fmt.Sprintf("&sharepermission=%d&shareid=%s&sharepath=%s", shared.Permission, shareParam.Extend, urlx.PathEscape(shareParam.Path))
 			}
 		}
 
 		// +
 		klog.Infof("[share] share rewrite url: %s, access: %s, shareby: %s, method: %s", url, bflName, shareBy, method)
 
-		req, _ := http.NewRequest(string(c.Request.Method()), url, nil)
+		var br io.Reader
+
+		if shareAccess.Paste { // ~ paste
+			var req = &paste.PasteReq{
+				Action:      pasteAction,
+				Source:      fmt.Sprintf("/%s", pathRewrite),
+				Destination: fmt.Sprintf("/%s/%s/%s/%s", pasteDstShared.FileType, pasteDstShared.Extend, strings.Trim(pasteDstShared.Path, "/"), strings.TrimLeft(pasteDstParam.Path, "/")),
+			}
+
+			bodyBytes, err := json.Marshal(req)
+			if err != nil {
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+				return
+			}
+			br = bytes.NewBuffer(bodyBytes)
+		}
+
+		var req, _ = http.NewRequest(string(c.Request.Method()), url, br)
 
 		c.Request.Header.VisitAll(func(key, value []byte) {
 			req.Header.Set(string(key), string(value))
 		})
 		req.Header.Set(common.REQUEST_HEADER_OWNER, accessOwner) // external, bflName maybe is owner in host
 
-		body := c.Request.Body()
-		req.Body = io.NopCloser(bytes.NewReader(body))
-		req.ContentLength = int64(len(body))
+		if !shareAccess.Paste {
+			body := c.Request.Body()
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			req.ContentLength = int64(len(body))
+		}
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -452,4 +532,16 @@ func accessIntercept(c *app.RequestContext, shared *share.SharePath, shareType s
 	}
 
 	return false
+}
+
+func checkNonSharedPath(path string) bool {
+	var isSharedPath = true
+	for _, sp := range nonSharePath {
+		if strings.Contains(path, sp) {
+			isSharedPath = false
+			break
+		}
+	}
+
+	return isSharedPath
 }
