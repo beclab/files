@@ -37,7 +37,7 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 
 	var res []byte
 	if req.Type != nil {
-		if *req.Type == "shared" {
+		if *req.Type == "shared" || *req.Type == "shared_by_me" {
 			res, err = seahub.HandleReposGet(owner, []string{"shared_by_me"})
 			if err != nil {
 				klog.Errorf("get repos error: %v", err)
@@ -45,7 +45,7 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 				return
 			}
 			klog.Infof("get repos: %s", string(res))
-		} else if *req.Type == "share_to_me" {
+		} else if *req.Type == "share_to_me" || *req.Type == "share_with_me" {
 			res, err = seahub.HandleReposGet(owner, []string{"shared_to_me"})
 			if err != nil {
 				klog.Errorf("get repos error: %v", err)
