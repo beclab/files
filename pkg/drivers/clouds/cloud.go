@@ -653,7 +653,7 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	var ranges = fileUploadArg.Ranges
 	var lastChunk = chunkInfo.ResumableChunkNumber == chunkInfo.ResumableTotalChunks
 
-	klog.Infof("Cloud uploadChunks, uploadId: %s, identy: %s, ua: %s, param: %s", uploadId, identy, ua, common.ToJson(param))
+	klog.Infof("Cloud uploadChunks, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s", uploadId, identy, ua, common.ToJson(param), chunkInfo.ParentDir)
 
 	_, fileInfo, err := upload.HandleUploadChunks(param, uploadId, *chunkInfo, ua, ranges)
 	if err != nil {

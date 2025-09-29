@@ -181,6 +181,10 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	uploadArg.ChunkInfo.SharebyPath = req.SharebyPath
 	uploadArg.ChunkInfo.File = header
 
+	if req.Share == "1" {
+		uploadArg.ChunkInfo.ParentDir = req.SharebyPath
+	}
+
 	p := uploadArg.ChunkInfo.ParentDir
 	if p == "" {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
