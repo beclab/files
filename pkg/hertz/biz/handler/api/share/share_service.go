@@ -44,7 +44,6 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	klog.Infof("~~~Debug log: req=%+v", req)
 
 	p := "/" + c.Param("path")
 	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
@@ -75,6 +74,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	permission := int32(PERMISSION_ADMIN)
 	// share_type detail check
 	if req.ShareType == "external" {
 		if req.Password == "" {
@@ -89,6 +89,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "expire time must not be empty"})
 			return
 		}
+		permission = req.Permission
 	}
 
 	if req.ShareType == "smb" {
@@ -100,9 +101,11 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "external share must have a permission"})
 			return
 		}
+		permission = req.Permission
 	}
 
 	if req.ShareType == "internal" {
+		// internal forced use default ADMIN as permission, no matter req.Permission of what value
 		queryParams := &database.QueryParams{}
 		queryParams.AND = []database.Filter{}
 		database.BuildStringQueryParam(fileParam.Owner, "share_paths.owner", "=", &queryParams.AND, true)
@@ -110,14 +113,12 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		database.BuildStringQueryParam(fileParam.Extend, "share_paths.extend", "=", &queryParams.AND, true)
 		database.BuildStringQueryParam(fileParam.Path, "share_paths.path", "=", &queryParams.AND, true)
 		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "=", &queryParams.AND, true)
-		res, total, err := database.QuerySharePath(queryParams, 0, 0, "", "", nil)
+		_, total, err := database.QuerySharePath(queryParams, 0, 0, "", "", nil)
 		if err != nil {
 			klog.Errorf("QuerySharePath error: %v", err)
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
 		}
-		klog.Infof("~~~Debug log: QuerySharePath total: %d", total)
-		klog.Infof("~~~Debug log: QuerySharePath result: %+v", res)
 		if total > 0 {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "internal share for a path can be only one at a time"})
 			return
@@ -138,7 +139,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		PasswordMd5: common.Md5String(req.Password),
 		ExpireIn:    expireIn,
 		ExpireTime:  expireTime,
-		Permission:  req.Permission,
+		Permission:  permission,
 		CreateTime:  now,
 		UpdateTime:  now,
 	}
@@ -169,6 +170,17 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
+	}
+
+	if req.Permission != "" {
+		permissions := strings.Split(req.Permission, ",")
+		for _, permission := range permissions {
+			p, err := strconv.Atoi(permission)
+			if p < PERMISSION_NONE || p > PERMISSION_ADMIN || err != nil {
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "Permission out of range"})
+				return
+			}
+		}
 	}
 
 	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
@@ -221,9 +233,9 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 			JoinField: "path_id",
 		})
 		database.BuildStringQueryParam(owner, "share_members.share_member", "=", &sharedWithMeQueryParams.AND, true)
-		if req.ShareRelativeUsers != "" {
-			sharedWithMeQueryParams.OR = []database.Filter{}
-			database.BuildStringQueryParam(req.ShareRelativeUsers, "share_paths.owner", "=", &sharedWithMeQueryParams.OR, false)
+		database.BuildStringQueryParam(req.Permission, "share_members.permission", "IN", &sharedWithMeQueryParams.AND, true)
+		if req.ShareRelativeUser != "" {
+			database.BuildStringQueryParam(req.ShareRelativeUser, "share_paths.owner", "IN", &sharedWithMeQueryParams.AND, true)
 		}
 		sharedWithMeRes, sharedWithMeTotal, err = database.QuerySharePath(sharedWithMeQueryParams, 0, 0, "", "", sharedWithMeJoinConditions)
 		if err != nil {
@@ -231,8 +243,6 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
 		}
-		klog.Infof("~~~Debug log: QuerySharePath total: %d", sharedWithMeTotal)
-		klog.Infof("~~~Debug log: QuerySharePath result: %+v", sharedWithMeRes)
 	}
 
 	//sharedByMe
@@ -248,6 +258,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		database.BuildStringQueryParam(req.Path, "share_paths.path", "=", &sharedByMeQueryParams.AND, false)
 		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "=", &sharedByMeQueryParams.AND, false)
 		database.BuildStringQueryParam(req.Name, "share_paths.name", "=", &sharedByMeQueryParams.AND, false)
+		database.BuildStringQueryParam(req.Permission, "share_paths.permission", "IN", &sharedByMeQueryParams.AND, true)
 
 		if req.ExpireIn != 0 {
 			currentTime := time.Now()
@@ -256,15 +267,14 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 		database.BuildStringQueryParam(owner, "share_paths.owner", "=", &sharedByMeQueryParams.AND, true)
 		sharedByMeJoinConditions := []*database.JoinCondition{}
-		if req.ShareRelativeUsers != "" {
+		if req.ShareRelativeUser != "" {
 			sharedByMeJoinConditions = append(sharedByMeJoinConditions, &database.JoinCondition{
 				Table:     "share_paths",
 				Field:     "id",
 				JoinTable: "share_members",
 				JoinField: "path_id",
 			})
-			sharedByMeQueryParams.OR = []database.Filter{}
-			database.BuildStringQueryParam(req.ShareRelativeUsers, "share_members.share_member", "=", &sharedByMeQueryParams.OR, false)
+			database.BuildStringQueryParam(req.ShareRelativeUser, "share_members.share_member", "IN", &sharedByMeQueryParams.AND, true)
 		}
 		sharedByMeRes, sharedByMeTotal, err = database.QuerySharePath(sharedByMeQueryParams, 0, 0, "", "", sharedByMeJoinConditions)
 		if err != nil {
@@ -272,22 +282,17 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
 		}
-		klog.Infof("~~~Debug log: QuerySharePath total: %d", sharedByMeTotal)
-		klog.Infof("~~~Debug log: QuerySharePath result: %+v", sharedByMeRes)
-
 	}
 
 	memberQueryParams := &database.QueryParams{}
 	memberQueryParams.AND = []database.Filter{}
 	database.BuildStringQueryParam(owner, "share_members.share_member", "=", &memberQueryParams.AND, true)
-	shareMembers, shareMembersTotal, err := database.QueryShareMember(memberQueryParams, 0, 0, "share_members.id", "ASC", nil)
+	shareMembers, _, err := database.QueryShareMember(memberQueryParams, 0, 0, "share_members.id", "ASC", nil)
 	if err != nil {
 		klog.Errorf("QueryShareMember error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	klog.Infof("~~~Debug log: QueryShareMember total: %d", shareMembersTotal)
-	klog.Infof("~~~Debug log: QueryShareMember result: %+v", shareMembers)
 
 	for _, sharePath := range sharedWithMeRes { // only shared with me possibly fit permission for member
 		if sharePath.ShareType != "internal" || sharePath.Owner != owner {
@@ -488,8 +493,6 @@ func ListShareToken(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	klog.Infof("~~~Debug log: QueryShareToken total: %d", total)
-	klog.Infof("~~~Debug log: QueryShareToken result: %+v", res)
 
 	resp := new(share.ListShareTokenResp)
 	resp.Total = int32(total)
@@ -578,8 +581,6 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	klog.Infof("~~~Debug log: QueryShareMember total: %d", total)
-	klog.Infof("~~~Debug log: QueryShareMember result: %+v", shareMembers)
 
 	memberMap := make(map[string]*share.ShareMember)
 	for _, member := range shareMembers {
@@ -719,8 +720,6 @@ func ListShareMember(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	klog.Infof("~~~Debug log: QueryShareMember total: %d", total)
-	klog.Infof("~~~Debug log: QueryShareMember result: %+v", res)
 
 	resp := new(share.ListShareMemberResp)
 	resp.Total = int32(total)
@@ -756,8 +755,6 @@ func UpdateShareMemberPermission(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	klog.Infof("~~~Debug log: QueryShareMember total: %d", total)
-	klog.Infof("~~~Debug log: QueryShareMember result: %+v", shareMembers)
 
 	memberMap := make(map[int64]*share.ShareMember)
 	for _, member := range shareMembers {
@@ -1593,13 +1590,11 @@ func RemoveUserRelativeAdjustShare(bflName string, tx *gorm.DB) error {
 	memberQueryParams.AND = []database.Filter{}
 	database.BuildStringQueryParam(bflName, "share_members.share_member", "=", &memberQueryParams.AND, true)
 
-	shareMembers, total, err := database.QueryShareMember(memberQueryParams, 0, 0, "share_members.id", "ASC", nil)
+	shareMembers, _, err := database.QueryShareMember(memberQueryParams, 0, 0, "share_members.id", "ASC", nil)
 	if err != nil {
 		klog.Errorf("QueryShareMember error: %v", err)
 		return err
 	}
-	klog.Infof("~~~Debug log: QueryShareMember total: %d", total)
-	klog.Infof("~~~Debug log: QueryShareMember result: %+v", shareMembers)
 
 	inPathQueryParams := &database.QueryParams{}
 	inPathQueryParams.OR = []database.Filter{}

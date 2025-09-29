@@ -141,7 +141,6 @@ func ObjListMapString(objs []*SearpcObj) ([]map[string]string, error) {
 	errMsg := ""
 	var err error
 	for i, obj := range objs {
-		klog.Infof("~~~Debug log: obj=%v", obj)
 		var stringMap map[string]string
 		stringMap, err = obj.MapString()
 		if err != nil {

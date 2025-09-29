@@ -140,14 +140,66 @@ func buildCondition(field, op string, value interface{}) (string, []interface{},
 		return fmt.Sprintf("%s LIKE ?", field), []interface{}{fmt.Sprint(value)}, nil // "%" needs to be added manually
 
 	case "IN":
-		if slice, ok := value.([]interface{}); ok {
-			placeholders := make([]string, len(slice))
-			for i := range slice {
-				placeholders[i] = "?"
-			}
-			return fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")), slice, nil
+		valueStr, ok := value.(string)
+		if !ok {
+			return "", nil, fmt.Errorf("invalid value type for IN operator")
 		}
-		return "", nil, fmt.Errorf("invalid value type for IN operator")
+
+		trimmedValue := strings.TrimSpace(valueStr)
+		if trimmedValue == "" {
+			return "", nil, fmt.Errorf("empty value not allowed")
+		}
+
+		if !strings.Contains(trimmedValue, ",") {
+			if intVal, err := strconv.Atoi(trimmedValue); err == nil {
+				return fmt.Sprintf("%s = ?", field), []interface{}{intVal}, nil
+			}
+			return fmt.Sprintf("%s = ?", field), []interface{}{trimmedValue}, nil
+		}
+
+		values := strings.Split(trimmedValue, ",")
+		var (
+			placeholders []string
+			params       []interface{}
+		)
+
+		allIntegers := true
+		var intValues []int
+		for _, v := range values {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				allIntegers = false
+				break
+			}
+			if val, err := strconv.Atoi(v); err == nil {
+				intValues = append(intValues, val)
+			} else {
+				allIntegers = false
+				break
+			}
+		}
+
+		if allIntegers {
+			placeholders = make([]string, len(intValues))
+			params = make([]interface{}, len(intValues))
+			for i := range intValues {
+				placeholders[i] = "?"
+				params[i] = intValues[i]
+			}
+			return fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")), params, nil
+		} else {
+			placeholders = make([]string, len(values))
+			params = make([]interface{}, len(values))
+			for i, v := range values {
+				v = strings.TrimSpace(v)
+				if v == "" {
+					return "", nil, fmt.Errorf("empty value in comma-separated list")
+				}
+				placeholders[i] = "?"
+				params[i] = v
+			}
+			return fmt.Sprintf("%s IN (%s)", field, strings.Join(placeholders, ",")), params, nil
+		}
 
 	case "BETWEEN":
 		if values, ok := value.([]interface{}); ok && len(values) == 2 {
