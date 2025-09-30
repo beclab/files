@@ -29,4 +29,8 @@ type Execute interface {
 	UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error)
 
 	UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error)
+
+	Compress(compressParam *models.CompressParam) (*tasks.Task, error)
+
+	Uncompress(uncompressParam *models.CompressParam) (*tasks.Task, error)
 }

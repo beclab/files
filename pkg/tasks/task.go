@@ -68,6 +68,9 @@ type Task struct {
 	manager *taskManager
 
 	details []string
+
+	// compress below
+	compressParam *models.CompressParam
 }
 
 func (t *Task) Id() string {
@@ -214,10 +217,12 @@ func (t *Task) Execute(fs ...func() error) error {
 		t.details = append(t.details, "successed")
 
 		// here is task really succeeded, share is better adjusted here
-		err = share.MoveRelativeAdjustShare(t.param.Action, t.param.Src, t.param.Dst, nil)
-		if err != nil {
-			klog.Errorf("relative adjust share err: %v", err)
-			t.message += "\nrelative adjust share err: " + err.Error()
+		if t.param.Action != "" {
+			err = share.MoveRelativeAdjustShare(t.param.Action, t.param.Src, t.param.Dst, nil)
+			if err != nil {
+				klog.Errorf("relative adjust share err: %v", err)
+				t.message += "\nrelative adjust share err: " + err.Error()
+			}
 		}
 
 		return
