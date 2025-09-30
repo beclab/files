@@ -5,17 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/diskcache"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/sync/seahub"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/files"
 	"files/pkg/models"
+	"files/pkg/preview"
 	"fmt"
+	"github.com/spf13/afero"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,9 +87,6 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 
 	klog.Infof("Sync preview, user: %s, args: %s", owner, common.ToJson(contextArgs))
 
-	var seahubUrl string
-	var previewSize string
-
 	filesData, err := seahub.ViewLibFile(fileParam, "dict")
 	if err != nil {
 		return nil, err
@@ -105,22 +108,141 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 		size = "thumb"
 	}
 
-	if size == "big" {
-		previewSize = "/1080"
-	} else {
-		previewSize = "/128"
-	}
-	res, err := seahub.GetThumbnail(fileParam, previewSize)
+	var previewFileName = fileParam.FileType + fileParam.Extend + fileInfo.Path + time.Unix(fileInfo.LastModified, 0).String() + queryParam.PreviewSize
+	klog.Infof("Preview preview, fileName: %s", previewFileName)
+	var key = diskcache.GenerateCacheKey(previewFileName)
+
+	klog.Infof("Sync preview, user: %s, fileType: %s, ext: %s, name: %s", owner, fileInfo.FileType, fileInfo.FileExt, fileInfo.FileName)
+
+	// get cache
+	cachedData, ok, err := preview.GetPreviewCache(owner, key, common.CacheThumb)
 	if err != nil {
-		klog.Errorf("Sync preview, get file failed, user: %s, url: %s, err: %s", owner, seahubUrl, err.Error())
+		klog.Errorf("Sync preview, get cache failed, user: %s, error: %v", owner, err)
+
+	} else if ok {
+		klog.Infof("Sync preview, get cache, file: %s, cache name: %s, exists: %v", fileInfo.Path, previewFileName, ok)
+
+		if cachedData != nil {
+			return &models.PreviewHandlerResponse{
+				FileName:     fileInfo.FileName,
+				FileModified: time.Unix(fileInfo.LastModified, 0),
+				Data:         cachedData,
+			}, nil
+		}
+	}
+
+	previewCachedPath := diskcache.GenerateCacheBufferPath(owner, filepath.Dir(fileInfo.Path))
+
+	if !files.FilePathExists(previewCachedPath) {
+		if err := files.MkdirAllWithChown(nil, previewCachedPath, 0755); err != nil {
+			klog.Errorln(err)
+			return nil, err
+		}
+	}
+
+	var imageFilePath = filepath.Join(previewCachedPath, fileInfo.FileName)
+
+	// sync download
+	repoId := fileParam.Extend
+
+	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+	if repo == nil {
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
+	}
+
+	path := filepath.Clean(fileParam.Path)
+	fileId, err := seaserv.GlobalSeafileAPI.GetFileIdByPath(repoId, path)
+	if err != nil {
+		return nil, errors.New("internal server error")
+	}
+	if fileId == "" {
+		klog.Errorf("file %s not found", path)
+		return nil, errors.New("file not found")
+	}
+
+	encrypted, err := strconv.ParseBool(repo["encrypted"])
+	if err != nil {
+		klog.Errorf("Error parsing repo encrypted: %v", err)
+		encrypted = false
+	}
+	if encrypted {
+		return nil, errors.New("permission denied")
+	}
+
+	username := fileParam.Owner + "@auth.local"
+
+	permission, err := seahub.CheckFolderPermission(username, repoId, path)
+	if err != nil || permission != "rw" {
+		return nil, errors.New("permission denied")
+	}
+
+	tmpFile, err := os.OpenFile(imageFilePath, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		klog.Errorf("Open or create temp file failed: %v", err)
+		return nil, err
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, fileId, "view", "", true)
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+	if token == "" {
 		return nil, err
 	}
 
-	return &models.PreviewHandlerResponse{
-		FileName:     fileName,
-		FileModified: time.Time{},
-		Data:         res,
-	}, nil
+	innerPath := seahub.GenFileGetURL(token, filepath.Base(path))
+	resp, err := http.Get("http://127.0.0.1:80/" + innerPath)
+	if err != nil {
+		klog.Errorf("Download failed: %v", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		klog.Errorf("Unexpected status: %s", resp.Status)
+		return nil, fmt.Errorf("unexpected status: %s", resp.Status)
+	}
+
+	if _, err = io.Copy(tmpFile, resp.Body); err != nil {
+		klog.Errorf("Save temp file failed: %v", err)
+		return nil, err
+	}
+
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:       afero.NewBasePathFs(afero.NewOsFs(), imageFilePath),
+		FsType:   fileParam.FileType,
+		FsExtend: fileParam.Extend,
+		Expand:   true,
+		Content:  true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	klog.Infof("Sync preview, download success, file path: %s", imageFilePath)
+
+	switch strings.ToLower(fileInfo.FileType) {
+	case "image":
+		data, err := preview.CreatePreview(owner, key, file, queryParam)
+		if err != nil {
+			return nil, err
+		}
+		return &models.PreviewHandlerResponse{
+			FileName:     fileInfo.FileName,
+			FileModified: time.Unix(fileInfo.LastModified, 0),
+			Data:         data,
+		}, nil
+	default:
+		return nil, fmt.Errorf("can't create preview for %s type", fileInfo.FileType)
+	}
 }
 
 func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandlerResponse, error) {
