@@ -11,6 +11,7 @@ import (
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/preview"
+	"files/pkg/tasks"
 	"fmt"
 	"net/url"
 	"os"
@@ -644,4 +645,27 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	result = append(result, fileInfo)
 
 	return common.ToBytes(result), err
+}
+
+/**
+ * Compress
+ */
+func (s *PosixStorage) Compress(compressParam *models.CompressParam) (task *tasks.Task, err error) {
+	task = tasks.TaskManager.CreateCompressTask(compressParam)
+	if err = task.Execute(task.Compress); err != nil {
+		klog.Errorf("Task Compress error: %v", err)
+	}
+
+	return
+}
+
+/**
+ * Uncompress
+ */
+func (s *PosixStorage) Uncompress(uncompressParam *models.CompressParam) (task *tasks.Task, err error) {
+	task = tasks.TaskManager.CreateCompressTask(uncompressParam)
+	if err = task.Execute(task.Uncompress); err != nil {
+		klog.Errorf("Task Uncompress error: %v", err)
+	}
+	return
 }

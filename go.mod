@@ -18,6 +18,7 @@ require (
 	github.com/chai2010/tiff v0.0.0-20211005095045-4ec2aa243943
 	github.com/cloudwego/hertz v0.10.2
 	github.com/disintegration/imaging v1.6.2
+	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707
 	github.com/dsoprea/go-exif/v3 v3.0.1
 	github.com/emicklei/go-restful/v3 v3.11.0
 	github.com/fsnotify/fsnotify v1.7.0
@@ -28,9 +29,11 @@ require (
 	github.com/go-resty/resty/v2 v2.3.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
+	github.com/h2non/filetype v1.1.3
 	github.com/maruel/natural v1.1.1
 	github.com/marusama/semaphore/v2 v2.5.0
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/nwaples/rardecode v1.1.3
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
@@ -44,6 +47,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/thoas/go-funk v0.9.3
 	go.uber.org/zap v1.27.0
+	github.com/ulikunitz/xz v0.5.15
 	golang.org/x/image v0.29.0
 	golang.org/x/text v0.27.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1

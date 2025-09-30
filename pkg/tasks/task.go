@@ -68,6 +68,9 @@ type Task struct {
 
 	details []string
 	isShare bool
+
+	// compress below
+	compressParam *models.CompressParam
 }
 
 func (t *Task) Id() string {
