@@ -12,6 +12,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/models"
 	"files/pkg/preview"
+	"files/pkg/tasks"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -754,4 +755,12 @@ func (s *SyncStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byt
 func (s *SyncStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	// this handler of sync is implemented by seafile-server
 	return nil, nil
+}
+
+func (s *SyncStorage) Compress(compressParam *models.CompressParam) (*tasks.Task, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *SyncStorage) Uncompress(uncompressParam *models.CompressParam) (*tasks.Task, error) {
+	return nil, fmt.Errorf("not implemented")
 }

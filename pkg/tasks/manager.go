@@ -90,6 +90,24 @@ func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 
 }
 
+// create compress
+func (t *taskManager) CreateCompressTask(param *models.CompressParam) *Task {
+	var ctx, cancel = context.WithCancel(context.Background())
+
+	var task = &Task{
+		id:            common.GenerateTaskId(),
+		param:         &models.PasteParam{Owner: param.Owner, Action: "", Src: nil, Dst: nil, Temp: nil},
+		compressParam: param,
+		state:         common.Pending,
+		ctx:           ctx,
+		ctxCancel:     cancel,
+		manager:       t,
+		createAt:      time.Now(),
+		totalSize:     param.TotalSize,
+	}
+	return task
+}
+
 // resume
 func (t *taskManager) ResumeTask(owner, taskId string) error {
 	klog.Infof("[Task] Id: %s, Resume, user: %s", taskId, owner)
@@ -195,13 +213,20 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 
 	var pauseAble bool = true
 
-	if src.IsSync() && dst.IsSync() {
-		pauseAble = false
+	if src == nil || dst == nil {
+	} else {
+		if src.IsSync() && dst.IsSync() {
+			pauseAble = false
+		}
 	}
 
+	action := task.param.Action
+	if action == "" {
+		action = task.compressParam.Action
+	}
 	var res = &TaskInfo{
 		Id:            task.id,
-		Action:        task.param.Action,
+		Action:        action,
 		IsDir:         !task.isFile,
 		FileName:      srcFileName,
 		Dst:           dstUri,

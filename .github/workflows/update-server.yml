@@ -63,7 +63,7 @@ jobs:
         run: |
           go mod tidy
           for GOOS in linux; do
-            for GOARCH in amd64 arm64; do
+            for GOARCH in amd64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
 
@@ -92,6 +92,7 @@ jobs:
               hz update -idl idl/resources.thrift
               hz update -idl idl/tree.thrift
               hz update -idl idl/user.thrift
+              hz update -idl idl/compress.thrift
               echo "upload.thrift"
               hz update -idl idl/upload.thrift
               echo "share.thrift"
