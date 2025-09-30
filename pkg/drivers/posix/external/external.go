@@ -4,6 +4,8 @@ import (
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/posix/posix"
 	"files/pkg/models"
+	"files/pkg/tasks"
+	"fmt"
 )
 
 type ExternalStorage struct {
@@ -60,4 +62,14 @@ func (s *ExternalStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([
 
 func (s *ExternalStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	return s.posix.UploadChunks(fileUploadArg)
+}
+
+func (s *ExternalStorage) Compress(compressParam *models.CompressParam) (*tasks.Task, error) {
+	//return s.posix.Compress(compressParam)
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *ExternalStorage) Uncompress(uncompressParam *models.CompressParam) (*tasks.Task, error) {
+	//return s.posix.Uncompress(uncompressParam)
+	return nil, fmt.Errorf("not implemented")
 }

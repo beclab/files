@@ -742,3 +742,17 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 
 	return common.ToBytes(result), nil
 }
+
+/**
+ * Compress
+ */
+func (s *CloudStorage) Compress(compressParam *models.CompressParam) (*tasks.Task, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+/**
+ * Uncompress
+ */
+func (s *CloudStorage) Uncompress(uncompressParam *models.CompressParam) (*tasks.Task, error) {
+	return nil, fmt.Errorf("not implemented")
+}

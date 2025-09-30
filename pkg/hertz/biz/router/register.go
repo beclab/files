@@ -3,6 +3,7 @@
 package router
 
 import (
+	api_compress "files/pkg/hertz/biz/router/api/compress"
 	api_external "files/pkg/hertz/biz/router/api/external"
 	api_md5 "files/pkg/hertz/biz/router/api/md5"
 	api_media "files/pkg/hertz/biz/router/api/media"
@@ -29,6 +30,8 @@ func GeneratedRegister(r *server.Hertz) {
 	api_media.Register(r)
 
 	api_search.Register(r)
+
+	api_compress.Register(r)
 
 	api_users.Register(r)
 

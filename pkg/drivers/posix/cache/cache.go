@@ -4,6 +4,7 @@ import (
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/posix/posix"
 	"files/pkg/models"
+	"files/pkg/tasks"
 )
 
 type CacheStorage struct {
@@ -60,4 +61,12 @@ func (s *CacheStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
 
 func (s *CacheStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	return s.posix.UploadChunks(fileUploadArg)
+}
+
+func (s *CacheStorage) Compress(compressParam *models.CompressParam) (*tasks.Task, error) {
+	return s.posix.Compress(compressParam)
+}
+
+func (s *CacheStorage) Uncompress(uncompressParam *models.CompressParam) (*tasks.Task, error) {
+	return s.posix.Uncompress(uncompressParam)
 }
