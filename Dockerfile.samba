@@ -1,0 +1,40 @@
+FROM golang:1.23 as builder
+
+WORKDIR /workspace
+COPY go.mod go.sum ./
+RUN \
+  echo ">> Downloading go modules..." && \
+  go mod download
+
+COPY cmd/samba ./cmd/samba
+
+RUN CGO_ENABLED=0 go build -o samba_share cmd/samba/main.go
+
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+# FROM gcr.io/distroless/base:nonroot
+# FROM gcr.io/distroless/base:debug
+
+FROM alpine:edge
+
+RUN set -eu && \
+  apk --no-cache add \
+  tini \
+  bash \
+  samba \
+  tzdata \
+  shadow && \
+  addgroup -S smb && \
+  rm -f /etc/samba/smb.conf && \
+  rm -rf /tmp/* /var/cache/apk/*
+
+WORKDIR /
+COPY --chmod=755 ./config/samba/samba.sh /usr/bin/samba.sh
+COPY --chmod=664 ./config/samba/smb.conf /etc/samba/smb.default
+COPY --from=builder /workspace/samba_share .
+
+EXPOSE 139 445
+
+HEALTHCHECK --interval=60s --timeout=15s CMD smbclient --configfile=/etc/samba/samba.conf -L \\localhost -U % -m SMB3
+
+ENTRYPOINT ["/samba_share"]

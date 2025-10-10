@@ -4,24 +4,28 @@ package share
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/models"
+	"files/pkg/samba"
 	"fmt"
-	"github.com/cloudwego/hertz/pkg/common/utils"
-	"github.com/google/uuid"
-	"gorm.io/gorm"
-	"k8s.io/klog/v2"
 	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
+
 	share "files/pkg/hertz/biz/model/api/share"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
@@ -129,6 +133,14 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
+	password := common.Md5String(req.Password)
+	if req.ShareType == "smb" {
+		input := []byte(req.Password)
+		encodedBytes := make([]byte, base64.StdEncoding.EncodedLen(len(input)))
+		base64.StdEncoding.Encode(encodedBytes, input)
+		password = string(encodedBytes)
+	}
+
 	sharePath := &share.SharePath{
 		Owner:       owner,
 		FileType:    fileParam.FileType,
@@ -136,7 +148,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		Path:        fileParam.Path,
 		ShareType:   req.ShareType,
 		Name:        req.Name,
-		PasswordMd5: common.Md5String(req.Password),
+		PasswordMd5: password,
 		ExpireIn:    expireIn,
 		ExpireTime:  expireTime,
 		Permission:  permission,
@@ -148,6 +160,14 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		klog.Errorf("postgres.CreateSharePath error: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
+	}
+
+	if req.ShareType == "smb" {
+		if err := samba.SambaService.CreateShareSamba(owner, res[0].ID, "add"); err != nil {
+			klog.Errorf("Failed create samba share failed, error: %v", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Create SMB share failed"})
+			return
+		}
 	}
 
 	resp := new(share.CreateSharePathResp)
@@ -388,6 +408,9 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	}
 
 	pathIds := strings.Split(req.PathIds, ",")
+
+	deleteSmbSharePaths, err := database.QuerySmbSharePathByIds(pathIds)
+
 	failedPathIds := []string{}
 	for _, pathId := range pathIds {
 		// for every share path, it is a individual transaction
@@ -422,6 +445,16 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	if len(failedPathIds) > 0 {
 		c.AbortWithStatusJSON(consts.StatusOK, utils.H{"msg": "Part of identified shared paths delete failed: " + strings.Join(failedPathIds, ",")})
 		return
+	}
+
+	if deleteSmbSharePaths != nil && len(deleteSmbSharePaths) > 0 {
+		var smbIds []string
+		for _, item := range deleteSmbSharePaths {
+			smbIds = append(smbIds, item.ID)
+		}
+		if err := samba.SambaService.CreateShareSamba("zhaoyu001", strings.Join(smbIds, ","), "del"); err != nil {
+			klog.Errorf("create samba DELETE crd error: %v", err)
+		}
 	}
 
 	resp := new(share.DeleteSharePathResp)

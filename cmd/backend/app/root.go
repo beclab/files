@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"files/pkg/client"
 	"files/pkg/common"
 	"files/pkg/diskcache"
 	"files/pkg/drivers"
@@ -14,6 +15,7 @@ import (
 	"files/pkg/img"
 	"files/pkg/integration"
 	"files/pkg/redisutils"
+	"files/pkg/samba"
 	"files/pkg/tasks"
 	"files/pkg/watchers"
 	"io"
@@ -32,7 +34,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 var (
@@ -154,7 +155,16 @@ user created with the credentials from options "username" and "password".`,
 		drivers.NewDriverHandler()
 
 		// step6: init global
-		config := ctrl.GetConfigOrDie()
+		f, err := client.NewFactory()
+		if err != nil {
+			klog.Fatalf("new factory error: %v", err)
+		}
+
+		config, err := f.ClientConfig()
+		if err != nil {
+			klog.Fatalf("get client config error: %v", err)
+		}
+
 		global.InitGlobalData(config)
 		global.InitGlobalNodes(config)
 		global.InitGlobalMounted()
@@ -181,7 +191,10 @@ user created with the credentials from options "username" and "password".`,
 		// .	- CleanupOldFilesAndRedisEntries
 		InitCrontabs()
 
-		// step12: run hertz server
+		// step12: samba
+		samba.NewSambaManager(f)
+
+		// step13: run hertz server
 		hertz.HertzServer()
 
 	}, pythonConfig{allowNoDB: true}),

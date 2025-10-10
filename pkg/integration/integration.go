@@ -378,7 +378,7 @@ func (i *integration) checkTokenExpired(user string, tokenName string) (bool, *I
 }
 
 func (i *integration) GetFilesPod(node string) (*corev1.Pod, error) {
-	pods, err := i.kubeClient.CoreV1().Pods("os-framework").List(context.Background(), v1.ListOptions{
+	pods, err := i.kubeClient.CoreV1().Pods(common.DefaultNamespace).List(context.Background(), v1.ListOptions{
 		LabelSelector: "app=files",
 	})
 	if err != nil {
