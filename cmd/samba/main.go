@@ -6,6 +6,7 @@ import (
 	"files/pkg/client"
 	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
+	"files/pkg/models"
 	"files/pkg/samba"
 	"files/pkg/watchers"
 
@@ -38,6 +39,7 @@ var rootCmd = &cobra.Command{
 
 		var w = watchers.NewWatchers(context.Background(), config)
 		watchers.AddToWatchers[v1.ShareSamba](w, samba.SambaGVR, samba.SambaService.HandlerEvent())
+		watchers.AddToWatchers[models.User](w, models.UserGVR, samba.SambaService.UserHandlerEvent())
 
 		w.Run(1)
 	},

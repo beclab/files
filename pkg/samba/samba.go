@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	v1 "files/pkg/apis/sys.bytetrade.io/v1"
+	"files/pkg/client"
 	k8sclient "files/pkg/client"
 	"files/pkg/common"
 	"files/pkg/hertz/biz/dal/database"
@@ -25,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -65,6 +67,7 @@ type samba struct {
 	ctx      context.Context
 	factory  k8sclient.Factory
 	commands *commands
+	users    []string
 	sync.RWMutex
 }
 
@@ -77,9 +80,11 @@ func NewSambaManager(f k8sclient.Factory) {
 }
 
 func (s *samba) Start() {
-	s.deleteExpiredShares()
+	s.getUsers()
 	s.generateConf()
 	s.commands.Run()
+
+	s.deleteExpiredShares()
 }
 
 func (s *samba) CreateShareSamba(owner string, ids string, operator string) error {
@@ -118,6 +123,30 @@ func (s *samba) CreateShareSamba(owner string, ids string, operator string) erro
 	klog.Infof("samba create share: %v", res.UnstructuredContent())
 
 	return nil
+}
+
+func (s *samba) UserHandlerEvent() cache.ResourceEventHandler {
+	return cache.FilteringResourceEventHandler{
+		FilterFunc: func(obj interface{}) bool {
+			return true
+		},
+		Handler: cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				s.getUsers()
+
+				klog.Infof("samba user addFunc, users: %v", s.users)
+
+			},
+			DeleteFunc: func(obj interface{}) {
+				user := obj.(*models.User)
+				klog.Infof("samba user deleteFunc, user: %s", user.Name)
+
+				s.getUsers()
+				s.generateConf()
+				s.deleteUserGroup(user.Name)
+			},
+		},
+	}
 }
 
 func (s *samba) HandlerEvent() cache.ResourceEventHandler {
@@ -173,11 +202,39 @@ func (s *samba) deleteExpiredShares() {
 	}()
 }
 
+func (s *samba) getUsers() {
+	s.Lock()
+	defer s.Unlock()
+
+	config, err := s.factory.ClientConfig()
+	if err != nil {
+		klog.Errorf("samba user addFunc clientConfig get error: %v", err)
+		return
+	}
+	cli, err := dynamic.NewForConfig(config)
+	if err != nil {
+		klog.Errorf("samba user addFunc dynamicClient get error: %v", err)
+		return
+	}
+
+	users, err := client.GetUser(cli)
+	if err != nil {
+		klog.Errorf("samba user addFunc getusers error: %v", err)
+		return
+	}
+
+	s.users = []string{}
+
+	for _, user := range users {
+		s.users = append(s.users, user.Name)
+	}
+}
+
 func (s *samba) generateConf() {
 	s.Lock()
 	defer s.Unlock()
 
-	smbUsers, _ := s.commands.ListUser(shareTypeSmb)
+	smbUsers, _ := s.commands.ListUser(s.users)
 
 	smbShareData, err := database.QuerySharePathByType(shareTypeSmb)
 	if err != nil {
@@ -185,7 +242,7 @@ func (s *samba) generateConf() {
 		return
 	}
 
-	klog.Infof("samba get users: %v", smbUsers)
+	klog.Infof("samba get system users: %v", smbUsers)
 
 	if len(smbShareData) == 0 {
 		klog.Infof("samba shares not found")
@@ -198,6 +255,9 @@ func (s *samba) generateConf() {
 
 	var shares = SambaShares{}
 	for _, item := range smbShareData {
+		if !s.checkUserExists(item.Owner) {
+			continue
+		}
 		expire, err := time.Parse(timeFormat, item.ExpireTime)
 		if err != nil {
 			klog.Errorf("samba sharePath time expired, error: %v, time: %s", err, item.ExpireTime)
@@ -215,8 +275,13 @@ func (s *samba) generateConf() {
 			continue
 		}
 
-		if err := s.commands.CreateUser(shareUser, sharePwd); err != nil {
-			klog.Errorf("samba create user error: %v", err)
+		if err := s.commands.CreateGroup(item.Owner, ""); err != nil {
+			klog.Errorf("samba create group %s error: %v", item.Owner, err)
+			return
+		}
+
+		if err := s.commands.CreateUser(shareUser, sharePwd, item.Owner); err != nil {
+			klog.Errorf("samba create user %s error: %v", shareUser, err)
 			return
 		}
 
@@ -239,11 +304,11 @@ func (s *samba) generateConf() {
 			Name:       item.ID,
 			Path:       fileUri + fp.Path,
 			Comment:    item.Name,
-			ValidUsers: shareTypeSmb,
+			ValidUsers: item.Owner,
 			Writable:   w,
 			ReadOnly:   r,
 			ForceUser:  shareUser,
-			ForceGroup: shareTypeSmb,
+			ForceGroup: item.Owner,
 		}
 		shares.Paths = append(shares.Paths, smbShare)
 	}
@@ -304,7 +369,7 @@ func (s *samba) formatPrivilege(permission int32) (string, string) {
 	case 2:
 		return "yes", "yes"
 	case 3, 4:
-		return "yes", "yes"
+		return "yes", "no"
 	}
 
 	return "no", "no"
@@ -350,4 +415,25 @@ func (s *samba) deleteExcludeUsers(sysUsers []string, smbShareData []*share.Shar
 	}
 
 	return nil
+}
+
+func (s *samba) deleteUserGroup(owner string) {
+	s.Lock()
+	defer s.Unlock()
+	users, _ := s.commands.ListUser([]string{owner})
+
+	s.commands.DeleteUser(users)
+	s.commands.DeleteGroup(owner)
+}
+
+func (s *samba) checkUserExists(owner string) bool {
+	var f bool
+	for _, e := range s.users {
+		if e == owner {
+			f = true
+			break
+		}
+	}
+
+	return f
 }

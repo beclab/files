@@ -1,30 +1,37 @@
 package client
 
 import (
-	"sync"
+	"context"
+	"encoding/json"
+	"files/pkg/models"
+
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/klog/v2"
 )
 
-var once sync.Once
+func GetUser(client *dynamic.DynamicClient) ([]*models.User, error) {
+	var users []*models.User
 
-var clientFactory Factory
-
-func ClientFactory() Factory {
-	return clientFactory
-}
-
-func Init(logLevel string) (err error) {
-
-	f, err := NewFactory()
+	unstructuredUsers, err := client.Resource(models.UserGVR).List(context.Background(), v1.ListOptions{})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	once.Do(func() {
-		clientFactory = f
-	})
 
-	return getNamespaces(logLevel, f)
-}
+	for _, unstructuredUser := range unstructuredUsers.Items {
+		b, err := unstructuredUser.MarshalJSON()
+		if err != nil {
+			klog.Errorf("marshal user error: %v", err)
+			continue
+		}
+		var user *models.User
+		if err := json.Unmarshal(b, &user); err != nil {
+			klog.Errorf("unmarshal user error: %v", err)
+			continue
+		}
 
-func getNamespaces(logLevel string, f Factory) error {
-	return nil
+		users = append(users, user)
+	}
+
+	return users, nil
 }

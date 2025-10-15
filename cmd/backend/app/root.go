@@ -14,6 +14,7 @@ import (
 	"files/pkg/hertz/biz/dal"
 	"files/pkg/img"
 	"files/pkg/integration"
+	"files/pkg/models"
 	"files/pkg/redisutils"
 	"files/pkg/samba"
 	"files/pkg/tasks"
@@ -179,7 +180,7 @@ user created with the credentials from options "username" and "password".`,
 		var w = watchers.NewWatchers(context.Background(), config)
 		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
-		watchers.AddToWatchers[integration.User](w, integration.UserGVR, integration.IntegrationManager().HandlerEvent())
+		watchers.AddToWatchers[models.User](w, models.UserGVR, integration.IntegrationManager().HandlerEvent())
 
 		go w.Run(1)
 
