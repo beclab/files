@@ -17,7 +17,9 @@ import (
 )
 
 func (i *integration) getAccounts(owner string, authToken string) ([]*accountsResponseData, error) {
-	settingsUrl := fmt.Sprintf("http://settings.user-system-%s:28080/api/account/all", owner)
+	var integrationUrl = fmt.Sprintf("%s/api/account/list", common.DefaultIntegrationProviderUrl)
+	var data = make(map[string]string)
+	data["user"] = owner
 
 	var backoff = wait.Backoff{
 		Duration: 2 * time.Second,
@@ -31,10 +33,11 @@ func (i *integration) getAccounts(owner string, authToken string) ([]*accountsRe
 	if e := retry.OnError(backoff, func(err error) bool {
 		return true
 	}, func() error {
-		// klog.Infof("fetch integration from settings: %s", settingsUrl)
-		resp, err := i.rest.SetDebug(false).R().SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
+		resp, err := i.rest.R().
+			SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
+			SetBody(data).
 			SetResult(&accountsResponse{}).
-			Get(settingsUrl)
+			Post(integrationUrl)
 
 		if err != nil {
 			return err
@@ -61,16 +64,18 @@ func (i *integration) getAccounts(owner string, authToken string) ([]*accountsRe
 }
 
 func (i *integration) getToken(owner string, accountName string, accountType string, authToken string) (*accountResponseData, error) {
-	settingsUrl := fmt.Sprintf("http://settings.user-system-%s:28080/api/account/retrieve", owner)
-
+	var integrationUrl = fmt.Sprintf("%s/api/account/retrieve", common.DefaultIntegrationProviderUrl)
 	var data = make(map[string]string)
-	data["name"] = i.formatUrl(accountType, accountName)
-	klog.Infof("fetch integration from settings: %s", settingsUrl)
+	data["name"] = accountName
+	data["type"] = i.formatUrl(accountType)
+	data["user"] = owner
+
+	klog.Infof("fetch integration from settings: %s", integrationUrl)
 	resp, err := i.rest.R().SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
 		SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
 		SetBody(data).
 		SetResult(&accountResponse{}).
-		Post(settingsUrl)
+		Post(integrationUrl)
 
 	if err != nil {
 		return nil, err
@@ -88,7 +93,7 @@ func (i *integration) getToken(owner string, accountName string, accountType str
 	return accountResp.Data, nil
 }
 
-func (i *integration) formatUrl(location, name string) string {
+func (i *integration) formatUrl(location string) string {
 	var l string
 	switch location {
 	case common.AwsS3:
@@ -100,7 +105,7 @@ func (i *integration) formatUrl(location, name string) string {
 	case common.TencentCos: // from settings api
 		l = common.TencentCos
 	}
-	return fmt.Sprintf("integration-account:%s:%s", l, name)
+	return l
 }
 
 func (i *integration) checkExpired(expiredAt int64) bool {
@@ -117,7 +122,6 @@ func (i *integration) getAuthToken(owner string) (string, error) {
 		}
 	}
 
-	namespace := fmt.Sprintf("user-system-%s", owner)
 	tr := &authv1.TokenRequest{
 		Spec: authv1.TokenRequestSpec{
 			Audiences:         []string{"https://kubernetes.default.svc.cluster.local"},
@@ -125,18 +129,18 @@ func (i *integration) getAuthToken(owner string) (string, error) {
 		},
 	}
 
-	token, err := i.kubeClient.CoreV1().ServiceAccounts(namespace).
-		CreateToken(context.Background(), "user-backend", tr, metav1.CreateOptions{})
+	token, err := i.kubeClient.CoreV1().ServiceAccounts(common.DefaultNamespace).
+		CreateToken(context.Background(), common.DefaultServiceAccount, tr, metav1.CreateOptions{})
 	if err != nil {
 		// klog.Errorf("Failed to create token for user %s in namespace %s: %v", owner, namespace, err)
-		return "", fmt.Errorf("failed to create token for user %s in namespace %s: %v", owner, namespace, err)
+		return "", fmt.Errorf("failed to create token for user %s in namespace %s: %v", owner, common.DefaultNamespace, err)
 	}
 
 	if !ok {
 		at = &authToken{}
 	}
 	at.token = token.Status.Token
-	at.expire = time.Now().Add(82800 * time.Second)
+	at.expire = time.Now().Add(40000 * time.Second)
 
 	i.authToken[owner] = at
 

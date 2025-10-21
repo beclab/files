@@ -10,6 +10,12 @@ const (
 	ROOT_PREFIX     = "/data"
 	CACHE_PREFIX    = "/appcache"
 	EXTERNAL_PREFIX = "/data/External"
+
+	DefaultNamespace              = "os-framework"
+	DefaultServiceAccount         = "os-internal"
+	DefaultIntegrationProviderUrl = "http://integration-provider-svc.os-protected:28080"
+
+	EnvIntegrationDebug = "FILES_INTEGRATION_DEBUG"
 )
 
 const (
@@ -41,6 +47,7 @@ const (
 	GoogleDrive = "google"
 	DropBox     = "dropbox"
 	TencentCos  = "tencent"
+	Space       = "space"
 
 	RcloneTypeLocal   = "local"
 	RcloneTypeS3      = "s3"

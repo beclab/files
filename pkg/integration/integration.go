@@ -7,6 +7,7 @@ import (
 	"files/pkg/hertz/biz/model/api/external"
 	"fmt"
 	"net/url"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -58,10 +59,16 @@ func NewIntegrationManager() {
 		panic(err)
 	}
 
+	debug := false
+	d := os.Getenv(common.EnvIntegrationDebug)
+	if d == "1" {
+		debug = true
+	}
+
 	IntegrationService = &integration{
 		client:     client,
 		kubeClient: kubeClient,
-		rest:       resty.New().SetTimeout(60 * time.Second).SetDebug(true),
+		rest:       resty.New().SetTimeout(60 * time.Second).SetDebug(debug),
 		tokens:     make(map[string]*Integrations),
 		authToken:  make(map[string]*authToken),
 	}
@@ -168,6 +175,9 @@ func (i *integration) GetIntegrations() error {
 		klog.Infof("integration get accounts, user: %s, count: %d", user.Name, len(accounts))
 
 		for _, acc := range accounts {
+			if acc.Type == common.Space {
+				continue
+			}
 			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)
 
 			if flag {
@@ -215,7 +225,7 @@ func (i *integration) GetIntegrations() error {
 					Available: token.RawData.Available,
 					Scope:     token.RawData.Scope,
 					IdToken:   token.RawData.IdToken,
-					ClientId:  token.ClientId, // or ?token.RawData.ClientId,
+					ClientId:  token.RawData.ClientId, // or ?token.RawData.ClientId,
 				}
 
 				userTokens, userExists := i.tokens[user.Name]
@@ -251,7 +261,7 @@ func (i *integration) GetIntegrations() error {
 						Url:          token.RawData.Endpoint,
 						Endpoint:     i.parseEndpoint(token.RawData.Endpoint),
 						Bucket:       i.parseBucket(token.RawData.Endpoint),
-						ClientId:     token.ClientId, // only for dropbox
+						ClientId:     token.RawData.ClientId, // only for dropbox
 						ExpiresAt:    token.RawData.ExpiresAt,
 					}
 

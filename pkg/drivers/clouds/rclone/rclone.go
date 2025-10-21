@@ -1,6 +1,7 @@
 package rclone
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
@@ -99,7 +100,7 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 	_ = changedConfigsJson
 
 	// if changedConfigsJson != "{}" {
-	klog.Infof("[startHttp] changed configs: %s", common.ToJson(changedConfigs))
+	klog.Infof("[startHttp] changed configs: %s", base64.StdEncoding.EncodeToString([]byte(common.ToJson(changedConfigs))))
 	// }
 
 	if len(changedConfigs.Delete) > 0 {

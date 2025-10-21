@@ -34,25 +34,24 @@ type accountResponse struct {
 }
 
 type accountResponseData struct {
-	Name     string                  `json:"name"`
-	Type     string                  `json:"type"`
-	RawData  *accountResponseRawData `json:"raw_data"`
-	CloudUrl string                  `json:"cloudUrl"`
-	ClientId string                  `json:"client_id"`
+	Name    string                  `json:"name"`
+	Type    string                  `json:"type"`
+	RawData *accountResponseRawData `json:"rawData"`
 }
 
 type accountResponseRawData struct {
-	ExpiresAt    int64  `json:"expires_at"`
-	RefreshToken string `json:"refresh_token"`
-	AccessToken  string `json:"access_token"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	ExpiresAt    int64  `json:"expiresAt"`
+	CreateAt     int64  `json:"createAt"`
+	Available    bool   `json:"available"`
 	Endpoint     string `json:"endpoint"`
 	Bucket       string `json:"bucket"`
-	UserId       string `json:"userid"`
-	Available    bool   `json:"available"`
-	CreateAt     int64  `json:"create_at"`
+	UserId       string `json:"userId"`
 	Scope        string `json:"scope"`
-	IdToken      string `json:"id_token"`
-	ClientId     string `json:"client_id"`
+	IdToken      string `json:"idToken"`
+	ClientId     string `json:"clientId"`
+	CloudUrl     string `json:"cloudUrl"`
 }
 
 type accountsResponse struct {
@@ -63,9 +62,9 @@ type accountsResponse struct {
 type accountsResponseData struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
-	ExpiresAt int64  `json:"expires_at"`
 	Available bool   `json:"available"`
-	CreateAt  int64  `json:"create_at"`
+	CreateAt  int64  `json:"createAt"`
+	ExpiresAt int64  `json:"expiresAt"`
 }
 
 // copy from kubesphere
