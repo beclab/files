@@ -4,9 +4,10 @@ import (
 	"files/pkg/common"
 	"files/pkg/hertz/biz/model/api/share"
 	"fmt"
-	"gorm.io/gorm"
 	"strconv"
 	"time"
+
+	"gorm.io/gorm"
 
 	"k8s.io/klog/v2"
 )
@@ -43,6 +44,24 @@ func QuerySharePath(params *QueryParams, page, pageSize int64, orderBy, order st
 		return nil, 0, err
 	}
 	return res, total, nil
+}
+
+func QuerySharePathByType(shareType string) ([]*share.SharePath, error) {
+	var res []*share.SharePath
+	if err := DB.Where("share_type = ?", shareType).Find(&res).Error; err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func QuerySmbSharePathByIds(ids []string) ([]*share.SharePath, error) {
+	var res []*share.SharePath
+	if err := DB.Where("share_type = ? and id in ?", "smb", ids).Find(&res).Error; err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func VerifySharePathPassword(pathID, inputPassword string) (bool, error) {

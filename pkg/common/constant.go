@@ -12,6 +12,10 @@ const (
 	EXTERNAL_PREFIX = "/data/External"
 
 	SERVER_HOST = "127.0.0.1:8080"
+
+	SambaConfTemplatePath = "/etc/samba/smb.conf"
+
+	DefaultNamespace = "os-framework"
 )
 
 const (

@@ -1,0 +1,23 @@
+[global]
+  server string = samba
+  idmap config * : range = 3000-7999
+  security = user
+  server min protocol = SMB2
+
+  # disable printing services
+  load printers = no
+  printing = bsd
+  printcap name = /dev/null
+  disable spoolss = yes
+
+{{ range $data := $.Paths }}
+[{{ $data.Name }}]
+  path = {{ $data.Path }}
+  comment = {{ $data.Comment }}
+  valid users = @{{ $data.ValidUsers }}
+  browseable = yes
+  writable = {{ $data.Writable }}
+  read only = {{ $data.ReadOnly }}
+  force user = {{ $data.ForceUser }}
+  force group = {{ $data.ForceGroup }}
+{{ end }}

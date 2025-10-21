@@ -17,7 +17,6 @@ import (
 	"github.com/go-resty/resty/v2"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -25,8 +24,6 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-var UserGVR = schema.GroupVersionResource{Group: "iam.kubesphere.io", Version: "v1alpha2", Resource: "users"}
 
 var IntegrationService *integration
 
@@ -36,7 +33,7 @@ type integration struct {
 	rest       *resty.Client
 	tokens     map[string]*Integrations
 	authToken  map[string]*authToken
-	users      []*User
+	users      []*models.User
 
 	sync.RWMutex
 }
@@ -378,7 +375,7 @@ func (i *integration) checkTokenExpired(user string, tokenName string) (bool, *I
 }
 
 func (i *integration) GetFilesPod(node string) (*corev1.Pod, error) {
-	pods, err := i.kubeClient.CoreV1().Pods("os-framework").List(context.Background(), v1.ListOptions{
+	pods, err := i.kubeClient.CoreV1().Pods(common.DefaultNamespace).List(context.Background(), v1.ListOptions{
 		LabelSelector: "app=files",
 	})
 	if err != nil {

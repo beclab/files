@@ -149,8 +149,6 @@ func (g *Data) getPvc(user string) {
 	GlobalData.UserPvcMap[user] = pvcUser
 	GlobalData.CachePvcMap[user] = pvcCache
 	GlobalData.mu.Unlock()
-
-	return
 }
 
 func (g *Data) getUsers() (users []string) {

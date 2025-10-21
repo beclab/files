@@ -9,7 +9,7 @@ struct SharePath {
     5: required string path (go.tag = 'gorm:"column:path;type:text;not null"')
     6: required string share_type (go.tag = 'gorm:"column:share_type;type:varchar(10);not null"')
     7: required string name (go.tag = 'gorm:"column:name;type:text"')
-    8: required string password_md5 (go.tag = 'gorm:"column:password_md5;type:varchar(32)"')
+    8: required string password_md5 (go.tag = 'gorm:"column:password_md5;type:varchar(150)"')
     9: required i64 expire_in (go.tag = 'gorm:"column:expire_in;not null"')
     10: required string expire_time (go.tag = 'gorm:"column:expire_time;type:timestamptz;not null"')
     11: required i32 permission (go.tag = 'gorm:"column:permission;not null"')
