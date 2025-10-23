@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"files/pkg/common"
 	"fmt"
 	"net/http"
@@ -22,10 +23,10 @@ func (i *integration) getAccounts(owner string, authToken string) ([]*accountsRe
 	data["user"] = owner
 
 	var backoff = wait.Backoff{
-		Duration: 2 * time.Second,
+		Duration: 1 * time.Second,
 		Factor:   2,
 		Jitter:   0.1,
-		Steps:    3,
+		Steps:    1,
 	}
 
 	var result *accountsResponse
@@ -43,21 +44,13 @@ func (i *integration) getAccounts(owner string, authToken string) ([]*accountsRe
 			return err
 		}
 
-		if resp.StatusCode() != http.StatusOK {
-			klog.Errorf("request accounts invalid, user: %s, status: %d, body: %s", owner, resp.StatusCode(), string(resp.Body()))
-			return fmt.Errorf("request status invalid, code: %d, msg: %s", resp.StatusCode(), string(resp.Body()))
-		}
-
-		result = resp.Result().(*accountsResponse)
-
-		if result.Code != 0 {
-			klog.Errorf("get accounts failed, user: %s, code: %d, body: %s", owner, result.Code, string(resp.Body()))
-			return fmt.Errorf("code %d invalid, msg: %s", result.Code, string(resp.Body()))
+		if err := json.Unmarshal(resp.Body(), &result); err != nil {
+			return err
 		}
 
 		return nil
 	}); e != nil {
-		return nil, fmt.Errorf("get accounts failed, error: %v", e)
+		return nil, e
 	}
 
 	return result.Data, nil

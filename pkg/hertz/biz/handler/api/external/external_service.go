@@ -433,11 +433,7 @@ func AccountsMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	accounts, err := integration.IntegrationManager().GetAccounts(owner)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
-	}
+	accounts, _ := integration.IntegrationManager().GetAccounts(owner)
 
 	result["code"] = http.StatusOK
 	result["data"] = accounts
