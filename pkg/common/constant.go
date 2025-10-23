@@ -15,7 +15,11 @@ const (
 
 	SambaConfTemplatePath = "/etc/samba/smb.conf"
 
-	DefaultNamespace = "os-framework"
+	DefaultNamespace              = "os-framework"
+	DefaultServiceAccount         = "os-internal"
+	DefaultIntegrationProviderUrl = "http://integration-provider-svc.os-protected:28080"
+
+	EnvIntegrationDebug = "FILES_INTEGRATION_DEBUG"
 )
 
 const (
@@ -48,6 +52,7 @@ const (
 	DropBox     = "dropbox"
 	TencentCos  = "tencent"
 	Share       = "share"
+	Space       = "space"
 
 	RcloneTypeLocal   = "local"
 	RcloneTypeS3      = "s3"

@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	common2 "files/pkg/common"
 	"files/pkg/drivers/clouds/rclone/common"
@@ -58,7 +59,7 @@ func (c *config) Create(param *Config) error {
 		Parameters: c.parseCreateConfigParameters(param),
 	}
 
-	klog.Infof("[rclone] create config: %s, param: %s", param.Type, common2.ToJson(data))
+	klog.Infof("[rclone] create config: %s, param: %s", param.Type, base64.StdEncoding.EncodeToString([]byte(common2.ToJson(data))))
 	_, err := utils.Request(ctx, url, http.MethodPost, nil, []byte(common2.ToJson(data)))
 	if err != nil {
 		klog.Warningf("[rclone] create config, result: %s", err.Error())
