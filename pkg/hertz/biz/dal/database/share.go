@@ -187,3 +187,45 @@ func QueryShareExternalById(shareId string) (*share.ShareToken, error) {
 	}
 	return res, nil
 }
+
+func QuerySearchSharedDirectories(owner string) ([]*share.SharePath, error) {
+	/**
+		 *
+	select id,owner,file_type,extend,path,share_type,name,permission from share_paths where share_type = 'internal' and id in (select path_id from share_members where share_member like '%zhaoyu003%')
+
+	union
+
+	select id,owner,file_type,extend,path,share_type,name,permission from share_paths where share_type = 'external' and permission in (1,3,4) and id in (select path_id from share_tokens where expire_at > '2025-10-25T00:00:00Z');
+	*/
+
+	var selectFields = "id,owner,file_type,extend,path,share_type,name,permission"
+
+	// ~ internal
+	var internalSharePaths []*share.SharePath
+	var internalSub = DB.Model(&share.ShareMember{})
+	internalSub.Select("path_id").Where("share_member LIKE ?", fmt.Sprintf("%%%s%%", owner))
+
+	var db = DB.Model(&share.SharePath{})
+	if err := db.Select(selectFields).Where("share_type = ? AND id IN (?)", "internal", internalSub).Find(&internalSharePaths).Error; err != nil {
+		return nil, err
+	}
+
+	// ~ external
+	var externalSharePaths []*share.SharePath
+	var permissions = []int{1, 3, 4}
+	var externalSub = DB.Model(&share.ShareToken{})
+
+	externalSub.Select("path_id").Where("? < expire_at", time.Now().Format("2006-01-02T15:04:05.000Z07:00"))
+
+	db = DB.Model(&share.SharePath{})
+	if err := db.Select(selectFields).Where("share_type = ? AND permission IN ? AND id IN (?)", "external", permissions, externalSub).Find(&externalSharePaths).Error; err != nil {
+		return nil, err
+	}
+
+	var result []*share.SharePath
+
+	result = append(result, internalSharePaths...)
+	result = append(result, externalSharePaths...)
+
+	return result, nil
+}

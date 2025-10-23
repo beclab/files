@@ -179,7 +179,7 @@ func (i *integration) GetIntegrations() error {
 		klog.Infof("integration get accounts, user: %s, count: %d", user.Name, len(accounts))
 
 		for _, acc := range accounts {
-			if acc.Type == common.Space {
+			if acc.Type == common.Space || acc.Type == common.TencentCos {
 				continue
 			}
 			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)
