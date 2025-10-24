@@ -11,8 +11,6 @@ import (
 	"github.com/emicklei/go-restful/v3"
 	authv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 )
@@ -22,39 +20,18 @@ func (i *integration) getAccounts(owner string, authToken string) ([]*accountsRe
 	var data = make(map[string]string)
 	data["user"] = owner
 
-	var backoff = wait.Backoff{
-		Duration: 1 * time.Second,
-		Factor:   2,
-		Jitter:   0.1,
-		Steps:    1,
+	var header = make(map[string]string)
+	header[common.REQUEST_HEADER_AUTHORIZATION] = fmt.Sprintf("Bearer %s", authToken)
+
+	resp, err := common.Request(integrationUrl, http.MethodPost, header, data, common.ParseBool(common.DebugIntegration))
+	if err != nil {
+		return nil, err
 	}
 
 	var result *accountsResponse
 
-	if e := retry.OnError(backoff, func(err error) bool {
-		return true
-	}, func() error {
-		resp, err := i.rest.R().
-			SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
-			SetBody(data).
-			SetResult(&accountsResponse{}).
-			Post(integrationUrl)
-
-		if err != nil {
-			return err
-		}
-
-		if err := json.Unmarshal(resp.Body(), &result); err != nil {
-			return err
-		}
-
-		// if result.Code != 0 {
-		// 	klog.Errorf("request accounts failed, user: %s, code: %d, msg: %s", owner, result.Code, result.Message)
-		// }
-
-		return nil
-	}); e != nil {
-		return nil, e
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, err
 	}
 
 	return result.Data, nil
@@ -68,26 +45,24 @@ func (i *integration) getToken(owner string, accountName string, accountType str
 	data["user"] = owner
 
 	klog.Infof("fetch integration from settings: %s", integrationUrl)
-	resp, err := i.rest.R().SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(common.REQUEST_HEADER_AUTHORIZATION, fmt.Sprintf("Bearer %s", authToken)).
-		SetBody(data).
-		SetResult(&accountResponse{}).
-		Post(integrationUrl)
+
+	var header = make(map[string]string)
+	header[restful.HEADER_ContentType] = restful.MIME_JSON
+	header[common.REQUEST_HEADER_AUTHORIZATION] = fmt.Sprintf("Bearer %s", authToken)
+
+	resp, err := common.Request(integrationUrl, http.MethodPost, header, data, common.ParseBool(common.DebugIntegration))
 
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("request status invalid, status code: %d", resp.StatusCode())
+
+	var result *accountResponse
+
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, err
 	}
 
-	accountResp := resp.Result().(*accountResponse)
-
-	if accountResp.Code != 0 {
-		return nil, fmt.Errorf("get account failed, code: %d, msg: %s", accountResp.Code, accountResp.Message)
-	}
-
-	return accountResp.Data, nil
+	return result.Data, nil
 }
 
 func (i *integration) formatUrl(location string) string {

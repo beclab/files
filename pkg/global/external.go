@@ -118,21 +118,21 @@ func (m *Mount) getMounted() {
 		return
 	}
 
-	var err error = nil
 	// for 1.12: path-incluster URL exists, won't err in normal condition
 	// for 1.11: path-incluster URL may not exist, if err, use usb-incluster and hdd-incluster for system functional
 	url := "http://" + host + "/system/mounted-path-incluster"
 
-	headers := make(http.Header)
-	headers.Set("X-Signature", "temp_signature")
-	res, err := common.RequestWithContext(url, http.MethodGet, &headers, nil)
+	var header = make(map[string]string)
+	header["X-Signature"] = "temp_signature"
+
+	resp, err := common.Request(url, http.MethodGet, header, nil, false)
 	if err != nil {
 		klog.Errorf("get mounted error: %v", err)
 		return
 	}
 
 	var result *MountedDevice
-	if err := json.Unmarshal(res, &result); err != nil {
+	if err := json.Unmarshal(resp, &result); err != nil {
 		klog.Errorf("unmarshal mounted error: %v", err)
 		return
 	}

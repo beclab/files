@@ -21,6 +21,15 @@ func Register(r *server.Hertz) {
 		_api := root.Group("/api", _apiMw()...)
 		{
 			_share := _api.Group("/share", _shareMw()...)
+			_share.POST("/get_account", append(_getaccountMw(), share.GetAccount)...)
+			{
+				_get_share := _share.Group("/get_share", _get_shareMw()...)
+				_get_share.GET("/", append(_getsharepathMw(), share.GetSharePath)...)
+			}
+			{
+				_get_token := _share.Group("/get_token", _get_tokenMw()...)
+				_get_token.POST("/", append(_gettokenMw(), share.GetToken)...)
+			}
 			{
 				_share_member := _share.Group("/share_member", _share_memberMw()...)
 				_share_member.DELETE("/", append(_removesharememberMw(), share.RemoveShareMember)...)

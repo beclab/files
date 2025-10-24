@@ -28,9 +28,10 @@ const (
 )
 
 var (
-	OlaresdHost    = os.Getenv("TERMINUSD_HOST")
-	ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
-	NodeName       = os.Getenv("NODE_NAME")
+	OlaresdHost      = os.Getenv("TERMINUSD_HOST")
+	ExternalPrefix   = os.Getenv("EXTERNAL_PREFIX")
+	NodeName         = os.Getenv("NODE_NAME")
+	DebugIntegration = os.Getenv("DEBUG_INTEGRATION")
 )
 
 const (
@@ -90,9 +91,21 @@ var (
 )
 
 var (
+	DefaultPGTimeFormat = "2006-01-02T15:04:05Z"
+
 	ShareTypeInternal = "internal"
 	ShareTypeExternal = "external"
 	ShareTypeSMB      = "smb"
+
+	ErrorMessageWrongShare       = "Wrong share."
+	ErrorMessageTokenExpired     = "Token expired."
+	ErrorMessageLinkExpired      = "Link expired."
+	ErrorMessageGetTokenError    = "GetToken failed."
+	ErrorMessagePermissionDenied = "Permission denied."
+	ErrorMessageWrongPassword    = "Wrong password. Please check the password and try again."
+
+	CodeLinkExpired  = 559
+	CodeTokenExpired = 569
 )
 
 var (

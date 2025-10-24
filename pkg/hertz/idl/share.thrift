@@ -10,6 +10,7 @@ struct SharePath {
     6: required string share_type (go.tag = 'gorm:"column:share_type;type:varchar(10);not null"')
     7: required string name (go.tag = 'gorm:"column:name;type:text"')
     8: required string password_md5 (go.tag = 'gorm:"column:password_md5;type:varchar(150)"')
+    /* millisecond */
     9: required i64 expire_in (go.tag = 'gorm:"column:expire_in;not null"')
     10: required string expire_time (go.tag = 'gorm:"column:expire_time;type:timestamptz;not null"')
     11: required i32 permission (go.tag = 'gorm:"column:permission;not null"')
@@ -83,6 +84,14 @@ struct ListSharePathResp {
     2: list<ViewSharePath> share_paths;
 }
 
+struct GetSharePathReq {
+    1: required string PathId (api.query="path_id");
+    2: required string Token (api.query="token");
+}
+
+struct GetSharePathResp {}
+
+
 struct UpdateSharePathReq {
     1: required string PathId (api.body="path_id");
     2: required string Name (api.body="name");
@@ -124,6 +133,14 @@ struct RevokeShareTokenReq {
 
 struct RevokeShareTokenResp {
     1: bool success;
+}
+
+struct GetTokenReq {
+    1: required string ShareId (api.body="id");
+    2: required string Password (api.body="pass");
+}
+
+struct GetTokenResp {
 }
 
 struct AddShareMemberInfo {
@@ -177,19 +194,28 @@ struct RemoveShareMemberResp {
     1: bool success;
 }
 
+struct SmbAccountResp {
+    1: string user;
+    2: string password;
+}
+
 // services
 service ShareService {
     CreateSharePathResp CreateSharePath(1: CreateSharePathReq request) (api.post="/api/share/share_path/*path");
     ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/");
     UpdateSharePathResp UpdateSharePath(1: UpdateSharePathReq request) (api.put="/api/share/share_path/");
     DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/");
+    GetSharePathResp GetSharePath(1: GetSharePathReq request) (api.get="/api/share/get_share/");
 
     GenerateShareTokenResp GenerateShareToken(1: GenerateShareTokenReq request) (api.post="/api/share/share_token/");
     ListShareTokenResp ListShareToken(1: ListShareTokenReq request) (api.get="/api/share/share_token/");
     RevokeShareTokenResp RevokeShareToken(1: RevokeShareTokenReq request) (api.delete="/api/share/share_token/");
+    GetTokenResp GetToken(1: GetTokenReq request) (api.post="/api/share/get_token/");
 
     AddShareMemberResp AddShareMember(1: AddShareMemberReq request) (api.post="/api/share/share_member/");
     ListShareMemberResp ListShareMember(1: ListShareMemberReq request) (api.get="/api/share/share_member/");
     UpdateShareMemberPermissionResp UpdateShareMemberPermission(1: UpdateShareMemberPermissionReq request) (api.put="/api/share/share_member/");
     RemoveShareMemberResp RemoveShareMember(1: RemoveShareMemberReq request) (api.delete="/api/share/share_member/");
+
+    SmbAccountResp GetAccount() (api.post="/api/share/get_account");
 }
