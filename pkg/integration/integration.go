@@ -9,13 +9,11 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"net/url"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/go-resty/resty/v2"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
@@ -31,7 +29,6 @@ var IntegrationService *integration
 type integration struct {
 	client     *dynamic.DynamicClient
 	kubeClient *kubernetes.Clientset
-	rest       *resty.Client
 	tokens     map[string]*Integrations
 	authToken  map[string]*authToken
 	users      []*models.User
@@ -61,16 +58,9 @@ func NewIntegrationManager() {
 		panic(err)
 	}
 
-	debug := false
-	d := os.Getenv(common.EnvIntegrationDebug)
-	if d == "1" {
-		debug = true
-	}
-
 	IntegrationService = &integration{
 		client:     client,
 		kubeClient: kubeClient,
-		rest:       resty.New().SetTimeout(60 * time.Second).SetDebug(debug),
 		tokens:     make(map[string]*Integrations),
 		authToken:  make(map[string]*authToken),
 	}

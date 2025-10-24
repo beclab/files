@@ -187,3 +187,32 @@ func QueryShareExternalById(shareId string) (*share.ShareToken, error) {
 	}
 	return res, nil
 }
+
+func QuerySearchSharedDirectories(owner string) ([]*share.SharePath, []*share.SharePath, error) {
+	var selectFields = "id,owner,file_type,extend,path,share_type,name,permission"
+
+	// ~ internal
+	var internalSharePaths []*share.SharePath
+	var internalSub = DB.Model(&share.ShareMember{})
+	internalSub.Select("path_id").Where("share_member LIKE ?", fmt.Sprintf("%%%s%%", owner))
+
+	var db = DB.Model(&share.SharePath{})
+	if err := db.Select(selectFields).Where("share_type = ? AND (owner = ? OR id IN (?)) AND expire_time > now()", "internal", owner, internalSub).Find(&internalSharePaths).Error; err != nil {
+		return nil, nil, err
+	}
+
+	// ~ external
+	var externalSharePaths []*share.SharePath
+	var permissions = []int{1, 2, 3, 4}
+	var externalSub = DB.Model(&share.ShareToken{})
+
+	externalSub.Select("path_id").Where("expire_at > now()")
+
+	db = DB.Model(&share.SharePath{})
+	if err := db.Select(selectFields).Where("share_type = ? AND permission IN ? AND expire_time > now() AND id IN (?)", "external", permissions, externalSub).Find(&externalSharePaths).Error; err != nil {
+		return nil, nil, err
+	}
+
+	return internalSharePaths, externalSharePaths, nil
+
+}
