@@ -275,6 +275,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		NoMimeType: true,
 		Metadata:   false,
 	}
+	createName = common.EscapeGlob(createName)
 	var filter = &operations.OperationsFilter{
 		FilterRule: s.service.command.FormatFilter(createName, true, true, true),
 	}
@@ -453,9 +454,10 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 			return nil, err
 		}
 		fsName, _ := files.GetFileNameFromPath(fileParam.Path)
+		fsNameTmp := common.EscapeGlob(fsName)
 		fsPathPrefix := files.GetPrefixPath(fileParam.Path)
 		var fs = fsPrefix + fsPathPrefix
-		var fileter = s.service.command.FormatFilter(fsName, false, true, true)
+		var fileter = s.service.command.FormatFilter(fsNameTmp, false, true, true)
 		items, err := s.service.command.GetOperation().List(fs, &operations.OperationsOpt{
 			NoModTime:  true,
 			NoMimeType: true,
@@ -508,13 +510,14 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		Metadata:   false,
 	}
 
+	dstNameTmp := common.EscapeGlob(dstName)
 	var filter = &operations.OperationsFilter{
-		FilterRule: s.service.command.FormatFilter(dstName, false, true, true),
+		FilterRule: s.service.command.FormatFilter(dstNameTmp, false, true, true),
 	}
 
 	dstItems, err := s.service.command.GetMatchedItems(fsPrefix+srcPrefixPath, opts, filter)
 	if err != nil {
-		klog.Errorf("Cloud rename, user: %s, get dst matched items error: %v", owner, err)
+		klog.Errorf("Cloud rename, user: %s, get dst matched items error: %v, dstName: %s", owner, err, dstName)
 		return nil, fmt.Errorf("Path %s not found", fileParam.Path)
 	}
 

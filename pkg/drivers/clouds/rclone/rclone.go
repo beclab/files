@@ -740,6 +740,8 @@ func (r *rclone) CheckGoogleDriveDupNames(param *models.FileParam) (bool, string
 	fileName, isFile := files.GetFileNameFromPath(param.Path)
 	pathPrefix := files.GetPrefixPath(param.Path)
 
+	fileName = common.EscapeGlob(fileName)
+
 	var fs string = fsPrefix + pathPrefix
 
 	var filter = r.FormatFilter(fileName, false, !isFile, isFile)

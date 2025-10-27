@@ -357,3 +357,37 @@ func genPassword() (string, error) {
 	}
 	return string(out), nil
 }
+
+func EscapeGlob(s string) string {
+	if s == "" {
+		return s
+	}
+
+	specials := map[rune]bool{
+		'\\': true,
+		'*':  true,
+		'?':  true,
+		'[':  true,
+		']':  true,
+		'{':  true,
+		'}':  true,
+		'(':  true,
+		')':  true,
+		'|':  true,
+		'^':  true,
+		'+':  true,
+		'.':  true,
+		'$':  true,
+	}
+
+	var b strings.Builder
+	b.Grow(len(s) * 2)
+
+	for _, r := range s {
+		if specials[r] {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
