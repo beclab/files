@@ -28,9 +28,10 @@ const (
 )
 
 var (
-	OlaresdHost    = os.Getenv("TERMINUSD_HOST")
-	ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
-	NodeName       = os.Getenv("NODE_NAME")
+	OlaresdHost      = os.Getenv("TERMINUSD_HOST")
+	ExternalPrefix   = os.Getenv("EXTERNAL_PREFIX")
+	NodeName         = os.Getenv("NODE_NAME")
+	DebugIntegration = os.Getenv("DEBUG_INTEGRATION")
 )
 
 const (

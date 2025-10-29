@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+func ParseBool(s string) bool {
+	return s == "true" || s == "1"
+}
+
 func ParseInt(s string) (int, error) {
 	r, err := strconv.Atoi(s)
 	if err != nil {
