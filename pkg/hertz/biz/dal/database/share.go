@@ -98,6 +98,15 @@ func CheckSharePathExpired(pathID string) (bool, error) {
 	return now.After(expireTime), nil
 }
 
+func GetSharePath(pathID string) (*share.SharePath, error) {
+	var res *share.SharePath
+	if err := DB.Table("share_paths").Where("id = ?", pathID).First(&res).Error; err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 // share_token
 
 func CreateShareToken(tokens []*share.ShareToken, db *gorm.DB) ([]*share.ShareToken, error) {
@@ -107,6 +116,15 @@ func CreateShareToken(tokens []*share.ShareToken, db *gorm.DB) ([]*share.ShareTo
 	}
 
 	return tokens, nil
+}
+
+func GetShareToken(token string) (*share.ShareToken, error) {
+	var res *share.ShareToken
+	if err := DB.Table("share_tokens").Where("token = ?", token).First(&res).Error; err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func DeleteShareToken(token string, db *gorm.DB) error {
@@ -180,9 +198,9 @@ func QueryShareMemberById(shareId string) (*share.ShareMember, error) {
 	return res, nil
 }
 
-func QueryShareExternalById(shareId string) (*share.ShareToken, error) {
+func QueryShareExternalById(shareId string, token string) (*share.ShareToken, error) {
 	var res *share.ShareToken
-	if err := DB.Table("share_tokens").Where("path_id = ?", shareId).First(&res).Error; err != nil {
+	if err := DB.Table("share_tokens").Where("path_id = ? and token = ?", shareId, token).First(&res).Error; err != nil {
 		return nil, err
 	}
 	return res, nil
