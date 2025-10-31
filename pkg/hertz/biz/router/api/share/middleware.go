@@ -125,3 +125,18 @@ func _gettokenMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _videoMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _videomethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _videosMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

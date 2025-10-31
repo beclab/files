@@ -19,6 +19,7 @@ func Register(r *server.Hertz) {
 	root := r.Group("/", rootMw()...)
 	{
 		_api := root.Group("/api", _apiMw()...)
+		_api.GET("/videos", append(_videomethodMw(), share.VideoMethod)...)
 		{
 			_share := _api.Group("/share", _shareMw()...)
 			_share.POST("/get_account", append(_getaccountMw(), share.GetAccount)...)

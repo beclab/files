@@ -1721,7 +1721,8 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 	// create token
 	var token = &share.ShareToken{
 		PathID:   req.ShareId,
-		ExpireAt: time.Now().Add(5 * time.Minute).Format(common.DefaultPGTimeFormat), // time.Now().Add(6 * time.Hour).Format(common.DefaultPGTimeFormat),
+		ExpireAt: time.Now().Add(6 * time.Hour).Format(common.DefaultPGTimeFormat),
+		// ExpireAt: time.Now().Add(5 * time.Minute).Format(common.DefaultPGTimeFormat),
 	}
 
 	res, err := database.CreateShareToken([]*share.ShareToken{token}, database.DB)
@@ -1805,4 +1806,11 @@ func GetSharePath(ctx context.Context, c *app.RequestContext) {
 	result["update_time"] = sharePath.UpdateTime
 
 	handler.RespSuccess(c, result)
+}
+
+// VideoMethod .
+// @router /video/*path [GET]
+func VideoMethod(ctx context.Context, c *app.RequestContext) {
+	resp := new(share.VideoResp)
+	c.JSON(consts.StatusOK, resp)
 }

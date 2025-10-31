@@ -198,6 +198,8 @@ struct SmbAccountResp {
     2: string password;
 }
 
+struct VideoResp {}
+
 // services
 service ShareService {
     CreateSharePathResp CreateSharePath(1: CreateSharePathReq request) (api.post="/api/share/share_path/*path");
@@ -217,4 +219,6 @@ service ShareService {
     RemoveShareMemberResp RemoveShareMember(1: RemoveShareMemberReq request) (api.delete="/api/share/share_member/");
 
     SmbAccountResp GetAccount() (api.post="/api/share/get_account");
+
+    VideoResp VideoMethod() (api.get="/api/videos");
 }
