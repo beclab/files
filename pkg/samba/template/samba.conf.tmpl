@@ -2,6 +2,8 @@
   server string = samba
   idmap config * : range = 3000-7999
   security = user
+  client min protocol = SMB2
+  client max protocol = SMB3
   server min protocol = SMB2
 
   # disable printing services
@@ -14,10 +16,15 @@
 [{{ $data.Name }}]
   path = {{ $data.Path }}
   comment = {{ $data.Comment }}
-  valid users = @{{ $data.ValidUsers }}
+  valid users = {{ $data.ForceUser }} @{{ $data.ForceGroup }}
   browseable = yes
   writable = {{ $data.Writable }}
   read only = {{ $data.ReadOnly }}
-  force user = {{ $data.ForceUser }}
-  force group = {{ $data.ForceGroup }}
+  {{ if eq $data.Writable "yes" -}}
+  create mask = 0664
+  directory mask = 2775
+  vfs objects = acl_xattr
+  inherit permissions = no
+  map acl inherit = yes
+  {{ end }}
 {{ end }}

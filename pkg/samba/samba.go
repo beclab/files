@@ -15,6 +15,7 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"sync"
 	"text/template"
 	"time"
@@ -68,6 +69,7 @@ type samba struct {
 	factory  k8sclient.Factory
 	commands *commands
 	users    []string
+	runTime  time.Time
 	sync.RWMutex
 }
 
@@ -75,6 +77,7 @@ func NewSambaManager(f k8sclient.Factory) {
 	SambaService = &samba{
 		ctx:      context.Background(),
 		factory:  f,
+		runTime:  time.Now(),
 		commands: new(commands),
 	}
 }
@@ -87,10 +90,16 @@ func (s *samba) Start() {
 	s.deleteExpiredShares()
 }
 
-func (s *samba) CreateShareSamba(owner string, ids string, operator string) error {
+func (s *samba) CreateShareSamba(sharePath []*share.SmbCreate, operator string) error {
 	cli, _ := s.factory.DynamicClient()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+
+	var items []string
+	for _, sp := range sharePath {
+		spb, _ := json.Marshal(sp)
+		items = append(items, string(spb))
+	}
 
 	var data = &v1.ShareSamba{
 		TypeMeta: metav1.TypeMeta{
@@ -102,21 +111,20 @@ func (s *samba) CreateShareSamba(owner string, ids string, operator string) erro
 			Namespace: common.DefaultNamespace,
 		},
 		Spec: v1.ShareSambaSpec{
-			Owner:    owner,
-			ShareIds: ids,
-			Operator: operator,
+			ShareItems: items,
+			Operator:   operator,
 		},
 	}
 
 	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(data)
 	if err != nil {
-		klog.Errorf("samba convert error: %v, id: %s, owner: %s, operator: %s", err, ids, owner, operator)
+		klog.Errorf("samba convert error: %v, operator: %s", err, operator)
 		return err
 	}
 
 	res, err := cli.Resource(SambaGVR).Namespace(common.DefaultNamespace).Create(ctx, &unstructured.Unstructured{Object: obj}, metav1.CreateOptions{})
 	if err != nil {
-		klog.Errorf("samba create error: %v, id: %s, owner: %s, operator: %s", err, ids, owner, operator)
+		klog.Errorf("samba create error: %v, operator: %s", err, operator)
 		return err
 	}
 
@@ -156,8 +164,14 @@ func (s *samba) HandlerEvent() cache.ResourceEventHandler {
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				klog.Info("samba addFunc")
-				s.generateConf()
+				sambaObj := obj.(*v1.ShareSamba)
+				if sambaObj.CreationTimestamp.Time.After(s.runTime) {
+					klog.Info("samba addFunc")
+					s.generateConf()
+					if sambaObj.Spec.Operator == "del" {
+						s.recoverSharedOwner(sambaObj.Spec.ShareItems)
+					}
+				}
 			},
 		},
 	}
@@ -192,11 +206,11 @@ func (s *samba) deleteExpiredShares() {
 				}
 
 				if err := cli.Resource(SambaGVR).Namespace(common.DefaultNamespace).Delete(context.Background(), v.Name, metav1.DeleteOptions{}); err != nil {
-					klog.Errorf("samba delete, delete failed, error: %v, owner: %s, operate: %s, ids: %s", err, v.Spec.Owner, v.Spec.Operator, v.Spec.ShareIds)
+					klog.Errorf("samba delete, delete failed, error: %v, operate: %s", err, v.Spec.Operator)
 					continue
 				}
 
-				klog.Infof("samba delete, delete done, owner: %s, operate: %s, ids: %s", v.Spec.Owner, v.Spec.Operator, v.Spec.ShareIds)
+				klog.Infof("samba delete, delete done, operate: %s", v.Spec.Operator)
 			}
 		}
 	}()
@@ -298,11 +312,18 @@ func (s *samba) generateConf() {
 			return
 		}
 
+		if item.Permission > 1 {
+			if err := s.commands.SetAcl(shareUser, item.Owner, "-m", "rwx", fileUri+fp.Path); err != nil {
+				klog.Errorf("samba setfacl error: %v", err)
+				return
+			}
+		}
+
 		w, r := s.formatPrivilege(item.Permission)
 
 		var smbShare = SambaShare{
 			Name:       item.ID,
-			Path:       fileUri + fp.Path,
+			Path:       fileUri + strings.TrimSuffix(fp.Path, "/"),
 			Comment:    item.Name,
 			ValidUsers: item.Owner,
 			Writable:   w,
@@ -366,13 +387,8 @@ func (s *samba) formatPrivilege(permission int32) (string, string) {
 	switch permission {
 	case 1:
 		return "no", "yes"
-	case 2:
-		return "yes", "yes"
-	case 3, 4:
-		return "yes", "no"
 	}
-
-	return "no", "no"
+	return "yes", "no"
 }
 
 func (s *samba) deleteExcludeUsers(sysUsers []string, smbShareData []*share.SharePath) error {
@@ -436,4 +452,33 @@ func (s *samba) checkUserExists(owner string) bool {
 	}
 
 	return f
+}
+
+func (s *samba) recoverSharedOwner(sharedPaths []string) {
+	for _, p := range sharedPaths {
+		var smb *share.SmbCreate
+		if err := json.Unmarshal([]byte(p), &smb); err != nil {
+			klog.Errorf("samba recover unmarshal error: %v, content: %s", err, p)
+			continue
+		}
+
+		m, err := models.CreateFileParam(smb.Owner, smb.Path)
+		if err != nil {
+			klog.Errorf("samba recover create file param error: %v, owner: %s, path: %s", err, smb.Owner, smb.Path)
+			continue
+		}
+
+		uri, err := m.GetResourceUri()
+		if err != nil {
+			klog.Errorf("samba recover get uri error: %v", err)
+			continue
+		}
+
+		if err := s.commands.SetAcl(smb.User, smb.Owner, "-x", "", uri+m.Path); err != nil { // remove acl
+			klog.Errorf("samba recover, setfacl remove error: %v", err)
+			return
+		}
+
+		s.commands.DeleteUser([]string{smb.User})
+	}
 }
