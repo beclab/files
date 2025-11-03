@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
+	"files/pkg/hertz/biz/handler"
 	"files/pkg/hertz/biz/model/api/paste"
 	"files/pkg/hertz/biz/model/api/share"
 	"files/pkg/models"
@@ -21,19 +21,19 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/common/utils"
-	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
 )
 
 type ShareAccess struct {
-	Method   string
-	Resource bool
-	Preview  bool
-	Raw      bool
-	Download bool
-	Paste    bool
-	Upload   bool
+	Method    string `json:"method"`
+	Resource  bool   `json:"resource"`
+	Preview   bool   `json:"preview"`
+	Raw       bool   `json:"raw"`
+	Download  bool   `json:"download"`
+	Paste     bool   `json:"paste"`
+	Upload    bool   `json:"upload"`
+	Video     bool   `json:"video"`
+	FromShare bool   `json:"fromShare"`
 }
 
 var (
@@ -51,7 +51,7 @@ var (
 )
 
 var (
-	ShareHostPrefix        = "share."
+	ShareApiVideosPath     = "/api/videos"
 	ShareApiResourcesPath  = "/api/resources"
 	ShareApiPreviewPath    = "/api/preview"
 	ShareApiRawPath        = "/api/raw"
@@ -64,10 +64,10 @@ var (
 func TimingMiddleware() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		start := time.Now()
+		host := string(c.GetHeader("X-Forwarded-Host"))
+		path := string(c.Request.RequestURI())
 
-		path := c.Path()
-
-		klog.Infof("%s %s starts at %v", string(c.Method()), path, start.Format("2006-01-02 15:04:05"))
+		klog.Infof("%s %s %s starts at %v", string(c.Method()), path, host, start.Format("2006-01-02 15:04:05"))
 
 		defer func() {
 			elapsed := time.Since(start)
@@ -100,10 +100,9 @@ func ShareMiddleware() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var err error
 		var bflName = string(c.GetHeader("X-Bfl-User")) // todo if sharing externally, you may use the name from the host here.
-		// var cookie = string(c.GetHeader("Cookie")) // todo for external sharing, this field may be empty unless it contains the sharer's cookie.
+		var cookie = string(c.GetHeader("Cookie"))      // todo for external sharing, this field may be empty unless it contains the sharer's cookie.
+		var host = string(c.GetHeader("X-Forwarded-Host"))
 		var method = string(c.Request.Method())
-		var host = string(c.Request.Host())
-		_ = host
 		var path = string(c.Request.Path())
 
 		if !checkNonSharedPath(path) {
@@ -118,6 +117,10 @@ func ShareMiddleware() app.HandlerFunc {
 			Method: method,
 		}
 
+		if strings.HasPrefix(host, "share.") {
+			shareAccess.FromShare = true
+		}
+
 		var pasteAction, pasteDst string
 		var pasteDstParam *models.FileParam
 
@@ -125,7 +128,11 @@ func ShareMiddleware() app.HandlerFunc {
 		var uploadLinkId, uploadParentDir, uploadFileName string
 		_ = uploadParentDir
 
-		if strings.HasPrefix(path, ShareApiResourcesPath) {
+		if strings.HasPrefix(path, ShareApiVideosPath) {
+			// + todo need to fix
+			paramPath = c.Query("PlayPath")
+			shareAccess.Video = true
+		} else if strings.HasPrefix(path, ShareApiResourcesPath) {
 			paramPath = strings.TrimPrefix(path, ShareApiResourcesPath)
 			shareAccess.Resource = true
 		} else if strings.HasPrefix(path, ShareApiPreviewPath) {
@@ -144,7 +151,7 @@ func ShareMiddleware() app.HandlerFunc {
 			var req paste.PasteReq
 			err = c.BindAndValidate(&req)
 			if err != nil {
-				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+				handler.RespError(c, err.Error())
 				return
 			}
 
@@ -170,12 +177,12 @@ func ShareMiddleware() app.HandlerFunc {
 					var tPath = strings.TrimPrefix(path, ShareApiUploadLinkPath)
 					var tPos = strings.LastIndex(tPath, "/")
 					if tPos == 0 {
-						c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "upload-link path invalid"})
+						handler.RespError(c, "upload-link path invalid")
 						return
 					}
 					uploadLinkId = tPath[tPos+1:]
 					if uploadLinkId == "" {
-						c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "upload-link path invalid"})
+						handler.RespError(c, "upload-link path invalid")
 						return
 					}
 
@@ -185,11 +192,10 @@ func ShareMiddleware() app.HandlerFunc {
 				paramPath = c.Query("parent_dir")
 				uploadFileName = c.Query("file_name")
 				uploadBytes = true
-
 			}
 		}
 
-		klog.Infof("[share] share param path: %s", paramPath)
+		klog.Infof("[share] share param path: %s, bflName: %s", paramPath, bflName)
 
 		if paramPath == "" {
 			c.Next(ctx)
@@ -203,26 +209,30 @@ func ShareMiddleware() app.HandlerFunc {
 			return
 		}
 
-		var download, upload bool
-		_ = download
-		_ = upload
-
 		var pasteDstShared *share.SharePath
+		var shareExpired int64
 
 		if shareAccess.Paste {
 
-			pasteDstShared, err = checkSharePath(pasteDstParam.Extend)
+			pasteDstShared, shareExpired, err = checkSharePath(bflName, pasteDstParam.Extend, shareAccess.FromShare)
 			if err != nil {
-				klog.Errorf("check paste dst sharePath error: %v", err)
-				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
+				if shareExpired == 0 {
+					handler.RespError(c, common.ErrorMessageWrongShare)
+				} else {
+					handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, shareExpired)
+				}
 				return
 			}
 		}
 
-		shared, err := checkSharePath(shareParam.Extend)
+		shared, expires, err := checkSharePath(bflName, shareParam.Extend, shareAccess.FromShare)
 		if err != nil {
-			klog.Errorf("check sharePath error: %v", err)
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
+			klog.Errorf("[share] check sharePath error: %v", err)
+			if expires == 0 {
+				handler.RespError(c, common.ErrorMessageWrongShare)
+			} else {
+				handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expires)
+			}
 			return
 		}
 
@@ -234,32 +244,31 @@ func ShareMiddleware() app.HandlerFunc {
 		var shareType = strings.ToLower(shared.ShareType)
 		var shareBy = shared.Owner
 
-		if shareType == common.ShareTypeInternal {
+		switch shareType {
+		case common.ShareTypeInternal:
 			if bflName != shared.Owner {
 				if err = checkInternal(bflName, shared, shareAccess); err != nil {
-					klog.Errorf("check internal error: %v", err)
-					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
+					klog.Errorf("[share] check internal error: %v", err)
+					handler.RespError(c, "No permission")
 					return
 				}
 			}
-		} else if shareType == common.ShareTypeExternal {
-			if bflName != shared.Owner {
-				var token = c.Query("token")
-				if err = checkExternal(bflName, token, shared, shareAccess); err != nil {
-					klog.Errorf("check external error: %v", err)
-					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
+		case common.ShareTypeExternal:
+			klog.Infof("[share] external share, cookie: %v", len(cookie))
+			var token = c.Query("token")
+			var expires int64
+			var permit bool
+			expires, permit, err = checkExternal(bflName, token, shared, shareAccess)
+			if err != nil {
+				klog.Errorf("[share] check external error: %v, expires: %d", err, expires)
+				handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expires)
+				return
+			} else {
+				if !permit {
+					handler.RespError(c, common.ErrorMessagePermissionDenied)
 					return
-				} else {
-					if ok := accessIntercept(c, shared, shareType, shareAccess); ok {
-						return
-					}
 				}
 			}
-		} else if shareType == common.ShareTypeSMB {
-
-		} else {
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "No permission"})
-			return
 		}
 
 		var pathRewrite string
@@ -287,8 +296,8 @@ func ShareMiddleware() app.HandlerFunc {
 			} else {
 				rewritePrefix = ShareApiUploadLinkPath + "/" + global.GlobalNode.GetMasterNode()
 			}
-
 		} else {
+			handler.RespError(c, "No permission")
 			return
 		}
 
@@ -298,7 +307,7 @@ func ShareMiddleware() app.HandlerFunc {
 
 		var url string
 		var accessOwner string
-		if shareAccess.Upload { // + upload
+		if shareAccess.Upload { // upload
 			if shareType == common.ShareTypeExternal {
 				accessOwner = shareBy
 			} else {
@@ -315,6 +324,10 @@ func ShareMiddleware() app.HandlerFunc {
 		} else if shareAccess.Paste {
 			accessOwner = bflName
 			url += fmt.Sprintf("%s%s?share=1&sharetype=%s", redirect, rewritePrefix, shareType)
+		} else if shareAccess.Video {
+			// + todo
+			// url = fmt.Sprintf("http://media-server-service.os-framework:9090/videos/olares/?PlayPath=/drive/Home/Documents/111/05.mkv")
+			url = fmt.Sprintf("http://127.0.0.1:9090/videos/olares/?PlayPath=/%s", pathRewrite)
 		} else {
 			accessOwner = shareBy
 
@@ -329,7 +342,7 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 		}
 
-		// +
+		//
 		klog.Infof("[share] share rewrite url: %s, access: %s, shareby: %s, method: %s", url, bflName, shareBy, method)
 
 		var br io.Reader
@@ -343,7 +356,7 @@ func ShareMiddleware() app.HandlerFunc {
 
 			bodyBytes, err := json.Marshal(req)
 			if err != nil {
-				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+				handler.RespError(c, err.Error())
 				return
 			}
 			br = bytes.NewBuffer(bodyBytes)
@@ -364,7 +377,7 @@ func ShareMiddleware() app.HandlerFunc {
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			c.String(502, "proxy error: %v", err)
+			handler.RespError(c, fmt.Sprintf("proxy error: %v", err))
 			return
 		}
 		defer resp.Body.Close()
@@ -378,36 +391,38 @@ func ShareMiddleware() app.HandlerFunc {
 		bodyRes, _ := io.ReadAll(resp.Body)
 		c.Write(bodyRes)
 		c.Abort()
-		return
 	}
 }
 
-func checkSharePath(shareId string) (*share.SharePath, error) {
+func checkSharePath(currentUser string, shareId string, fromShare bool) (*share.SharePath, int64, error) {
 	sharePath, err := database.QueryShareById(shareId)
 	if err != nil {
 		klog.Errorf("postgres.QueryShareById error: %v", err)
-		return nil, err
+		return nil, 0, errors.New(common.ErrorMessageWrongShare)
 	}
 
 	if sharePath == nil {
-		return nil, errors.New("url invalid")
+		klog.Errorf("sharePath not found, shareId: %s", shareId)
+		return nil, 0, errors.New(common.ErrorMessageWrongShare)
 	}
 
 	if !((sharePath.FileType == common.Drive && sharePath.Extend == common.Home) || sharePath.FileType == common.Sync) {
 		klog.Errorf("sharePath invalid, type: %s, extend: %s", sharePath.FileType, sharePath.Extend)
-		return nil, errors.New("url invalid")
+		return nil, 0, errors.New(common.ErrorMessageWrongShare)
 	}
 
-	expired, err := time.Parse(time.RFC3339, sharePath.ExpireTime)
-	if err != nil {
-		return nil, fmt.Errorf("sharePath expireTime invalid, sharePath.ExpireTime: %s", sharePath.ExpireTime)
+	if !fromShare && currentUser == sharePath.Owner {
+		return sharePath, 0, nil
 	}
+
+	expired, _ := time.Parse(common.DefaultPGTimeFormat, sharePath.ExpireTime)
 
 	if time.Now().After(expired) {
-		return nil, fmt.Errorf("sharePath expireTime, sharePath.ExpireTime: %s", sharePath.ExpireTime)
+		klog.Errorf("sharePath expired, expireTime: %s", sharePath.ExpireTime)
+		return nil, expired.Unix(), errors.New(common.ErrorMessageLinkExpired)
 	}
 
-	return sharePath, nil
+	return sharePath, 0, nil
 }
 
 func checkInternal(currentOwner string, sharePaths *share.SharePath, shareAccess *ShareAccess) error {
@@ -439,42 +454,35 @@ func checkInternal(currentOwner string, sharePaths *share.SharePath, shareAccess
 	return nil
 }
 
-func checkExternal(currentUser string, token string, sharePaths *share.SharePath, shareAccess *ShareAccess) error {
+func checkExternal(currentUser string, token string, sharePaths *share.SharePath, shareAccess *ShareAccess) (int64, bool, error) {
+	if !shareAccess.FromShare && currentUser == sharePaths.Owner {
+		return 0, true, nil
+	}
+	var defaultExpired = time.Now().Unix()
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return errors.New("token is nil")
+		return defaultExpired, false, errors.New("token is nil")
 	}
 
-	shareToken, err := database.QueryShareExternalById(sharePaths.ID)
+	shareToken, err := database.QueryShareExternalById(sharePaths.ID, token)
 	if err != nil {
-		return fmt.Errorf("postgres.QueryShareExternalById error: %v", err)
+		return defaultExpired, false, fmt.Errorf("postgres.QueryShareExternalById error: %v", err)
 	}
 
 	if shareToken == nil {
-		return errors.New("shareToken not found")
+		return defaultExpired, false, errors.New("shareToken not found")
 	}
 
 	klog.Infof("share token: %s", common.ToJson(shareToken))
 
-	if shareToken.Token != token {
-		return fmt.Errorf("token invalid, shareToken.Token: %s", shareToken.Token)
-	}
-
-	expired, err := time.Parse(time.RFC3339, shareToken.ExpireAt)
-	if err != nil {
-		return fmt.Errorf("shareToken expireAt invalid, shareToken.ExpireAt: %s", shareToken.ExpireAt)
-	}
-
+	expired, _ := time.Parse(common.DefaultPGTimeFormat, shareToken.ExpireAt)
 	if time.Now().After(expired) {
-		return fmt.Errorf("shareToken expired, shareToken.ExpireAt: %s", shareToken.ExpireAt)
+		klog.Errorf("[share] shareToken expired, expireAt: %s", shareToken.ExpireAt)
+		return expired.Unix(), false, fmt.Errorf("shareToken expired, shareToken.ExpireAt: %s", shareToken.ExpireAt)
 	}
 
-	if permit := checkPermission(currentUser, sharePaths.Owner, sharePaths.ShareType, sharePaths.Permission, shareAccess); !permit {
-		return errors.New("authorization check failed")
-	}
-
-	return nil
-
+	permit := checkPermission(currentUser, sharePaths.Owner, sharePaths.ShareType, sharePaths.Permission, shareAccess)
+	return 0, permit, nil
 }
 
 // method string, preview, raw bool, download, upload bool
@@ -488,7 +496,7 @@ func checkPermission(currentUser string, shareBy string, shareType string, permi
 	 * 4 - admin
 	 */
 
-	if currentUser == shareBy {
+	if shareType == common.ShareTypeInternal && currentUser == shareBy {
 		return true
 	}
 
@@ -497,41 +505,16 @@ func checkPermission(currentUser string, shareBy string, shareType string, permi
 		return shareAccess.Method == http.MethodGet && !shareAccess.Upload
 	case 2: // only upload
 		if shareType == common.ShareTypeExternal {
-			return shareAccess.Upload || shareAccess.Method == http.MethodGet
+			return shareAccess.Upload || (shareAccess.Method == http.MethodGet && shareAccess.Upload)
 		}
 		return false
 	case 3:
-		return (shareAccess.Resource && shareAccess.Method == http.MethodGet) || shareAccess.Upload || shareAccess.Download
+		return ((shareAccess.Resource || shareAccess.Preview || shareAccess.Raw) && shareAccess.Method == http.MethodGet) || shareAccess.Upload || shareAccess.Download
 	case 4:
 		return true
 	default:
 		return false
 	}
-}
-
-func accessIntercept(c *app.RequestContext, shared *share.SharePath, shareType string, shareAccess *ShareAccess) bool {
-	if shareType == common.ShareTypeExternal {
-		if shareAccess.Resource && shareAccess.Method == http.MethodGet {
-			klog.Info("share access intercept")
-			var f = files.FileInfo{
-				FsType:   "share",
-				FsExtend: shared.Extend,
-				Path:     shared.Path,
-				IsDir:    true,
-			}
-			if shared.Path == "/" {
-				f.Name = ""
-			} else {
-				f.Name = strings.Trim(shared.Path, "/")
-			}
-			c.Status(200)
-			c.Write([]byte(common.ToJson(f)))
-			c.Abort()
-			return true
-		}
-	}
-
-	return false
 }
 
 func checkNonSharedPath(path string) bool {

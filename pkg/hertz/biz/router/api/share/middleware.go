@@ -26,11 +26,6 @@ func _share_memberMw() []app.HandlerFunc {
 	return nil
 }
 
-func _nodeMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
 func _removesharememberMw() []app.HandlerFunc {
 	// your code...
 	return nil
@@ -102,6 +97,46 @@ func _generatesharetokenMw() []app.HandlerFunc {
 }
 
 func _updatesharepathMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getaccountMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _get_shareMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getsharepathMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _get_tokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _gettokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _videoMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _videomethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _videosMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

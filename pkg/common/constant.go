@@ -91,9 +91,20 @@ var (
 )
 
 var (
-	ShareTypeInternal = "internal"
-	ShareTypeExternal = "external"
-	ShareTypeSMB      = "smb"
+	DefaultPGTimeFormat = "2006-01-02T15:04:05Z"
+	ShareTypeInternal   = "internal"
+	ShareTypeExternal   = "external"
+	ShareTypeSMB        = "smb"
+
+	ErrorMessageWrongShare       = "Wrong share."
+	ErrorMessageTokenExpired     = "Token expired."
+	ErrorMessageLinkExpired      = "Link expired."
+	ErrorMessageGetTokenError    = "GetToken failed."
+	ErrorMessagePermissionDenied = "Permission denied."
+	ErrorMessageWrongPassword    = "Wrong password. Please check the password and try again."
+
+	CodeLinkExpired  = 559
+	CodeTokenExpired = 569
 )
 
 var (

@@ -10,6 +10,7 @@ import (
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
 	"files/pkg/hertz/biz/dal/database"
+	"files/pkg/hertz/biz/handler"
 	"files/pkg/models"
 	"files/pkg/samba"
 	"fmt"
@@ -1676,4 +1677,140 @@ func RemoveUserRelativeAdjustShare(bflName string, tx *gorm.DB) error {
 		return tx.Commit().Error
 	}
 	return nil
+}
+
+// GetToken .
+// @router /api/share/get_token/ [POST]
+func GetToken(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.GetTokenReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	klog.Infof("GetToken, shareId: %s", req.ShareId)
+
+	sharePath, err := database.QueryShareById(req.ShareId)
+	if err != nil {
+		klog.Errorf("GetToken, share path not found, shareId: %s", req.ShareId)
+		handler.RespError(c, common.ErrorMessageWrongShare)
+		return
+	}
+
+	if sharePath.ShareType != common.ShareTypeExternal {
+		klog.Errorf("GetToken, shareType %s invalid, shareId: %s", sharePath.ShareType, req.ShareId)
+		handler.RespError(c, common.ErrorMessageWrongShare)
+		return
+	}
+
+	if common.Md5String(req.Password) != sharePath.PasswordMd5 {
+		handler.RespError(c, common.ErrorMessageWrongPassword)
+		return
+	}
+
+	klog.Infof("GetToken, sharePath expireTime: %s, shareId: %s", sharePath.ExpireTime, req.ShareId)
+
+	expireTime, _ := time.Parse(common.DefaultPGTimeFormat, sharePath.ExpireTime)
+	if time.Now().After(expireTime) {
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expireTime.Unix())
+		return
+	}
+
+	// create token
+	var token = &share.ShareToken{
+		PathID:   req.ShareId,
+		ExpireAt: time.Now().Add(6 * time.Hour).Format(common.DefaultPGTimeFormat),
+		// ExpireAt: time.Now().Add(5 * time.Minute).Format(common.DefaultPGTimeFormat),
+	}
+
+	res, err := database.CreateShareToken([]*share.ShareToken{token}, database.DB)
+	if err != nil {
+		klog.Errorf("GetToken generate token error: %v, shareId: %s", err, req.ShareId)
+		handler.RespError(c, common.ErrorMessageGetTokenError)
+		return
+	}
+
+	defaultToken := res[0]
+
+	var result = make(map[string]interface{})
+	result["code"] = 0
+	result["data"] = defaultToken.Token
+
+	klog.Infof("GetToken, get external shared, shareId: %s, token: %s", req.ShareId, defaultToken.Token)
+
+	c.JSON(consts.StatusOK, result)
+}
+
+// GetAccount .
+// @router /api/share/get_account [POST]
+func GetAccount(ctx context.Context, c *app.RequestContext) {
+	user, pass := common.GenerateAccount()
+
+	resp := new(share.SmbAccountResp)
+	resp.User = user
+	resp.Password = pass
+
+	handler.RespSuccess(c, resp)
+}
+
+// GetSharePath .
+// @router /api/share/get_share/ [GET]
+func GetSharePath(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.GetSharePathReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	shareToken, err := database.GetShareToken(req.Token)
+	if err != nil {
+		klog.Errorf("GetSharePath, get token error: %v", err)
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, time.Now().Unix())
+		return
+	}
+
+	expired, _ := time.Parse(common.DefaultPGTimeFormat, shareToken.ExpireAt)
+	if time.Now().After(expired) {
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expired.Unix())
+		return
+	}
+
+	sharePath, err := database.GetSharePath(req.PathId)
+	if err != nil {
+		klog.Errorf("GetSharePath, get path error: %v", err)
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+	}
+
+	expired, _ = time.Parse(common.DefaultPGTimeFormat, sharePath.ExpireTime)
+	if time.Now().After(expired) {
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expired.Unix())
+		return
+	}
+
+	var result = make(map[string]interface{})
+	result["id"] = sharePath.ID
+	result["name"] = sharePath.Name
+	result["file_type"] = sharePath.FileType
+	result["extend"] = sharePath.Extend
+	result["path"] = sharePath.Path
+	result["owner"] = sharePath.Owner
+	result["share_type"] = sharePath.ShareType
+	result["permission"] = sharePath.Permission
+	result["expire_in"] = sharePath.ExpireIn
+	result["expire_time"] = sharePath.ExpireTime
+	result["create_time"] = sharePath.CreateTime
+	result["update_time"] = sharePath.UpdateTime
+
+	handler.RespSuccess(c, result)
+}
+
+// VideoMethod .
+// @router /video/*path [GET]
+func VideoMethod(ctx context.Context, c *app.RequestContext) {
+	resp := new(share.VideoResp)
+	c.JSON(consts.StatusOK, resp)
 }
