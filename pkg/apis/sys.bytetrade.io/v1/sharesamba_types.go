@@ -28,9 +28,8 @@ type ShareSambaSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Owner    string `json:"owner"`
-	ShareIds string `json:"share_ids"`
-	Operator string `json:"operator"`
+	ShareItems []string `json:"share_items"`
+	Operator   string   `json:"operator"`
 }
 
 // ShareSambaStatus defines the observed state of ShareSamba
@@ -45,8 +44,6 @@ type ShareSambaStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced, shortName={sharesamba}, categories={all}
-// +kubebuilder:printcolumn:JSONPath=.spec.name, name=name, type=string
-// +kubebuilder:printcolumn:JSONPath=.spec.owner, name=owner, type=string
 // +kubebuilder:printcolumn:JSONPath=.spec.operator, name=operator, type=string
 // +kubebuilder:printcolumn:JSONPath=.metadata.creationTimestamp, name=creation, type=date
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

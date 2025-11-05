@@ -82,8 +82,9 @@ func (c *commands) DeleteUser(users []string) {
 		}
 
 		if err == nil {
-			klog.Infof("samba delete user: %s done", user)
+			klog.Infof("samba delete user: %s done.", user)
 		}
+
 	}
 }
 
@@ -163,6 +164,8 @@ func (c *commands) CreateGroup(groupName, groupId string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		klog.Errorf("samba groupadd error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
+	} else {
+		klog.Infof("samba create group %s done!! cmd: %s", groupName, cmd.String())
 	}
 
 	return nil
@@ -184,6 +187,43 @@ func (c *commands) DeleteGroup(groupName string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		klog.Errorf("samba groupdel error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
+	}
+
+	return nil
+}
+
+func (c *commands) SetAcl(user string, owner string, op string, rw string, smbPath string) error {
+	var userAcl = fmt.Sprintf("%s:%s", user, rw)
+	if op == "-x" {
+		userAcl = user
+	}
+	var groupAcl = fmt.Sprintf("%s:%s", owner, rw)
+	if op == "-x" {
+		groupAcl = owner
+	}
+
+	smbPath = strings.TrimSuffix(smbPath, "/")
+
+	for _, tmp := range []string{"u", "d:u"} {
+		var args = []string{op, fmt.Sprintf("%s:%s", tmp, userAcl), smbPath}
+		cmd := exec.Command("setfacl", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			klog.Errorf("samba setfacl error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
+		} else {
+			klog.Infof("samba setfacl: %s done.", cmd.String())
+		}
+	}
+
+	for _, tmp := range []string{"g", "d:g"} {
+		var args = []string{op, fmt.Sprintf("%s:%s", tmp, groupAcl), smbPath}
+		cmd := exec.Command("setfacl", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			klog.Errorf("samba setfacl error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
+		} else {
+			klog.Infof("samba setfacl: %s done.", cmd.String())
+		}
 	}
 
 	return nil

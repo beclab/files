@@ -9,6 +9,7 @@ var (
 const (
 	ROOT_PREFIX     = "/data"
 	CACHE_PREFIX    = "/appcache"
+	CACHE_ALIAS     = "/AppData"
 	EXTERNAL_PREFIX = "/data/External"
 
 	SERVER_HOST = "127.0.0.1:8080"

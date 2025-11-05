@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"files/pkg/client"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/files"
@@ -15,6 +16,7 @@ import (
 	"files/pkg/samba"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -106,7 +108,11 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "external share must have a permission"})
 			return
 		}
-		permission = req.Permission
+		if req.Permission == 1 {
+			permission = 1
+		} else {
+			permission = 3
+		}
 	}
 
 	if req.ShareType == "internal" {
@@ -134,12 +140,26 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
+	var smbUser string
 	password := common.Md5String(req.Password)
 	if req.ShareType == "smb" {
-		input := []byte(req.Password)
-		encodedBytes := make([]byte, base64.StdEncoding.EncodedLen(len(input)))
-		base64.StdEncoding.Encode(encodedBytes, input)
+		smbUser, _ = common.GenerateAccount()
+		var smbAccount = &share.SmbAccount{
+			User:     smbUser,
+			Password: req.Password,
+		}
+		smbAccountBytes, _ := json.Marshal(smbAccount)
+		encodedBytes := make([]byte, base64.StdEncoding.EncodedLen(len(smbAccountBytes)))
+		base64.StdEncoding.Encode(encodedBytes, smbAccountBytes)
 		password = string(encodedBytes)
+	}
+
+	if req.ShareType == common.ShareTypeExternal {
+		if err := client.CreateShareRole(owner); err != nil {
+			klog.Errorf("create external share cluster role error: %v, user: %s", err, owner)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "create external share failed"})
+			return
+		}
 	}
 
 	sharePath := &share.SharePath{
@@ -164,7 +184,17 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if req.ShareType == "smb" {
-		if err := samba.SambaService.CreateShareSamba(owner, res[0].ID, "add"); err != nil {
+		var item = res[0]
+
+		var shareItem = &share.SmbCreate{
+			Owner: owner,
+			ID:    item.ID,
+			Path:  fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path),
+			User:  smbUser,
+		}
+
+		var shareItems = []*share.SmbCreate{shareItem}
+		if err := samba.SambaService.CreateShareSamba(shareItems, "add"); err != nil {
 			klog.Errorf("Failed create samba share failed, error: %v", err)
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Create SMB share failed"})
 			return
@@ -179,6 +209,13 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	resp.SharePath.SharedByMe = true
+
+	if req.ShareType == "smb" {
+		resp.SharePath.SmbLink = fmt.Sprintf("smb://%s/%s/", os.Getenv("NODE_IP"), resp.SharePath.ID)
+		resp.SharePath.SmbUser = smbUser
+		resp.SharePath.SmbPassword = req.Password
+	}
+
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -449,12 +486,25 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if deleteSmbSharePaths != nil && len(deleteSmbSharePaths) > 0 {
-		var smbIds []string
+		var smbs []*share.SmbCreate
 		for _, item := range deleteSmbSharePaths {
-			smbIds = append(smbIds, item.ID)
+			pwdBytes, err := base64.StdEncoding.DecodeString(item.PasswordMd5)
+			if err != nil {
+				klog.Errorf("delete share path, decode error: %v", err)
+			}
+
+			var smbUser *share.SmbAccount
+			json.Unmarshal(pwdBytes, &smbUser)
+			var smb = &share.SmbCreate{
+				Owner: item.Owner,
+				ID:    item.ID,
+				Path:  fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path),
+				User:  smbUser.User,
+			}
+			smbs = append(smbs, smb)
 		}
-		if err := samba.SambaService.CreateShareSamba("zhaoyu001", strings.Join(smbIds, ","), "del"); err != nil {
-			klog.Errorf("create samba DELETE crd error: %v", err)
+		if err := samba.SambaService.CreateShareSamba(smbs, "del"); err != nil {
+			klog.Errorf("delete share path, create samba DELETE crd error: %v", err)
 		}
 	}
 
@@ -1741,18 +1791,6 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("GetToken, get external shared, shareId: %s, token: %s", req.ShareId, defaultToken.Token)
 
 	c.JSON(consts.StatusOK, result)
-}
-
-// GetAccount .
-// @router /api/share/get_account [POST]
-func GetAccount(ctx context.Context, c *app.RequestContext) {
-	user, pass := common.GenerateAccount()
-
-	resp := new(share.SmbAccountResp)
-	resp.User = user
-	resp.Password = pass
-
-	handler.RespSuccess(c, resp)
 }
 
 // GetSharePath .

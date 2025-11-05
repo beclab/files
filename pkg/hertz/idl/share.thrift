@@ -49,6 +49,9 @@ struct ViewSharePath {
     11: required string create_time
     12: required string update_time
     13: bool shared_by_me
+    14: string smb_link (go.tag='json:"smb_link,omitempty"')
+    15: string smb_user (go.tag='json:"smb_user,omitempty"')
+    16: string smb_password (go.tag='json:"smb_password,omitempty"')
 }
 
 struct CreateSharePathReq {
@@ -193,9 +196,16 @@ struct RemoveShareMemberResp {
     1: bool success;
 }
 
-struct SmbAccountResp {
-    1: string user;
-    2: string password;
+struct SmbAccount {
+  1: string user;
+  2: string password;
+}
+
+struct SmbCreate {
+  1: string owner;
+  2: string id;
+  3: string path;
+  4: string user;
 }
 
 struct VideoResp {}
@@ -217,8 +227,6 @@ service ShareService {
     ListShareMemberResp ListShareMember(1: ListShareMemberReq request) (api.get="/api/share/share_member/");
     UpdateShareMemberPermissionResp UpdateShareMemberPermission(1: UpdateShareMemberPermissionReq request) (api.put="/api/share/share_member/");
     RemoveShareMemberResp RemoveShareMember(1: RemoveShareMemberReq request) (api.delete="/api/share/share_member/");
-
-    SmbAccountResp GetAccount() (api.post="/api/share/get_account");
 
     VideoResp VideoMethod() (api.get="/api/videos");
 }
