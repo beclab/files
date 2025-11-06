@@ -100,18 +100,15 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if req.ShareType == "smb" {
-		if req.Password == "" {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "smb share must have a password"})
-			return
-		}
-		if req.Permission == 0 {
+		if req.Permission != 1 && req.Permission != 3 {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "external share must have a permission"})
 			return
 		}
-		if req.Permission == 1 {
-			permission = 1
-		} else {
+
+		if req.Password == "" { // anonymous
 			permission = 3
+		} else {
+			permission = req.Permission
 		}
 	}
 
@@ -143,15 +140,19 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	var smbUser string
 	password := common.Md5String(req.Password)
 	if req.ShareType == "smb" {
-		smbUser, _ = common.GenerateAccount()
-		var smbAccount = &share.SmbAccount{
-			User:     smbUser,
-			Password: req.Password,
+		if req.Password != "" {
+			smbUser, _ = common.GenerateAccount()
+			var smbAccount = &share.SmbAccount{
+				User:     smbUser,
+				Password: req.Password,
+			}
+			smbAccountBytes, _ := json.Marshal(smbAccount)
+			encodedBytes := make([]byte, base64.StdEncoding.EncodedLen(len(smbAccountBytes)))
+			base64.StdEncoding.Encode(encodedBytes, smbAccountBytes)
+			password = string(encodedBytes)
+		} else { // anonymous
+			password = ""
 		}
-		smbAccountBytes, _ := json.Marshal(smbAccount)
-		encodedBytes := make([]byte, base64.StdEncoding.EncodedLen(len(smbAccountBytes)))
-		base64.StdEncoding.Encode(encodedBytes, smbAccountBytes)
-		password = string(encodedBytes)
 	}
 
 	if req.ShareType == common.ShareTypeExternal {
@@ -190,7 +191,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			Owner: owner,
 			ID:    item.ID,
 			Path:  fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path),
-			User:  smbUser,
+			User:  smbUser, // anonymous
 		}
 
 		var shareItems = []*share.SmbCreate{shareItem}
@@ -488,18 +489,23 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	if deleteSmbSharePaths != nil && len(deleteSmbSharePaths) > 0 {
 		var smbs []*share.SmbCreate
 		for _, item := range deleteSmbSharePaths {
-			pwdBytes, err := base64.StdEncoding.DecodeString(item.PasswordMd5)
-			if err != nil {
-				klog.Errorf("delete share path, decode error: %v", err)
+			var smbShareUser string
+			if item.PasswordMd5 != "" {
+				pwdBytes, err := base64.StdEncoding.DecodeString(item.PasswordMd5)
+				if err != nil {
+					klog.Errorf("delete share path, decode error: %v", err)
+				}
+
+				var smbUser *share.SmbAccount
+				json.Unmarshal(pwdBytes, &smbUser)
+				smbShareUser = smbUser.User
 			}
 
-			var smbUser *share.SmbAccount
-			json.Unmarshal(pwdBytes, &smbUser)
 			var smb = &share.SmbCreate{
 				Owner: item.Owner,
 				ID:    item.ID,
 				Path:  fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path),
-				User:  smbUser.User,
+				User:  smbShareUser,
 			}
 			smbs = append(smbs, smb)
 		}

@@ -305,8 +305,10 @@ func Chown(fs afero.Fs, path string, uid, gid int) error {
 	var err error = nil
 	if fs == nil {
 		err = os.Chown(path, uid, gid)
+		err = os.Chmod(path, 0775)
 	} else {
 		err = fs.Chown(path, uid, gid)
+		err = fs.Chmod(path, 0775)
 	}
 	if err != nil {
 		klog.Errorf("can't chown directory %s to user %d: %s", path, uid, err)
