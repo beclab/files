@@ -55,6 +55,7 @@ type SambaShare struct {
 	ReadOnly   string `json:"read_only"`
 	ForceUser  string `json:"force_user"`
 	ForceGroup string `json:"force_group"`
+	Anonymous  bool   `json:"anonymous"`
 }
 
 type SambaSharePathAccount struct {
@@ -283,22 +284,6 @@ func (s *samba) generateConf() {
 			continue
 		}
 
-		shareUser, sharePwd, err := s.getUser(item.PasswordMd5)
-		if err != nil {
-			klog.Errorf("samba decode user error: %v, data: %s, id: %s, name: %s, owner: %s", err, item.PasswordMd5, item.ID, item.Name, item.Owner)
-			continue
-		}
-
-		if err := s.commands.CreateGroup(item.Owner, ""); err != nil {
-			klog.Errorf("samba create group %s error: %v", item.Owner, err)
-			return
-		}
-
-		if err := s.commands.CreateUser(shareUser, sharePwd, item.Owner); err != nil {
-			klog.Errorf("samba create user %s error: %v", shareUser, err)
-			return
-		}
-
 		fPath := fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path)
 		fp, err := models.CreateFileParam(item.Owner, fPath)
 		if err != nil {
@@ -312,11 +297,35 @@ func (s *samba) generateConf() {
 			return
 		}
 
-		if item.Permission > 1 {
-			if err := s.commands.SetAcl(shareUser, item.Owner, "-m", "rwx", fileUri+fp.Path); err != nil {
-				klog.Errorf("samba setfacl error: %v", err)
+		var anonymous bool
+		var shareUser, sharePwd string
+		if item.PasswordMd5 != "" {
+			shareUser, sharePwd, err = s.getUser(item.PasswordMd5)
+			if err != nil {
+				klog.Errorf("samba decode user error: %v, data: %s, id: %s, name: %s, owner: %s", err, item.PasswordMd5, item.ID, item.Name, item.Owner)
+				continue
+			}
+
+			if err := s.commands.CreateGroup(item.Owner, ""); err != nil {
+				klog.Errorf("samba create group %s error: %v", item.Owner, err)
 				return
 			}
+
+			if err := s.commands.CreateUser(shareUser, sharePwd, item.Owner); err != nil {
+				klog.Errorf("samba create user %s error: %v", shareUser, err)
+				return
+			}
+
+			if item.Permission > 1 {
+				if err := s.commands.SetAcl(shareUser, item.Owner, "-m", "rwx", fileUri+fp.Path); err != nil {
+					klog.Errorf("samba setfacl error: %v", err)
+					return
+				}
+			}
+		} else {
+			// anonymous
+			anonymous = true
+			s.commands.SetAnonymousPermission(item.Owner, fileUri+fp.Path)
 		}
 
 		w, r := s.formatPrivilege(item.Permission)
@@ -330,6 +339,7 @@ func (s *samba) generateConf() {
 			ReadOnly:   r,
 			ForceUser:  shareUser,
 			ForceGroup: item.Owner,
+			Anonymous:  anonymous,
 		}
 		shares.Paths = append(shares.Paths, smbShare)
 	}
@@ -474,11 +484,14 @@ func (s *samba) recoverSharedOwner(sharedPaths []string) {
 			continue
 		}
 
-		if err := s.commands.SetAcl(smb.User, smb.Owner, "-x", "", uri+m.Path); err != nil { // remove acl
-			klog.Errorf("samba recover, setfacl remove error: %v", err)
-			return
+		if smb.User != "" {
+			if err := s.commands.SetAcl(smb.User, smb.Owner, "-x", "", uri+m.Path); err != nil { // remove acl
+				klog.Errorf("samba recover, setfacl remove error: %v", err)
+				return
+			}
+
+			s.commands.DeleteUser([]string{smb.User})
 		}
 
-		s.commands.DeleteUser([]string{smb.User})
 	}
 }

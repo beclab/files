@@ -1,5 +1,6 @@
 [global]
   server string = samba
+  map to guest = Bad User
   idmap config * : range = 3000-7999
   security = user
   client min protocol = SMB2
@@ -16,15 +17,27 @@
 [{{ $data.Name }}]
   path = {{ $data.Path }}
   comment = {{ $data.Comment }}
+  {{ if $data.Anonymous  -}}
+  browseable = yes
+  writable = yes
+  read only = no
+  guest ok = yes
+  force user = nobody
+  force group = {{ $data.ForceGroup }}
+  create mask = 0664
+  directory mask = 0775
+  {{ else -}}
   valid users = {{ $data.ForceUser }} @{{ $data.ForceGroup }}
   browseable = yes
   writable = {{ $data.Writable }}
   read only = {{ $data.ReadOnly }}
+  force group = {{ $data.ForceGroup }}
   {{ if eq $data.Writable "yes" -}}
   create mask = 0664
   directory mask = 2775
   vfs objects = acl_xattr
   inherit permissions = no
   map acl inherit = yes
-  {{ end }}
+  {{ end -}}
+  {{ end -}}
 {{ end }}

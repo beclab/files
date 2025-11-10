@@ -192,6 +192,28 @@ func (c *commands) DeleteGroup(groupName string) error {
 	return nil
 }
 
+func (c *commands) SetAnonymousPermission(owner string, smbPath string) error {
+	var args = []string{fmt.Sprintf("nobody:%s", owner), smbPath}
+	cmd := exec.Command("chown", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		klog.Errorf("samba chown anonymous error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
+	} else {
+		klog.Infof("samba chown anonymous: %s done.", cmd.String())
+	}
+
+	args = []string{"-R", "3777", smbPath}
+	cmd = exec.Command("chmod", args...)
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		klog.Errorf("samba chmod anonymous error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
+	} else {
+		klog.Infof("samba chmod anonymous: %s done.", cmd.String())
+	}
+
+	return nil
+}
+
 func (c *commands) SetAcl(user string, owner string, op string, rw string, smbPath string) error {
 	var userAcl = fmt.Sprintf("%s:%s", user, rw)
 	if op == "-x" {
