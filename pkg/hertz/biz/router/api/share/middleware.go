@@ -76,11 +76,6 @@ func _share_tokenMw() []app.HandlerFunc {
 	return nil
 }
 
-func _node1Mw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
 func _revokesharetokenMw() []app.HandlerFunc {
 	// your code...
 	return nil
@@ -126,17 +121,47 @@ func _gettokenMw() []app.HandlerFunc {
 	return nil
 }
 
-func _videoMw() []app.HandlerFunc {
+func _share_passwordMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _videomethodMw() []app.HandlerFunc {
+func _resetpasswordMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _videosMw() []app.HandlerFunc {
+func _smb_share_usersMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listsmbshareuserMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _smb_share_userMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _createsmbuserMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _deletesmbuserMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _smb_share_memberMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _modifysmbmemberMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/base64"
 	"path"
 	"strconv"
 	"strings"
@@ -108,4 +109,55 @@ func MimeTypeByExtension(filename string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+func AdjustExpire(expireIn int64, expireTime string) (int64, string) {
+	currentTime := time.Now()
+	currentTimeMillis := currentTime.UnixMilli()
+
+	if expireTime == "" {
+		if expireIn == 0 {
+			return 0, "9999-12-31T23:59:59.000000Z"
+		}
+		return expireIn, currentTime.Add(time.Duration(expireIn) * time.Millisecond).Format(time.RFC3339)
+	}
+
+	var expireTimeMillis int64
+	if _, err := strconv.ParseInt(expireTime, 10, 64); err == nil {
+		val, _ := strconv.ParseInt(expireTime, 10, 64)
+		expireTimeMillis = val
+	} else {
+		parsedTime, err := time.Parse(time.RFC3339, expireTime)
+		if err != nil {
+			return 0, ""
+		}
+		expireTimeMillis = parsedTime.UnixMilli()
+	}
+
+	if expireIn != 0 {
+		calculatedExpireTimeMillis := currentTimeMillis + expireIn
+		if calculatedExpireTimeMillis > expireTimeMillis {
+			return expireIn, currentTime.Add(time.Duration(expireIn) * time.Millisecond).Format(time.RFC3339)
+		}
+		return expireTimeMillis - currentTimeMillis, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
+	}
+
+	remaining := expireTimeMillis - currentTimeMillis
+	if remaining < 0 {
+		return 0, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
+	}
+	return remaining, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
+}
+
+func Base64Encode(v string) string {
+	return base64.StdEncoding.EncodeToString([]byte(v))
+}
+
+func Base64Decode(v string) (string, error) {
+	r, err := base64.StdEncoding.DecodeString(v)
+	if err != nil {
+		return "", err
+	}
+
+	return string(r), nil
 }

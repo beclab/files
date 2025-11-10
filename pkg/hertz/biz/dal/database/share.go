@@ -55,6 +55,21 @@ func QuerySharePathByType(shareType string) ([]*share.SharePath, error) {
 	return res, nil
 }
 
+func QuerySmbShares(shareType string) ([]*share.SmbShareView, error) {
+	// SELECT share_paths.id, share_paths.owner, share_paths.file_type, share_paths.extend, share_paths.path, share_paths.share_type, share_paths.name, share_paths.expire_in, share_paths.expire_time, share_paths.smb_share_public, share_smb_members.permission, share_smb_users.user_id,  share_smb_users.user_name, share_smb_users.password FROM "share_paths" inner join share_smb_members on share_paths.id = share_smb_members.path_id inner join share_smb_users on share_smb_members.user_id = share_smb_users.user_id WHERE share_paths.share_type = 'smb'
+	var res []*share.SmbShareView
+	err := DB.Table("share_paths").Select("share_paths.id, share_paths.owner, share_paths.file_type, share_paths.extend, share_paths.path, share_paths.share_type, share_paths.name, share_paths.expire_in, share_paths.expire_time, share_paths.smb_share_public, share_smb_members.permission, share_smb_users.user_id,  share_smb_users.user_name, share_smb_users.password").Joins("inner join share_smb_members on share_paths.id = share_smb_members.path_id").Joins("inner join share_smb_users on share_smb_members.user_id = share_smb_users.user_id").Where("share_paths.share_type = ?", shareType).Scan(&res).Error
+
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	return res, nil
+}
+
 func QuerySmbSharePathByIds(ids []string) ([]*share.SharePath, error) {
 	var res []*share.SharePath
 	if err := DB.Where("share_type = ? and id in ?", "smb", ids).Find(&res).Error; err != nil {
@@ -184,7 +199,10 @@ func QueryShareMember(params *QueryParams, page, pageSize int64, orderBy, order 
 func QueryShareById(shareId string) (*share.SharePath, error) {
 	var res *share.SharePath
 	if err := DB.Table("share_paths").Where("id = ?", shareId).First(&res).Error; err != nil {
-		return nil, err
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
 	}
 
 	return res, nil
@@ -233,4 +251,98 @@ func QuerySearchSharedDirectories(owner string) ([]*share.SharePath, []*share.Sh
 
 	return internalSharePaths, externalSharePaths, nil
 
+}
+
+func UpdateSharePassword(sharePath *share.SharePath) error {
+	return DB.Table("share_paths").Save(sharePath).Error
+}
+
+func GetSmbSharePathByPath(shareType string, fileType, extend, path string, owner string, isPublic int32) (*share.SharePath, error) {
+	var res *share.SharePath
+
+	if err := DB.Table("share_paths").Where("share_type = ? AND owner = ? AND file_type = ? AND extend = ? AND path = ? AND smb_share_public = ?", shareType, owner, fileType, extend, path, isPublic).Scan(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, err
+	}
+	return res, nil
+}
+
+func CreateSmbSharePathTx(sharePath *share.SharePath, shareMembers []*share.ShareSmbMember) error {
+	var err error
+	tx := DB.Begin()
+
+	if err = tx.Create(sharePath).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	for _, m := range shareMembers {
+		if err = tx.Create(m).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		if err = tx.Rollback().Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func QuerySmbUsers() ([]*share.ShareSmbUser, error) {
+	var res []*share.ShareSmbUser
+	if err := DB.Table("share_smb_users").Find(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	return res, nil
+}
+
+func CreateSmbUser(owner, userId, userName, password string) error {
+	var now = time.Now().UTC().Format(time.RFC3339Nano)
+	var data = &share.ShareSmbUser{
+		Owner:      owner,
+		UserID:     userId,
+		UserName:   userName,
+		Password:   password,
+		CreateTime: now,
+		UpdateTime: now,
+	}
+
+	return DB.Table("share_smb_users").Create(data).Error
+}
+
+func DeleteSmbUser(owner string, users []string) error {
+	var err error
+	var tx = DB.Begin()
+
+	for _, user := range users {
+		if err = tx.Table("share_smb_members").Where("owner = ? AND user_id = ?", owner, user).Delete(&share.ShareSmbMember{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		if err = tx.Table("share_smb_users").Where("owner = ? AND user_id = ?", owner, user).Delete(&share.ShareSmbUser{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		if err = tx.Rollback().Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
