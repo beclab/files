@@ -36,6 +36,20 @@ func FormatSharePathViews(data []*share.SmbShareView) map[string]*models.SambaSh
 				PublicShare: d.SmbSharePublic == 1,
 				Members:     make([]*models.SambaShareMembers, 0),
 			}
+			if d.UserName != "" {
+				var member = &models.SambaShareMembers{
+					UserId:     d.UserId,
+					UserName:   d.UserName,
+					Password:   d.Password,
+					Permission: d.Permission,
+				}
+				val.Members = append(val.Members, member)
+			}
+			result[d.ID] = val
+			continue
+		}
+
+		if d.UserName != "" {
 			var member = &models.SambaShareMembers{
 				UserId:     d.UserId,
 				UserName:   d.UserName,
@@ -43,17 +57,7 @@ func FormatSharePathViews(data []*share.SmbShareView) map[string]*models.SambaSh
 				Permission: d.Permission,
 			}
 			val.Members = append(val.Members, member)
-			result[d.ID] = val
-			continue
 		}
-
-		var member = &models.SambaShareMembers{
-			UserId:     d.UserId,
-			UserName:   d.UserName,
-			Password:   d.Password,
-			Permission: d.Permission,
-		}
-		val.Members = append(val.Members, member)
 		result[d.ID] = val
 	}
 

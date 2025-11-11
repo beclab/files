@@ -4,7 +4,6 @@ package share
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"files/pkg/client"
 	"files/pkg/common"
@@ -77,12 +76,12 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	if fileParam.FileType != "drive" && fileParam.FileType != "sync" {
+	if fileParam.FileType != common.Drive && fileParam.FileType != common.Sync {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "file type not supported"})
 		return
 	}
 
-	if fileParam.FileType == "sync" && req.ShareType != "internal" {
+	if fileParam.FileType == common.Sync && req.ShareType != common.Internal {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "share type not supported for file type sync"})
 		return
 	}
@@ -129,7 +128,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	expireIn, expireTime := AdjustExpire(req.ExpireIn, req.ExpireTime)
+	expireIn, expireTime := common.AdjustExpire(req.ExpireIn, req.ExpireTime)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
@@ -307,8 +306,8 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	for _, sharePath := range sharedWithMeRes { // only shared with me possibly fit permission for member
-		if sharePath.ShareType != "internal" || sharePath.Owner != owner {
+	for _, sharePath := range sharedByMeRes {
+		if sharePath.ShareType != common.ShareTypeInternal || sharePath.Owner != owner {
 			continue // always do not continue because of sharedWithMeRes is always internal and owner not me, just for taking position
 		}
 		for _, shareMember := range shareMembers {
@@ -318,8 +317,29 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
+	for _, sharePath := range sharedWithMeRes { // only shared with me possibly fit permission for member
+		if sharePath.ShareType == common.ShareTypeInternal && sharePath.Owner != owner {
+			for _, shareMember := range shareMembers {
+				if shareMember.PathID == sharePath.ID {
+					sharePath.Permission = shareMember.Permission
+				}
+			}
+		}
+
+	}
+
 	res := append(sharedWithMeRes, sharedByMeRes...)
 	total := sharedWithMeTotal + sharedByMeTotal
+
+	var queryShareIds []string
+	for _, r := range res {
+		if r.ShareType == common.ShareTypeInternal || r.ShareType == common.ShareTypeSMB {
+			queryShareIds = append(queryShareIds, r.ID)
+		}
+	}
+
+	internalShareMembers, _ := database.QueryShareInternalMembers(queryShareIds)
+	smbShareMembers, _ := database.QueryShareSmbMembers(queryShareIds)
 
 	resp := new(share.ListSharePathResp)
 	resp.Total = int32(total)
@@ -334,6 +354,38 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		if sharePath.Owner == owner {
 			viewPath.SharedByMe = true
 		}
+
+		if sharePath.ShareType == common.ShareTypeInternal {
+			if len(internalShareMembers) > 0 {
+				for _, u := range internalShareMembers {
+					if u.PathID != viewPath.ID {
+						continue
+					}
+					var user = &share.ViewSharePathUsers{
+						ID:         fmt.Sprintf("%d", u.ID),
+						Name:       u.ShareMember,
+						Permission: u.Permission,
+					}
+					viewPath.Users = append(viewPath.Users, user)
+				}
+			}
+		} else if sharePath.ShareType == common.ShareTypeSMB {
+			viewPath.SmbLink = fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), viewPath.Name)
+			if len(smbShareMembers) > 0 {
+				for _, u := range smbShareMembers {
+					if u.PathId != viewPath.ID {
+						continue
+					}
+					var user = &share.ViewSharePathUsers{
+						ID:         u.UserId,
+						Name:       u.UserName,
+						Permission: u.Permission,
+					}
+					viewPath.Users = append(viewPath.Users, user)
+				}
+			}
+		}
+
 		resp.SharePaths = append(resp.SharePaths, viewPath)
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -1076,44 +1128,6 @@ func ParseTime(t string) string {
 	return time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
 }
 
-func AdjustExpire(expireIn int64, expireTime string) (int64, string) {
-	currentTime := time.Now()
-	currentTimeMillis := currentTime.UnixMilli()
-
-	if expireTime == "" {
-		if expireIn == 0 {
-			return 0, "9999-12-31T23:59:59.000000Z"
-		}
-		return expireIn, currentTime.Add(time.Duration(expireIn) * time.Millisecond).Format(time.RFC3339)
-	}
-
-	var expireTimeMillis int64
-	if _, err := strconv.ParseInt(expireTime, 10, 64); err == nil {
-		val, _ := strconv.ParseInt(expireTime, 10, 64)
-		expireTimeMillis = val
-	} else {
-		parsedTime, err := time.Parse(time.RFC3339, expireTime)
-		if err != nil {
-			return 0, ""
-		}
-		expireTimeMillis = parsedTime.UnixMilli()
-	}
-
-	if expireIn != 0 {
-		calculatedExpireTimeMillis := currentTimeMillis + expireIn
-		if calculatedExpireTimeMillis > expireTimeMillis {
-			return expireIn, currentTime.Add(time.Duration(expireIn) * time.Millisecond).Format(time.RFC3339)
-		}
-		return expireTimeMillis - currentTimeMillis, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
-	}
-
-	remaining := expireTimeMillis - currentTimeMillis
-	if remaining < 0 {
-		return 0, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
-	}
-	return remaining, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
-}
-
 func DeleteSharePathRelations(pathId string, tx *gorm.DB) error {
 	commit := false
 	if tx == nil {
@@ -1294,9 +1308,9 @@ func DeleteRelativeAdjustShare(fileParam *models.FileParam, dirents []string, tx
 			var internalSharePaths []*share.SharePath
 			var externalSharePaths []*share.SharePath
 			for _, sharePath := range pathRes {
-				if sharePath.ShareType == "internal" {
+				if sharePath.ShareType == common.ShareTypeInternal {
 					internalSharePaths = append(internalSharePaths, sharePath)
-				} else if sharePath.ShareType == "external" {
+				} else if sharePath.ShareType == common.ShareTypeExternal {
 					externalSharePaths = append(externalSharePaths, sharePath)
 				}
 			}
@@ -1397,11 +1411,11 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 				var externalSharePaths []*share.SharePath // will be removed with token removed either
 				var smbSharePaths []*share.SharePath      // will be removed
 				for _, sharePath := range pathRes {
-					if sharePath.ShareType == "internal" {
+					if sharePath.ShareType == common.ShareTypeInternal {
 						internalSharePaths = append(internalSharePaths, sharePath)
-					} else if sharePath.ShareType == "external" {
+					} else if sharePath.ShareType == common.ShareTypeExternal {
 						externalSharePaths = append(externalSharePaths, sharePath)
-					} else if sharePath.ShareType == "smb" {
+					} else if sharePath.ShareType == common.ShareTypeSMB {
 						smbSharePaths = append(smbSharePaths, sharePath)
 					}
 				}
@@ -1826,11 +1840,9 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 	handler.RespSuccess(c, result)
 }
 
-// + todo
 // ResetPassword .
 // @router /api/share/share_password/ [PUT]
 func ResetPassword(ctx context.Context, c *app.RequestContext) {
-	// + todo 这里应该只涉及 external 的密码重置
 	var err error
 	var req share.ResetPasswordReq
 	err = c.BindAndValidate(&req)
@@ -1838,6 +1850,8 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
+
+	klog.Infof("[samba] ResetPassword, data: %s", req.PathId)
 
 	sharePath, err := database.QueryShareById(req.PathId)
 	if err != nil {
@@ -1850,65 +1864,14 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if sharePath.ShareType == common.ShareTypeExternal {
-		if req.Password == "" {
-			handler.RespError(c, common.ErrorMessageWrongPassword)
-			return
-		}
-	} else if sharePath.ShareType == common.ShareTypeSMB {
-		if sharePath.PasswordMd5 == "" {
-			handler.RespError(c, common.ErrorMessagePermissionDenied)
-			return
-		}
-	} else {
-		handler.RespError(c, common.ErrorMessageWrongShare)
-		return
-	}
+	sharePath.PasswordMd5 = common.Md5String(req.Password)
 
-	if sharePath.ShareType == common.ShareTypeExternal {
-		sharePath.PasswordMd5 = common.Md5String(req.Password)
-	} else {
-		de, err := base64.URLEncoding.DecodeString(sharePath.PasswordMd5)
-		if err != nil {
-			klog.Errorf("ResetPassword, decode password error: %v, content: %s", err, sharePath.PasswordMd5)
-			handler.RespError(c, common.ErrorMesssageSambaPasswordInvalid)
-			return
-		}
-		var a share.SmbAccount
-		if err = json.Unmarshal(de, &a); err != nil {
-			klog.Errorf("ResetPassword, unmarshal password error: %v, content: %s", err, sharePath.PasswordMd5)
-			handler.RespError(c, common.ErrorMesssageSambaPasswordInvalid)
-			return
-		}
-
-		a.Password = req.Password
-		newAccountBytes, _ := json.Marshal(a)
-		encodedBytes := make([]byte, base64.StdEncoding.EncodedLen(len(newAccountBytes)))
-		base64.StdEncoding.Encode(encodedBytes, newAccountBytes)
-		sharePath.PasswordMd5 = string(encodedBytes)
-	}
-
-	if err = database.UpdateSharePassword(sharePath); err != nil {
+	if err = database.ResetExternalSharePasswordTx(sharePath); err != nil {
 		klog.Errorf("ResetPassword, update error: %v", err)
 		return
 	}
 
-	if sharePath.ShareType == common.ShareTypeExternal {
-		// todo 删除历史 token
-	} else {
-		// todo 通知 samba
-		var smbCreate = &share.SmbCreate{
-			Owner: sharePath.Owner,
-			ID:    sharePath.ID,
-			Path:  "",
-			User:  req.User,
-		}
-		_ = smbCreate
-	}
-
-	resp := new(share.ResetPasswordResp)
-
-	c.JSON(consts.StatusOK, resp)
+	handler.RespSuccess(c, nil)
 }
 
 // ListSmbShareUser .
@@ -2019,6 +1982,9 @@ func DeleteSmbUser(ctx context.Context, c *app.RequestContext) {
 		for _, item := range relSmbUserShares {
 			if item.SmbSharePublic == 1 {
 				// in theory, there shouldn’t be any public Samba shares here.
+				continue
+			}
+			if item.UserName == "" {
 				continue
 			}
 

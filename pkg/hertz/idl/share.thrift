@@ -71,9 +71,15 @@ struct ViewSharePath {
     11: required string create_time
     12: required string update_time
     13: bool shared_by_me
-    14: string smb_link (go.tag='json:"smb_link,omitempty"')
-    15: string smb_user (go.tag='json:"smb_user,omitempty"')
-    16: string smb_password (go.tag='json:"smb_password,omitempty"')
+    14: bool public_smb
+    15: list<ViewSharePathUsers> users (go.tag='json:"users,omitempty"')
+    16: string smb_link (go.tag='json:"smb_link,omitempty"')
+}
+
+struct ViewSharePathUsers {
+    1: string id
+    2: string name
+    3: i32 permission
 }
 
 struct CreateSharePathReq {
@@ -240,8 +246,7 @@ struct SmbCreate {
 
 struct ResetPasswordReq {
   1: required string pathId (api.body="path_id");
-  2: string user (api.body="user");
-  3: required string password (api.body="password");
+  2: required string password (api.body="password");
 }
 
 struct ResetPasswordResp {}
@@ -290,7 +295,7 @@ service ShareService {
     ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/");
     UpdateSharePathResp UpdateSharePath(1: UpdateSharePathReq request) (api.put="/api/share/share_path/");
     DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/");
-    ResetPasswordResp ResetPassword(1: ResetPasswordReq request) (api.put="/api/share/share_password/"); /* todo */
+    ResetPasswordResp ResetPassword(1: ResetPasswordReq request) (api.put="/api/share/share_password/");
     GetExternalSharePathResp GetExternalSharePath(1: GetExternalSharePathReq request) (api.get="/api/share/get_share/");
     GetInternalSmbSharePathResp GetInternalSmbSharePath() (api.get="/api/share/get_share_internal_smb/*path");
 

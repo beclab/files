@@ -69,7 +69,8 @@ func TimingMiddleware() app.HandlerFunc {
 
 		defer func() {
 			elapsed := time.Since(start)
-			klog.Infof("%s %s execution time: %v", string(c.Method()), path, elapsed)
+
+			klog.Infof("%s %s execution time: %v, code: %d", string(c.Method()), path, elapsed, c.Response.StatusCode())
 		}()
 
 		c.Next(ctx)
@@ -476,7 +477,6 @@ func checkExternal(currentUser string, token string, sharePaths *share.SharePath
 	}
 
 	permit := checkPermission(currentUser, sharePaths.Owner, sharePaths.ShareType, sharePaths.Permission, shareAccess)
-	fmt.Println("---done---", permit)
 	return 0, permit, nil
 }
 
