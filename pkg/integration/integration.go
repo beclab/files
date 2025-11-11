@@ -282,10 +282,12 @@ func (i *integration) GetUsers() []models.OwnerInfo {
 		var anno = user.ObjectMeta.Annotations
 		role, _ := anno["bytetrade.io/owner-role"]
 		status, _ := anno["bytetrade.io/wizard-status"]
+		olaresId, _ := anno["bytetrade.io/terminus-name"]
 		var u = models.OwnerInfo{
-			Name:   user.Name,
-			Role:   role,
-			Status: status,
+			Name:     user.Name,
+			Role:     role,
+			OlaresId: olaresId,
+			Status:   status,
 		}
 		data = append(data, u)
 	}

@@ -79,7 +79,8 @@ func (r *QueryParam) Json() string {
 }
 
 type OwnerInfo struct {
-	Name   string
-	Role   string
-	Status string
+	Name     string
+	Role     string
+	OlaresId string
+	Status   string
 }
