@@ -140,7 +140,7 @@ func GetSharePath(pathID string) (*share.SharePath, error) {
 func GetInternalSmbSharePath(owner string, shareType string, shareFileType, shareExtend, sharePath string) (res *models.InternalSmbSharePath, err error) {
 	if shareType == common.ShareTypeInternal {
 		var data []*models.InternalSharePath
-		if err = DB.Table("share_paths").Select("share_paths.*, share_members.id as share_member_id, share_members.share_member, share_members.permission as share_member_permission").Joins("inner join share_members on share_paths.id = share_members.path_id").Where("share_paths.owner = ? AND share_paths.share_type = ? AND share_paths.file_type = ? AND share_paths.extend = ? AND share_paths.path = ?", owner, shareType, shareFileType, shareExtend, sharePath).Find(&data).Error; err != nil {
+		if err = DB.Table("share_paths").Select("share_paths.*, share_members.id as share_member_id, share_members.share_member, share_members.permission as share_member_permission").Joins("left join share_members on share_paths.id = share_members.path_id").Where("share_paths.owner = ? AND share_paths.share_type = ? AND share_paths.file_type = ? AND share_paths.extend = ? AND share_paths.path = ?", owner, shareType, shareFileType, shareExtend, sharePath).Find(&data).Error; err != nil {
 			return
 		}
 		if len(data) > 0 {
@@ -161,17 +161,19 @@ func GetInternalSmbSharePath(owner string, shareType string, shareFileType, shar
 			}
 
 			for _, d := range data {
-				var user = &models.InternalSmbSharePathUsers{
-					Id:         fmt.Sprintf("%d", d.ShareMemberId),
-					Name:       d.ShareMember,
-					Permission: d.ShareMemberPermission,
+				if d.ShareMember != "" {
+					var user = &models.InternalSmbSharePathUsers{
+						Id:         fmt.Sprintf("%d", d.ShareMemberId),
+						Name:       d.ShareMember,
+						Permission: d.ShareMemberPermission,
+					}
+					res.Users = append(res.Users, user)
 				}
-				res.Users = append(res.Users, user)
 			}
 		}
 	} else {
 		var data []*share.SmbShareView
-		if err = DB.Table("share_paths").Select("share_paths.id, share_paths.owner, share_paths.file_type, share_paths.extend, share_paths.path, share_paths.share_type, share_paths.name, share_paths.expire_in, share_paths.expire_time, share_paths.permission as share_permission, share_paths.smb_share_public, share_smb_members.permission, share_smb_users.user_id,  share_smb_users.user_name, share_smb_users.password").Joins("inner join share_smb_members on share_paths.id = share_smb_members.path_id").Joins("inner join share_smb_users on share_smb_members.user_id = share_smb_users.user_id").Where("share_paths.owner = ? AND share_paths.share_type = ? AND share_paths.file_type = ? AND share_paths.extend = ? AND share_paths.path = ?", owner, shareType, shareFileType, shareExtend, sharePath).Find(&data).Error; err != nil {
+		if err = DB.Table("share_paths").Select("share_paths.id, share_paths.owner, share_paths.file_type, share_paths.extend, share_paths.path, share_paths.share_type, share_paths.name, share_paths.expire_in, share_paths.expire_time, share_paths.permission as share_permission, share_paths.smb_share_public, share_smb_members.permission, share_smb_users.user_id,  share_smb_users.user_name, share_smb_users.password").Joins("left join share_smb_members on share_paths.id = share_smb_members.path_id").Joins("left join share_smb_users on share_smb_members.user_id = share_smb_users.user_id").Where("share_paths.owner = ? AND share_paths.share_type = ? AND share_paths.file_type = ? AND share_paths.extend = ? AND share_paths.path = ?", owner, shareType, shareFileType, shareExtend, sharePath).Find(&data).Error; err != nil {
 			return
 		}
 
@@ -195,12 +197,14 @@ func GetInternalSmbSharePath(owner string, shareType string, shareFileType, shar
 			}
 
 			for _, d := range data {
-				var user = &models.InternalSmbSharePathUsers{
-					Id:         d.UserId,
-					Name:       d.UserName,
-					Permission: d.Permission,
+				if d.UserId != "" {
+					var user = &models.InternalSmbSharePathUsers{
+						Id:         d.UserId,
+						Name:       d.UserName,
+						Permission: d.Permission,
+					}
+					res.Users = append(res.Users, user)
 				}
-				res.Users = append(res.Users, user)
 			}
 		}
 	}
@@ -448,13 +452,15 @@ func DeleteSmbUserTx(owner string, users []string) error {
 func ModifySmbMembersTx(owner string, pathId string, addMembers, editMembers, delMembers []*share.CreateSmbSharePathMembers) error {
 	var err error
 	var tx = DB.Begin()
-
+	var now = time.Now().UTC().Format(time.RFC3339Nano)
 	for _, member := range addMembers {
 		var m = &share.ShareSmbMember{
 			Owner:      owner,
 			PathID:     pathId,
 			UserID:     member.ID,
 			Permission: member.Permission,
+			CreateTime: now,
+			UpdateTime: now,
 		}
 		if err = tx.Table("share_smb_members").Create(m).Error; err != nil {
 			tx.Rollback()

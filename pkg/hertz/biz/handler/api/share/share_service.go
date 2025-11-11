@@ -2106,7 +2106,7 @@ func ModifySmbMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	klog.Infof("[samba] modify smb share members, req: %s", common.ParseString(req))
+	klog.Infof("[samba] ModifySmbMember, req: %s", common.ParseString(req))
 
 	shared, err := database.GetSharePath(req.PathId)
 	if err != nil {
@@ -2115,7 +2115,7 @@ func ModifySmbMember(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if err = samba.SambaService.ModifySambaShareMembers(owner, shared, req.Users); err != nil {
-		klog.Errorf("[samba] modify smb share members failed, owner: %s, pathId: %s, error: %v", owner, req.PathId, err)
+		klog.Errorf("[samba] ModifySmbMember, failed, owner: %s, pathId: %s, error: %v", owner, req.PathId, err)
 		handler.RespError(c, fmt.Sprintf("Modify Members Error: %v", err))
 		return
 	}
