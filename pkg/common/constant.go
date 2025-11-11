@@ -97,6 +97,8 @@ var (
 	ShareTypeExternal   = "external"
 	ShareTypeSMB        = "smb"
 
+	ErrorMessageShareTypeInvalid      = "Share type invalid."
+	ErrorMessagePathInvalid           = "Path invalid."
 	ErrorMessageOwnerNotFound         = "Owner not found."
 	ErrorMessageWrongShare            = "Wrong share."
 	ErrorMessageTokenExpired          = "Token expired."
@@ -107,6 +109,7 @@ var (
 	ErrorMessageShareExists           = "Share exists."
 	ErrorMesssageSambaPasswordInvalid = "Samba share password invalid."
 	ErrorMessageWrongPassword         = "Wrong password. Please check the password and try again."
+	ErrorMessageInternalPathExists    = "Internal share for a path can be only one at a time."
 
 	CodeLinkExpired  = 559
 	CodeTokenExpired = 569

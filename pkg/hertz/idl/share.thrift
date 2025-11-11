@@ -115,12 +115,14 @@ struct ListSharePathResp {
     2: list<ViewSharePath> share_paths;
 }
 
-struct GetSharePathReq {
+struct GetExternalSharePathReq {
     1: required string PathId (api.query="path_id");
     2: required string Token (api.query="token");
 }
 
-struct GetSharePathResp {}
+struct GetExternalSharePathResp {}
+
+struct GetInternalSmbSharePathResp {}
 
 struct UpdateSharePathReq {
     1: required string PathId (api.body="path_id");
@@ -254,21 +256,15 @@ struct CreateSmbUserReq {
 struct CreateSmbUserResp {}
 
 struct DeleteSmbUserReq {
-    1: required list<string> user (api.body="user");
+    1: required list<string> users (api.body="users");
 }
 struct DeleteSmbUserResp {}
 
 struct ModifySmbMemberReq {
     1: required string PathId (api.body="path_id");
-    2: list<ModifySmbMember> ShareMembers (api.body="share_members");
+    2: list<CreateSmbSharePathMembers> Users (api.body="users");
 }
 struct ModifySmbMemberResp {}
-
-struct ModifySmbMember {
-    1: required string ShareMember (api.body="share_member");
-    2: required i32 Permission (api.body="permission", api.vd="$>=0 && $<=4");
-}
-
 
 struct SmbShareView {
     1: string id (go.tag = 'gorm:"column:id"');
@@ -280,11 +276,12 @@ struct SmbShareView {
     7: string name (go.tag = 'gorm:"column:name"');
     8: i64 expireIn (go.tag = 'gorm:"column:expire_in"');
     9: string expireTime (go.tag = 'gorm:"column:expire_time"');
-    10: i32 smbSharePublic (go.tag = 'gorm:"column:smb_share_public"');
-    11: i32 permission (go.tag = 'gorm:"column:permission"');
+    10: i32 sharePermission (go.tag = 'gorm:"column:share_permission"');
+    11: i32 smbSharePublic (go.tag = 'gorm:"column:smb_share_public"');
     12: string userId (go.tag = 'gorm:"column:user_id"');
     13: string userName (go.tag = 'gorm:"column:user_name"');
     14: string password (go.tag = 'gorm:"column:password"');
+    15: i32 permission (go.tag = 'gorm:"column:permission"');
 }
 
 // services
@@ -293,8 +290,9 @@ service ShareService {
     ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/");
     UpdateSharePathResp UpdateSharePath(1: UpdateSharePathReq request) (api.put="/api/share/share_path/");
     DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/");
-    ResetPasswordResp ResetPassword(1: ResetPasswordReq request) (api.put="/api/share/share_password/");
-    GetSharePathResp GetSharePath(1: GetSharePathReq request) (api.get="/api/share/get_share/");
+    ResetPasswordResp ResetPassword(1: ResetPasswordReq request) (api.put="/api/share/share_password/"); /* todo */
+    GetExternalSharePathResp GetExternalSharePath(1: GetExternalSharePathReq request) (api.get="/api/share/get_share/");
+    GetInternalSmbSharePathResp GetInternalSmbSharePath() (api.get="/api/share/get_share_internal_smb/*path");
 
     GenerateShareTokenResp GenerateShareToken(1: GenerateShareTokenReq request) (api.post="/api/share/share_token/");
     ListShareTokenResp ListShareToken(1: ListShareTokenReq request) (api.get="/api/share/share_token/");
@@ -307,7 +305,7 @@ service ShareService {
     RemoveShareMemberResp RemoveShareMember(1: RemoveShareMemberReq request) (api.delete="/api/share/share_member/");
 
     /* samba */
-    ListSmbUserResp ListSmbShareUser(1: ListSmbUserReq request) (api.get="/api/share/smb_share_user/");
+    ListSmbUserResp ListSmbUser(1: ListSmbUserReq request) (api.get="/api/share/smb_share_user/");
     CreateSmbUserResp CreateSmbUser(1: CreateSmbUserReq request) (api.post="/api/share/smb_share_user/");
     DeleteSmbUserResp DeleteSmbUser(1: DeleteSmbUserReq request) (api.delete="/api/share/smb_share_user/");
     ModifySmbMemberResp ModifySmbMember(1: ModifySmbMemberReq request) (api.post="/api/share/smb_share_member/");

@@ -23,7 +23,11 @@ func Register(r *server.Hertz) {
 			_share := _api.Group("/share", _shareMw()...)
 			{
 				_get_share := _share.Group("/get_share", _get_shareMw()...)
-				_get_share.GET("/", append(_getsharepathMw(), share.GetSharePath)...)
+				_get_share.GET("/", append(_getexternalsharepathMw(), share.GetExternalSharePath)...)
+			}
+			{
+				_get_share_internal_smb := _share.Group("/get_share_internal_smb", _get_share_internal_smbMw()...)
+				_get_share_internal_smb.GET("/*path", append(_getinternalsmbsharepathMw(), share.GetInternalSmbSharePath)...)
 			}
 			{
 				_get_token := _share.Group("/get_token", _get_tokenMw()...)
@@ -60,7 +64,7 @@ func Register(r *server.Hertz) {
 			{
 				_smb_share_user := _share.Group("/smb_share_user", _smb_share_userMw()...)
 				_smb_share_user.DELETE("/", append(_deletesmbuserMw(), share.DeleteSmbUser)...)
-				_smb_share_user.GET("/", append(_listsmbshareuserMw(), share.ListSmbShareUser)...)
+				_smb_share_user.GET("/", append(_listsmbuserMw(), share.ListSmbUser)...)
 				_smb_share_user.POST("/", append(_createsmbuserMw(), share.CreateSmbUser)...)
 			}
 		}

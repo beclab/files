@@ -2,6 +2,7 @@ package common
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"path"
 	"strconv"
 	"strings"
@@ -33,6 +34,15 @@ func ParseUnixMilli(s int64) time.Time {
 	var date = time.UnixMilli(s)
 
 	return date
+}
+
+func ParseString(v interface{}) string {
+	var b, err = json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+
+	return string(b)
 }
 
 func MimeTypeByExtension(filename string) string {

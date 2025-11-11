@@ -56,11 +56,6 @@ func _createsharepathMw() []app.HandlerFunc {
 	return nil
 }
 
-func _node0Mw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
 func _deletesharepathMw() []app.HandlerFunc {
 	// your code...
 	return nil
@@ -96,17 +91,7 @@ func _updatesharepathMw() []app.HandlerFunc {
 	return nil
 }
 
-func _getaccountMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
 func _get_shareMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _getsharepathMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
@@ -127,16 +112,6 @@ func _share_passwordMw() []app.HandlerFunc {
 }
 
 func _resetpasswordMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _smb_share_usersMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _listsmbshareuserMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
@@ -162,6 +137,26 @@ func _smb_share_memberMw() []app.HandlerFunc {
 }
 
 func _modifysmbmemberMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listsmbuserMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getexternalsharepathMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _get_share_internal_smbMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getinternalsmbsharepathMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

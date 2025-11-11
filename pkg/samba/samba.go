@@ -101,8 +101,7 @@ func (s *samba) CreateShareSamba(sharePath []*share.SmbCreate, operator string) 
 
 	var items []string
 	for _, sp := range sharePath {
-		spb, _ := json.Marshal(sp)
-		items = append(items, string(spb))
+		items = append(items, common.ParseString(sp))
 	}
 
 	var data = &v1.ShareSamba{
@@ -172,8 +171,12 @@ func (s *samba) HandlerEvent() cache.ResourceEventHandler {
 				if sambaObj.CreationTimestamp.Time.After(s.runTime) {
 					klog.Info("samba addFunc")
 					s.generateConf()
-					if sambaObj.Spec.Operator == "del" {
+
+					switch sambaObj.Spec.Operator {
+					case "del":
 						s.recoverSharedOwner(sambaObj.Spec.ShareItems)
+					case "deluser":
+						s.deleteUser(sambaObj.Spec.ShareItems)
 					}
 				}
 			},
@@ -248,20 +251,19 @@ func (s *samba) getUsers() {
 	}
 }
 
-// + todo
 func (s *samba) generateConf() {
 	s.Lock()
 	defer s.Unlock()
 
 	smbUsers, _ := s.commands.ListUser(s.users)
 
-	smbShareData, err := database.QuerySmbShares(shareTypeSmb)
+	smbShareData, err := database.QuerySmbShares("", shareTypeSmb, nil, nil)
 	if err != nil {
 		klog.Errorf("samba get shares data error: %v", err)
 		return
 	}
 
-	smbShares := s.formatSharePathViews(smbShareData)
+	smbShares := FormatSharePathViews(smbShareData)
 
 	klog.Infof("samba get system users: %v", smbUsers)
 
@@ -274,8 +276,6 @@ func (s *samba) generateConf() {
 	smbShareBytes, _ := json.Marshal(smbShares)
 	klog.Infof("samba share paths: %s", string(smbShareBytes))
 
-	// + todo 重构
-	// + 增加 write list 和 read list
 	var shares = SambaShares{}
 	for _, item := range smbShares { // ~ map
 		if !s.checkUserExists(item.Owner) {
@@ -352,7 +352,7 @@ func (s *samba) generateConf() {
 		var smbShare = SambaShare{
 			Name:       item.Name,
 			Path:       fileUri + strings.TrimSuffix(fp.Path, "/"),
-			Comment:    fmt.Sprintf("%s_%s", item.Owner, item.Name),
+			Comment:    fmt.Sprintf("%s_%s_%s", item.Owner, item.Id, item.Name),
 			ValidUsers: item.Owner,
 			Writable:   "yes",
 			ReadOnly:   "no",
@@ -406,16 +406,8 @@ func (s *samba) getUser(pass string) (pwd string, err error) {
 	return
 }
 
-func (s *samba) formatPrivilege(permission int32) (string, string) {
-	switch permission {
-	case 1:
-		return "no", "yes"
-	}
-	return "yes", "no"
-}
-
 func (s *samba) deleteExcludeUsers(sysUsers []string, smbShareData map[string]*models.SambaShares) error {
-	if smbShareData == nil || len(smbShareData) == 0 {
+	if len(smbShareData) == 0 {
 		s.commands.DeleteUser(sysUsers)
 		return nil
 	}
@@ -476,6 +468,54 @@ func (s *samba) checkUserExists(owner string) bool {
 	return f
 }
 
+func (s *samba) deleteUser(sharedPaths []string) {
+	var paths []*share.SmbCreate
+	for _, p := range sharedPaths {
+		var smb *share.SmbCreate
+		if err := json.Unmarshal([]byte(p), &smb); err != nil {
+			klog.Errorf("samba deleteUser unmarshal error: %v, content: %s", err, p)
+			continue
+		}
+		paths = append(paths, smb)
+	}
+
+	sort.Slice(paths, func(i, j int) bool {
+		return paths[i].User < paths[j].User
+	})
+
+	var deleteUsersIdx = make(map[string]string)
+	for _, p := range paths {
+		m, err := models.CreateFileParam(p.Owner, p.Path)
+		if err != nil {
+			klog.Errorf("samba deleteUser create file param error: %v, owner: %s, path: %s", err, p.Owner, p.Path)
+			continue
+		}
+
+		if _, ok := deleteUsersIdx[p.User]; !ok {
+			deleteUsersIdx[p.User] = p.User
+		}
+
+		uri, err := m.GetResourceUri()
+		if err != nil {
+			klog.Errorf("samba deleteUser get uri error: %v", err)
+			continue
+		}
+		var dir = uri + m.Path
+		if err := s.commands.SetAcl(p.User, p.Owner, "-x", "", dir); err != nil {
+			klog.Errorf("samba deleteUser setfacl remove error: %v, user: %s, path: %s", err, p.User, dir)
+			continue
+		}
+	}
+
+	var deleteUsers []string
+	for k := range deleteUsersIdx {
+		deleteUsers = append(deleteUsers, k)
+	}
+
+	s.commands.DeleteUser(deleteUsers)
+
+}
+
 func (s *samba) recoverSharedOwner(sharedPaths []string) {
 	for _, p := range sharedPaths {
 		var smb *share.SmbCreate
@@ -499,64 +539,11 @@ func (s *samba) recoverSharedOwner(sharedPaths []string) {
 		if smb.User != "" {
 			if err := s.commands.SetAcl(smb.User, smb.Owner, "-x", "", uri+m.Path); err != nil { // remove acl
 				klog.Errorf("samba recover, setfacl remove error: %v", err)
-				return
+				continue
 			}
-
-			s.commands.DeleteUser([]string{smb.User})
 		}
 
 	}
-}
-
-func (s *samba) formatSharePathViews(data []*share.SmbShareView) map[string]*models.SambaShares {
-	if len(data) == 0 {
-		return nil
-	}
-
-	sort.Slice(data, func(i, j int) bool {
-		return data[i].ID < data[j].ID
-	})
-
-	var result = make(map[string]*models.SambaShares)
-
-	for _, d := range data {
-		val, ok := result[d.ID]
-		if !ok {
-			val = &models.SambaShares{
-				Id:          d.ID,
-				Owner:       d.Owner,
-				FileType:    d.FileType,
-				Extend:      d.Extend,
-				Path:        d.Path,
-				ShareType:   d.ShareType,
-				Name:        d.Name,
-				ExpireIn:    d.ExpireIn,
-				ExpireTime:  d.ExpireTime,
-				PublicShare: d.SmbSharePublic == 1,
-				Members:     make([]*models.SambaShareMembers, 0),
-			}
-			var member = &models.SambaShareMembers{
-				UserId:     d.UserId,
-				UserName:   d.UserName,
-				Password:   d.Password,
-				Permission: d.Permission,
-			}
-			val.Members = append(val.Members, member)
-			result[d.ID] = val
-			continue
-		}
-
-		var member = &models.SambaShareMembers{
-			UserId:     d.UserId,
-			UserName:   d.UserName,
-			Password:   d.Password,
-			Permission: d.Permission,
-		}
-		val.Members = append(val.Members, member)
-		result[d.ID] = val
-	}
-
-	return result
 }
 
 func (s *samba) CreateSambaSharePath(owner string, smbSharePublicLevel int32, users []*share.CreateSmbSharePathMembers, fileParam *models.FileParam, reqExpireIn int64, reqExpireTime string) (*share.SharePath, error) {
@@ -594,7 +581,7 @@ func (s *samba) CreateSambaSharePath(owner string, smbSharePublicLevel int32, us
 		return nil, err
 	}
 
-	if smbSharePaths != nil || len(smbSharePaths) > 0 {
+	if len(smbSharePaths) > 0 {
 		var allSmbSharePaths []string
 		for _, item := range smbSharePaths {
 			allSmbSharePaths = append(allSmbSharePaths, item.Path)
@@ -649,14 +636,39 @@ func (s *samba) DeleteSambaShareUsers(owner string, users []string) error {
 	s.Lock()
 	defer s.Unlock()
 
-	return database.DeleteSmbUser(owner, users)
+	return database.DeleteSmbUserTx(owner, users)
 }
 
-func (s *samba) ModifySambaShareMembers(owner string, sharePath *share.SharePath, members []*share.AddShareMemberInfo) error {
+func (s *samba) ModifySambaShareMembers(owner string, sharePath *share.SharePath, modifyMembers []*share.CreateSmbSharePathMembers) error {
 	s.Lock()
 	defer s.Unlock()
 
-	// + todo
+	members, err := database.QuerySmbMembers(sharePath.ID)
+	if err != nil {
+		klog.Errorf("[samba] query smb share members failed, owner: %s, pathId: %s, error: %v", owner, sharePath.ID, err)
+		return err
+	}
+
+	addMembers, editMembers, delMembers := CompareSmbShareMembers(members, modifyMembers)
+
+	klog.Infof("[samba] modify smb share members, owner: %s, pathId: %s, add: %s, edit: %s, del: %s", owner, sharePath.ID, common.ParseString(addMembers), common.ParseString(editMembers), common.ParseString(delMembers))
+
+	if err := database.ModifySmbMembersTx(owner, sharePath.ID, addMembers, editMembers, delMembers); err != nil {
+		klog.Errorf("[samba] modify smb share members failed, owner: %s, pathId: %s, error: %v", owner, sharePath.ID, err)
+		return err
+	}
+
+	var crd = &share.SmbCreate{
+		Owner: owner,
+		ID:    sharePath.ID,
+		Path:  fmt.Sprintf("/%s/%s%s", sharePath.FileType, sharePath.Extend, sharePath.Path),
+		User:  "",
+	}
+
+	if err := s.CreateShareSamba([]*share.SmbCreate{crd}, "add"); err != nil {
+		klog.Errorf("[samba] modify smb share members, update crd failed, owner: %s, pathId: %s, error: %v", owner, sharePath.ID, err)
+		return err
+	}
 
 	return nil
 }
