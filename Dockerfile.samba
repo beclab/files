@@ -7,8 +7,34 @@ RUN \
   go mod download
 
 COPY cmd/samba ./cmd/samba
+COPY config/ ./config/
+COPY pkg/ ./pkg/
 
-RUN CGO_ENABLED=0 go build -ldflags "-w -s" -o samba_share cmd/samba/main.go
+RUN go install github.com/cloudwego/hertz/cmd/hz@latest && \
+  hz -v &&  \
+  GO111MODULE=on go install github.com/cloudwego/thriftgo@latest &&  \
+  go mod tidy &&  \
+  go mod edit -replace github.com/apache/thrift=github.com/apache/thrift@v0.13.0 &&  \
+  go mod tidy &&  \
+  cd pkg/hertz &&  \
+  hz update -idl idl/callback.thrift &&  \
+  hz update -idl idl/external.thrift &&  \
+  hz update -idl idl/md5.thrift &&  \
+  hz update -idl idl/nodes.thrift &&  \
+  hz update -idl idl/paste.thrift &&  \
+  hz update -idl idl/permission.thrift &&  \
+  hz update -idl idl/preview.thrift &&  \
+  hz update -idl idl/raw.thrift &&  \
+  hz update -idl idl/repos.thrift &&  \
+  hz update -idl idl/resources.thrift &&  \
+  hz update -idl idl/tree.thrift &&  \
+  hz update -idl idl/user.thrift &&  \
+  hz update -idl idl/upload.thrift &&  \
+  hz update -idl idl/share.thrift &&  \
+  cd /workspace &&  \
+  go mod tidy
+
+RUN go build -ldflags "-w -s" -o samba_share cmd/samba/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

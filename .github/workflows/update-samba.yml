@@ -62,5 +62,5 @@ jobs:
           context: .
           file: Dockerfile.samba
           push: true
-          tags: beclab/samba-server:${{ steps.get-latest-tag.outputs.tag }}
+          tags: beclab/samba-server:${{ github.event.inputs.tags }}
           platforms: linux/amd64,linux/arm64
