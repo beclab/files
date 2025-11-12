@@ -8,7 +8,7 @@ RUN \
 
 COPY cmd/samba ./cmd/samba
 
-RUN CGO_ENABLED=0 go build -o samba_share cmd/samba/main.go
+RUN CGO_ENABLED=0 go build -ldflags "-w -s" -o samba_share cmd/samba/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -30,7 +30,7 @@ RUN set -eu && \
 
 WORKDIR /
 COPY --chmod=755 ./config/samba/samba.sh /usr/bin/samba.sh
-COPY --chmod=664 ./config/samba/smb.conf /etc/samba/smb.default
+COPY --chmod=664 ./config/samba/smb.conf /etc/samba/smb.conf
 COPY --from=builder /workspace/samba_share .
 
 EXPOSE 139 445
