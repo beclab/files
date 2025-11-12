@@ -55,7 +55,7 @@ type FileInfo struct {
 	Token           string            `json:"token,omitempty"`
 	ExternalType    string            `json:"externalType,omitempty"`
 	ReadOnly        *bool             `json:"readOnly,omitempty"`
-	SharePermission string            `json:"sharePermission,omitempty"`
+	SharePermission int32             `json:"permission,omitempty"`
 }
 
 func (fi *FileInfo) String() string {

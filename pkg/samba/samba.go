@@ -36,8 +36,7 @@ import (
 var SambaGVR = schema.GroupVersionResource{Group: "sys.bytetrade.io", Version: "v1", Resource: "sharesambas"}
 
 const (
-	shareTypeSmb = "smb"
-	timeFormat   = "2006-01-02T15:04:05Z"
+	timeFormat = "2006-01-02T15:04:05Z"
 )
 
 //go:embed template/samba.conf.tmpl
@@ -257,7 +256,7 @@ func (s *samba) generateConf() {
 
 	smbUsers, _ := s.commands.ListUser(s.users)
 
-	smbShareData, err := database.QuerySmbShares("", shareTypeSmb, nil, nil)
+	smbShareData, err := database.QuerySmbShares("", common.ShareTypeSMB, nil, nil)
 	if err != nil {
 		klog.Errorf("samba get shares data error: %v", err)
 		return
