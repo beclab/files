@@ -31,6 +31,7 @@ RUN go install github.com/cloudwego/hertz/cmd/hz@latest && \
   hz update -idl idl/user.thrift &&  \
   hz update -idl idl/upload.thrift &&  \
   hz update -idl idl/share.thrift &&  \
+  hz update -idl idl/search.thrift &&  \
   cd /workspace &&  \
   go mod tidy
 
