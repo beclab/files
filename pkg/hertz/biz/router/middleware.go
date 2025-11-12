@@ -46,6 +46,7 @@ var (
 		"/api/mount",
 		"/api/unmount",
 		"/api/smb_history",
+		"/api/search",
 	}
 )
 
@@ -238,11 +239,13 @@ func ShareMiddleware() app.HandlerFunc {
 		var sharedPath = shared.Path
 		var shareType = strings.ToLower(shared.ShareType)
 		var shareBy = shared.Owner
+		var shareMember *share.ShareMember
 
 		switch shareType {
 		case common.ShareTypeInternal:
 			if bflName != shared.Owner {
-				if err = checkInternal(bflName, shared, shareAccess); err != nil {
+				shareMember, err = checkInternal(bflName, shared, shareAccess)
+				if err != nil {
 					klog.Errorf("[share] check internal error: %v", err)
 					handler.RespError(c, "No permission")
 					return
@@ -256,12 +259,12 @@ func ShareMiddleware() app.HandlerFunc {
 			expires, permit, err = checkExternal(bflName, token, shared, shareAccess)
 			if err != nil {
 				klog.Errorf("[share] check external error: %v, expires: %d", err, expires)
-				// handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expires)
-				// return
+				handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expires)
+				return
 			} else {
 				if !permit {
-					// handler.RespError(c, common.ErrorMessagePermissionDenied)
-					// return
+					handler.RespError(c, common.ErrorMessagePermissionDenied)
+					return
 				}
 			}
 		}
@@ -300,6 +303,17 @@ func ShareMiddleware() app.HandlerFunc {
 			rewritePrefix += "/"
 		}
 
+		var permission int32
+		if shared.ShareType == common.ShareTypeInternal {
+			if shareMember != nil {
+				permission = shareMember.Permission
+			} else {
+				permission = shared.Permission
+			}
+		} else {
+			permission = shared.Permission
+		}
+
 		var url string
 		var accessOwner string
 		if shareAccess.Upload { // upload
@@ -329,7 +343,7 @@ func ShareMiddleware() app.HandlerFunc {
 				url += fmt.Sprintf("?share=1&sharetype=%s", shareType)
 			}
 			if shareAccess.Resource && method == http.MethodGet {
-				url += fmt.Sprintf("&sharepermission=%d&shareid=%s&sharepath=%s", shared.Permission, shareParam.Extend, urlx.PathEscape(shareParam.Path))
+				url += fmt.Sprintf("&sharepermission=%d&shareid=%s&sharepath=%s", permission, shareParam.Extend, urlx.PathEscape(shareParam.Path))
 			}
 		}
 
@@ -420,33 +434,21 @@ func checkSharePath(currentUser string, shareId string, fromShare bool) (*share.
 	return sharePath, 0, nil
 }
 
-func checkInternal(currentOwner string, sharePaths *share.SharePath, shareAccess *ShareAccess) error {
-	shareMember, err := database.QueryShareMemberById(sharePaths.ID)
+func checkInternal(currentOwner string, sharePaths *share.SharePath, shareAccess *ShareAccess) (*share.ShareMember, error) {
+	shareMember, err := database.QueryShareMemberById(currentOwner, sharePaths.ID)
 	if err != nil {
-		return fmt.Errorf("postgres.QueryShareMemberById error: %v", err)
+		return nil, fmt.Errorf("postgres.QueryShareMemberById error: %v", err)
 	}
 
 	if shareMember.ShareMember == "" {
-		return errors.New("shareMember not found")
+		return nil, errors.New("shareMember not found")
 	}
 
-	var matchedMember bool
-	var members = strings.Split(shareMember.ShareMember, ",")
-	for _, m := range members {
-		if m == currentOwner {
-			matchedMember = true
-			break
-		}
+	// permission is shareMember.Permission
+	if permit := checkPermission(currentOwner, sharePaths.Owner, sharePaths.ShareType, shareMember.Permission, shareAccess); !permit {
+		return nil, errors.New("authorization check failed")
 	}
-
-	if !matchedMember {
-		return errors.New("matchedMember is nil")
-	}
-
-	if permit := checkPermission(currentOwner, sharePaths.Owner, sharePaths.ShareType, sharePaths.Permission, shareAccess); !permit {
-		return errors.New("authorization check failed")
-	}
-	return nil
+	return shareMember, nil
 }
 
 func checkExternal(currentUser string, token string, sharePaths *share.SharePath, shareAccess *ShareAccess) (int64, bool, error) {
