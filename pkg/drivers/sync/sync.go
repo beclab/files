@@ -34,13 +34,14 @@ type SyncStorage struct {
 }
 
 type Files struct {
-	DirId    string  `json:"dir_id"`
-	Items    []*File `json:"dirent_list"`
-	UserPerm string  `json:"user_perm"`
-	FsType   string  `json:"fileType"`
-	FsExtend string  `json:"fileExtend"`
-	FsPath   string  `json:"filePath"`
-	Name     string  `json:"name"`
+	DirId      string  `json:"dir_id"`
+	Items      []*File `json:"dirent_list"`
+	UserPerm   string  `json:"user_perm"`
+	FsType     string  `json:"fileType"`
+	FsExtend   string  `json:"fileExtend"`
+	FsPath     string  `json:"filePath"`
+	Name       string  `json:"name"`
+	LastModify string  `json:"last_modify"`
 }
 
 type File struct {
@@ -57,6 +58,148 @@ type File struct {
 	Permission    string `json:"permission"`
 	Size          int64  `json:"size"`
 	Type          string `json:"type"`
+	LastModify    string `json:"last_modify"`
+}
+
+func getSyncFileType(filename string) string {
+	mimetype := common.MimeTypeByExtension(filename)
+
+	switch {
+	case strings.HasPrefix(mimetype, "video"):
+		return "video"
+	case strings.HasPrefix(mimetype, "audio"):
+		return "audio"
+	case strings.HasPrefix(mimetype, "image"):
+		return "image"
+	case strings.HasSuffix(mimetype, "pdf"):
+		return "pdf"
+	case strings.HasPrefix(mimetype, "text") || strings.HasPrefix(mimetype, "application"): // 10 MB
+		return "text"
+	default:
+		return "blob"
+	}
+}
+
+func TransSyncFilesToFileInfo(filesData *Files, contextArgs *models.HttpContextArgs) *files.FileInfo {
+	klog.Infof("Begin to trans")
+	if filesData == nil {
+		klog.Info("filesData is nil")
+		return nil
+	}
+
+	var shareId = contextArgs.QueryParam.ShareId
+	var sharePath = contextArgs.QueryParam.SharePath
+	var sharePermission = contextArgs.QueryParam.SharePermission
+	var permission, _ = common.ParseInt(sharePermission)
+	klog.Infof("shareId=%s, sharePath=%s, permission=%d", shareId, sharePath, permission)
+
+	klog.Infof("Begin to identify result base infos")
+	result := &files.FileInfo{}
+	result.SyncDirId = filesData.DirId
+	result.Extension = ""
+	result.IsDir = true
+
+	if shareId == "" {
+		result.SyncPermission = filesData.UserPerm
+		result.FsType = filesData.FsType
+		result.FsExtend = filesData.FsExtend
+		result.Path = filesData.FsPath
+		result.Name = filesData.Name
+	} else {
+		result.FsType = common.Share
+		result.FsExtend = shareId
+		result.Path = sharePath
+		result.Name = sharePath
+		result.SharePermission = int32(permission)
+		if sharePath == "/" {
+			result.Name = ""
+		}
+	}
+	if filesData.LastModify != "" {
+		klog.Infof("filesData.LastModify=%s", filesData.LastModify)
+		lastModify, err := time.Parse(time.RFC3339Nano, filesData.LastModify)
+		if err != nil {
+			klog.Error(err)
+		} else {
+			result.ModTime = lastModify
+		}
+	} else {
+		klog.Infof("filesData.LastModify is empty")
+	}
+
+	klog.Infof("Begin to identify result recursive infos")
+	if filesData.Items != nil {
+		listing := &files.Listing{
+			Items:         []*files.FileInfo{},
+			NumDirs:       0,
+			NumFiles:      0,
+			NumTotalFiles: 0,
+			Size:          0,
+			FileSize:      0,
+		}
+
+		klog.Infof("Begin to recursive listing")
+		for _, item := range filesData.Items {
+			resItem := &files.FileInfo{}
+			resItem.SyncItemId = item.Id
+			resItem.Name = item.Name
+			if item.Type == "dir" {
+				resItem.Extension = ""
+				resItem.IsDir = true
+				resItem.Type = ""
+			} else {
+				resItem.Extension = filepath.Ext(item.Name)
+				resItem.IsDir = false
+				resItem.Type = getSyncFileType(item.Name)
+			}
+			if shareId == "" {
+				resItem.FsType = item.FsType
+				resItem.FsExtend = item.FsExtend
+				resItem.SyncPermission = item.Permission
+				if item.Type == "dir" {
+					resItem.Path = item.Path + "/"
+				} else {
+					resItem.Path = filepath.Join(item.ParentDir, item.Name)
+				}
+				resItem.SyncParentDir = item.ParentDir
+			} else {
+				resItem.FsType = common.Share
+				resItem.FsExtend = shareId
+				resItem.SharePermission = int32(permission)
+				if item.Type == "dir" {
+					resItem.Path = filepath.Join(sharePath, item.Name) + "/"
+				} else {
+					resItem.Path = filepath.Join(sharePath, item.Name)
+				}
+				resItem.SyncParentDir = filepath.Join(sharePath, strings.TrimPrefix(item.ParentDir, filesData.FsPath))
+			}
+			resItem.Size = item.Size
+
+			if item.LastModify != "" {
+				klog.Infof("resItem.LastModify=%s", item.LastModify)
+				itemLastModify, itemErr := time.Parse(time.RFC3339Nano, item.LastModify)
+				if itemErr != nil {
+					klog.Error(itemErr)
+				} else {
+					resItem.ModTime = itemLastModify
+				}
+			} else {
+				klog.Infof("item.LastModify is empty")
+			}
+
+			listing.Size += item.Size
+			listing.NumDirs += item.NumDirs
+			listing.NumFiles += item.NumFiles
+			listing.NumTotalFiles += item.NumTotalFiles
+			klog.Info("resItem=%+v", resItem)
+
+			listing.Items = append(listing.Items, resItem)
+		}
+		klog.Infof("listing=%+v", listing)
+
+		result.Listing = listing
+	}
+	return result
 }
 
 func NewSyncStorage(handler *base.HandlerParam) *SyncStorage {
@@ -77,7 +220,8 @@ func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) 
 		return nil, err
 	}
 
-	return common.ToBytes(filesData), nil
+	fileData := TransSyncFilesToFileInfo(filesData, contextArgs)
+	return common.ToBytes(fileData), nil
 }
 
 func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error) {
@@ -540,6 +684,7 @@ func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 	if err != nil {
 		return nil, err
 	}
+	klog.Infof("res=%s", string(res))
 
 	var data *Files
 	if err := json.Unmarshal(res, &data); err != nil {

@@ -163,6 +163,19 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	allDirInfo := []map[string]interface{}{}
 	allFileInfo := []map[string]interface{}{}
 
+	lastModify := ""
+	if parentDir != "/" {
+		baseInfo := getDirInfo(repoId, parentDir)
+		klog.Infof("mtime: %+v", baseInfo["mtime"])
+
+		if baseInfo != nil {
+			lastModify = baseInfo["mtime"]
+		}
+	} else {
+		lastModify = TimestampToISO(GetRepoLastModify(repo))
+		klog.Infof("mtime: %s", lastModify)
+	}
+
 	for _, dir := range parentDirs {
 		dirInfo, fileInfo, err := getDirFileInfoList(
 			username,
@@ -180,8 +193,9 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	}
 
 	response := map[string]interface{}{
-		"user_perm": permission,
-		"dir_id":    dirId,
+		"user_perm":   permission,
+		"dir_id":      dirId,
+		"last_modify": lastModify,
 	}
 
 	response["dirent_list"] = append(allDirInfo, allFileInfo...)
@@ -289,14 +303,15 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 
 	for _, dirent := range dirList {
 		dirInfo := map[string]interface{}{
-			"type":       "dir",
-			"id":         dirent["obj_id"],
-			"name":       dirent["obj_name"],
-			"mtime":      dirent["mtime"],
-			"permission": dirent["permission"],
-			"parent_dir": parentDir,
-			"path":       filepath.Join(parentDir, dirent["obj_name"].(string)),
-			"mode":       dirent["mode"],
+			"type":        "dir",
+			"id":          dirent["obj_id"],
+			"name":        dirent["obj_name"],
+			"mtime":       dirent["mtime"],
+			"last_modify": TimestampToISO(dirent["mtime"]),
+			"permission":  dirent["permission"],
+			"parent_dir":  parentDir,
+			"path":        filepath.Join(parentDir, dirent["obj_name"].(string)),
+			"mode":        dirent["mode"],
 		}
 		dirInfoList = append(dirInfoList, dirInfo)
 	}
@@ -361,6 +376,7 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 			"id":                       fileObjID,
 			"name":                     fileName,
 			"mtime":                    dirent["mtime"],
+			"last_modify":              TimestampToISO(dirent["mtime"]),
 			"permission":               dirent["permission"],
 			"parent_dir":               parentDir,
 			"size":                     sizeInt,

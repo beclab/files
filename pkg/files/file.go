@@ -56,6 +56,10 @@ type FileInfo struct {
 	ExternalType    string            `json:"externalType,omitempty"`
 	ReadOnly        *bool             `json:"readOnly,omitempty"`
 	SharePermission int32             `json:"permission,omitempty"`
+	SyncDirId       string            `json:"dir_id,omitempty"`
+	SyncItemId      string            `json:"id,omitempty"`
+	SyncPermission  string            `json:"user_permission,omitempty"`
+	SyncParentDir   string            `json:"parent_dir,omitempty"`
 }
 
 func (fi *FileInfo) String() string {
