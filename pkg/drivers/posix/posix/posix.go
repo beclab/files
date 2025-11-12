@@ -46,6 +46,7 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	var shareId = contextArgs.QueryParam.ShareId
 	var sharePath = contextArgs.QueryParam.SharePath
 	var sharePermission = contextArgs.QueryParam.SharePermission
+	var permission, _ = common.ParseInt(sharePermission)
 
 	klog.Infof("Posix list, user: %s, args: %s, shareId: %s, sharePath: %s", owner, fileParam.Json(), shareId, sharePath)
 
@@ -59,11 +60,12 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 	if fileData.IsDir {
 		if shareId != "" {
+
 			fileData.FsType = common.Share
 			fileData.FsExtend = shareId
 			fileData.Path = sharePath
 			fileData.Name = sharePath
-			fileData.SharePermission = sharePermission
+			fileData.SharePermission = int32(permission)
 			if sharePath == "/" {
 				fileData.Name = ""
 			}
@@ -74,12 +76,12 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 		fileData.Listing.ApplySort()
 	}
 
-	if fileData.Items != nil && len(fileData.Items) > 0 {
+	if len(fileData.Items) > 0 {
 		if shareId != "" {
 			for _, item := range fileData.Items {
 				item.FsType = common.Share
 				item.FsExtend = shareId
-				item.SharePermission = sharePermission
+				item.SharePermission = int32(permission)
 				if item.IsDir {
 					item.Path = filepath.Join(sharePath, item.Name) + "/"
 				} else {
