@@ -43,8 +43,11 @@ func NewPosixStorage(handler *base.HandlerParam) *PosixStorage {
 func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
+	var shareId = contextArgs.QueryParam.ShareId
+	var sharePath = contextArgs.QueryParam.SharePath
+	var sharePermission = contextArgs.QueryParam.SharePermission
 
-	klog.Infof("Posix list, user: %s, args: %s", owner, fileParam.Json())
+	klog.Infof("Posix list, user: %s, args: %s, shareId: %s, sharePath: %s", owner, fileParam.Json(), shareId, sharePath)
 
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
@@ -55,8 +58,35 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	}
 
 	if fileData.IsDir {
+		if shareId != "" {
+			fileData.FsType = common.Share
+			fileData.FsExtend = shareId
+			fileData.Path = sharePath
+			fileData.Name = sharePath
+			fileData.SharePermission = sharePermission
+			if sharePath == "/" {
+				fileData.Name = ""
+			}
+
+		}
+
 		fileData.Listing.Sorting = files.DefaultSorting
 		fileData.Listing.ApplySort()
+	}
+
+	if fileData.Items != nil && len(fileData.Items) > 0 {
+		if shareId != "" {
+			for _, item := range fileData.Items {
+				item.FsType = common.Share
+				item.FsExtend = shareId
+				item.SharePermission = sharePermission
+				if item.IsDir {
+					item.Path = filepath.Join(sharePath, item.Name) + "/"
+				} else {
+					item.Path = filepath.Join(sharePath, item.Name)
+				}
+			}
+		}
 	}
 
 	res, err := json.Marshal(fileData)
@@ -172,7 +202,21 @@ func (s *PosixStorage) Tree(fileParam *models.FileParam, stopChan chan struct{},
 		return err
 	}
 
-	go s.generateListingData(fs, fileParam, fileData.Listing, stopChan, dataChan)
+	if fileData.Listing == nil && fileData != nil {
+		go func(stopChan <-chan struct{}, dataChan chan<- string) {
+			defer close(dataChan)
+			dataChan <- common.ToJson(fileData)
+
+			select {
+			case <-stopChan:
+				return
+			default:
+			}
+
+		}(stopChan, dataChan)
+	} else {
+		go s.generateListingData(fs, fileParam, fileData.Listing, stopChan, dataChan)
+	}
 
 	return nil
 }
@@ -443,7 +487,9 @@ func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FilePa
 	defer close(dataChan)
 
 	var streamFiles []*files.FileInfo
-	streamFiles = append(streamFiles, listing.Items...)
+	if listing != nil && len(listing.Items) > 0 {
+		streamFiles = append(streamFiles, listing.Items...)
+	}
 
 	for len(streamFiles) > 0 {
 		firstItem := streamFiles[0]
@@ -507,7 +553,7 @@ func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content boo
 	}
 
 	if s.isExternal(fileParam.FileType, fileParam.Extend) {
-		klog.Infof("getFiles fileType: %s, extend: %s", fileParam.FileType, fileParam.Extend)
+		// klog.Infof("getFiles fileType: %s, extend: %s", fileParam.FileType, fileParam.Extend)
 		file.ExternalType = global.GlobalMounted.CheckExternalType(file.Path, file.IsDir)
 		if file.IsDir && file.Listing != nil {
 			for _, f := range file.Items {
@@ -525,8 +571,10 @@ func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content boo
  */
 func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	var user = fileUploadArg.FileParam.Owner
+	var node = fileUploadArg.Node
+	var from = fileUploadArg.From
 
-	klog.Infof("Posix uploadLink, user: %s, param: %s", user, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Posix uploadLink, user: %s, node: %s, from: %s, share: %s %s, param: %s", user, node, from, fileUploadArg.Share, fileUploadArg.ShareType, common.ToJson(fileUploadArg.FileParam))
 
 	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
 
@@ -539,10 +587,14 @@ func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
  * UploadedBytes
  */
 func (s *PosixStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	var node = fileUploadArg.Node
 	var user = fileUploadArg.FileParam.Owner
-	klog.Infof("Posix uploadBytes, user: %s, param: %s", user, common.ToJson(fileUploadArg.FileParam))
+	var identy = fileUploadArg.Identy
+	var ua = fileUploadArg.UserAgentHash
 
-	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
+	klog.Infof("Posix uploadBytes, user: %s, node: %s, identy: %s, ua: %s, share: %s %s, param: %s", user, node, identy, ua, fileUploadArg.Share, fileUploadArg.ShareType, common.ToJson(fileUploadArg.FileParam))
+
+	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName, identy, ua)
 
 	klog.Infof("Posix uploadBytes, done! data: %s", string(data))
 
@@ -554,10 +606,14 @@ func (s *PosixStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
  */
 func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	var user = fileUploadArg.FileParam.Owner
+	var chunkInfo = fileUploadArg.ChunkInfo
+	var uploadId = fileUploadArg.UploadId
+	var identy = chunkInfo.ResumableIdenty
+	var ua = fileUploadArg.UserAgentHash
 
-	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, param: %s", user, fileUploadArg.UploadId, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s %s", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby, chunkInfo.SharebyPath)
 
-	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *fileUploadArg.ChunkInfo, fileUploadArg.Ranges)
+	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
 
 	if err != nil {
 		return nil, err

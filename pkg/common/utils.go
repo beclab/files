@@ -2,10 +2,12 @@ package common
 
 import (
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/url"
 	"os"
 	"regexp"
@@ -15,6 +17,16 @@ import (
 	"time"
 
 	"k8s.io/klog/v2"
+)
+
+var (
+	userFirst = "abcdefghijklmnopqrstuvwxyz"
+	userRest  = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+	lower   = "abcdefghijklmnopqrstuvwxyz"
+	upper   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	digits  = "0123456789"
+	special = "-_"
 )
 
 var RootPrefix = os.Getenv("ROOT_PREFIX")
@@ -242,4 +254,140 @@ func SplitNameExt(filename string) (name, ext string) {
 		return filename[:idx], filename[idx:]
 	}
 	return filename, ""
+}
+
+func GenerateAccount() (string, string) {
+	var u, p string
+	var err error
+	for {
+		u, err = genUsername()
+		if err != nil {
+			continue
+		}
+		p, err = genPassword()
+		if err != nil {
+			continue
+		}
+
+		break
+	}
+
+	return u, p
+}
+
+func rint(n int) (int, error) {
+	v, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	if err != nil {
+		return 0, err
+	}
+	return int(v.Int64()), nil
+}
+
+func rchar(set string) (byte, error) {
+	i, err := rint(len(set))
+	if err != nil {
+		return 0, err
+	}
+	return set[i], nil
+}
+
+func shuffle(b []byte) error {
+	for i := len(b) - 1; i > 0; i-- {
+		j, err := rint(i + 1)
+		if err != nil {
+			return err
+		}
+		b[i], b[j] = b[j], b[i]
+	}
+	return nil
+}
+
+func genUsername() (string, error) {
+	nDelta, err := rint(5) // 0..4
+	if err != nil {
+		return "", err
+	}
+	n := 8 + nDelta
+
+	out := make([]byte, n)
+	ch, err := rchar(userFirst)
+	if err != nil {
+		return "", err
+	}
+	out[0] = ch
+	for i := 1; i < n; i++ {
+		ch, err := rchar(userRest)
+		if err != nil {
+			return "", err
+		}
+		out[i] = ch
+	}
+
+	if out[n-1] == '-' {
+		out[n-1] = '_'
+	}
+	return string(out), nil
+}
+
+func genPassword() (string, error) {
+	n := 16
+	pool := lower + upper + digits + special
+
+	out := make([]byte, 0, n)
+
+	req := []string{lower, upper, digits, special}
+	for _, set := range req {
+		ch, err := rchar(set)
+		if err != nil {
+			return "", err
+		}
+		out = append(out, ch)
+	}
+
+	for len(out) < n {
+		ch, err := rchar(pool)
+		if err != nil {
+			return "", err
+		}
+		out = append(out, ch)
+	}
+
+	if err := shuffle(out); err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+func EscapeGlob(s string) string {
+	if s == "" {
+		return s
+	}
+
+	specials := map[rune]bool{
+		'\\': true,
+		'*':  true,
+		'?':  true,
+		'[':  true,
+		']':  true,
+		'{':  true,
+		'}':  true,
+		'(':  true,
+		')':  true,
+		'|':  true,
+		'^':  true,
+		'+':  true,
+		'.':  true,
+		'$':  true,
+	}
+
+	var b strings.Builder
+	b.Grow(len(s) * 2)
+
+	for _, r := range s {
+		if specials[r] {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

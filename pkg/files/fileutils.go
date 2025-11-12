@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -304,8 +305,10 @@ func Chown(fs afero.Fs, path string, uid, gid int) error {
 	var err error = nil
 	if fs == nil {
 		err = os.Chown(path, uid, gid)
+		err = os.Chmod(path, 0775)
 	} else {
 		err = fs.Chown(path, uid, gid)
+		err = fs.Chmod(path, 0775)
 	}
 	if err != nil {
 		klog.Errorf("can't chown directory %s to user %d: %s", path, uid, err)
@@ -745,4 +748,75 @@ func CheckKeepFile(p string) error {
 	}
 
 	return nil
+}
+
+func GetCommonPath(paths []string) []string {
+	return minimizeDirs(paths)
+}
+
+func normDir(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	parts := strings.Split(p, "/")
+	var clean []string
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		clean = append(clean, part)
+	}
+	if len(clean) == 0 {
+		return "/"
+	}
+	return "/" + strings.Join(clean, "/") + "/"
+}
+
+func isAncestorDir(a, b string) bool {
+	a = normDir(a)
+	b = normDir(b)
+	if a == "/" {
+		return true
+	}
+	if len(a) > len(b) {
+		return false
+	}
+	return strings.HasPrefix(b, a)
+}
+
+func minimizeDirs(dirs []string) []string {
+	if len(dirs) == 0 {
+		return dirs
+	}
+
+	seen := make(map[string]struct{})
+	var normalized []string
+	for _, d := range dirs {
+		nd := normDir(d)
+		if _, ok := seen[nd]; !ok {
+			seen[nd] = struct{}{}
+			normalized = append(normalized, nd)
+		}
+	}
+
+	sort.Strings(normalized)
+
+	var result []string
+	for _, d := range normalized {
+		contained := false
+		for _, kept := range result {
+			if isAncestorDir(kept, d) {
+				contained = true
+				break
+			}
+		}
+		if !contained {
+			result = append(result, d)
+		}
+	}
+	return result
 }

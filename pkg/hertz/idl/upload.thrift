@@ -3,11 +3,16 @@ namespace go upload
 struct UploadLinkReq {
     1: required string FilePath (api.query="file_path");
     2: required string From (api.query="from");
+    3: string share (api.query="share");
+    4: string sharetype (api.query="sharetype");
 }
 
 struct UploadedBytesReq {
     1: required string ParentDir (api.query="parent_dir");
     2: required string FileName (api.query="file_name");
+    4: string Identy (api.query="identy");
+    5: string share (api.query="share");
+    6: string sharetype (api.query="sharetype");
 }
 
 struct UploadedBytesResp {
@@ -32,6 +37,10 @@ struct UploadChunksReq {
     15: string driveType (api.form="driveType");
     16: string node (api.form="node");
     17: string md5 (api.form="md5");
+    18: string share (api.query="share");
+    19: string sharetype (api.query="sharetype");
+    20: string shareby (api.query="shareby");
+    21: string sharebyPath (api.query="shareby_path");
 }
 
 union UploadChunksResp {

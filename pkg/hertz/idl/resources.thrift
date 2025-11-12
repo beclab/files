@@ -8,6 +8,7 @@ struct PostResourcesResp {
 
 struct PatchResourcesReq {
     1: required string destination (api.query="destination");
+    2: string driveId (api.query="driveId");
 }
 
 struct PatchResourcesResp {

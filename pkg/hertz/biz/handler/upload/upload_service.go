@@ -11,12 +11,13 @@ import (
 	upload "files/pkg/hertz/biz/model/upload"
 	"files/pkg/models"
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"reflect"
-	"strings"
 )
 
 // UploadLinkMethod .
@@ -30,13 +31,15 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	node := c.Param("node")
 	var uploadArg = &models.FileUploadArgs{
 		FileParam: &models.FileParam{},
+		Node:      c.Param("node"),
+		From:      req.From,
+		Share:     req.Share,
+		ShareType: req.Sharetype,
 	}
-	uploadArg.Node = node
+
 	p := req.FilePath
-	uploadArg.From = req.From
 	if !strings.HasSuffix(p, "/") {
 		p = p + "/"
 	}
@@ -85,12 +88,15 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	node := c.Param("node")
 	var uploadArg = &models.FileUploadArgs{
-		FileParam: &models.FileParam{},
+		FileParam:     &models.FileParam{},
+		Node:          c.Param("node"),
+		Share:         req.Share,
+		ShareType:     req.Sharetype,
+		FileName:      req.FileName,
+		UserAgentHash: common.Md5String(string(c.GetHeader("User-Agent"))),
 	}
-	uploadArg.Node = node
-	uploadArg.FileName = req.FileName
+
 	p := req.ParentDir
 	if !strings.HasSuffix(p, "/") {
 		p = p + "/"
@@ -138,6 +144,7 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var req upload.UploadChunksReq
+
 	err = c.BindAndValidate(&req)
 	if err != nil {
 		klog.Errorf("bind and validate error: %v", err)
@@ -146,13 +153,13 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	req.RetJson = 1
 
-	node := c.Param("node")
-	uid := c.Param("uid")
 	var uploadArg = &models.FileUploadArgs{
-		FileParam: &models.FileParam{},
+		FileParam:     &models.FileParam{},
+		Node:          c.Param("node"),
+		UploadId:      c.Param("uid"),
+		UserAgentHash: common.Md5String(string(c.GetHeader("User-Agent"))),
 	}
-	uploadArg.Node = node
-	uploadArg.UploadId = uid
+
 	uploadArg.ChunkInfo = new(models.ResumableInfo)
 	err = json.Unmarshal(common.ToBytes(req), &uploadArg.ChunkInfo)
 	if err != nil {
@@ -168,7 +175,15 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	uploadArg.ChunkInfo.Share = req.Share
+	uploadArg.ChunkInfo.ShareType = req.Sharetype
+	uploadArg.ChunkInfo.Shareby = req.Shareby
+	uploadArg.ChunkInfo.SharebyPath = req.SharebyPath
 	uploadArg.ChunkInfo.File = header
+
+	if req.Share == "1" {
+		uploadArg.ChunkInfo.ParentDir = req.SharebyPath
+	}
 
 	p := uploadArg.ChunkInfo.ParentDir
 	if p == "" {

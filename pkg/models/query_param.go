@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/cloudwego/hertz/pkg/app"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/cloudwego/hertz/pkg/app"
 )
 
 type QueryParam struct {
@@ -22,8 +23,13 @@ type QueryParam struct {
 	FileMode                string          `json:"fileMode,omitempty"`
 	RepoName                string          `json:"repoName,omitempty"`
 	RepoId                  string          `json:"repoId,omitempty"`
+	DriveId                 string          `json:"driveid"`
 	Destination             string          `json:"destination,omitempty"`
 	ShareType               string          `json:"shareType,omitempty"`
+	ShareId                 string          `json:"shareId,omitempty"`
+	SharePath               string          `json:"sharePath,omitempty"`
+	SharePermission         string          `json:"sharePermission,omitempty"`
+	ShareByType             string          `json:"shareByType,omitempty"`
 	Header                  http.Header     `json:"-"`
 	Body                    io.ReadCloser   `json:"-"`
 }
@@ -55,8 +61,13 @@ func CreateQueryParam(owner string, ctx context.Context, c *app.RequestContext, 
 		FileMode:                strings.TrimSpace(c.Query("mode")),
 		RepoName:                strings.TrimSpace(c.Query("repoName")),
 		RepoId:                  strings.TrimSpace(c.Query("repoId")),
+		DriveId:                 strings.TrimSpace(c.Query("driveId")),
 		Destination:             strings.TrimSpace(c.Query("destination")),
-		ShareType:               strings.TrimSpace(c.Query("type")), // "mine", "shared", "share_to_me"
+		ShareType:               strings.TrimSpace(c.Query("type")), // "mine", "shared", "share_with_me"
+		ShareId:                 strings.TrimSpace(c.Query("shareid")),
+		SharePath:               strings.TrimSpace(c.Query("sharepath")),
+		SharePermission:         strings.TrimSpace(c.Query("sharepermission")),
+		ShareByType:             strings.TrimSpace(c.Query("sharetype")),
 		Header:                  header,
 		Body:                    io.NopCloser(bytes.NewReader(c.Request.Body())),
 	}
@@ -65,4 +76,11 @@ func CreateQueryParam(owner string, ctx context.Context, c *app.RequestContext, 
 func (r *QueryParam) Json() string {
 	d, _ := json.Marshal(r)
 	return string(d)
+}
+
+type OwnerInfo struct {
+	Name     string
+	Role     string
+	OlaresId string
+	Status   string
 }

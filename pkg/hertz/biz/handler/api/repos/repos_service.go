@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
+	"files/pkg/hertz/biz/dal/database"
+	"files/pkg/hertz/biz/handler/api/share"
 	repos "files/pkg/hertz/biz/model/api/repos"
+	"files/pkg/models"
 	"fmt"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -26,18 +29,32 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	var res []byte
-	if req.Type != nil && (*req.Type == "shared" || *req.Type == "share_to_me") {
-		res = common.ToBytes(map[string][]string{
-			"repos": {},
-		})
-	} else {
-		owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
-		if owner == "" {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
-			return
-		}
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
 
+	var res []byte
+	if req.Type != nil {
+		if *req.Type == "shared" || *req.Type == "shared_by_me" {
+			res, err = seahub.HandleReposGet(owner, []string{"shared_by_me"})
+			if err != nil {
+				klog.Errorf("get repos error: %v", err)
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get repos error: %v", err)})
+				return
+			}
+			klog.Infof("get repos: %s", string(res))
+		} else if *req.Type == "share_to_me" || *req.Type == "share_with_me" {
+			res, err = seahub.HandleReposGet(owner, []string{"shared_to_me"})
+			if err != nil {
+				klog.Errorf("get repos error: %v", err)
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get repos error: %v", err)})
+				return
+			}
+			klog.Infof("get repos: %s", string(res))
+		}
+	} else {
 		res, err = seahub.HandleReposGet(owner, []string{"mine"})
 		if err != nil {
 			klog.Errorf("get repos error: %v", err)
@@ -47,8 +64,8 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 		klog.Infof("get repos: %s", string(res))
 	}
 
-	resp := new(repos.GetReposResp)
-	if err = json.Unmarshal(res, &resp); err != nil {
+	resp := new(map[string]interface{}) // different share type with different responses
+	if err := json.Unmarshal(res, &resp); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
@@ -122,10 +139,34 @@ func DeleteReposMethod(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("Repo delete repo, user: %s, id: %s", owner, repoId)
 
+	tx := database.DB.Begin()
+	// sync relative must be done before real delete, or else dir or repo will not be found
+	deleteFileParam := &models.FileParam{
+		Owner:    owner,
+		FileType: "sync",
+		Extend:   repoId,
+		Path:     "/",
+	}
+	dirents := []string{"/"}
+	err = share.DeleteRelativeAdjustShare(deleteFileParam, dirents, tx)
+	if err != nil {
+		klog.Errorf("delete repo relative adjust share error: %v", err)
+		tx.Rollback()
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("delete repo relative adjust share error: %v", err)})
+		return
+	}
+
 	res, err := seahub.HandleRepoDelete(owner, repoId)
 	if err != nil {
 		klog.Errorf("delete repo error: %v, name: %s", err, repoId)
+		tx.Rollback()
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("delete repo error: %v, name: %s", err, repoId)})
+		return
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
 

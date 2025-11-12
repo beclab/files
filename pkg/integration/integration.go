@@ -1,10 +1,12 @@
 package integration
 
 import (
+	"context"
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/config"
 	"files/pkg/hertz/biz/model/api/external"
+	"files/pkg/models"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -12,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-resty/resty/v2"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -22,16 +24,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-var UserGVR = schema.GroupVersionResource{Group: "iam.kubesphere.io", Version: "v1alpha2", Resource: "users"}
-
 var IntegrationService *integration
 
 type integration struct {
 	client     *dynamic.DynamicClient
 	kubeClient *kubernetes.Clientset
-	rest       *resty.Client
 	tokens     map[string]*Integrations
 	authToken  map[string]*authToken
+	users      []*models.User
 
 	sync.RWMutex
 }
@@ -61,7 +61,6 @@ func NewIntegrationManager() {
 	IntegrationService = &integration{
 		client:     client,
 		kubeClient: kubeClient,
-		rest:       resty.New().SetTimeout(60 * time.Second).SetDebug(true),
 		tokens:     make(map[string]*Integrations),
 		authToken:  make(map[string]*authToken),
 	}
@@ -145,6 +144,8 @@ func (i *integration) GetIntegrations() error {
 		return fmt.Errorf("users not exists")
 	}
 
+	i.users = users
+
 	var configs []*config.Config
 
 	for _, user := range users {
@@ -168,6 +169,9 @@ func (i *integration) GetIntegrations() error {
 		klog.Infof("integration get accounts, user: %s, count: %d", user.Name, len(accounts))
 
 		for _, acc := range accounts {
+			if acc.Type == common.Space || acc.Type == common.TencentCos {
+				continue
+			}
 			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)
 
 			if flag {
@@ -215,7 +219,7 @@ func (i *integration) GetIntegrations() error {
 					Available: token.RawData.Available,
 					Scope:     token.RawData.Scope,
 					IdToken:   token.RawData.IdToken,
-					ClientId:  token.ClientId, // or ?token.RawData.ClientId,
+					ClientId:  token.RawData.ClientId, // or ?token.RawData.ClientId,
 				}
 
 				userTokens, userExists := i.tokens[user.Name]
@@ -251,7 +255,7 @@ func (i *integration) GetIntegrations() error {
 						Url:          token.RawData.Endpoint,
 						Endpoint:     i.parseEndpoint(token.RawData.Endpoint),
 						Bucket:       i.parseBucket(token.RawData.Endpoint),
-						ClientId:     token.ClientId, // only for dropbox
+						ClientId:     token.RawData.ClientId, // only for dropbox
 						ExpiresAt:    token.RawData.ExpiresAt,
 					}
 
@@ -267,6 +271,28 @@ func (i *integration) GetIntegrations() error {
 	rclone.Command.StartHttp(configs)
 
 	return nil
+}
+
+func (i *integration) GetUsers() []models.OwnerInfo {
+	i.Lock()
+	defer i.Unlock()
+
+	var data []models.OwnerInfo
+	for _, user := range i.users {
+		var anno = user.ObjectMeta.Annotations
+		role, _ := anno["bytetrade.io/owner-role"]
+		status, _ := anno["bytetrade.io/wizard-status"]
+		olaresId, _ := anno["bytetrade.io/terminus-name"]
+		var u = models.OwnerInfo{
+			Name:     user.Name,
+			Role:     role,
+			OlaresId: olaresId,
+			Status:   status,
+		}
+		data = append(data, u)
+	}
+
+	return data
 }
 
 func (i *integration) parseEndpoint(s string) string {
@@ -348,4 +374,25 @@ func (i *integration) checkTokenExpired(user string, tokenName string) (bool, *I
 
 	return i.checkExpired(t.ExpiresAt), t, nil
 
+}
+
+func (i *integration) GetFilesPod(node string) (*corev1.Pod, error) {
+	pods, err := i.kubeClient.CoreV1().Pods(common.DefaultNamespace).List(context.Background(), v1.ListOptions{
+		LabelSelector: "app=files",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if pods == nil || pods.Items == nil || len(pods.Items) == 0 {
+		return nil, fmt.Errorf("files pod not found")
+	}
+
+	for _, pod := range pods.Items {
+		if node == pod.Spec.NodeName {
+			return &pod, nil
+		}
+	}
+
+	return nil, fmt.Errorf("files pod not found")
 }

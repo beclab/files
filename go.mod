@@ -9,6 +9,7 @@ replace bytetrade.io/web3os/fs-lib => github.com/beclab/fs-lib v0.0.2
 require (
 	github.com/alitto/pond/v2 v2.3.2
 	github.com/apache/thrift v0.22.0
+	github.com/bytedance/gopkg v0.1.1
 	github.com/chai2010/tiff v0.0.0-20211005095045-4ec2aa243943
 	github.com/cloudwego/hertz v0.10.2
 	github.com/disintegration/imaging v1.6.2
@@ -20,6 +21,7 @@ require (
 	github.com/go-playground/assert/v2 v2.2.0
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-resty/resty/v2 v2.3.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/maruel/natural v1.1.1
 	github.com/marusama/semaphore/v2 v2.5.0
@@ -50,7 +52,6 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bytedance/gopkg v0.1.1 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -77,7 +78,6 @@ require (
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

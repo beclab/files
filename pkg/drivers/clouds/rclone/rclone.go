@@ -1,6 +1,7 @@
 package rclone
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
@@ -98,9 +99,9 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 	changedConfigsJson := common.ToJson(changedConfigs)
 	_ = changedConfigsJson
 
-	// if changedConfigsJson != "{}" {
-	klog.Infof("[startHttp] changed configs: %s", common.ToJson(changedConfigs))
-	// }
+	if changedConfigsJson != "{}" {
+		klog.Infof("[startHttp] changed configs: %s", base64.StdEncoding.EncodeToString([]byte(common.ToJson(changedConfigs))))
+	}
 
 	if len(changedConfigs.Delete) > 0 {
 		for _, deleteServe := range changedConfigs.Delete {
@@ -575,8 +576,6 @@ func (r *rclone) Clear(param *models.FileParam) error {
 			return err
 		}
 
-		r.GetOperation().FsCacheClear()
-
 		klog.Infof("[rclone] clear, file done! user: %s, fs: %s, remote: %s", owner, fs, remote)
 
 		return nil
@@ -590,8 +589,6 @@ func (r *rclone) Clear(param *models.FileParam) error {
 		klog.Errorf("[rclone] clear, purge error: %v, user: %s, fs: %s, remote: %s", err, owner, fs, remote)
 		return err
 	}
-
-	r.GetOperation().FsCacheClear()
 
 	klog.Infof("[rclone] clear, purge done! user: %s, fs: %s, remote: %s", owner, fs, remote)
 
@@ -742,6 +739,8 @@ func (r *rclone) CheckGoogleDriveDupNames(param *models.FileParam) (bool, string
 
 	fileName, isFile := files.GetFileNameFromPath(param.Path)
 	pathPrefix := files.GetPrefixPath(param.Path)
+
+	fileName = common.EscapeGlob(fileName)
 
 	var fs string = fsPrefix + pathPrefix
 

@@ -9,7 +9,18 @@ var (
 const (
 	ROOT_PREFIX     = "/data"
 	CACHE_PREFIX    = "/appcache"
+	CACHE_ALIAS     = "/AppData"
 	EXTERNAL_PREFIX = "/data/External"
+
+	SERVER_HOST = "127.0.0.1:8080"
+
+	SambaConfTemplatePath = "/etc/samba/smb.conf"
+
+	DefaultNamespace              = "os-framework"
+	DefaultServiceAccount         = "os-internal"
+	DefaultIntegrationProviderUrl = "http://integration-provider-svc.os-protected:28080"
+
+	EnvIntegrationDebug = "FILES_INTEGRATION_DEBUG"
 )
 
 const (
@@ -18,17 +29,18 @@ const (
 )
 
 var (
-	OlaresdHost    = os.Getenv("TERMINUSD_HOST")
-	ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
-	NodeName       = os.Getenv("NODE_NAME")
+	OlaresdHost      = os.Getenv("TERMINUSD_HOST")
+	ExternalPrefix   = os.Getenv("EXTERNAL_PREFIX")
+	NodeName         = os.Getenv("NODE_NAME")
+	DebugIntegration = os.Getenv("DEBUG_INTEGRATION")
 )
 
 const (
 	Local       = "local"
 	Posix       = "posix"
 	Drive       = "drive"
-	Home        = "home"
-	Data        = "data"
+	Home        = "Home"
+	Data        = "Data"
 	Cache       = "cache"
 	External    = "external"
 	Internal    = "internal"
@@ -41,6 +53,8 @@ const (
 	GoogleDrive = "google"
 	DropBox     = "dropbox"
 	TencentCos  = "tencent"
+	Share       = "share"
+	Space       = "space"
 
 	RcloneTypeLocal   = "local"
 	RcloneTypeS3      = "s3"
@@ -75,6 +89,30 @@ var (
 
 	CacheBuffer = "buffer"
 	CacheThumb  = "thumb"
+)
+
+var (
+	DefaultPGTimeFormat = "2006-01-02T15:04:05Z"
+	ShareTypeInternal   = "internal"
+	ShareTypeExternal   = "external"
+	ShareTypeSMB        = "smb"
+
+	ErrorMessageShareTypeInvalid      = "Share type invalid."
+	ErrorMessagePathInvalid           = "Path invalid."
+	ErrorMessageOwnerNotFound         = "Owner not found."
+	ErrorMessageWrongShare            = "Wrong share."
+	ErrorMessageTokenExpired          = "Token expired."
+	ErrorMessageLinkExpired           = "Link expired."
+	ErrorMessageGetTokenError         = "GetToken failed."
+	ErrorMessagePermissionDenied      = "Permission denied."
+	ErrorMessageUserExists            = "User already exists or is used by another account."
+	ErrorMessageShareExists           = "Share exists."
+	ErrorMesssageSambaPasswordInvalid = "Samba share password invalid."
+	ErrorMessageWrongPassword         = "Wrong password. Please check the password and try again."
+	ErrorMessageInternalPathExists    = "Internal share for a path can be only one at a time."
+
+	CodeLinkExpired  = 559
+	CodeTokenExpired = 569
 )
 
 var (

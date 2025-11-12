@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	"files/pkg/hertz/biz/handler/api/share"
 	resources "files/pkg/hertz/biz/model/api/resources"
 	"files/pkg/models"
 	"fmt"
@@ -135,6 +136,15 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	err = share.RenameRelativeAdjustShare(contextArg.FileParam, contextArg.QueryParam.Destination, true, nil)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
+
 	resp := new(resources.PatchResourcesResp)
 	c.JSON(consts.StatusOK, resp)
 }
@@ -220,6 +230,16 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	deleteArg.Dirents = req.Dirents
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", deleteArg.FileParam.Owner, deleteArg.FileParam.FileType, c.Method(), common.ToJson(deleteArg))
+
+	// sync relative must be done before real delete, or else dir or repo will not be found
+	err = share.DeleteRelativeAdjustShare(deleteArg.FileParam, deleteArg.Dirents, nil)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
+			"code":    1,
+			"message": err.Error(),
+		})
+		return
+	}
 
 	var handlerParam = &base.HandlerParam{
 		Ctx:   ctx,

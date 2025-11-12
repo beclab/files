@@ -275,6 +275,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		NoMimeType: true,
 		Metadata:   false,
 	}
+	createName = common.EscapeGlob(createName)
 	var filter = &operations.OperationsFilter{
 		FilterRule: s.service.command.FormatFilter(createName, true, true, true),
 	}
@@ -391,13 +392,9 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 		var existsName string
 		for _, dirent := range dirents {
 			var count int
-
 			var isDir = strings.HasSuffix(dirent, "/")
 			for _, item := range items.List {
-				if count >= 2 {
-					existsDupname = true
-					break
-				}
+
 				if item.IsDir != isDir {
 					continue
 				}
@@ -408,7 +405,8 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 				}
 			}
 
-			if existsDupname {
+			if count >= 2 {
+				existsDupname = true
 				break
 			}
 		}
@@ -419,10 +417,6 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	}
 
 	deleteFailedPaths, _ = s.service.command.Delete(fileParam, dirents)
-
-	if err := s.service.command.GetOperation().FsCacheClear(); err != nil {
-		klog.Errorf("Cloud delete, fscache clear error: %v", err)
-	}
 
 	if len(deleteFailedPaths) > 0 {
 		return common.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
@@ -437,8 +431,9 @@ func (s *CloudStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var owner = contextArgs.FileParam.Owner
 	var fileParam = contextArgs.FileParam
+	var driveId = contextArgs.QueryParam.DriveId
 
-	klog.Infof("Cloud rename, user: %s, param: %s", owner, common.ToJson(contextArgs))
+	klog.Infof("Cloud rename, user: %s, param: %s, driveId: %s", owner, common.ToJson(contextArgs), driveId)
 
 	var srcName, isSrcFile = files.GetFileNameFromPath(fileParam.Path)
 	var srcPrefixPath = files.GetPrefixPath(fileParam.Path)
@@ -453,15 +448,16 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, nil
 	}
 
-	if fileParam.IsGoogleDrive() {
+	if fileParam.IsGoogleDrive() && driveId == "" {
 		fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
 		if err != nil {
 			return nil, err
 		}
 		fsName, _ := files.GetFileNameFromPath(fileParam.Path)
+		fsNameTmp := common.EscapeGlob(fsName)
 		fsPathPrefix := files.GetPrefixPath(fileParam.Path)
 		var fs = fsPrefix + fsPathPrefix
-		var fileter = s.service.command.FormatFilter(fsName, false, true, true)
+		var fileter = s.service.command.FormatFilter(fsNameTmp, false, true, true)
 		items, err := s.service.command.GetOperation().List(fs, &operations.OperationsOpt{
 			NoModTime:  true,
 			NoMimeType: true,
@@ -485,15 +481,6 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		if count >= 2 {
 			return nil, fmt.Errorf("The file or folder you selected has multiple objects with the same name. Please log in to the Google Drive website to modify the name and ensure its uniqueness.")
 		}
-	}
-
-	srcStat, err := s.service.Stat(fileParam)
-	if err != nil {
-		return nil, err
-	}
-
-	if srcStat == nil || srcStat.Item == nil {
-		return nil, fmt.Errorf("path %s not exists", fileParam.Path)
 	}
 
 	var dstFs, dstRemote string
@@ -523,14 +510,15 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		Metadata:   false,
 	}
 
+	dstNameTmp := common.EscapeGlob(dstName)
 	var filter = &operations.OperationsFilter{
-		FilterRule: s.service.command.FormatFilter(dstName, false, true, true),
+		FilterRule: s.service.command.FormatFilter(dstNameTmp, false, true, true),
 	}
 
 	dstItems, err := s.service.command.GetMatchedItems(fsPrefix+srcPrefixPath, opts, filter)
 	if err != nil {
-		klog.Errorf("Cloud rename, user: %s, get dst matched items error: %v", owner, err)
-		return nil, err
+		klog.Errorf("Cloud rename, user: %s, get dst matched items error: %v, dstName: %s", owner, err, dstName)
+		return nil, fmt.Errorf("Path %s not found", fileParam.Path)
 	}
 
 	if dstItems != nil && dstItems.List != nil && len(dstItems.List) > 0 {
@@ -538,13 +526,12 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	klog.Infof("Cloud rename, src: %s, dst: %s", common.ToJson(fileParam), common.ToJson(dstParam))
-	resp, err := s.service.Rename(fileParam, dstParam)
+	resp, err := s.service.Rename(fileParam, dstParam, driveId)
 	if err != nil {
+		// + todo
+		// if strings.Contains(err.Error(), "object not found") {
+		// }
 		return nil, err
-	}
-
-	if err := s.service.command.GetOperation().FsCacheClear(); err != nil {
-		klog.Errorf("Cloud rename, fscache clear error: %v", err)
 	}
 
 	klog.Infof("Cloud rename, user: %s, resp: %s", owner, string(resp))
@@ -572,14 +559,14 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 		klog.Infof("Cloud tree, firstItem Path: %s", firstItem.Path)
 		klog.Infof("Cloud tree, firstItem Name: %s", firstItem.Name)
 		var firstItemPath string
-		if fileParam.FileType == common.GoogleDrive {
-			firstItemPath = firstItem.Meta.ID
-		} else {
-			firstItemPath = firstItem.Path
-		}
+		firstItemPath = firstItem.Path
 
 		if firstItem.IsDir {
+			if !strings.HasSuffix(firstItemPath, "/") {
+				firstItemPath += "/"
+			}
 			var nestFileParam = &models.FileParam{
+				Owner:    fileParam.Owner,
 				FileType: fileParam.FileType,
 				Extend:   fileParam.Extend,
 				Path:     firstItemPath,
@@ -625,8 +612,11 @@ func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListR
  * UploadLink
  */
 func (s *CloudStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	var user = fileUploadArg.FileParam.Owner
+	var node = fileUploadArg.Node
+	var from = fileUploadArg.From
 
-	klog.Infof("Cloud uploadLink, param: %s", common.ToJson(fileUploadArg))
+	klog.Infof("Cloud uploadLink, user: %s, node: %s, from: %s, param: %s", user, node, from, common.ToJson(fileUploadArg))
 
 	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
 
@@ -639,9 +629,14 @@ func (s *CloudStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
  * UploadedBytes
  */
 func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	klog.Infof("Cloud uploadBytes, param: %s", common.ToJson(fileUploadArg))
+	var user = fileUploadArg.FileParam.Owner
+	var node = fileUploadArg.Node
+	var identy = fileUploadArg.Identy
+	var ua = fileUploadArg.UserAgentHash
 
-	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName)
+	klog.Infof("Cloud uploadBytes, user: %s, node: %s, identy: %s, ua: %s, param: %s", user, node, identy, ua, common.ToJson(fileUploadArg))
+
+	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName, identy, ua)
 
 	klog.Infof("Cloud uploadBytes, done! data: %s", string(data))
 
@@ -653,14 +648,17 @@ func (s *CloudStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
  */
 func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	var param = fileUploadArg.FileParam
-	var uploadId = fileUploadArg.UploadId
 	var chunkInfo = fileUploadArg.ChunkInfo
+	var uploadId = fileUploadArg.UploadId
+	var identy = chunkInfo.ResumableIdenty
+	var ua = fileUploadArg.UserAgentHash
+
 	var ranges = fileUploadArg.Ranges
 	var lastChunk = chunkInfo.ResumableChunkNumber == chunkInfo.ResumableTotalChunks
 
-	klog.Infof("Cloud uploadChunks, uploadId: %s, param: %s", uploadId, common.ToJson(param))
+	klog.Infof("Cloud uploadChunks, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s", uploadId, identy, ua, common.ToJson(param), chunkInfo.ParentDir)
 
-	_, fileInfo, err := upload.HandleUploadChunks(param, uploadId, *chunkInfo, ranges)
+	_, fileInfo, err := upload.HandleUploadChunks(param, uploadId, *chunkInfo, ua, ranges)
 	if err != nil {
 		return nil, err
 	}

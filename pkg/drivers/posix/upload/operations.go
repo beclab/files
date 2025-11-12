@@ -26,9 +26,9 @@ import (
 const (
 	expireTime         = time.Duration(24) * time.Hour
 	DefaultMaxFileSize = 4 * 1024 * 1024 * 1024 // 4G
-	CacheRequestPrefix = "/AppData"
-	CachePathPrefix    = "/appcache"
-	ExternalPathPrefix = "/data/External/"
+	CacheRequestPrefix = common.CACHE_ALIAS
+	CachePathPrefix    = common.CACHE_PREFIX
+	ExternalPathPrefix = common.EXTERNAL_PREFIX
 )
 
 var UploadsFiles map[string]string = map[string]string{}
@@ -248,6 +248,7 @@ func UpdateFileInfo(fileInfo FileInfo, uploadsDir string) error {
 	return nil
 }
 
+// dst, src
 func MoveFileByInfo(fileInfo FileInfo, uploadsDir string) error {
 	// Construct file path
 	filePath := filepath.Join(uploadsDir, fileInfo.ID)

@@ -86,7 +86,6 @@ func (s *CacheStorage) copyToExternal() (task *tasks.Task, err error) {
 		return
 	}
 
-	// ! todo cross node
 	task = tasks.TaskManager.CreateTask(s.paste)
 	if err = task.Execute(task.DownloadFromFiles); err != nil {
 		klog.Errorf("Cache copyToExternal error: %v", err)
@@ -118,7 +117,6 @@ func (s *CacheStorage) copyToCache() (task *tasks.Task, err error) {
 		return
 	}
 
-	// ! todo cross node
 	task = tasks.TaskManager.CreateTask(s.paste)
 	if err = task.Execute(task.DownloadFromFiles); err != nil {
 		klog.Errorf("Cache copyToCache error: %v", err)

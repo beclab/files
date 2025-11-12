@@ -94,6 +94,24 @@ func (g *Node) GetNodes() []NodeInfo {
 	return nodes
 }
 
+func (g *Node) GetMasterNode() string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	var master string
+
+	for _, n := range g.Nodes {
+		l := n.Labels
+		_, isMaster := l["node-role.kubernetes.io/control-plane"]
+		if isMaster {
+			master = n.Name
+			break
+		}
+	}
+
+	return master
+}
+
 func (g *Node) getGlobalNodes() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
