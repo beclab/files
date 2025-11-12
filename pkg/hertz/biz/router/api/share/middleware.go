@@ -56,11 +56,6 @@ func _createsharepathMw() []app.HandlerFunc {
 	return nil
 }
 
-func _node0Mw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
 func _deletesharepathMw() []app.HandlerFunc {
 	// your code...
 	return nil
@@ -72,11 +67,6 @@ func _listsharepathMw() []app.HandlerFunc {
 }
 
 func _share_tokenMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _node1Mw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
@@ -101,17 +91,7 @@ func _updatesharepathMw() []app.HandlerFunc {
 	return nil
 }
 
-func _getaccountMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
 func _get_shareMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _getsharepathMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
@@ -126,17 +106,57 @@ func _gettokenMw() []app.HandlerFunc {
 	return nil
 }
 
-func _videoMw() []app.HandlerFunc {
+func _share_passwordMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _videomethodMw() []app.HandlerFunc {
+func _resetpasswordMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
-func _videosMw() []app.HandlerFunc {
+func _smb_share_userMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _createsmbuserMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _deletesmbuserMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _smb_share_memberMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _modifysmbmemberMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listsmbuserMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getexternalsharepathMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _get_share_internal_smbMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getinternalsmbsharepathMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

@@ -16,7 +16,7 @@
 {{ range $data := $.Paths }}
 [{{ $data.Name }}]
   path = {{ $data.Path }}
-  comment = {{ $data.Comment }}
+  comment = "{{ $data.Comment }}"
   {{ if $data.Anonymous  -}}
   browseable = yes
   writable = yes
@@ -27,10 +27,12 @@
   create mask = 0664
   directory mask = 0775
   {{ else -}}
-  valid users = {{ $data.ForceUser }} @{{ $data.ForceGroup }}
+  valid users = {{ $data.ForceUser }}
   browseable = yes
   writable = {{ $data.Writable }}
   read only = {{ $data.ReadOnly }}
+  read list = {{ $data.ReadList }}
+  write list = {{ $data.WriteList }}
   force group = {{ $data.ForceGroup }}
   {{ if eq $data.Writable "yes" -}}
   create mask = 0664

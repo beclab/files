@@ -4,7 +4,6 @@ package share
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"files/pkg/client"
 	"files/pkg/common"
@@ -20,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -41,6 +41,8 @@ const (
 	PERMISSION_ADMIN
 )
 
+var smbLocker sync.Mutex
+
 // CreateSharePath .
 // @router /share/share_path/*path [POST]
 func CreateSharePath(ctx context.Context, c *app.RequestContext) {
@@ -55,12 +57,15 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	p := "/" + c.Param("path")
 	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 	if owner == "" {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
 		return
 	}
+
+	klog.Infof("[samba] CreateSharePath, owner: %s, data: %s", owner, common.ParseString(req))
+
 	fileParam, err := models.CreateFileParam(owner, p)
 	if err != nil {
-		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		klog.Errorf("[samba] CreateSharePath, file param error: %v, owner: %s", err, owner)
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
 		return
 	}
@@ -71,19 +76,24 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	if fileParam.FileType != "drive" && fileParam.FileType != "sync" {
+	if fileParam.FileType != common.Drive && fileParam.FileType != common.Sync {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "file type not supported"})
 		return
 	}
 
-	if fileParam.FileType == "sync" && req.ShareType != "internal" {
+	if fileParam.FileType == common.Sync && req.ShareType != common.Internal {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "share type not supported for file type sync"})
+		return
+	}
+
+	if req.ShareType == common.ShareTypeSMB { // ~ create samba
+		createSambaShare(c, owner, &req, fileParam)
 		return
 	}
 
 	permission := int32(PERMISSION_ADMIN)
 	// share_type detail check
-	if req.ShareType == "external" {
+	if req.ShareType == common.ShareTypeExternal {
 		if req.Password == "" {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "external share must have a password"})
 			return
@@ -97,22 +107,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 		permission = req.Permission
-	}
-
-	if req.ShareType == "smb" {
-		if req.Permission != 1 && req.Permission != 3 {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "external share must have a permission"})
-			return
-		}
-
-		if req.Password == "" { // anonymous
-			permission = 3
-		} else {
-			permission = req.Permission
-		}
-	}
-
-	if req.ShareType == "internal" {
+	} else if req.ShareType == common.ShareTypeInternal {
 		// internal forced use default ADMIN as permission, no matter req.Permission of what value
 		queryParams := &database.QueryParams{}
 		queryParams.AND = []database.Filter{}
@@ -128,33 +123,16 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 		if total > 0 {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "internal share for a path can be only one at a time"})
+			handler.RespError(c, common.ErrorMessageInternalPathExists)
 			return
 		}
 	}
 
-	expireIn, expireTime := AdjustExpire(req.ExpireIn, req.ExpireTime)
+	expireIn, expireTime := common.AdjustExpire(req.ExpireIn, req.ExpireTime)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	var smbUser string
 	password := common.Md5String(req.Password)
-	if req.ShareType == "smb" {
-		if req.Password != "" {
-			smbUser, _ = common.GenerateAccount()
-			var smbAccount = &share.SmbAccount{
-				User:     smbUser,
-				Password: req.Password,
-			}
-			smbAccountBytes, _ := json.Marshal(smbAccount)
-			encodedBytes := make([]byte, base64.StdEncoding.EncodedLen(len(smbAccountBytes)))
-			base64.StdEncoding.Encode(encodedBytes, smbAccountBytes)
-			password = string(encodedBytes)
-		} else { // anonymous
-			password = ""
-		}
-	}
-
 	if req.ShareType == common.ShareTypeExternal {
 		if err := client.CreateShareRole(owner); err != nil {
 			klog.Errorf("create external share cluster role error: %v, user: %s", err, owner)
@@ -184,40 +162,15 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if req.ShareType == "smb" {
-		var item = res[0]
-
-		var shareItem = &share.SmbCreate{
-			Owner: owner,
-			ID:    item.ID,
-			Path:  fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path),
-			User:  smbUser, // anonymous
-		}
-
-		var shareItems = []*share.SmbCreate{shareItem}
-		if err := samba.SambaService.CreateShareSamba(shareItems, "add"); err != nil {
-			klog.Errorf("Failed create samba share failed, error: %v", err)
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Create SMB share failed"})
-			return
-		}
-	}
-
-	resp := new(share.CreateSharePathResp)
-	resp.SharePath = new(share.ViewSharePath)
-	if err = json.Unmarshal(common.ToBytes(res[0]), &resp.SharePath); err != nil {
+	var result = new(share.ViewSharePath)
+	if err = json.Unmarshal(common.ToBytes(res[0]), &result); err != nil {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
 	}
-	resp.SharePath.SharedByMe = true
+	result.SharedByMe = true
 
-	if req.ShareType == "smb" {
-		resp.SharePath.SmbLink = fmt.Sprintf("smb://%s/%s/", os.Getenv("NODE_IP"), resp.SharePath.ID)
-		resp.SharePath.SmbUser = smbUser
-		resp.SharePath.SmbPassword = req.Password
-	}
-
-	c.JSON(consts.StatusOK, resp)
+	handler.RespSuccess(c, result)
 }
 
 // ListSharePath .
@@ -353,8 +306,8 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	for _, sharePath := range sharedWithMeRes { // only shared with me possibly fit permission for member
-		if sharePath.ShareType != "internal" || sharePath.Owner != owner {
+	for _, sharePath := range sharedByMeRes {
+		if sharePath.ShareType != common.ShareTypeInternal || sharePath.Owner != owner {
 			continue // always do not continue because of sharedWithMeRes is always internal and owner not me, just for taking position
 		}
 		for _, shareMember := range shareMembers {
@@ -364,8 +317,29 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
+	for _, sharePath := range sharedWithMeRes { // only shared with me possibly fit permission for member
+		if sharePath.ShareType == common.ShareTypeInternal && sharePath.Owner != owner {
+			for _, shareMember := range shareMembers {
+				if shareMember.PathID == sharePath.ID {
+					sharePath.Permission = shareMember.Permission
+				}
+			}
+		}
+
+	}
+
 	res := append(sharedWithMeRes, sharedByMeRes...)
 	total := sharedWithMeTotal + sharedByMeTotal
+
+	var queryShareIds []string
+	for _, r := range res {
+		if r.ShareType == common.ShareTypeInternal || r.ShareType == common.ShareTypeSMB {
+			queryShareIds = append(queryShareIds, r.ID)
+		}
+	}
+
+	internalShareMembers, _ := database.QueryShareInternalMembers(queryShareIds)
+	smbShareMembers, _ := database.QueryShareSmbMembers(queryShareIds)
 
 	resp := new(share.ListSharePathResp)
 	resp.Total = int32(total)
@@ -380,6 +354,38 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		if sharePath.Owner == owner {
 			viewPath.SharedByMe = true
 		}
+
+		if sharePath.ShareType == common.ShareTypeInternal {
+			if len(internalShareMembers) > 0 {
+				for _, u := range internalShareMembers {
+					if u.PathID != viewPath.ID {
+						continue
+					}
+					var user = &share.ViewSharePathUsers{
+						ID:         fmt.Sprintf("%d", u.ID),
+						Name:       u.ShareMember,
+						Permission: u.Permission,
+					}
+					viewPath.Users = append(viewPath.Users, user)
+				}
+			}
+		} else if sharePath.ShareType == common.ShareTypeSMB {
+			viewPath.SmbLink = fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), viewPath.Name)
+			if len(smbShareMembers) > 0 {
+				for _, u := range smbShareMembers {
+					if u.PathId != viewPath.ID {
+						continue
+					}
+					var user = &share.ViewSharePathUsers{
+						ID:         u.UserId,
+						Name:       u.UserName,
+						Permission: u.Permission,
+					}
+					viewPath.Users = append(viewPath.Users, user)
+				}
+			}
+		}
+
 		resp.SharePaths = append(resp.SharePaths, viewPath)
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -446,9 +452,17 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
 	pathIds := strings.Split(req.PathIds, ",")
 
-	deleteSmbSharePaths, err := database.QuerySmbSharePathByIds(pathIds)
+	klog.Infof("[samba] DeleteSharePath, owner: %s, pathIds: %v", owner, pathIds)
+
+	deleteSmbSharePaths, err := database.QuerySmbShares(owner, common.ShareTypeSMB, pathIds, nil)
 
 	failedPathIds := []string{}
 	for _, pathId := range pathIds {
@@ -456,7 +470,7 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 		tx := database.DB.Begin()
 		err = DeleteSharePathRelations(pathId, tx)
 		if err != nil {
-			klog.Errorf("DeleteSharePath error: %v", err)
+			klog.Errorf("[samba] DeleteSharePath error: %v", err)
 			tx.Rollback()
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
@@ -471,7 +485,7 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 
 		err = tx.Commit().Error
 		if err != nil {
-			klog.Errorf("DeleteSharePath error: %v", err)
+			klog.Errorf("[samba] DeleteSharePath error: %v", err)
 			failedPathIds = append(failedPathIds, pathId)
 		}
 	}
@@ -486,29 +500,34 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if deleteSmbSharePaths != nil && len(deleteSmbSharePaths) > 0 {
-		var smbs []*share.SmbCreate
-		for _, item := range deleteSmbSharePaths {
-			var smbShareUser string
-			if item.PasswordMd5 != "" {
-				pwdBytes, err := base64.StdEncoding.DecodeString(item.PasswordMd5)
-				if err != nil {
-					klog.Errorf("delete share path, decode error: %v", err)
-				}
+	if len(deleteSmbSharePaths) > 0 {
+		// ~ delete samba share paths
+		if err := database.DeleteSmbShareTx(owner, pathIds); err != nil {
+			klog.Errorf("[samba] DeleteSharePath, delete samba failed, owner: %s, error: %v", owner, err)
+			handler.RespError(c, fmt.Sprintf("Delete Smb Share Path Error: %v", err))
+			return
+		}
 
-				var smbUser *share.SmbAccount
-				json.Unmarshal(pwdBytes, &smbUser)
-				smbShareUser = smbUser.User
+		var deleteSmbSharePathsFmt = samba.FormatSharePathViews(deleteSmbSharePaths)
+		var smbs []*share.SmbCreate
+		for _, item := range deleteSmbSharePathsFmt {
+			if item.PublicShare {
+				continue
+			}
+			var smbShareUser []string
+			for _, u := range item.Members {
+				smbShareUser = append(smbShareUser, u.UserName)
 			}
 
 			var smb = &share.SmbCreate{
 				Owner: item.Owner,
-				ID:    item.ID,
+				ID:    item.Id,
 				Path:  fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path),
-				User:  smbShareUser,
+				User:  strings.Join(smbShareUser, ","),
 			}
 			smbs = append(smbs, smb)
 		}
+
 		if err := samba.SambaService.CreateShareSamba(smbs, "del"); err != nil {
 			klog.Errorf("delete share path, create samba DELETE crd error: %v", err)
 		}
@@ -615,6 +634,7 @@ func RevokeShareToken(ctx context.Context, c *app.RequestContext) {
 // AddShareMember .
 // @router /share/share_member/:node/ [POST]
 func AddShareMember(ctx context.Context, c *app.RequestContext) {
+	// support internal and samba
 	var err error
 	var req share.AddShareMemberReq
 	err = c.BindAndValidate(&req)
@@ -641,7 +661,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 	sharePath := sharePaths[0]
 	klog.Infof("SharePath: %+v", sharePath)
 
-	if sharePath.ShareType != "internal" {
+	if sharePath.ShareType != common.ShareTypeInternal && sharePath.ShareType != common.ShareTypeSMB {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "SharePath is not internal"})
 		return
 	}
@@ -1108,44 +1128,6 @@ func ParseTime(t string) string {
 	return time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
 }
 
-func AdjustExpire(expireIn int64, expireTime string) (int64, string) {
-	currentTime := time.Now()
-	currentTimeMillis := currentTime.UnixMilli()
-
-	if expireTime == "" {
-		if expireIn == 0 {
-			return 0, "9999-12-31T23:59:59.000000Z"
-		}
-		return expireIn, currentTime.Add(time.Duration(expireIn) * time.Millisecond).Format(time.RFC3339)
-	}
-
-	var expireTimeMillis int64
-	if _, err := strconv.ParseInt(expireTime, 10, 64); err == nil {
-		val, _ := strconv.ParseInt(expireTime, 10, 64)
-		expireTimeMillis = val
-	} else {
-		parsedTime, err := time.Parse(time.RFC3339, expireTime)
-		if err != nil {
-			return 0, ""
-		}
-		expireTimeMillis = parsedTime.UnixMilli()
-	}
-
-	if expireIn != 0 {
-		calculatedExpireTimeMillis := currentTimeMillis + expireIn
-		if calculatedExpireTimeMillis > expireTimeMillis {
-			return expireIn, currentTime.Add(time.Duration(expireIn) * time.Millisecond).Format(time.RFC3339)
-		}
-		return expireTimeMillis - currentTimeMillis, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
-	}
-
-	remaining := expireTimeMillis - currentTimeMillis
-	if remaining < 0 {
-		return 0, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
-	}
-	return remaining, time.Unix(0, expireTimeMillis*int64(time.Millisecond)).Format(time.RFC3339)
-}
-
 func DeleteSharePathRelations(pathId string, tx *gorm.DB) error {
 	commit := false
 	if tx == nil {
@@ -1326,9 +1308,9 @@ func DeleteRelativeAdjustShare(fileParam *models.FileParam, dirents []string, tx
 			var internalSharePaths []*share.SharePath
 			var externalSharePaths []*share.SharePath
 			for _, sharePath := range pathRes {
-				if sharePath.ShareType == "internal" {
+				if sharePath.ShareType == common.ShareTypeInternal {
 					internalSharePaths = append(internalSharePaths, sharePath)
-				} else if sharePath.ShareType == "external" {
+				} else if sharePath.ShareType == common.ShareTypeExternal {
 					externalSharePaths = append(externalSharePaths, sharePath)
 				}
 			}
@@ -1429,11 +1411,11 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 				var externalSharePaths []*share.SharePath // will be removed with token removed either
 				var smbSharePaths []*share.SharePath      // will be removed
 				for _, sharePath := range pathRes {
-					if sharePath.ShareType == "internal" {
+					if sharePath.ShareType == common.ShareTypeInternal {
 						internalSharePaths = append(internalSharePaths, sharePath)
-					} else if sharePath.ShareType == "external" {
+					} else if sharePath.ShareType == common.ShareTypeExternal {
 						externalSharePaths = append(externalSharePaths, sharePath)
-					} else if sharePath.ShareType == "smb" {
+					} else if sharePath.ShareType == common.ShareTypeSMB {
 						smbSharePaths = append(smbSharePaths, sharePath)
 					}
 				}
@@ -1750,6 +1732,12 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 
 	sharePath, err := database.QueryShareById(req.ShareId)
 	if err != nil {
+		klog.Errorf("GetToken, query share failed, shareId: %s, error: %v", req.ShareId, err)
+		handler.RespError(c, fmt.Sprintf("GetToken Error, %v", err))
+		return
+	}
+
+	if sharePath == nil {
 		klog.Errorf("GetToken, share path not found, shareId: %s", req.ShareId)
 		handler.RespError(c, common.ErrorMessageWrongShare)
 		return
@@ -1801,9 +1789,9 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 
 // GetSharePath .
 // @router /api/share/get_share/ [GET]
-func GetSharePath(ctx context.Context, c *app.RequestContext) {
+func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 	var err error
-	var req share.GetSharePathReq
+	var req share.GetExternalSharePathReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -1852,9 +1840,287 @@ func GetSharePath(ctx context.Context, c *app.RequestContext) {
 	handler.RespSuccess(c, result)
 }
 
-// VideoMethod .
-// @router /video/*path [GET]
-func VideoMethod(ctx context.Context, c *app.RequestContext) {
-	resp := new(share.VideoResp)
-	c.JSON(consts.StatusOK, resp)
+// ResetPassword .
+// @router /api/share/share_password/ [PUT]
+func ResetPassword(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.ResetPasswordReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	klog.Infof("[samba] ResetPassword, data: %s", req.PathId)
+
+	sharePath, err := database.QueryShareById(req.PathId)
+	if err != nil {
+		klog.Errorf("ResetPassword, querySharePath error: %v", err)
+		handler.RespError(c, fmt.Sprintf("ResetPassword Error: %v", err))
+	}
+
+	if sharePath == nil {
+		handler.RespError(c, common.ErrorMessageWrongShare)
+		return
+	}
+
+	sharePath.PasswordMd5 = common.Md5String(req.Password)
+
+	if err = database.ResetExternalSharePasswordTx(sharePath); err != nil {
+		klog.Errorf("ResetPassword, update error: %v", err)
+		return
+	}
+
+	handler.RespSuccess(c, nil)
+}
+
+// ListSmbShareUser .
+// @router /api/share/smb_share_users/ [GET]
+func ListSmbUser(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.ListSmbUserReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	res, err := database.QuerySmbUsers()
+	if err != nil {
+		handler.RespError(c, err.Error())
+		return
+	}
+
+	var data = make([]map[string]string, 0)
+	for _, r := range res {
+		p, _ := common.Base64Decode(r.Password)
+		var d = make(map[string]string)
+		d["id"] = r.UserID
+		d["name"] = r.UserName
+		d["password"] = p
+		data = append(data, d)
+	}
+
+	handler.RespSuccess(c, data)
+}
+
+// CreateSmbUser .
+// @router /api/share/smb_share_user/ [POST]
+func CreateSmbUser(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.CreateSmbUserReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
+	var userId = uuid.New().String()
+	var userName = req.User
+	var password = common.Base64Encode(req.Password)
+
+	err = database.CreateSmbUser(owner, userId, userName, password)
+	if err != nil {
+		if !strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+			handler.RespError(c, fmt.Sprintf("Create User Error %v", err))
+			return
+		}
+
+		handler.RespError(c, common.ErrorMessageUserExists)
+		return
+	}
+
+	var result = make(map[string]string)
+	result["id"] = userId
+	result["name"] = userName
+	result["password"] = req.Password
+
+	handler.RespSuccess(c, result)
+}
+
+// DeleteSmbUser .
+// @router /api/share/smb_share_user/ [DELETE]
+func DeleteSmbUser(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.DeleteSmbUserReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
+	// all samba shares linked to the deleted users
+	relSmbUserShares, err := database.QuerySmbShares(owner, common.ShareTypeSMB, nil, req.Users)
+	if err != nil {
+		klog.Errorf("[samba] DeleteSmbUser, query users shares error: %v", err)
+		handler.RespError(c, common.ErrorMessageWrongShare)
+		return
+	}
+
+	klog.Infof("[samba] DeleteSmbUser, data: %s, relshares: %s", common.ParseString(req), common.ParseString(relSmbUserShares))
+
+	if err := samba.SambaService.DeleteSambaShareUsers(owner, req.Users); err != nil {
+		klog.Errorf("[samba] DeleteSmbUser, delete users error: %v", err)
+		handler.RespError(c, fmt.Sprintf("Delete User Error: %v", err))
+		return
+	}
+
+	if len(relSmbUserShares) > 0 {
+		var smbs []*share.SmbCreate
+		for _, item := range relSmbUserShares {
+			if item.SmbSharePublic == 1 {
+				// in theory, there shouldn’t be any public Samba shares here.
+				continue
+			}
+			if item.UserName == "" {
+				continue
+			}
+
+			var smb = &share.SmbCreate{
+				Owner: item.Owner,
+				ID:    item.ID,
+				Path:  fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path),
+				User:  item.UserName,
+			}
+			smbs = append(smbs, smb)
+		}
+
+		if err := samba.SambaService.CreateShareSamba(smbs, "deluser"); err != nil {
+			klog.Errorf("[samba] DeleteSmbUser, write deluser crd failed, owner: %s, error: %s", owner, err)
+			handler.RespError(c, fmt.Sprintf("Delete User Error: %v", err))
+			return
+		}
+	}
+
+	handler.RespSuccess(c, nil)
+}
+
+// ~ internal func
+func createSambaShare(c *app.RequestContext, owner string, req *share.CreateSharePathReq, fileParam *models.FileParam) {
+	var isSmbSharePublic int32
+	if len(req.Users) == 0 {
+		isSmbSharePublic = 1
+	}
+
+	result, err := samba.SambaService.CreateSambaSharePath(owner, isSmbSharePublic, req.Users, fileParam, req.ExpireIn, req.ExpireTime)
+	if err != nil {
+		klog.Errorf("[share] CreateSharePath, create smb share failed, owner: %s, error: %v", owner, err)
+		handler.RespError(c, fmt.Sprintf("Create Smb Share Error %v", err))
+		return
+	}
+
+	var shareItem = &share.SmbCreate{
+		Owner: owner,
+		ID:    result.ID,
+		Path:  fmt.Sprintf("/%s/%s%s", result.FileType, result.Extend, result.Path),
+		User:  "", // not use
+	}
+
+	var shareItems = []*share.SmbCreate{shareItem}
+	if err := samba.SambaService.CreateShareSamba(shareItems, "add"); err != nil {
+		klog.Errorf("[share] CreateSharePath, create smb share crd failed, owner: %s, error: %v", owner, err)
+		handler.RespError(c, fmt.Sprintf("Create Samba Share Res Error: %v", err))
+		return
+	}
+
+	var data = &share.ViewSharePath{
+		ID:         result.ID,
+		Owner:      result.Owner,
+		FileType:   fileParam.FileType,
+		Extend:     fileParam.Extend,
+		Path:       fileParam.Path,
+		ShareType:  common.ShareTypeSMB,
+		Name:       result.Name,
+		ExpireIn:   result.ExpireIn,
+		ExpireTime: result.ExpireTime,
+		Permission: result.Permission,
+		CreateTime: result.CreateTime,
+		UpdateTime: result.UpdateTime,
+		SharedByMe: true,
+		SmbLink:    fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), result.Name),
+	}
+
+	handler.RespSuccess(c, data)
+}
+
+// ModifySmbMember .
+// @router /api/share/smb_share_member/ [POST]
+func ModifySmbMember(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.ModifySmbMemberReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		handler.RespError(c, err.Error())
+		return
+	}
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
+	klog.Infof("[samba] ModifySmbMember, req: %s", common.ParseString(req))
+
+	shared, err := database.GetSharePath(req.PathId)
+	if err != nil {
+		handler.RespError(c, common.ErrorMessageWrongShare)
+		return
+	}
+
+	if err = samba.SambaService.ModifySambaShareMembers(owner, shared, req.Users); err != nil {
+		klog.Errorf("[samba] ModifySmbMember, failed, owner: %s, pathId: %s, error: %v", owner, req.PathId, err)
+		handler.RespError(c, fmt.Sprintf("Modify Members Error: %v", err))
+		return
+	}
+
+	handler.RespSuccess(c, req.Users)
+}
+
+// GetInternalSmbSharePath .
+// @router /api/share/get_share_internal_smb/ [GET]
+func GetInternalSmbSharePath(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var sharePath = c.Param("path")
+	var shareType = c.Query("share_type")
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
+	klog.Infof("[samba] GetInternalSmbSharePath, owner: %s, path: %s, type: %s", owner, sharePath, shareType)
+
+	if !common.ListContains([]string{common.ShareTypeInternal, common.ShareTypeSMB}, shareType) {
+		handler.RespError(c, common.ErrorMessageShareTypeInvalid)
+		return
+	}
+
+	fileParam, err := models.CreateFileParam(owner, sharePath)
+	if err != nil {
+		handler.RespError(c, common.ErrorMessagePathInvalid)
+		return
+	}
+
+	res, err := database.GetInternalSmbSharePath(owner, shareType, fileParam.FileType, fileParam.Extend, fileParam.Path)
+	if err != nil {
+		klog.Errorf("[samba] GetInternalSmbSharePath, get error: %v", err)
+		handler.RespError(c, fmt.Sprintf("Get Share Path Error: %v", err))
+		return
+	}
+
+	handler.RespSuccess(c, res)
 }

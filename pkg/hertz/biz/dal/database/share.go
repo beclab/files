@@ -3,7 +3,9 @@ package database
 import (
 	"files/pkg/common"
 	"files/pkg/hertz/biz/model/api/share"
+	"files/pkg/models"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
@@ -55,9 +57,58 @@ func QuerySharePathByType(shareType string) ([]*share.SharePath, error) {
 	return res, nil
 }
 
+func QueryShareInternalMembers(shareIds []string) ([]*share.ShareMember, error) {
+	var res []*share.ShareMember
+	if err := DB.Table("share_members").Where("path_id IN ?", shareIds).Find(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return res, nil
+}
+
+func QueryShareSmbMembers(shareIds []string) ([]*models.SambaMemberUserView, error) {
+	var res []*models.SambaMemberUserView
+	if err := DB.Table("share_smb_members").Select("share_smb_members.path_id, share_smb_users.user_id, share_smb_users.user_name, share_smb_members.permission").Joins("INNER JOIN share_smb_users ON share_smb_members.user_id = share_smb_users.user_id").Where("path_id IN ?", shareIds).Find(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return res, nil
+}
+
+func QuerySmbShares(owner string, shareType string, shareIds []string, userIds []string) ([]*share.SmbShareView, error) {
+	var res []*share.SmbShareView
+	var tx = DB.Table("share_paths").Select("share_paths.id, share_paths.owner, share_paths.file_type, share_paths.extend, share_paths.path, share_paths.share_type, share_paths.name, share_paths.expire_in, share_paths.expire_time, share_paths.permission as share_permission, share_paths.smb_share_public, share_smb_members.permission, share_smb_users.user_id, share_smb_users.user_name, share_smb_users.password").Joins("LEFT JOIN share_smb_members ON share_paths.id = share_smb_members.path_id").Joins("LEFT JOIN share_smb_users ON share_smb_members.user_id = share_smb_users.user_id")
+	tx.Where("share_paths.share_type = ?", shareType)
+
+	if owner != "" {
+		tx.Where("share_paths.owner = ?", owner)
+	}
+	if len(shareIds) > 0 {
+		tx.Where("share_paths.id IN ?", shareIds)
+	}
+	if len(userIds) > 0 {
+		tx.Where("share_smb_users.user_id IN ?", userIds)
+	}
+
+	err := tx.Scan(&res).Error
+
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	return res, nil
+}
+
 func QuerySmbSharePathByIds(ids []string) ([]*share.SharePath, error) {
 	var res []*share.SharePath
-	if err := DB.Where("share_type = ? and id in ?", "smb", ids).Find(&res).Error; err != nil {
+	if err := DB.Where("share_type = ? AND id IN ?", "smb", ids).Find(&res).Error; err != nil {
 		return nil, err
 	}
 
@@ -105,6 +156,82 @@ func GetSharePath(pathID string) (*share.SharePath, error) {
 	}
 
 	return res, nil
+}
+
+func GetInternalSmbSharePath(owner string, shareType string, shareFileType, shareExtend, sharePath string) (res *models.InternalSmbSharePath, err error) {
+	if shareType == common.ShareTypeInternal {
+		var data []*models.InternalSharePath
+		if err = DB.Table("share_paths").Select("share_paths.*, share_members.id as share_member_id, share_members.share_member, share_members.permission as share_member_permission").Joins("LEFT JOIN share_members on share_paths.id = share_members.path_id").Where("share_paths.owner = ? AND share_paths.share_type = ? AND share_paths.file_type = ? AND share_paths.extend = ? AND share_paths.path = ?", owner, shareType, shareFileType, shareExtend, sharePath).Find(&data).Error; err != nil {
+			return
+		}
+		if len(data) > 0 {
+			var item = data[0]
+			res = &models.InternalSmbSharePath{
+				Id:         item.Id,
+				Owner:      item.Owner,
+				FileType:   item.FileType,
+				Extend:     item.Extend,
+				Path:       item.Path,
+				ShareType:  item.ShareType,
+				Name:       item.Name,
+				ExpireIn:   item.ExpireIn,
+				ExpireTime: item.ExpireTime,
+				Permission: item.Permission,
+				SharedByMe: item.Owner == owner,
+				Users:      make([]*models.InternalSmbSharePathUsers, 0),
+			}
+
+			for _, d := range data {
+				if d.ShareMember != "" {
+					var user = &models.InternalSmbSharePathUsers{
+						Id:         fmt.Sprintf("%d", d.ShareMemberId),
+						Name:       d.ShareMember,
+						Permission: d.ShareMemberPermission,
+					}
+					res.Users = append(res.Users, user)
+				}
+			}
+		}
+	} else {
+		var data []*share.SmbShareView
+		if err = DB.Table("share_paths").Select("share_paths.id, share_paths.owner, share_paths.file_type, share_paths.extend, share_paths.path, share_paths.share_type, share_paths.name, share_paths.expire_in, share_paths.expire_time, share_paths.permission as share_permission, share_paths.smb_share_public, share_smb_members.permission, share_smb_users.user_id, share_smb_users.user_name, share_smb_users.password").Joins("LEFT JOIN share_smb_members ON share_paths.id = share_smb_members.path_id").Joins("LEFT JOIN share_smb_users ON share_smb_members.user_id = share_smb_users.user_id").Where("share_paths.owner = ? AND share_paths.share_type = ? AND share_paths.file_type = ? AND share_paths.extend = ? AND share_paths.path = ?", owner, shareType, shareFileType, shareExtend, sharePath).Find(&data).Error; err != nil {
+			return
+		}
+
+		if len(data) > 0 {
+			var item = data[0]
+			var publicSmb bool = (item.SmbSharePublic == 1)
+			res = &models.InternalSmbSharePath{
+				Id:         item.ID,
+				Owner:      item.Owner,
+				FileType:   item.FileType,
+				Extend:     item.Extend,
+				Path:       item.Path,
+				ShareType:  item.ShareType,
+				Name:       item.Name,
+				ExpireIn:   item.ExpireIn,
+				ExpireTime: item.ExpireTime,
+				Permission: item.SharePermission,
+				SharedByMe: item.Owner == owner,
+				PublicSmb:  &publicSmb,
+				Users:      make([]*models.InternalSmbSharePathUsers, 0),
+				SmbLink:    fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), item.Name),
+			}
+
+			for _, d := range data {
+				if d.UserId != "" {
+					var user = &models.InternalSmbSharePathUsers{
+						Id:         d.UserId,
+						Name:       d.UserName,
+						Permission: d.Permission,
+					}
+					res.Users = append(res.Users, user)
+				}
+			}
+		}
+	}
+
+	return
 }
 
 // share_token
@@ -184,7 +311,10 @@ func QueryShareMember(params *QueryParams, page, pageSize int64, orderBy, order 
 func QueryShareById(shareId string) (*share.SharePath, error) {
 	var res *share.SharePath
 	if err := DB.Table("share_paths").Where("id = ?", shareId).First(&res).Error; err != nil {
-		return nil, err
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
 	}
 
 	return res, nil
@@ -232,5 +362,203 @@ func QuerySearchSharedDirectories(owner string) ([]*share.SharePath, []*share.Sh
 	}
 
 	return internalSharePaths, externalSharePaths, nil
+
+}
+
+func GetSmbSharePathByPath(shareType string, fileType, extend, path string, owner string, isPublic int32) (*share.SharePath, error) {
+	var res *share.SharePath
+
+	if err := DB.Table("share_paths").Where("share_type = ? AND owner = ? AND file_type = ? AND extend = ? AND path = ? AND smb_share_public = ?", shareType, owner, fileType, extend, path, isPublic).Scan(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, err
+	}
+	return res, nil
+}
+
+func ResetExternalSharePasswordTx(sharePath *share.SharePath) error {
+	var err error
+	var tx = DB.Begin()
+
+	var updates = make(map[string]interface{})
+	updates["expire_at"] = time.Now().Add(-1 * time.Minute).UTC().Format(time.RFC3339Nano)
+
+	if err = tx.Table("share_paths").Where("id = ?", sharePath.ID).Update("password_md5", sharePath.PasswordMd5).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err = tx.Table("share_tokens").Where("path_id = ?", sharePath.ID).Updates(updates).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		if err = tx.Rollback().Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func CreateSmbSharePathTx(sharePath *share.SharePath, shareMembers []*share.ShareSmbMember) error {
+	var err error
+	tx := DB.Begin()
+
+	if err = tx.Create(sharePath).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	for _, m := range shareMembers {
+		if err = tx.Create(m).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		if err = tx.Rollback().Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func QuerySmbMembers(pathID string) ([]*share.ShareSmbMember, error) {
+	var res []*share.ShareSmbMember
+	if err := DB.Table("share_smb_members").Where("path_id = ?", pathID).Find(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	return res, nil
+}
+
+func QuerySmbUsers() ([]*share.ShareSmbUser, error) {
+	var res []*share.ShareSmbUser
+	if err := DB.Table("share_smb_users").Find(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	return res, nil
+}
+
+func CreateSmbUser(owner, userId, userName, password string) error {
+	var now = time.Now().UTC().Format(time.RFC3339Nano)
+	var data = &share.ShareSmbUser{
+		Owner:      owner,
+		UserID:     userId,
+		UserName:   userName,
+		Password:   password,
+		CreateTime: now,
+		UpdateTime: now,
+	}
+
+	return DB.Table("share_smb_users").Create(data).Error
+}
+
+func DeleteSmbUserTx(owner string, users []string) error {
+	var err error
+	var tx = DB.Begin()
+
+	for _, user := range users {
+		if err = tx.Table("share_smb_members").Where("owner = ? AND user_id = ?", owner, user).Delete(&share.ShareSmbMember{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		if err = tx.Table("share_smb_users").Where("owner = ? AND user_id = ?", owner, user).Delete(&share.ShareSmbUser{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		if err = tx.Rollback().Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func ModifySmbMembersTx(owner string, pathId string, addMembers, editMembers, delMembers []*share.CreateSmbSharePathMembers) error {
+	var err error
+	var tx = DB.Begin()
+	var now = time.Now().UTC().Format(time.RFC3339Nano)
+	for _, member := range addMembers {
+		var m = &share.ShareSmbMember{
+			Owner:      owner,
+			PathID:     pathId,
+			UserID:     member.ID,
+			Permission: member.Permission,
+			CreateTime: now,
+			UpdateTime: now,
+		}
+		if err = tx.Table("share_smb_members").Create(m).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	for _, member := range editMembers {
+		var updates = make(map[string]interface{})
+		updates["permission"] = member.Permission
+		if err = tx.Table("share_smb_members").Where("owner = ? AND path_id = ? AND user_id = ?", owner, pathId, member.ID).Updates(updates).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	for _, member := range delMembers {
+		if err = tx.Table("share_smb_members").Where("owner = ? AND path_id = ? AND user_id = ?", owner, pathId, member.ID).Delete(&share.ShareSmbMember{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		if err = tx.Rollback().Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func DeleteSmbShareTx(owner string, pathIds []string) error {
+	var err error
+	var tx = DB.Begin()
+
+	if err = tx.Table("share_smb_members").Where("path_id IN ?", pathIds).Delete(&share.ShareSmbMember{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err = tx.Table("share_paths").Where("id IN ?", pathIds).Delete(&share.SharePath{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		if err = tx.Rollback().Error; err != nil {
+			return err
+		}
+	}
+	return nil
 
 }

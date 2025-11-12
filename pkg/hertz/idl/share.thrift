@@ -9,13 +9,14 @@ struct SharePath {
     5: required string path (go.tag = 'gorm:"column:path;type:text;not null"')
     6: required string share_type (go.tag = 'gorm:"column:share_type;type:varchar(10);not null"')
     7: required string name (go.tag = 'gorm:"column:name;type:text"')
-    8: required string password_md5 (go.tag = 'gorm:"column:password_md5;type:varchar(150)"')
+    8: string password_md5 (go.tag = 'gorm:"column:password_md5;type:varchar(150)"')
     /* millisecond */
     9: required i64 expire_in (go.tag = 'gorm:"column:expire_in;not null"')
     10: required string expire_time (go.tag = 'gorm:"column:expire_time;type:timestamptz;not null"')
-    11: required i32 permission (go.tag = 'gorm:"column:permission;not null"')
-    12: required string create_time (go.tag = 'gorm:"column:create_time;type:timestamptz;not null;autoCreateTime:milli"')
-    13: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime:milli"')
+    11: required i32 permission (go.tag = 'gorm:"column:permission;not null;default:0"')
+    12: i32 smb_share_public (go.tag = 'gorm:"column:smb_share_public;not null;default:0"')
+    13: required string create_time (go.tag = 'gorm:"column:create_time;type:timestamptz;not null;autoCreateTime:milli"')
+    14: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime:milli"')
 }
 
 struct ShareToken {
@@ -34,6 +35,27 @@ struct ShareMember {
     6: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime"')
 }
 
+struct ShareSmbUser {
+    1: required i64 id (go.tag = 'gorm:"column:id;primaryKey;autoIncrement"')
+    2: required string owner (go.tag = 'gorm:"column:owner;type:varchar(100);not null"')
+    3: required string user_id (go.tag = 'gorm:"column:user_id;type:uuid;not null"')
+    4: required string user_name (go.tag = 'gorm:"column:user_name;type:varchar(24);not null;unique"')
+    5: required string password (go.tag = 'gorm:"column:password;type:varchar(250)"')
+    6: required string create_time (go.tag = 'gorm:"column:create_time;type:timestamptz;not null;autoCreateTime"')
+    7: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime"')
+}
+
+struct ShareSmbMember {
+    1: required i64 id (go.tag = 'gorm:"column:id;primaryKey;autoIncrement"')
+    2: required string owner (go.tag = 'gorm:"column:owner;type:varchar(100);not null"')
+    3: required string path_id (go.tag = 'gorm:"column:path_id;type:uuid;not null"')
+    4: required string user_id (go.tag = 'gorm:"column:user_id;type:uuid;not null"')
+    /* permission = 1 or 3 */
+    5: required i32 permission (go.tag = 'gorm:"column:permission;not null"')
+    6: required string create_time (go.tag = 'gorm:"column:create_time;type:timestamptz;not null;autoCreateTime"')
+    7: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime"')
+}
+
 // api models
 struct ViewSharePath {
     1: required string id
@@ -49,9 +71,15 @@ struct ViewSharePath {
     11: required string create_time
     12: required string update_time
     13: bool shared_by_me
-    14: string smb_link (go.tag='json:"smb_link,omitempty"')
-    15: string smb_user (go.tag='json:"smb_user,omitempty"')
-    16: string smb_password (go.tag='json:"smb_password,omitempty"')
+    14: bool public_smb
+    15: list<ViewSharePathUsers> users (go.tag='json:"users,omitempty"')
+    16: string smb_link (go.tag='json:"smb_link,omitempty"')
+}
+
+struct ViewSharePathUsers {
+    1: string id
+    2: string name
+    3: i32 permission
 }
 
 struct CreateSharePathReq {
@@ -62,6 +90,12 @@ struct CreateSharePathReq {
     4: i64 expire_in (api.body="expire_in");
     5: string expire_time (api.body="expire_time");
     6: i32 permission (api.body="permission", api.vd="$>=0 && $<=4");
+    7: list<CreateSmbSharePathMembers> users (api.body="users");
+}
+
+struct CreateSmbSharePathMembers {
+    1: string id;
+    2: i32 permission (api.body="permission", api.vd="$>=0 && $<=4");
 }
 
 struct CreateSharePathResp {
@@ -87,12 +121,14 @@ struct ListSharePathResp {
     2: list<ViewSharePath> share_paths;
 }
 
-struct GetSharePathReq {
+struct GetExternalSharePathReq {
     1: required string PathId (api.query="path_id");
     2: required string Token (api.query="token");
 }
 
-struct GetSharePathResp {}
+struct GetExternalSharePathResp {}
+
+struct GetInternalSmbSharePathResp {}
 
 struct UpdateSharePathReq {
     1: required string PathId (api.body="path_id");
@@ -208,7 +244,50 @@ struct SmbCreate {
   4: string user;
 }
 
-struct VideoResp {}
+struct ResetPasswordReq {
+  1: required string pathId (api.body="path_id");
+  2: required string password (api.body="password");
+}
+
+struct ResetPasswordResp {}
+
+struct ListSmbUserReq {}
+struct ListSmbUserResp {}
+
+struct CreateSmbUserReq {
+    1: required string user (api.body="user");
+    2: required string password (api.body="password");
+}
+struct CreateSmbUserResp {}
+
+struct DeleteSmbUserReq {
+    1: required list<string> users (api.body="users");
+}
+struct DeleteSmbUserResp {}
+
+struct ModifySmbMemberReq {
+    1: required string PathId (api.body="path_id");
+    2: list<CreateSmbSharePathMembers> Users (api.body="users");
+}
+struct ModifySmbMemberResp {}
+
+struct SmbShareView {
+    1: string id (go.tag = 'gorm:"column:id"');
+    2: string owner (go.tag = 'gorm:"column:owner"');
+    3: string fileType (go.tag = 'gorm:"column:file_type"');
+    4: string extend (go.tag = 'gorm:"column:extend"');
+    5: string path (go.tag = 'gorm:"column:path"');
+    6: string shareType (go.tag = 'gorm:"column:share_type"');
+    7: string name (go.tag = 'gorm:"column:name"');
+    8: i64 expireIn (go.tag = 'gorm:"column:expire_in"');
+    9: string expireTime (go.tag = 'gorm:"column:expire_time"');
+    10: i32 sharePermission (go.tag = 'gorm:"column:share_permission"');
+    11: i32 smbSharePublic (go.tag = 'gorm:"column:smb_share_public"');
+    12: string userId (go.tag = 'gorm:"column:user_id"');
+    13: string userName (go.tag = 'gorm:"column:user_name"');
+    14: string password (go.tag = 'gorm:"column:password"');
+    15: i32 permission (go.tag = 'gorm:"column:permission"');
+}
 
 // services
 service ShareService {
@@ -216,7 +295,9 @@ service ShareService {
     ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/");
     UpdateSharePathResp UpdateSharePath(1: UpdateSharePathReq request) (api.put="/api/share/share_path/");
     DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/");
-    GetSharePathResp GetSharePath(1: GetSharePathReq request) (api.get="/api/share/get_share/");
+    ResetPasswordResp ResetPassword(1: ResetPasswordReq request) (api.put="/api/share/share_password/");
+    GetExternalSharePathResp GetExternalSharePath(1: GetExternalSharePathReq request) (api.get="/api/share/get_share/");
+    GetInternalSmbSharePathResp GetInternalSmbSharePath() (api.get="/api/share/get_share_internal_smb/*path");
 
     GenerateShareTokenResp GenerateShareToken(1: GenerateShareTokenReq request) (api.post="/api/share/share_token/");
     ListShareTokenResp ListShareToken(1: ListShareTokenReq request) (api.get="/api/share/share_token/");
@@ -228,5 +309,9 @@ service ShareService {
     UpdateShareMemberPermissionResp UpdateShareMemberPermission(1: UpdateShareMemberPermissionReq request) (api.put="/api/share/share_member/");
     RemoveShareMemberResp RemoveShareMember(1: RemoveShareMemberReq request) (api.delete="/api/share/share_member/");
 
-    VideoResp VideoMethod() (api.get="/api/videos");
+    /* samba */
+    ListSmbUserResp ListSmbUser(1: ListSmbUserReq request) (api.get="/api/share/smb_share_user/");
+    CreateSmbUserResp CreateSmbUser(1: CreateSmbUserReq request) (api.post="/api/share/smb_share_user/");
+    DeleteSmbUserResp DeleteSmbUser(1: DeleteSmbUserReq request) (api.delete="/api/share/smb_share_user/");
+    ModifySmbMemberResp ModifySmbMember(1: ModifySmbMemberReq request) (api.post="/api/share/smb_share_member/");
 }

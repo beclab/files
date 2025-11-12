@@ -3,9 +3,10 @@ package dal
 import (
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/model/api/share"
-	"k8s.io/klog/v2"
 	"os"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 func migration(table interface{}, tableName string, rebuild bool) {
@@ -41,4 +42,6 @@ func Init() {
 	migration(&share.SharePath{}, "share_paths", rebuild)
 	migration(&share.ShareToken{}, "share_tokens", rebuild)
 	migration(&share.ShareMember{}, "share_members", rebuild)
+	migration(&share.ShareSmbUser{}, "share_smb_users", rebuild)
+	migration(&share.ShareSmbMember{}, "share_smb_members", rebuild)
 }

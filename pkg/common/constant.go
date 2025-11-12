@@ -97,12 +97,19 @@ var (
 	ShareTypeExternal   = "external"
 	ShareTypeSMB        = "smb"
 
-	ErrorMessageWrongShare       = "Wrong share."
-	ErrorMessageTokenExpired     = "Token expired."
-	ErrorMessageLinkExpired      = "Link expired."
-	ErrorMessageGetTokenError    = "GetToken failed."
-	ErrorMessagePermissionDenied = "Permission denied."
-	ErrorMessageWrongPassword    = "Wrong password. Please check the password and try again."
+	ErrorMessageShareTypeInvalid      = "Share type invalid."
+	ErrorMessagePathInvalid           = "Path invalid."
+	ErrorMessageOwnerNotFound         = "Owner not found."
+	ErrorMessageWrongShare            = "Wrong share."
+	ErrorMessageTokenExpired          = "Token expired."
+	ErrorMessageLinkExpired           = "Link expired."
+	ErrorMessageGetTokenError         = "GetToken failed."
+	ErrorMessagePermissionDenied      = "Permission denied."
+	ErrorMessageUserExists            = "User already exists or is used by another account."
+	ErrorMessageShareExists           = "Share exists."
+	ErrorMesssageSambaPasswordInvalid = "Samba share password invalid."
+	ErrorMessageWrongPassword         = "Wrong password. Please check the password and try again."
+	ErrorMessageInternalPathExists    = "Internal share for a path can be only one at a time."
 
 	CodeLinkExpired  = 559
 	CodeTokenExpired = 569

@@ -32,7 +32,6 @@ type ShareAccess struct {
 	Download  bool   `json:"download"`
 	Paste     bool   `json:"paste"`
 	Upload    bool   `json:"upload"`
-	Video     bool   `json:"video"`
 	FromShare bool   `json:"fromShare"`
 }
 
@@ -51,7 +50,6 @@ var (
 )
 
 var (
-	ShareApiVideosPath     = "/api/videos"
 	ShareApiResourcesPath  = "/api/resources"
 	ShareApiPreviewPath    = "/api/preview"
 	ShareApiRawPath        = "/api/raw"
@@ -71,7 +69,8 @@ func TimingMiddleware() app.HandlerFunc {
 
 		defer func() {
 			elapsed := time.Since(start)
-			klog.Infof("%s %s execution time: %v", string(c.Method()), path, elapsed)
+
+			klog.Infof("%s %s execution time: %v, code: %d", string(c.Method()), path, elapsed, c.Response.StatusCode())
 		}()
 
 		c.Next(ctx)
@@ -128,11 +127,7 @@ func ShareMiddleware() app.HandlerFunc {
 		var uploadLinkId, uploadParentDir, uploadFileName string
 		_ = uploadParentDir
 
-		if strings.HasPrefix(path, ShareApiVideosPath) {
-			// + todo need to fix
-			paramPath = c.Query("PlayPath")
-			shareAccess.Video = true
-		} else if strings.HasPrefix(path, ShareApiResourcesPath) {
+		if strings.HasPrefix(path, ShareApiResourcesPath) {
 			paramPath = strings.TrimPrefix(path, ShareApiResourcesPath)
 			shareAccess.Resource = true
 		} else if strings.HasPrefix(path, ShareApiPreviewPath) {
@@ -195,7 +190,7 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 		}
 
-		klog.Infof("[share] share param path: %s, bflName: %s", paramPath, bflName)
+		klog.Infof("[share] share param path: %s, bflName: %s, shareAccess: %+v", paramPath, bflName, shareAccess)
 
 		if paramPath == "" {
 			c.Next(ctx)
@@ -261,12 +256,12 @@ func ShareMiddleware() app.HandlerFunc {
 			expires, permit, err = checkExternal(bflName, token, shared, shareAccess)
 			if err != nil {
 				klog.Errorf("[share] check external error: %v, expires: %d", err, expires)
-				handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expires)
-				return
+				// handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expires)
+				// return
 			} else {
 				if !permit {
-					handler.RespError(c, common.ErrorMessagePermissionDenied)
-					return
+					// handler.RespError(c, common.ErrorMessagePermissionDenied)
+					// return
 				}
 			}
 		}
@@ -324,10 +319,6 @@ func ShareMiddleware() app.HandlerFunc {
 		} else if shareAccess.Paste {
 			accessOwner = bflName
 			url += fmt.Sprintf("%s%s?share=1&sharetype=%s", redirect, rewritePrefix, shareType)
-		} else if shareAccess.Video {
-			// + todo
-			// url = fmt.Sprintf("http://media-server-service.os-framework:9090/videos/olares/?PlayPath=/drive/Home/Documents/111/05.mkv")
-			url = fmt.Sprintf("http://127.0.0.1:9090/videos/olares/?PlayPath=/%s", pathRewrite)
 		} else {
 			accessOwner = shareBy
 
@@ -367,7 +358,11 @@ func ShareMiddleware() app.HandlerFunc {
 		c.Request.Header.VisitAll(func(key, value []byte) {
 			req.Header.Set(string(key), string(value))
 		})
-		req.Header.Set(common.REQUEST_HEADER_OWNER, accessOwner) // external, bflName maybe is owner in host
+		if shareAccess.FromShare {
+			req.Header.Set(common.REQUEST_HEADER_OWNER, bflName) // external, bflName maybe is owner in host
+		} else {
+			req.Header.Set(common.REQUEST_HEADER_OWNER, accessOwner) // external, bflName maybe is owner in host
+		}
 
 		if !shareAccess.Paste {
 			body := c.Request.Body()

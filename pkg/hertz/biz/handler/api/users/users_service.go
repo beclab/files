@@ -22,18 +22,23 @@ func UsersMethod(ctx context.Context, c *app.RequestContext) {
 	resp := &users.UsersResp{
 		Data: new(users.UsersData),
 	}
-
+	var olaresId string
 	var usersNodes []*users.UsersNode
 	for _, v := range usersdata {
+		if v.Name == owner {
+			olaresId = v.OlaresId
+		}
 		var u = &users.UsersNode{
-			Name:   v.Name,
-			Role:   v.Role,
-			Status: v.Status,
+			Name:     v.Name,
+			Role:     v.Role,
+			OlaresId: v.OlaresId,
+			Status:   v.Status,
 		}
 		usersNodes = append(usersNodes, u)
 	}
 
 	resp.Data.Owner = owner
+	resp.Data.OlaresId = olaresId
 	resp.Data.Users = usersNodes
 
 	c.JSON(consts.StatusOK, resp)

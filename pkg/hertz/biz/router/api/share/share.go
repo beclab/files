@@ -19,12 +19,15 @@ func Register(r *server.Hertz) {
 	root := r.Group("/", rootMw()...)
 	{
 		_api := root.Group("/api", _apiMw()...)
-		_api.GET("/videos", append(_videomethodMw(), share.VideoMethod)...)
 		{
 			_share := _api.Group("/share", _shareMw()...)
 			{
 				_get_share := _share.Group("/get_share", _get_shareMw()...)
-				_get_share.GET("/", append(_getsharepathMw(), share.GetSharePath)...)
+				_get_share.GET("/", append(_getexternalsharepathMw(), share.GetExternalSharePath)...)
+			}
+			{
+				_get_share_internal_smb := _share.Group("/get_share_internal_smb", _get_share_internal_smbMw()...)
+				_get_share_internal_smb.GET("/*path", append(_getinternalsmbsharepathMw(), share.GetInternalSmbSharePath)...)
 			}
 			{
 				_get_token := _share.Group("/get_token", _get_tokenMw()...)
@@ -38,6 +41,10 @@ func Register(r *server.Hertz) {
 				_share_member.PUT("/", append(_updatesharememberpermissionMw(), share.UpdateShareMemberPermission)...)
 			}
 			{
+				_share_password := _share.Group("/share_password", _share_passwordMw()...)
+				_share_password.PUT("/", append(_resetpasswordMw(), share.ResetPassword)...)
+			}
+			{
 				_share_path := _share.Group("/share_path", _share_pathMw()...)
 				_share_path.DELETE("/", append(_deletesharepathMw(), share.DeleteSharePath)...)
 				_share_path.GET("/", append(_listsharepathMw(), share.ListSharePath)...)
@@ -49,6 +56,16 @@ func Register(r *server.Hertz) {
 				_share_token.DELETE("/", append(_revokesharetokenMw(), share.RevokeShareToken)...)
 				_share_token.GET("/", append(_listsharetokenMw(), share.ListShareToken)...)
 				_share_token.POST("/", append(_generatesharetokenMw(), share.GenerateShareToken)...)
+			}
+			{
+				_smb_share_member := _share.Group("/smb_share_member", _smb_share_memberMw()...)
+				_smb_share_member.POST("/", append(_modifysmbmemberMw(), share.ModifySmbMember)...)
+			}
+			{
+				_smb_share_user := _share.Group("/smb_share_user", _smb_share_userMw()...)
+				_smb_share_user.DELETE("/", append(_deletesmbuserMw(), share.DeleteSmbUser)...)
+				_smb_share_user.GET("/", append(_listsmbuserMw(), share.ListSmbUser)...)
+				_smb_share_user.POST("/", append(_createsmbuserMw(), share.CreateSmbUser)...)
 			}
 		}
 	}
