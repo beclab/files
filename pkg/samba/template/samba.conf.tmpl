@@ -17,6 +17,7 @@
 [{{ $data.Name }}]
   path = {{ $data.Path }}
   comment = "{{ $data.Comment }}"
+  vfs objects = catia fruit streams_xattr acl_xattr
   {{ if $data.Anonymous  -}}
   browseable = yes
   writable = yes
@@ -37,9 +38,16 @@
   {{ if eq $data.Writable "yes" -}}
   create mask = 0664
   directory mask = 2775
-  vfs objects = acl_xattr
   inherit permissions = no
   map acl inherit = yes
   {{ end -}}
   {{ end -}}
+  ea support = yes
+  fruit:resource = xattr
+  fruit:metadata = stream
+  fruit:aapl = yes
+  fruit:posix_rename = yes
+  fruit:encoding = native
+  veto files = /.DS_Store/Thumbs.db/._*/
+  delete veto files = yes
 {{ end }}

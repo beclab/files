@@ -4,6 +4,11 @@ struct PasteReq {
     1: required string Action (api.body="action");
     2: required string Source (api.body="source");
     3: required string Destination (api.body="destination");
+    4: i32 Share (api.body="share");
+    5: string SrcShareType (api.body="srcShareType");
+    6: string DstShareType (api.body="dstShareType");
+    7: string SrcOwner (api.body="srcOwner");
+    8: string DstOwner (api.body="dstOwner");
 }
 
 struct PasteResp {
