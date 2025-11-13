@@ -35,7 +35,7 @@ RUN go install github.com/cloudwego/hertz/cmd/hz@latest && \
   cd /workspace &&  \
   go mod tidy
 
-RUN go build -ldflags "-w -s" -o samba_share cmd/samba/main.go
+RUN CGO_ENABLED=0 go build -ldflags "-w -s" -o samba_share cmd/samba/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -56,8 +56,8 @@ RUN set -eu && \
   rm -rf /tmp/* /var/cache/apk/*
 
 WORKDIR /
-COPY --chmod=755 ./config/samba/samba.sh /usr/bin/samba.sh
-COPY --chmod=664 ./config/samba/smb.conf /etc/samba/smb.conf
+COPY --from=builder --chmod=755 /workspace/config/samba/samba.sh /usr/bin/samba.sh
+COPY --from=builder --chmod=664 /workspace/config/samba/smb.conf /etc/samba/smb.conf
 COPY --from=builder /workspace/samba_share .
 
 EXPOSE 139 445
