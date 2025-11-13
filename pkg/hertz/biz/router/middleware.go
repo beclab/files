@@ -250,11 +250,6 @@ func ShareMiddleware() app.HandlerFunc {
 			var expires int64
 			var permit bool
 
-			if token == "" {
-				handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenInvalid, 0)
-				return
-			}
-
 			expires, permit, err = checkExternal(bflName, token, shared, shareAccess)
 			if err != nil {
 				klog.Errorf("[share] check external error: %v, expires: %d", err, expires)
