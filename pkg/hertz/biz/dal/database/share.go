@@ -432,10 +432,12 @@ func CreateSmbSharePathTx(sharePath *share.SharePath, shareMembers []*share.Shar
 		return err
 	}
 
-	for _, m := range shareMembers {
-		if err = tx.Create(m).Error; err != nil {
-			tx.Rollback()
-			return err
+	if len(shareMembers) > 0 {
+		for _, m := range shareMembers {
+			if err = tx.Create(m).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
 		}
 	}
 
@@ -461,9 +463,13 @@ func QuerySmbMembers(pathID string) ([]*share.ShareSmbMember, error) {
 	return res, nil
 }
 
-func QuerySmbUsers() ([]*share.ShareSmbUser, error) {
+func QuerySmbUsers(userIds []string) ([]*share.ShareSmbUser, error) {
 	var res []*share.ShareSmbUser
-	if err := DB.Table("share_smb_users").Find(&res).Error; err != nil {
+	var tx = DB.Table("share_smb_users")
+	if len(userIds) > 0 {
+		tx.Where("user_id IN ?", userIds)
+	}
+	if err := tx.Find(&res).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return nil, err
 		}
@@ -513,10 +519,21 @@ func DeleteSmbUserTx(owner string, users []string) error {
 	return nil
 }
 
-func ModifySmbMembersTx(owner string, pathId string, addMembers, editMembers, delMembers []*share.CreateSmbSharePathMembers) error {
+func ModifySmbMembersTx(owner string, publicSmb bool, pathId string, addMembers, editMembers, delMembers []*share.CreateSmbSharePathMembers) error {
 	var err error
 	var tx = DB.Begin()
 	var now = time.Now().UTC().Format(time.RFC3339Nano)
+
+	var smbSharePublic int32 = 0
+	if publicSmb {
+		smbSharePublic = 1
+	}
+
+	if err = tx.Table("share_paths").Where("id = ?", pathId).Update("smb_share_public", smbSharePublic).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	for _, member := range addMembers {
 		var m = &share.ShareSmbMember{
 			Owner:      owner,

@@ -15,8 +15,19 @@ func (t *Task) Rsync() error {
 	var action = t.param.Action
 	var src = t.param.Src
 	var dst = t.param.Dst
+	var share = t.param.Share
+	var srcShareType = t.param.SrcShareType
+	var dstShareType = t.param.DstShareType
+	var srcOwner = t.param.SrcOwner
+	var dstOwner = t.param.DstOwner
 
-	klog.Infof("[Task] Id: %s, start, rsync, user: %s, action: %s, src: %s, dst: %s", t.id, user, action, common.ToJson(src), common.ToJson(dst))
+	if share == 1 {
+		src.Owner = srcOwner
+		dst.Owner = dstOwner
+	}
+
+	klog.Infof("[Task] Id: %s, start, rsync, user: %s, action: %s, src: %s, dst: %s, shareType: %s,%s, shareOwner:%s,%s",
+		t.id, user, action, common.ToJson(src), common.ToJson(dst), srcShareType, dstShareType, srcOwner, dstOwner)
 
 	var srcUri, err = src.GetResourceUri()
 	if err != nil {
