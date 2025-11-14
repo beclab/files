@@ -123,7 +123,13 @@ jobs:
           context: .
           file: Dockerfile.media
           push: true
-          tags: ${{ github.ref_type == 'tag' && format('docker.io/beclab/files-server:{0}-{1}', github.event.inputs.tags || steps.get-latest-tag.outputs.tag, matrix.package_arch) || format('docker.io/beclab/files-server:{0}', github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
+          # Use the input tag if present, else fall back to the step output tag
+          tags: ${{ github.ref_type == 'tag' &&
+                  format('docker.io/beclab/files-server:{0}-{1}',
+                         github.event.inputs.tags || steps.get-latest-tag.outputs.tag,
+                         matrix.package_arch) ||
+                  format('docker.io/beclab/files-server:{0}',
+                         github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
           platforms: ${{ matrix.platform }}
           build-args: |
             PACKAGE_ARCH=${{ matrix.package_arch }}
