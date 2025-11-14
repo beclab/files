@@ -164,6 +164,7 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	allFileInfo := []map[string]interface{}{}
 
 	baseInfo := getDirInfo(repoId, parentDir)
+	klog.Infof("baseInfo: %+v", baseInfo)
 	mtime := ""
 	if baseInfo != nil {
 		mtime = baseInfo["mtime"]
