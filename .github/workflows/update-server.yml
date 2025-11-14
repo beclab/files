@@ -19,8 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # Define platforms based on trigger type:
+        # tags build both amd64 and arm64, others build only amd64
         platform: ${{ github.ref_type == 'tag' && fromJSON('["linux/amd64", "linux/arm64"]') || fromJSON('["linux/amd64"]') }}
+        # Define package architectures, mirroring the platform logic
         package_arch: ${{ github.ref_type == 'tag' && fromJSON('["amd64", "arm64"]') || fromJSON('["amd64"]') }}
+        # Exclude invalid combinations (e.g., linux/amd64 with package_arch: arm64)
         exclude:
           - platform: linux/amd64
             package_arch: arm64
@@ -141,5 +145,5 @@ jobs:
           TAG_NAME=${{ github.event.inputs.tags || steps.get-latest-tag.outputs.tag }}
           docker buildx imagetools create \
             --tag beclab/files-server:${TAG_NAME} \
-            beclab/files-server:${TAG_NME}-amd64 \
+            beclab/files-server:${TAG_NAME}-amd64 \
             beclab/files-server:${TAG_NAME}-arm64
