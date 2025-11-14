@@ -17,15 +17,6 @@ on:
 jobs:
   update_server:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: ${{ fromJSON('["linux/amd64","linux/arm64"]') }}
-        package_arch: ${{ fromJSON('["amd64","arm64"]') }}
-        exclude:
-          - platform: linux/amd64
-            package_arch: arm64
-          - platform: linux/arm64
-            package_arch: amd64
     steps:
       - name: PR Conventional Commit Validation
         uses: ytanikin/PRConventionalCommits@1.1.0
@@ -124,8 +115,6 @@ jobs:
           file: Dockerfile.media
           push: true
           tags: ${{ format('docker.io/beclab/files-server:{0}', github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
-          platforms: ${{ matrix.platform }}
-          build-args: |
-            PACKAGE_ARCH=${{ matrix.package_arch }}
+          platforms: linux/amd64,linux/arm64
           progress: plain
 
