@@ -17,19 +17,6 @@ on:
 jobs:
   update_server:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # Define platforms based on trigger type:
-        # tags build both amd64 and arm64, others build only amd64
-        platform: ${{ github.ref_type == 'tag' && fromJSON('["linux/amd64", "linux/arm64"]') || fromJSON('["linux/amd64"]') }}
-        # Define package architectures, mirroring the platform logic
-        package_arch: ${{ github.ref_type == 'tag' && fromJSON('["amd64", "arm64"]') || fromJSON('["amd64"]') }}
-        # Exclude invalid combinations (e.g., linux/amd64 with package_arch: arm64)
-        exclude:
-          - platform: linux/amd64
-            package_arch: arm64
-          - platform: linux/arm64
-            package_arch: amd64
     steps:
       - name: PR Conventional Commit Validation
         uses: ytanikin/PRConventionalCommits@1.1.0
@@ -127,17 +114,10 @@ jobs:
           context: .
           file: Dockerfile.media
           push: true
-          # Use the input tag if present, else fall back to the step output tag
-          #tags: ${{ github.ref_type == 'tag' &&
-          #        format('docker.io/beclab/files-server:{0}-{1}',
-          #               github.event.inputs.tags || steps.get-latest-tag.outputs.tag,
-          #               matrix.package_arch) ||
-          #        format('docker.io/beclab/files-server:{0}',
-          #               github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
           tags: ${{ github.ref_type == 'tag' &&
                   format('docker.io/beclab/files-server:{0}',
                          github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
-          platforms: ${{ matrix.platform }}
+          platforms: ${{ fromJSON('["linux/amd64", "linux/arm64"]') }}
           build-args: |
-            PACKAGE_ARCH=${{ matrix.package_arch }}
+            PACKAGE_ARCH=${{ fromJSON('["amd64", "arm64"]') }}
           progress: plain
