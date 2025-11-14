@@ -126,12 +126,15 @@ jobs:
         with:
           context: .
           file: Dockerfile.media
-          push: false
+          push: true
           # Use the input tag if present, else fall back to the step output tag
+          #tags: ${{ github.ref_type == 'tag' &&
+          #        format('docker.io/beclab/files-server:{0}-{1}',
+          #               github.event.inputs.tags || steps.get-latest-tag.outputs.tag,
+          #               matrix.package_arch) ||
+          #        format('docker.io/beclab/files-server:{0}',
+          #               github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
           tags: ${{ github.ref_type == 'tag' &&
-                  format('docker.io/beclab/files-server:{0}-{1}',
-                         github.event.inputs.tags || steps.get-latest-tag.outputs.tag,
-                         matrix.package_arch) ||
                   format('docker.io/beclab/files-server:{0}',
                          github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
           platforms: ${{ matrix.platform }}
@@ -140,7 +143,7 @@ jobs:
           progress: plain
 
       - name: Create and push manifest
-        if: github.ref_type == 'tag' && matrix.platform == 'linux/arm64'
+        if: github.ref_type == 'ta0g' && matrix.platform == 'linux/arm64'
         run: |
           TAG_NAME=${{ github.event.inputs.tags || steps.get-latest-tag.outputs.tag }}
           docker buildx imagetools create \
