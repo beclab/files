@@ -117,7 +117,7 @@ jobs:
           tags: ${{ github.ref_type == 'tag' &&
                   format('docker.io/beclab/files-server:{0}',
                          github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
-          platforms: ${{ fromJSON('["linux/amd64","linux/arm64"]') }}
+          platforms: linux/amd64,linux/arm64
           build-args: |
-            PACKAGE_ARCH=${{ fromJSON('["amd64","arm64"]') }}
+            PACKAGE_ARCH=amd64,arm64
           progress: plain
