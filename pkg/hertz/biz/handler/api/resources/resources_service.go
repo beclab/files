@@ -136,7 +136,7 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	err = share.RenameRelativeAdjustShare(contextArg.FileParam, contextArg.QueryParam.Destination, true, nil)
+	err = share.RenameRelativeAdjustShare(contextArg.FileParam, contextArg.QueryParam.Destination, contextArg.FileParam.Extend, true, nil)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,

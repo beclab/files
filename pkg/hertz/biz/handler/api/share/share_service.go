@@ -1210,7 +1210,7 @@ func DeleteSharePathRelations(pathId string, tx *gorm.DB) error {
 	return nil
 }
 
-func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, parsePath bool, tx *gorm.DB) error {
+func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, dstExtend string, parsePath bool, tx *gorm.DB) error {
 	commit := false
 	if tx == nil {
 		tx = database.DB.Begin()
@@ -1256,7 +1256,8 @@ func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, pars
 			for _, sharePath := range pathRes {
 				updatePath := dstPath + strings.TrimPrefix(sharePath.Path, fileParam.Path)
 				err = database.UpdateSharePath(sharePath.ID, map[string]interface{}{
-					"path": updatePath,
+					"path":   updatePath,
+					"extend": dstExtend,
 				}, tx)
 				if err != nil {
 					klog.Errorf("UpdateSharePath error: %v", err)
@@ -1383,7 +1384,7 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 		if src.FileType == "drive" {
 			if dst.FileType == "drive" {
 				// just update share info, very like rename
-				err = RenameRelativeAdjustShare(src, dst.Path, false, tx)
+				err = RenameRelativeAdjustShare(src, dst.Path, dst.Extend, false, tx)
 				if err != nil {
 					klog.Errorf("MoveRelativeAdjustShare drive-drive error: %v", err)
 					tx.Rollback()
