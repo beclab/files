@@ -124,7 +124,7 @@ jobs:
           file: Dockerfile.media
           push: true
           tags: ${{ format('docker.io/beclab/files-server:{0}', github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           build-args: |
             PACKAGE_ARCH=${{ matrix.package_arch }}
           progress: plain
