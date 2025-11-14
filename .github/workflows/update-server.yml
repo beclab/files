@@ -126,7 +126,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.media
-          push: true
+          push: false
           # Use the input tag if present, else fall back to the step output tag
           tags: ${{ github.ref_type == 'tag' &&
                   format('docker.io/beclab/files-server:{0}-{1}',
