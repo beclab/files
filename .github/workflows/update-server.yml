@@ -141,12 +141,3 @@ jobs:
           build-args: |
             PACKAGE_ARCH=${{ matrix.package_arch }}
           progress: plain
-
-      - name: Create and push manifest
-        if: github.ref_type == 'ta0g' && matrix.platform == 'linux/arm64'
-        run: |
-          TAG_NAME=${{ github.event.inputs.tags || steps.get-latest-tag.outputs.tag }}
-          docker buildx imagetools create \
-            --tag beclab/files-server:${TAG_NAME} \
-            beclab/files-server:${TAG_NAME}-amd64 \
-            beclab/files-server:${TAG_NAME}-arm64

@@ -33,9 +33,9 @@ COPY cmd/backend/dist dist
 
 # Detect the CPU architecture and copy the appropriate binary
 RUN if [ "$(uname -m)" = "x86_64" ]; then \
-        mv dist/linux-amd64/filebrowser /filebrowser; \
+        cp dist/linux-amd64/filebrowser /filebrowser; \
     elif [ "$(uname -m)" = "aarch64" ]; then \
-        mv dist/linux-arm64/filebrowser /filebrowser; \
+        cp dist/linux-arm64/filebrowser /filebrowser; \
     else \
         echo "Unsupported CPU architecture" && exit 1; \
     fi
