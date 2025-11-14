@@ -1,0 +1,43 @@
+package enums
+
+type BaseItemKind int
+
+const (
+	AggregateFolder BaseItemKind = iota
+	Audio
+	AudioBook
+	BasePluginFolder
+	Book
+	BoxSet
+	Channel
+	ChannelFolderItem
+	CollectionFolder
+	Episode
+	Folder
+	Genre
+	ManualPlaylistsFolder
+	Movie
+	LiveTvChannel
+	LiveTvProgram
+	MusicAlbum
+	MusicArtist
+	MusicGenre
+	MusicVideo
+	Person
+	Photo
+	PhotoAlbum
+	Playlist
+	PlaylistsFolder
+	Program
+	Recording
+	Season
+	Series
+	Studio
+	Trailer
+	TvChannel
+	TvProgram
+	UserRootFolder
+	UserView
+	Video
+	Year
+)

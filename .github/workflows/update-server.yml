@@ -97,6 +97,7 @@ jobs:
               echo "share.thrift"
               hz update -idl idl/share.thrift
               hz update -idl idl/search.thrift
+              hz update -idl idl/media.thrift
 
               cd ../..
               go mod tidy
@@ -114,6 +115,6 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          #          tags: beclab/files-server:${{ github.event.inputs.tags }}
-          tags: beclab/files-server:${{ steps.get-latest-tag.outputs.tag }}
+          tags: ${{ format('docker.io/beclab/files-server:{0}', github.event.inputs.tags || steps.get-latest-tag.outputs.tag) }}
           platforms: linux/amd64,linux/arm64
+          progress: plain

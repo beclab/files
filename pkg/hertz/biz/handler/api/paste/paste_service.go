@@ -11,9 +11,10 @@ import (
 	"files/pkg/models"
 	"files/pkg/tasks"
 	"fmt"
+	"strconv"
+
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"k8s.io/klog/v2"
-	"strconv"
 
 	paste "files/pkg/hertz/biz/model/api/paste"
 
@@ -53,10 +54,15 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	var pasteParam = &models.PasteParam{
-		Owner:  owner,
-		Action: req.Action,
-		Src:    src,
-		Dst:    dst,
+		Owner:        owner,
+		Action:       req.Action,
+		Src:          src,
+		Dst:          dst,
+		Share:        int(req.Share),
+		SrcShareType: req.SrcShareType,
+		DstShareType: req.DstShareType,
+		SrcOwner:     req.SrcOwner,
+		DstOwner:     req.DstOwner,
 	}
 
 	handler := drivers.Adaptor.NewFileHandler(pasteParam.Src.FileType, &base.HandlerParam{})

@@ -21,3 +21,13 @@ func RespErrorExpired(c *app.RequestContext, code int, msg string, expire int64)
 	c.JSON(code, utils.H{"code": 1, "message": msg, "expire": expire})
 	c.Abort()
 }
+
+func RespBadRequest(c *app.RequestContext, msg string) {
+	c.JSON(http.StatusBadRequest, utils.H{"code": 1, "message": msg})
+	c.Abort()
+}
+
+func RespStatusInternalServerError(c *app.RequestContext, msg string) {
+	c.JSON(http.StatusInternalServerError, utils.H{"code": 1, "message": msg})
+	c.Abort()
+}
