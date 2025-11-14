@@ -34,14 +34,14 @@ type SyncStorage struct {
 }
 
 type Files struct {
-	DirId    string  `json:"dir_id"`
-	Items    []*File `json:"dirent_list"`
-	UserPerm string  `json:"user_perm"`
-	FsType   string  `json:"fileType"`
-	FsExtend string  `json:"fileExtend"`
-	FsPath   string  `json:"filePath"`
-	Name     string  `json:"name"`
-	MTime    string  `json:"mtime"`
+	DirId      string  `json:"dir_id"`
+	Items      []*File `json:"dirent_list"`
+	UserPerm   string  `json:"user_perm"`
+	FsType     string  `json:"fileType"`
+	FsExtend   string  `json:"fileExtend"`
+	FsPath     string  `json:"filePath"`
+	Name       string  `json:"name"`
+	LastModify string  `json:"last_modify"`
 }
 
 type File struct {
@@ -58,7 +58,7 @@ type File struct {
 	Permission    string `json:"permission"`
 	Size          int64  `json:"size"`
 	Type          string `json:"type"`
-	MTime         string `json:"mtime"`
+	LastModify    string `json:"last_modify"`
 }
 
 func getSyncFileType(filename string) string {
@@ -115,16 +115,16 @@ func TransSyncFilesToFileInfo(filesData *Files, contextArgs *models.HttpContextA
 			result.Name = ""
 		}
 	}
-	if filesData.MTime != "" {
-		klog.Infof("filesData.MTime=%s", filesData.MTime)
-		mtimeInt, err := common.ParseInt64(filesData.MTime)
+	if filesData.LastModify != "" {
+		klog.Infof("filesData.LastModify=%s", filesData.LastModify)
+		lastModify, err := time.Parse(time.RFC3339Nano, filesData.LastModify)
 		if err != nil {
 			klog.Error(err)
 		} else {
-			result.ModTime = time.Unix(mtimeInt, 0)
+			result.ModTime = lastModify
 		}
 	} else {
-		klog.Infof("filesData.MTime is empty")
+		klog.Infof("filesData.LastModify is empty")
 	}
 
 	klog.Infof("Begin to identify result recursive infos")
@@ -175,16 +175,16 @@ func TransSyncFilesToFileInfo(filesData *Files, contextArgs *models.HttpContextA
 			}
 			resItem.Size = item.Size
 
-			if item.MTime != "" {
-				klog.Infof("resItem.MTime=%s", item.MTime)
-				itemMtimeInt, itemErr := common.ParseInt64(item.MTime)
+			if item.LastModify != "" {
+				klog.Infof("resItem.LastModify=%s", item.LastModify)
+				itemLastModify, itemErr := time.Parse(time.RFC3339Nano, item.LastModify)
 				if itemErr != nil {
 					klog.Error(itemErr)
 				} else {
-					resItem.ModTime = time.Unix(itemMtimeInt, 0)
+					resItem.ModTime = itemLastModify
 				}
 			} else {
-				klog.Infof("item.Mtime is empty")
+				klog.Infof("item.LastModify is empty")
 			}
 
 			listing.Size += item.Size
