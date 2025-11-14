@@ -1,0 +1,145 @@
+# Combined image version (Debian)
+ARG OS_VERSION=bookworm
+
+# Jellyfin FFMPEG package
+ARG FFMPEG_PACKAGE=jellyfin-ffmpeg7
+
+# https://github.com/intel/compute-runtime/releases
+ARG GMMLIB_VER=22.7.0
+# >= Gen12 graphics (current)
+ARG IGC2_VER=2.10.8
+ARG IGC2_BUILD=18926
+ARG NEO_VER=25.13.33276.16
+# <= Gen11 graphics (legacy)
+ARG IGC1_LEGACY_VER=1.0.17537.20
+ARG NEO_LEGACY_VER=24.35.30872.22
+
+# https://github.com/tsukumijima/libmali-rockchip
+ARG MALI_PKG_VER=1.9-1_arm64
+ARG MALI_PKG_TAG=v1.9-1-2131373
+ARG MALI_PKG_CFG=valhall-g610-g24p0-gbm
+
+# Debian architecture (amd64, arm64, armhf), set by build script
+ARG PACKAGE_ARCH=
+# Base Image architecture (amd64, arm64v8, arm32v7), set by build script
+ARG IMAGE_ARCH
+# Target platform architecture (amd64, arm64/v8, arm/v7), set by build script
+ARG TARGET_ARCH
+
+FROM debian:${OS_VERSION}-slim AS build
+
+RUN mkdir dist
+COPY cmd/backend/dist dist
+
+# Detect the CPU architecture and copy the appropriate binary
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+        mv dist/linux-amd64/filebrowser /filebrowser; \
+    elif [ "$(uname -m)" = "aarch64" ]; then \
+        mv dist/linux-arm64/filebrowser /filebrowser; \
+    else \
+        echo "Unsupported CPU architecture" && exit 1; \
+    fi
+
+# --
+
+# In the combined image stage
+# FROM --platform=linux/${TARGET_ARCH} ${IMAGE_ARCH}/debian:${OS_VERSION}-slim AS combined
+FROM debian:${OS_VERSION}-slim
+
+ARG OS_VERSION
+ARG FFMPEG_PACKAGE
+
+ARG GMMLIB_VER
+ARG IGC2_VER
+ARG IGC2_BUILD
+ARG NEO_VER
+ARG IGC1_LEGACY_VER
+ARG NEO_LEGACY_VER
+
+ARG MALI_PKG_VER
+ARG MALI_PKG_TAG
+ARG MALI_PKG_CFG
+
+ARG PACKAGE_ARCH
+
+# Set the FFMPEG path for Jellyfin
+ENV JELLYFIN_FFMPEG="/usr/lib/jellyfin-ffmpeg/ffmpeg"
+
+# https://github.com/NVIDIA/nvidia-docker/wiki/Installation-(Native-GPU-Support)
+ENV NVIDIA_VISIBLE_DEVICES="all"
+ENV NVIDIA_DRIVER_CAPABILITIES="compute,video,utility"
+
+# Install dependencies including jellyfin-ffmpeg7
+RUN apt-get update \
+ && apt-get install --no-install-recommends --no-install-suggests --yes \
+    poppler-utils \
+    wv \
+    unrtf \
+    tidy \
+    inotify-tools \
+    mailcap  \
+    rsync \
+    ca-certificates \
+    gnupg \
+    curl \
+    apt-transport-https \
+ && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
+ | gpg --dearmor -o /etc/apt/trusted.gpg.d/debian-jellyfin.gpg \
+ && echo "deb [arch=${PACKAGE_ARCH}] https://repo.jellyfin.org/master/debian ${OS_VERSION} main" > /etc/apt/sources.list.d/jellyfin.list \
+ && apt-get update \
+ && apt-get install --no-install-recommends --no-install-suggests --yes \
+    ${FFMPEG_PACKAGE} \
+    openssl \
+    locales \
+    libfontconfig1 \
+    libfreetype6 \
+    libjemalloc2 \
+ && sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && locale-gen \
+ && apt-get remove gnupg apt-transport-https --yes \
+ && apt-get clean autoclean --yes \
+ && apt-get autoremove --yes \
+ && rm -rf /var/cache/apt/archives* /var/lib/apt/lists/*
+
+# Intel OpenCL Tone mapping dependencies:
+RUN if test "${PACKAGE_ARCH}" = "amd64"; then \
+    mkdir intel-compute-runtime \
+ && cd intel-compute-runtime \
+ && curl -LO https://github.com/intel/compute-runtime/releases/download/${NEO_VER}/libigdgmm12_${GMMLIB_VER}_amd64.deb \
+          -LO https://github.com/intel/intel-graphics-compiler/releases/download/v${IGC2_VER}/intel-igc-core-2_${IGC2_VER}+${IGC2_BUILD}_amd64.deb \
+          -LO https://github.com/intel/intel-graphics-compiler/releases/download/v${IGC2_VER}/intel-igc-opencl-2_${IGC2_VER}+${IGC2_BUILD}_amd64.deb \
+          -LO https://github.com/intel/compute-runtime/releases/download/${NEO_VER}/intel-opencl-icd_${NEO_VER}_amd64.deb \
+          -LO https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC1_LEGACY_VER}/intel-igc-core_${IGC1_LEGACY_VER}_amd64.deb \
+          -LO https://github.com/intel/intel-graphics-compiler/releases/download/igc-${IGC1_LEGACY_VER}/intel-igc-opencl_${IGC1_LEGACY_VER}_amd64.deb \
+          -LO https://github.com/intel/compute-runtime/releases/download/${NEO_LEGACY_VER}/intel-opencl-icd-legacy1_${NEO_LEGACY_VER}_amd64.deb \
+ && apt-get install --no-install-recommends --no-install-suggests -f -y ./*.deb \
+ && cd .. \
+ && rm -rf intel-compute-runtime \
+ ; fi \
+ && apt-get clean autoclean --yes \
+ && apt-get autoremove --yes \
+ && rm -rf /var/cache/apt/archives* /var/lib/apt/lists/*
+
+# Rockchip RK3588 libmali OpenCL dependencies:
+RUN if test "${PACKAGE_ARCH}" = "arm64"; then \
+    mkdir libmali-rockchip \
+ && cd libmali-rockchip \
+ && curl -LO https://github.com/tsukumijima/libmali-rockchip/releases/download/${MALI_PKG_TAG}/libmali-${MALI_PKG_CFG}_${MALI_PKG_VER}.deb \
+ && apt-get install --no-install-recommends --no-install-suggests -f -y ./*.deb \
+ && cd .. \
+ && rm -rf libmali-rockchip \
+ ; fi \
+ && apt-get clean autoclean --yes \
+ && apt-get autoremove --yes \
+ && rm -rf /var/cache/apt/archives* /var/lib/apt/lists/*
+
+ENV PATH="/usr/lib/jellyfin-ffmpeg:${PATH}"
+
+HEALTHCHECK --start-period=2s --interval=5s --timeout=3s \
+  CMD curl -f http://localhost/health || exit 1
+
+VOLUME /srv
+EXPOSE 8080
+
+COPY --from=build /filebrowser /filebrowser
+
+ENTRYPOINT ["/filebrowser"]
