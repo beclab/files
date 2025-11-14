@@ -1,13 +1,5 @@
 package models
 
-type PasteReq struct {
-	Owner       string `json:"owner"`
-	Extend      string `json:"extend"`
-	Action      string `json:"action"`
-	Source      string `json:"source"`
-	Destination string `json:"destination"`
-}
-
 type PasteParam struct {
 	Owner                   string `json:"owner"`
 	Action                  string `json:"action"`
@@ -16,4 +8,9 @@ type PasteParam struct {
 	Src                     *FileParam
 	Dst                     *FileParam
 	Temp                    *FileParam
+	Share                   int    `json:"share"`
+	SrcShareType            string `json:"srcShareType"`
+	DstShareType            string `json:"dstShareType"`
+	SrcOwner                string `json:"srcOwner"`
+	DstOwner                string `json:"dstOwner"`
 }

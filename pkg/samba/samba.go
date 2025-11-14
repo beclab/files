@@ -612,16 +612,18 @@ func (s *samba) CreateSambaSharePath(owner string, smbSharePublicLevel int32, us
 	}
 
 	var newSmbShareMembers []*share.ShareSmbMember
-	for _, u := range users {
-		var newSmbShareMember = &share.ShareSmbMember{
-			Owner:      owner,
-			PathID:     sharePathId,
-			UserID:     u.ID,
-			Permission: u.Permission,
-			CreateTime: now,
-			UpdateTime: now,
+	if smbSharePublicLevel != 1 {
+		for _, u := range users {
+			var newSmbShareMember = &share.ShareSmbMember{
+				Owner:      owner,
+				PathID:     sharePathId,
+				UserID:     u.ID,
+				Permission: u.Permission,
+				CreateTime: now,
+				UpdateTime: now,
+			}
+			newSmbShareMembers = append(newSmbShareMembers, newSmbShareMember)
 		}
-		newSmbShareMembers = append(newSmbShareMembers, newSmbShareMember)
 	}
 
 	if err := database.CreateSmbSharePathTx(newSmbSharePath, newSmbShareMembers); err != nil {
@@ -638,9 +640,14 @@ func (s *samba) DeleteSambaShareUsers(owner string, users []string) error {
 	return database.DeleteSmbUserTx(owner, users)
 }
 
-func (s *samba) ModifySambaShareMembers(owner string, sharePath *share.SharePath, modifyMembers []*share.CreateSmbSharePathMembers) error {
+func (s *samba) ModifySambaShareMembers(owner string, publicSmb bool, sharePath *share.SharePath, modifyMembers []*share.CreateSmbSharePathMembers) error {
 	s.Lock()
 	defer s.Unlock()
+
+	var changeToPublic bool
+	if sharePath.SmbSharePublic == 0 && publicSmb {
+		changeToPublic = true
+	}
 
 	members, err := database.QuerySmbMembers(sharePath.ID)
 	if err != nil {
@@ -648,15 +655,31 @@ func (s *samba) ModifySambaShareMembers(owner string, sharePath *share.SharePath
 		return err
 	}
 
-	addMembers, editMembers, delMembers := CompareSmbShareMembers(members, modifyMembers)
+	var userIds []string
+	for _, member := range members {
+		userIds = append(userIds, member.UserID)
+	}
+	smbUsers, _ := database.QuerySmbUsers(userIds)
+
+	addMembers, editMembers, delMembers := CompareSmbShareMembers(publicSmb, members, modifyMembers)
 
 	klog.Infof("[samba] modify smb share members, owner: %s, pathId: %s, add: %s, edit: %s, del: %s", owner, sharePath.ID, common.ParseString(addMembers), common.ParseString(editMembers), common.ParseString(delMembers))
 
-	if err := database.ModifySmbMembersTx(owner, sharePath.ID, addMembers, editMembers, delMembers); err != nil {
+	if err := database.ModifySmbMembersTx(owner, publicSmb, sharePath.ID, addMembers, editMembers, delMembers); err != nil {
 		klog.Errorf("[samba] modify smb share members failed, owner: %s, pathId: %s, error: %v", owner, sharePath.ID, err)
 		return err
 	}
 
+	var removeUsers []string
+	if changeToPublic {
+		if len(smbUsers) > 0 {
+			for _, m := range smbUsers {
+				removeUsers = append(removeUsers, m.UserName)
+			}
+		}
+	}
+
+	var operator = "add"
 	var crd = &share.SmbCreate{
 		Owner: owner,
 		ID:    sharePath.ID,
@@ -664,7 +687,12 @@ func (s *samba) ModifySambaShareMembers(owner string, sharePath *share.SharePath
 		User:  "",
 	}
 
-	if err := s.CreateShareSamba([]*share.SmbCreate{crd}, "add"); err != nil {
+	if changeToPublic {
+		operator = "del"
+		crd.User = strings.Join(removeUsers, ",")
+	}
+
+	if err := s.CreateShareSamba([]*share.SmbCreate{crd}, operator); err != nil {
 		klog.Errorf("[samba] modify smb share members, update crd failed, owner: %s, pathId: %s, error: %v", owner, sharePath.ID, err)
 		return err
 	}

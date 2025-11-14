@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -40,8 +39,6 @@ const (
 	PERMISSION_EDIT
 	PERMISSION_ADMIN
 )
-
-var smbLocker sync.Mutex
 
 // CreateSharePath .
 // @router /share/share_path/*path [POST]
@@ -370,6 +367,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 				}
 			}
 		} else if sharePath.ShareType == common.ShareTypeSMB {
+			viewPath.PublicSmb = sharePath.SmbSharePublic == 1
 			viewPath.SmbLink = fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), viewPath.Name)
 			if len(smbShareMembers) > 0 {
 				for _, u := range smbShareMembers {
@@ -1756,7 +1754,7 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("GetToken, sharePath expireTime: %s, shareId: %s", sharePath.ExpireTime, req.ShareId)
 
-	expireTime, _ := time.Parse(common.DefaultPGTimeFormat, sharePath.ExpireTime)
+	expireTime, _ := time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
 	if time.Now().After(expireTime) {
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expireTime.Unix())
 		return
@@ -1765,8 +1763,7 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 	// create token
 	var token = &share.ShareToken{
 		PathID:   req.ShareId,
-		ExpireAt: time.Now().Add(6 * time.Hour).Format(common.DefaultPGTimeFormat),
-		// ExpireAt: time.Now().Add(5 * time.Minute).Format(common.DefaultPGTimeFormat),
+		ExpireAt: time.Now().Add(6 * time.Hour).Format(time.RFC3339Nano),
 	}
 
 	res, err := database.CreateShareToken([]*share.ShareToken{token}, database.DB)
@@ -1805,7 +1802,7 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	expired, _ := time.Parse(common.DefaultPGTimeFormat, shareToken.ExpireAt)
+	expired, _ := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
 	if time.Now().After(expired) {
 		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expired.Unix())
 		return
@@ -1817,7 +1814,7 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
 	}
 
-	expired, _ = time.Parse(common.DefaultPGTimeFormat, sharePath.ExpireTime)
+	expired, _ = time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
 	if time.Now().After(expired) {
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expired.Unix())
 		return
@@ -1885,7 +1882,7 @@ func ListSmbUser(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	res, err := database.QuerySmbUsers()
+	res, err := database.QuerySmbUsers(nil)
 	if err != nil {
 		handler.RespError(c, err.Error())
 		return
@@ -2010,7 +2007,7 @@ func DeleteSmbUser(ctx context.Context, c *app.RequestContext) {
 // ~ internal func
 func createSambaShare(c *app.RequestContext, owner string, req *share.CreateSharePathReq, fileParam *models.FileParam) {
 	var isSmbSharePublic int32
-	if len(req.Users) == 0 {
+	if req.PublicSmb {
 		isSmbSharePublic = 1
 	}
 
@@ -2080,7 +2077,17 @@ func ModifySmbMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if err = samba.SambaService.ModifySambaShareMembers(owner, shared, req.Users); err != nil {
+	if shared == nil {
+		handler.RespError(c, common.ErrorMessageWrongShare)
+		return
+	}
+
+	if shared.SmbSharePublic == 1 && req.PublicSmb {
+		handler.RespSuccess(c, nil)
+		return
+	}
+
+	if err = samba.SambaService.ModifySambaShareMembers(owner, req.PublicSmb, shared, req.Users); err != nil {
 		klog.Errorf("[samba] ModifySmbMember, failed, owner: %s, pathId: %s, error: %v", owner, req.PathId, err)
 		handler.RespError(c, fmt.Sprintf("Modify Members Error: %v", err))
 		return

@@ -90,7 +90,8 @@ struct CreateSharePathReq {
     4: i64 expire_in (api.body="expire_in");
     5: string expire_time (api.body="expire_time");
     6: i32 permission (api.body="permission", api.vd="$>=0 && $<=4");
-    7: list<CreateSmbSharePathMembers> users (api.body="users");
+    7: bool public_smb (api.body="public_smb");
+    8: list<CreateSmbSharePathMembers> users (api.body="users");
 }
 
 struct CreateSmbSharePathMembers {
@@ -267,7 +268,8 @@ struct DeleteSmbUserResp {}
 
 struct ModifySmbMemberReq {
     1: required string PathId (api.body="path_id");
-    2: list<CreateSmbSharePathMembers> Users (api.body="users");
+    2: bool public_smb (api.body="public_smb");
+    3: list<CreateSmbSharePathMembers> Users (api.body="users");
 }
 struct ModifySmbMemberResp {}
 

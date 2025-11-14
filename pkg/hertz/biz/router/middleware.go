@@ -110,6 +110,7 @@ func ShareMiddleware() app.HandlerFunc {
 			return
 		}
 
+		// if Paste, is's Source
 		var paramPath string
 		var urlShareType string
 		_ = urlShareType
@@ -122,6 +123,7 @@ func ShareMiddleware() app.HandlerFunc {
 		}
 
 		var pasteAction, pasteDst string
+		// if Paste, it's Destination
 		var pasteDstParam *models.FileParam
 
 		var uploadLink, uploadBytes, uploadChunk bool
@@ -141,7 +143,7 @@ func ShareMiddleware() app.HandlerFunc {
 			} else {
 				shareAccess.Download = true
 			}
-		} else if strings.HasPrefix(path, ShareApiPastePath) {
+		} else if strings.HasPrefix(path, ShareApiPastePath) { // paste
 			shareAccess.Paste = true
 
 			var req paste.PasteReq
@@ -198,27 +200,18 @@ func ShareMiddleware() app.HandlerFunc {
 			return
 		}
 
-		shareParam, _ := models.CreateFileParam(bflName, paramPath)
+		// if Paste, it's Source
+		var shareParam *models.FileParam
+		shareParam, _ = models.CreateFileParam(bflName, paramPath)
 
 		if shareParam == nil || (shareParam.FileType != common.Share && ((pasteDstParam != nil && pasteDstParam.FileType != common.Share) || pasteDstParam == nil)) {
 			c.Next(ctx)
 			return
 		}
 
-		var pasteDstShared *share.SharePath
-		var shareExpired int64
-
 		if shareAccess.Paste {
-
-			pasteDstShared, shareExpired, err = checkSharePath(bflName, pasteDstParam.Extend, shareAccess.FromShare)
-			if err != nil {
-				if shareExpired == 0 {
-					handler.RespError(c, common.ErrorMessageWrongShare)
-				} else {
-					handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, shareExpired)
-				}
-				return
-			}
+			proxySharePaste(c, bflName, pasteAction, shareParam, pasteDstParam)
+			return
 		}
 
 		shared, expires, err := checkSharePath(bflName, shareParam.Extend, shareAccess.FromShare)
@@ -256,19 +249,26 @@ func ShareMiddleware() app.HandlerFunc {
 			var token = c.Query("token")
 			var expires int64
 			var permit bool
+
 			expires, permit, err = checkExternal(bflName, token, shared, shareAccess)
 			if err != nil {
 				klog.Errorf("[share] check external error: %v, expires: %d", err, expires)
 				handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expires)
 				return
 			} else {
+				klog.Infof("[share] check external, permit: %v, expires: %d, shareOwner: %s, shareType: %s, sharePermit: %d", permit, expires, shared.Owner, shared.ShareType, shared.Permission)
 				if !permit {
+					if shared.Permission == 2 {
+						handler.RespSuccess(c, nil)
+						return
+					}
 					handler.RespError(c, common.ErrorMessagePermissionDenied)
 					return
 				}
 			}
 		}
 
+		var masterNodeName = global.GlobalNode.GetMasterNode()
 		var pathRewrite string
 		if shareParam.Path != "/" {
 			pathRewrite = strings.TrimRight(sharedPath, "/") + shareParam.Path
@@ -284,15 +284,13 @@ func ShareMiddleware() app.HandlerFunc {
 			rewritePrefix = ShareApiResourcesPath
 		} else if shareAccess.Preview {
 			rewritePrefix = ShareApiPreviewPath
-		} else if shareAccess.Paste { // ~ paste
-			rewritePrefix = ShareApiPastePath + "/" + global.GlobalNode.GetMasterNode()
 		} else if shareAccess.Raw || shareAccess.Download {
 			rewritePrefix = ShareApiRawPath
 		} else if shareAccess.Upload {
 			if uploadBytes {
-				rewritePrefix = ShareApiUploadedPath + "/" + global.GlobalNode.GetMasterNode()
+				rewritePrefix = ShareApiUploadedPath + "/" + masterNodeName
 			} else {
-				rewritePrefix = ShareApiUploadLinkPath + "/" + global.GlobalNode.GetMasterNode()
+				rewritePrefix = ShareApiUploadLinkPath + "/" + masterNodeName
 			}
 		} else {
 			handler.RespError(c, "No permission")
@@ -330,9 +328,6 @@ func ShareMiddleware() app.HandlerFunc {
 			} else if uploadChunk {
 				url = fmt.Sprintf("%s%s%s?&ret-json=%s&share=1&sharetype=%s&shareby=%s&shareby_path=/%s", redirect, rewritePrefix, uploadLinkId, c.Query("ret-json"), shareType, shareBy, pathRewrite)
 			}
-		} else if shareAccess.Paste {
-			accessOwner = bflName
-			url += fmt.Sprintf("%s%s?share=1&sharetype=%s", redirect, rewritePrefix, shareType)
 		} else {
 			accessOwner = shareBy
 
@@ -351,22 +346,6 @@ func ShareMiddleware() app.HandlerFunc {
 		klog.Infof("[share] share rewrite url: %s, access: %s, shareby: %s, method: %s", url, bflName, shareBy, method)
 
 		var br io.Reader
-
-		if shareAccess.Paste { // ~ paste
-			var req = &paste.PasteReq{
-				Action:      pasteAction,
-				Source:      fmt.Sprintf("/%s", pathRewrite),
-				Destination: fmt.Sprintf("/%s/%s/%s/%s", pasteDstShared.FileType, pasteDstShared.Extend, strings.Trim(pasteDstShared.Path, "/"), strings.TrimLeft(pasteDstParam.Path, "/")),
-			}
-
-			bodyBytes, err := json.Marshal(req)
-			if err != nil {
-				handler.RespError(c, err.Error())
-				return
-			}
-			br = bytes.NewBuffer(bodyBytes)
-		}
-
 		var req, _ = http.NewRequest(string(c.Request.Method()), url, br)
 
 		c.Request.Header.VisitAll(func(key, value []byte) {
@@ -378,11 +357,9 @@ func ShareMiddleware() app.HandlerFunc {
 			req.Header.Set(common.REQUEST_HEADER_OWNER, accessOwner) // external, bflName maybe is owner in host
 		}
 
-		if !shareAccess.Paste {
-			body := c.Request.Body()
-			req.Body = io.NopCloser(bytes.NewReader(body))
-			req.ContentLength = int64(len(body))
-		}
+		body := c.Request.Body()
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		req.ContentLength = int64(len(body))
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -424,7 +401,7 @@ func checkSharePath(currentUser string, shareId string, fromShare bool) (*share.
 		return sharePath, 0, nil
 	}
 
-	expired, _ := time.Parse(common.DefaultPGTimeFormat, sharePath.ExpireTime)
+	expired, _ := time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
 
 	if time.Now().After(expired) {
 		klog.Errorf("sharePath expired, expireTime: %s", sharePath.ExpireTime)
@@ -472,7 +449,7 @@ func checkExternal(currentUser string, token string, sharePaths *share.SharePath
 
 	klog.Infof("share token: %s", common.ToJson(shareToken))
 
-	expired, _ := time.Parse(common.DefaultPGTimeFormat, shareToken.ExpireAt)
+	expired, _ := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
 	if time.Now().After(expired) {
 		klog.Errorf("[share] shareToken expired, expireAt: %s", shareToken.ExpireAt)
 		return expired.Unix(), false, fmt.Errorf("shareToken expired, shareToken.ExpireAt: %s", shareToken.ExpireAt)
@@ -506,7 +483,8 @@ func checkPermission(currentUser string, shareBy string, shareType string, permi
 		}
 		return false
 	case 3:
-		return ((shareAccess.Resource || shareAccess.Preview || shareAccess.Raw) && shareAccess.Method == http.MethodGet) || shareAccess.Upload || shareAccess.Download
+		return true
+		// return ((shareAccess.Resource || shareAccess.Preview || shareAccess.Raw) && shareAccess.Method == http.MethodGet) || shareAccess.Upload || shareAccess.Download
 	case 4:
 		return true
 	default:
@@ -524,4 +502,173 @@ func checkNonSharedPath(path string) bool {
 	}
 
 	return isSharedPath
+}
+
+func proxySharePaste(c *app.RequestContext, owner string, action string, src, dst *models.FileParam) {
+	var isSrcShare, isDstShare = src.FileType == common.Share, dst.FileType == common.Share
+
+	klog.Infof("[share] Paste, owern: %s, src: %s, dst: %s", owner, common.ParseString(src), common.ParseString(dst))
+
+	var srcDriveParam, dstDriveParam *models.FileParam
+	var srcShareType, dstShareType string
+
+	if isSrcShare {
+		shared, err := database.GetSharePath(src.Extend)
+		if err != nil {
+			handler.RespError(c, fmt.Sprintf("Get Share Source Error: %v", err))
+			return
+		}
+
+		if shared == nil {
+			handler.RespError(c, common.ErrorMessagePasteWrongSourceShare)
+			return
+		}
+
+		// check expire
+		if checkExpired(shared.ExpireTime) {
+			handler.RespError(c, common.ErrorMessagePasteSourceExpired)
+			return
+		}
+
+		// check member
+		member, err := database.GetShareMember(shared.ID, owner)
+		if err != nil {
+			handler.RespError(c, fmt.Sprintf("Get Share Source Member Error: %v", err))
+			return
+		}
+		if member == nil {
+			handler.RespError(c, common.ErrorMessagePasteWrongSourceShare)
+			return
+		}
+
+		// check permission
+		if member.Permission < 1 {
+			handler.RespError(c, common.ErrorMessagePermissionDenied)
+			return
+		}
+
+		//
+		srcShareType = shared.ShareType
+		srcDriveParam = &models.FileParam{
+			Owner:    shared.Owner,
+			FileType: shared.FileType,
+			Extend:   shared.Extend,
+			Path:     shared.Path + strings.TrimPrefix(src.Path, "/"),
+		}
+	} else {
+		srcDriveParam = &models.FileParam{
+			Owner:    owner,
+			FileType: src.FileType,
+			Extend:   src.Extend,
+			Path:     src.Path,
+		}
+	}
+
+	if isDstShare {
+		shared, err := database.GetSharePath(dst.Extend)
+		if err != nil {
+			handler.RespError(c, fmt.Sprintf("Get Share Destination Error: %v", err))
+			return
+		}
+
+		if shared == nil {
+			handler.RespError(c, common.ErrorMessagePasteWrongDestinationShare)
+			return
+		}
+
+		// check expire
+		if checkExpired(shared.ExpireTime) {
+			handler.RespError(c, common.ErrorMessagePasteDestinationExpired)
+			return
+		}
+
+		// check member
+		member, err := database.GetShareMember(shared.ID, owner)
+		if err != nil {
+			handler.RespError(c, fmt.Sprintf("Get Share Destination Member Error: %v", err))
+			return
+		}
+
+		if member == nil {
+			handler.RespError(c, common.ErrorMessagePasteWrongDestinationShare)
+			return
+		}
+
+		// check permission, view, edit, admin
+		if owner != shared.Owner && member.Permission < 2 {
+			handler.RespError(c, common.ErrorMessagePermissionDenied)
+			return
+		}
+
+		//
+		dstShareType = shared.ShareType
+		dstDriveParam = &models.FileParam{
+			Owner:    shared.Owner,
+			FileType: shared.FileType,
+			Extend:   shared.Extend,
+			Path:     shared.Path + strings.TrimPrefix(dst.Path, "/"),
+		}
+	} else {
+		dstDriveParam = &models.FileParam{
+			Owner:    owner,
+			FileType: dst.FileType,
+			Extend:   dst.Extend,
+			Path:     dst.Path,
+		}
+	}
+
+	var param = &paste.PasteReq{
+		Action:       action,
+		Source:       fmt.Sprintf("/%s/%s/%s", srcDriveParam.FileType, srcDriveParam.Extend, strings.TrimPrefix(srcDriveParam.Path, "/")),
+		Destination:  fmt.Sprintf("/%s/%s/%s", dstDriveParam.FileType, dstDriveParam.Extend, strings.TrimPrefix(dstDriveParam.Path, "/")),
+		Share:        1,
+		SrcShareType: srcShareType,
+		DstShareType: dstShareType,
+		SrcOwner:     srcDriveParam.Owner,
+		DstOwner:     dstDriveParam.Owner,
+	}
+
+	var masterNodeName = global.GlobalNode.GetMasterNode()
+	var query = string(c.Request.QueryString())
+	var url = fmt.Sprintf("http://%s/%s/%s?%s", common.SERVER_HOST, strings.TrimPrefix(ShareApiPastePath, "/"), masterNodeName, query)
+
+	var br io.Reader
+	bodyBytes, err := json.Marshal(param)
+	if err != nil {
+		handler.RespError(c, err.Error())
+		return
+	}
+	br = bytes.NewBuffer(bodyBytes)
+
+	var req, _ = http.NewRequest(string(c.Request.Method()), url, br)
+
+	c.Request.Header.VisitAll(func(key, value []byte) {
+		req.Header.Set(string(key), string(value))
+	})
+	req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		handler.RespError(c, fmt.Sprintf("proxy error: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			c.Header(k, v)
+		}
+	}
+	c.Status(resp.StatusCode)
+	bodyRes, _ := io.ReadAll(resp.Body)
+	c.Write(bodyRes)
+	c.Abort()
+}
+
+func checkExpired(expireAt string) bool {
+	expired, _ := time.Parse(time.RFC3339Nano, expireAt)
+	if time.Now().After(expired) {
+		return true
+	}
+	return false
 }

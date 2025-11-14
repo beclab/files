@@ -64,7 +64,17 @@ func FormatSharePathViews(data []*share.SmbShareView) map[string]*models.SambaSh
 	return result
 }
 
-func CompareSmbShareMembers(existsMembers []*share.ShareSmbMember, modifyMembers []*share.CreateSmbSharePathMembers) (newMembers, editMembers, delMembers []*share.CreateSmbSharePathMembers) {
+func CompareSmbShareMembers(publicSmb bool, existsMembers []*share.ShareSmbMember, modifyMembers []*share.CreateSmbSharePathMembers) (newMembers, editMembers, delMembers []*share.CreateSmbSharePathMembers) {
+	if publicSmb {
+		for _, m := range existsMembers {
+			delMembers = append(delMembers, &share.CreateSmbSharePathMembers{
+				ID:         m.UserID,
+				Permission: m.Permission,
+			})
+		}
+		return
+	}
+
 	existsIdx := make(map[string]*share.ShareSmbMember, len(existsMembers))
 	for _, n := range existsMembers {
 		existsIdx[n.UserID] = n
