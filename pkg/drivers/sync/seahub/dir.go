@@ -163,6 +163,12 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	allDirInfo := []map[string]interface{}{}
 	allFileInfo := []map[string]interface{}{}
 
+	baseInfo := getDirInfo(repoId, parentDir)
+	mtime := ""
+	if baseInfo != nil {
+		mtime = baseInfo["mtime"]
+	}
+
 	for _, dir := range parentDirs {
 		dirInfo, fileInfo, err := getDirFileInfoList(
 			username,
@@ -182,6 +188,7 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	response := map[string]interface{}{
 		"user_perm": permission,
 		"dir_id":    dirId,
+		"mtime":     mtime,
 	}
 
 	response["dirent_list"] = append(allDirInfo, allFileInfo...)
