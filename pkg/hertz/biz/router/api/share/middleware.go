@@ -160,3 +160,13 @@ func _getinternalsmbsharepathMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _share_membersMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _updatesharepathmembersMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
