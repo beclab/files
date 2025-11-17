@@ -15,8 +15,9 @@ struct SharePath {
     10: required string expire_time (go.tag = 'gorm:"column:expire_time;type:timestamptz;not null"')
     11: required i32 permission (go.tag = 'gorm:"column:permission;not null;default:0"')
     12: i32 smb_share_public (go.tag = 'gorm:"column:smb_share_public;not null;default:0"')
-    13: required string create_time (go.tag = 'gorm:"column:create_time;type:timestamptz;not null;autoCreateTime:milli"')
-    14: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime:milli"')
+    13: i64 upload_size_limit (go.tag = 'gorm:"column:upload_size_limit"')
+    14: required string create_time (go.tag = 'gorm:"column:create_time;type:timestamptz;not null;autoCreateTime:milli"')
+    15: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime:milli"')
 }
 
 struct ShareToken {
@@ -68,12 +69,20 @@ struct ViewSharePath {
     8: required i64 expire_in
     9: required string expire_time
     10: required i32 permission
-    11: required string create_time
-    12: required string update_time
-    13: bool shared_by_me
-    14: bool public_smb
-    15: list<ViewSharePathUsers> users (go.tag='json:"users,omitempty"')
-    16: string smb_link (go.tag='json:"smb_link,omitempty"')
+    11: i64 upload_size_limit
+    12: required string create_time
+    13: required string update_time
+    14: bool shared_by_me
+    15: bool public_smb
+    16: list<ViewSharePathMembers> share_members (go.tag='json:"share_members,omitempty"')
+    17: list<ViewSharePathUsers> users (go.tag='json:"users,omitempty"')
+    18: string smb_link (go.tag='json:"smb_link,omitempty"')
+}
+
+struct ViewSharePathMembers {
+    1: i64 id
+    2: string share_member
+    3: i32 permission
 }
 
 struct ViewSharePathUsers {
@@ -90,8 +99,10 @@ struct CreateSharePathReq {
     4: i64 expire_in (api.body="expire_in");
     5: string expire_time (api.body="expire_time");
     6: i32 permission (api.body="permission", api.vd="$>=0 && $<=4");
-    7: bool public_smb (api.body="public_smb");
-    8: list<CreateSmbSharePathMembers> users (api.body="users");
+    7: i64 upload_size_limit (api.body="upload_size_limit");
+    8: bool public_smb (api.body="public_smb");
+    9: list<AddOrUpdateShareMemberInfo> share_members (api.body="share_members");
+    10: list<CreateSmbSharePathMembers> users (api.body="users");
 }
 
 struct CreateSmbSharePathMembers {
@@ -113,7 +124,7 @@ struct ListSharePathReq {
     7: string Name (api.query="name");
     8: string Permission (api.query="permission");
     9: i64 ExpireIn (api.query="expire_in");
-    10: optional bool SharedWithMe (api.query="shared_with_me");
+    10: optional bool SharedToMe (api.query="shared_to_me");
     11: optional bool SharedByMe (api.query="shared_by_me");
 }
 
@@ -138,6 +149,11 @@ struct UpdateSharePathReq {
 
 struct UpdateSharePathResp {
     1: ViewSharePath share_path;
+}
+
+struct UpdateSharePathMembersReq {
+    1: required string PathId (api.body="path_id");
+    2: required list<AddOrUpdateShareMemberInfo> ShareMembers (api.body="share_members");
 }
 
 struct DeleteSharePathReq {
@@ -182,14 +198,14 @@ struct GetTokenReq {
 struct GetTokenResp {
 }
 
-struct AddShareMemberInfo {
+struct AddOrUpdateShareMemberInfo {
     1: required string ShareMember (api.body="share_member");
     2: required i32 Permission (api.body="permission", api.vd="$>=0 && $<=4");
 }
 
 struct AddShareMemberReq {
     1: required string PathId (api.body="path_id");
-    2: required list<AddShareMemberInfo> ShareMembers (api.body="share_members");
+    2: required list<AddOrUpdateShareMemberInfo> ShareMembers (api.body="share_members");
 }
 
 struct AddShareMemberResp {
@@ -296,6 +312,7 @@ service ShareService {
     CreateSharePathResp CreateSharePath(1: CreateSharePathReq request) (api.post="/api/share/share_path/*path");
     ListSharePathResp ListSharePath(1: ListSharePathReq request) (api.get="/api/share/share_path/");
     UpdateSharePathResp UpdateSharePath(1: UpdateSharePathReq request) (api.put="/api/share/share_path/");
+    UpdateSharePathResp UpdateSharePathMembers(1: UpdateSharePathMembersReq request) (api.put="/api/share/share_path/share_members/");
     DeleteSharePathResp DeleteSharePath(1: DeleteSharePathReq request) (api.delete="/api/share/share_path/");
     ResetPasswordResp ResetPassword(1: ResetPasswordReq request) (api.put="/api/share/share_password/");
     GetExternalSharePathResp GetExternalSharePath(1: GetExternalSharePathReq request) (api.get="/api/share/get_share/");
