@@ -186,7 +186,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 		klog.Errorf("Open or create temp file failed: %v", err)
 		return nil, err
 	}
-	defer os.Remove(tmpFile.Name())
+	defer os.RemoveAll(filepath.Dir(imageFilePath))
 	defer tmpFile.Close()
 
 	token, err := seaserv.GlobalSeafileAPI.GetFileServerAccessToken(repoId, fileId, "view", "", true)
@@ -229,19 +229,19 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 
 	klog.Infof("Sync preview, download success, file path: %s", imageFilePath)
 
-	switch strings.ToLower(fileInfo.FileType) {
+	switch strings.ToLower(file.Type) {
 	case "image":
 		data, err := preview.CreatePreview(owner, key, file, queryParam)
 		if err != nil {
 			return nil, err
 		}
 		return &models.PreviewHandlerResponse{
-			FileName:     fileInfo.FileName,
-			FileModified: time.Unix(fileInfo.LastModified, 0),
+			FileName:     file.Name,
+			FileModified: file.ModTime,
 			Data:         data,
 		}, nil
 	default:
-		return nil, fmt.Errorf("can't create preview for %s type", fileInfo.FileType)
+		return nil, fmt.Errorf("can't create preview for %s type", file.Type)
 	}
 }
 

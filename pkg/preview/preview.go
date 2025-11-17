@@ -99,7 +99,7 @@ func CreatePreview(owner string, key string,
 	}
 
 	buf := &bytes.Buffer{}
-	if err := imgSvc.Resize(context.TODO(), fd, width, height, buf, options...); err != nil {
+	if err = imgSvc.Resize(context.TODO(), fd, width, height, buf, options...); err != nil {
 		return nil, err
 	}
 
