@@ -90,17 +90,7 @@ func PreviewMethod(ctx context.Context, c *app.RequestContext) {
 				return
 			}
 		}
-		if !contextArg.FileParam.IsSync() {
-			c.SetContentType(common.MimeTypeByExtension(fileData.FileName)) // todo temp
-		} else {
-			name, ext := common.SplitNameExt(fileData.FileName)
-			ext = strings.ToLower(ext)
-			if ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".tiff" || ext == ".heic" {
-				c.SetContentType(common.MimeTypeByExtension(fileData.FileName))
-			} else {
-				c.SetContentType(common.MimeTypeByExtension(name + ".png"))
-			}
-		}
+		c.SetContentType(common.MimeTypeByExtension(fileData.FileName)) // todo temp
 		c.SetBodyStream(bytes.NewReader(fileData.Data), len(fileData.Data))
 	} else {
 		for k, vs := range fileData.RespHeader {
