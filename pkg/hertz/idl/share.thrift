@@ -121,7 +121,7 @@ struct ListSharePathReq {
     7: string Name (api.query="name");
     8: string Permission (api.query="permission");
     9: i64 ExpireIn (api.query="expire_in");
-    10: optional bool SharedWithMe (api.query="shared_with_me");
+    10: optional bool SharedToMe (api.query="shared_to_me");
     11: optional bool SharedByMe (api.query="shared_by_me");
 }
 

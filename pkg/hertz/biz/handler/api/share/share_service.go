@@ -251,27 +251,30 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	sharedWithMe := true
+	sharedToMe := true
 	sharedByMe := true
-	if req.SharedWithMe != nil {
-		sharedWithMe = *req.SharedWithMe
+	if req.SharedToMe != nil {
+		klog.Infof("*req.SharedWithMe=%t", *req.SharedToMe)
+		sharedToMe = *req.SharedToMe
 	}
 	if req.SharedByMe != nil {
+		klog.Infof("*req.SharedByMe=%t", *req.SharedByMe)
 		sharedByMe = *req.SharedByMe
 	}
-	if !sharedWithMe && !sharedByMe {
+	if !sharedToMe && !sharedByMe {
 		c.JSON(consts.StatusOK, map[string]interface{}{
 			"total":       0,
 			"share_paths": []string{},
 		})
 		return
 	} // no need to query any more
+	klog.Infof("sharedWithMe=%t, sharedByMe=%t", sharedToMe, sharedByMe)
 
 	// sharedWithMe
 	sharedWithMeRes := []*share.SharePath{}
 	sharedWithMeTotal := int64(0)
 
-	if sharedWithMe {
+	if sharedToMe {
 		sharedWithMeQueryParams := &database.QueryParams{}
 		sharedWithMeQueryParams.AND = []database.Filter{}
 		database.BuildStringQueryParam(req.PathId, "share_paths.id", "IN", &sharedWithMeQueryParams.AND, true)
