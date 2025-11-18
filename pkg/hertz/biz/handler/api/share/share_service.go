@@ -254,7 +254,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 	sharedToMe := true
 	sharedByMe := true
 	if req.SharedToMe != nil {
-		klog.Infof("*req.SharedWithMe=%t", *req.SharedToMe)
+		klog.Infof("*req.SharedToMe=%t", *req.SharedToMe)
 		sharedToMe = *req.SharedToMe
 	}
 	if req.SharedByMe != nil {
@@ -268,41 +268,41 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		})
 		return
 	} // no need to query any more
-	klog.Infof("sharedWithMe=%t, sharedByMe=%t", sharedToMe, sharedByMe)
+	klog.Infof("sharedToMe=%t, sharedByMe=%t", sharedToMe, sharedByMe)
 
-	// sharedWithMe
-	sharedWithMeRes := []*share.SharePath{}
-	sharedWithMeTotal := int64(0)
+	// sharedToMe
+	sharedToMeRes := []*share.SharePath{}
+	sharedToMeTotal := int64(0)
 
 	if sharedToMe {
-		sharedWithMeQueryParams := &database.QueryParams{}
-		sharedWithMeQueryParams.AND = []database.Filter{}
-		database.BuildStringQueryParam(req.PathId, "share_paths.id", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.FileType, "share_paths.file_type", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.Extend, "share_paths.extend", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.Path, "share_paths.path", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.Name, "share_paths.name", "IN", &sharedWithMeQueryParams.AND, true)
+		sharedToMeQueryParams := &database.QueryParams{}
+		sharedToMeQueryParams.AND = []database.Filter{}
+		database.BuildStringQueryParam(req.PathId, "share_paths.id", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.FileType, "share_paths.file_type", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Extend, "share_paths.extend", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Path, "share_paths.path", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Name, "share_paths.name", "IN", &sharedToMeQueryParams.AND, true)
 
 		if req.ExpireIn != 0 {
 			currentTime := time.Now()
 			expireTime := currentTime.Add(time.Duration(req.ExpireIn) * time.Millisecond).Format(time.RFC3339)
-			database.BuildStringQueryParam(expireTime, "share_paths.expire_time", "<=", &sharedWithMeQueryParams.AND, true)
+			database.BuildStringQueryParam(expireTime, "share_paths.expire_time", "<=", &sharedToMeQueryParams.AND, true)
 		}
 
-		sharedWithMeJoinConditions := []*database.JoinCondition{}
-		sharedWithMeJoinConditions = append(sharedWithMeJoinConditions, &database.JoinCondition{
+		sharedToMeJoinConditions := []*database.JoinCondition{}
+		sharedToMeJoinConditions = append(sharedToMeJoinConditions, &database.JoinCondition{
 			Table:     "share_paths",
 			Field:     "id",
 			JoinTable: "share_members",
 			JoinField: "path_id",
 		})
-		database.BuildStringQueryParam(owner, "share_members.share_member", "=", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.Permission, "share_members.permission", "IN", &sharedWithMeQueryParams.AND, true)
+		database.BuildStringQueryParam(owner, "share_members.share_member", "=", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Permission, "share_members.permission", "IN", &sharedToMeQueryParams.AND, true)
 		if req.ShareRelativeUser != "" {
-			database.BuildStringQueryParam(req.ShareRelativeUser, "share_paths.owner", "IN", &sharedWithMeQueryParams.AND, true)
+			database.BuildStringQueryParam(req.ShareRelativeUser, "share_paths.owner", "IN", &sharedToMeQueryParams.AND, true)
 		}
-		sharedWithMeRes, sharedWithMeTotal, err = database.QuerySharePath(sharedWithMeQueryParams, 0, 0, "", "", sharedWithMeJoinConditions)
+		sharedToMeRes, sharedToMeTotal, err = database.QuerySharePath(sharedToMeQueryParams, 0, 0, "", "", sharedToMeJoinConditions)
 		if err != nil {
 			klog.Errorf("QuerySharePath error: %v", err)
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -361,7 +361,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 
 	for _, sharePath := range sharedByMeRes {
 		if sharePath.ShareType != common.ShareTypeInternal || sharePath.Owner != owner {
-			continue // always do not continue because of sharedWithMeRes is always internal and owner not me, just for taking position
+			continue // always do not continue because of sharedToMeRes is always internal and owner not me, just for taking position
 		}
 		for _, shareMember := range shareMembers {
 			if shareMember.PathID == sharePath.ID {
@@ -370,7 +370,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	for _, sharePath := range sharedWithMeRes { // only shared with me possibly fit permission for member
+	for _, sharePath := range sharedToMeRes { // only shared with me possibly fit permission for member
 		if sharePath.ShareType == common.ShareTypeInternal && sharePath.Owner != owner {
 			for _, shareMember := range shareMembers {
 				if shareMember.PathID == sharePath.ID {
@@ -381,8 +381,8 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 
 	}
 
-	res := append(sharedWithMeRes, sharedByMeRes...)
-	total := sharedWithMeTotal + sharedByMeTotal
+	res := append(sharedToMeRes, sharedByMeRes...)
+	total := sharedToMeTotal + sharedByMeTotal
 
 	var queryShareIds []string
 	for _, r := range res {
