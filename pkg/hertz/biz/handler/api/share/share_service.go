@@ -50,6 +50,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+	klog.Infof("req.UploadSizeLimit=%d", req.UploadSizeLimit)
 
 	p := "/" + c.Param("path")
 	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
@@ -138,23 +139,69 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
+	tx := database.DB.Begin()
+
 	sharePath := &share.SharePath{
-		Owner:       owner,
-		FileType:    fileParam.FileType,
-		Extend:      fileParam.Extend,
-		Path:        fileParam.Path,
-		ShareType:   req.ShareType,
-		Name:        req.Name,
-		PasswordMd5: password,
-		ExpireIn:    expireIn,
-		ExpireTime:  expireTime,
-		Permission:  permission,
-		CreateTime:  now,
-		UpdateTime:  now,
+		Owner:           owner,
+		FileType:        fileParam.FileType,
+		Extend:          fileParam.Extend,
+		Path:            fileParam.Path,
+		ShareType:       req.ShareType,
+		Name:            req.Name,
+		PasswordMd5:     password,
+		UploadSizeLimit: req.UploadSizeLimit,
+		ExpireIn:        expireIn,
+		ExpireTime:      expireTime,
+		Permission:      permission,
+		CreateTime:      now,
+		UpdateTime:      now,
 	}
-	res, err := database.CreateSharePath([]*share.SharePath{sharePath}, database.DB)
+	res, err := database.CreateSharePath([]*share.SharePath{sharePath}, tx)
 	if err != nil {
+		tx.Rollback()
 		klog.Errorf("postgres.CreateSharePath error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	var addShareMembers = []*share.ShareMember{}
+	for _, shareMemberInfo := range req.ShareMembers {
+		shareMember := &share.ShareMember{
+			PathID:      res[0].ID,
+			ShareMember: shareMemberInfo.ShareMember,
+			Permission:  shareMemberInfo.Permission,
+			CreateTime:  now,
+			UpdateTime:  now,
+		}
+		addShareMembers = append(addShareMembers, shareMember)
+	}
+
+	// add member
+	var addRes = []*share.ShareMember{}
+	if len(addShareMembers) > 0 {
+		addRes, err = database.CreateShareMember(addShareMembers, tx)
+		if err != nil {
+			klog.Errorf("postgres.CreateShareMember error: %v", err)
+			tx.Rollback()
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		if sharePath.FileType == "sync" {
+			seaResp, err := seahub.HandlePutDirSharedItems(sharePath, addShareMembers, "user")
+			if err != nil {
+				klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
+				tx.Rollback()
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+				return
+			}
+			klog.Infof("postgres.HandlePutDirSharedItems response: %+v", seaResp)
+		}
+	}
+	klog.Infof("add member response: %+v", addRes)
+
+	err = tx.Commit().Error
+	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
@@ -166,6 +213,14 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	result.SharedByMe = true
+	for _, shareMember := range addRes {
+		resMember := &share.ViewSharePathMembers{
+			ID:          shareMember.ID,
+			ShareMember: shareMember.ShareMember,
+			Permission:  shareMember.Permission,
+		}
+		result.ShareMembers = append(result.ShareMembers, resMember)
+	}
 
 	handler.RespSuccess(c, result)
 }
@@ -198,55 +253,58 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	sharedWithMe := true
+	sharedToMe := true
 	sharedByMe := true
-	if req.SharedWithMe != nil {
-		sharedWithMe = *req.SharedWithMe
+	if req.SharedToMe != nil {
+		klog.Infof("*req.SharedToMe=%t", *req.SharedToMe)
+		sharedToMe = *req.SharedToMe
 	}
 	if req.SharedByMe != nil {
+		klog.Infof("*req.SharedByMe=%t", *req.SharedByMe)
 		sharedByMe = *req.SharedByMe
 	}
-	if !sharedWithMe && !sharedByMe {
+	if !sharedToMe && !sharedByMe {
 		c.JSON(consts.StatusOK, map[string]interface{}{
 			"total":       0,
 			"share_paths": []string{},
 		})
 		return
 	} // no need to query any more
+	klog.Infof("sharedToMe=%t, sharedByMe=%t", sharedToMe, sharedByMe)
 
-	// sharedWithMe
-	sharedWithMeRes := []*share.SharePath{}
-	sharedWithMeTotal := int64(0)
+	// sharedToMe
+	sharedToMeRes := []*share.SharePath{}
+	sharedToMeTotal := int64(0)
 
-	if sharedWithMe {
-		sharedWithMeQueryParams := &database.QueryParams{}
-		sharedWithMeQueryParams.AND = []database.Filter{}
-		database.BuildStringQueryParam(req.PathId, "share_paths.id", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.FileType, "share_paths.file_type", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.Extend, "share_paths.extend", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.Path, "share_paths.path", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "IN", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.Name, "share_paths.name", "IN", &sharedWithMeQueryParams.AND, true)
+	if sharedToMe {
+		sharedToMeQueryParams := &database.QueryParams{}
+		sharedToMeQueryParams.AND = []database.Filter{}
+		database.BuildStringQueryParam(req.PathId, "share_paths.id", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.FileType, "share_paths.file_type", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Extend, "share_paths.extend", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Path, "share_paths.path", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.ShareType, "share_paths.share_type", "IN", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Name, "share_paths.name", "IN", &sharedToMeQueryParams.AND, true)
 
 		if req.ExpireIn != 0 {
 			currentTime := time.Now()
 			expireTime := currentTime.Add(time.Duration(req.ExpireIn) * time.Millisecond).Format(time.RFC3339)
-			database.BuildStringQueryParam(expireTime, "share_paths.expire_time", "<=", &sharedWithMeQueryParams.AND, true)
+			database.BuildStringQueryParam(expireTime, "share_paths.expire_time", "<=", &sharedToMeQueryParams.AND, true)
 		}
 
-		sharedWithMeJoinConditions := []*database.JoinCondition{}
-		sharedWithMeJoinConditions = append(sharedWithMeJoinConditions, &database.JoinCondition{
+		sharedToMeJoinConditions := []*database.JoinCondition{}
+		sharedToMeJoinConditions = append(sharedToMeJoinConditions, &database.JoinCondition{
 			Table:     "share_paths",
 			Field:     "id",
 			JoinTable: "share_members",
 			JoinField: "path_id",
 		})
-		database.BuildStringQueryParam(owner, "share_members.share_member", "=", &sharedWithMeQueryParams.AND, true)
-		database.BuildStringQueryParam(req.Permission, "share_members.permission", "IN", &sharedWithMeQueryParams.AND, true)
+		database.BuildStringQueryParam(owner, "share_members.share_member", "=", &sharedToMeQueryParams.AND, true)
+		database.BuildStringQueryParam(req.Permission, "share_members.permission", "IN", &sharedToMeQueryParams.AND, true)
 		if req.ShareRelativeUser != "" {
-			database.BuildStringQueryParam(req.ShareRelativeUser, "share_paths.owner", "IN", &sharedWithMeQueryParams.AND, true)
+			database.BuildStringQueryParam(req.ShareRelativeUser, "share_paths.owner", "IN", &sharedToMeQueryParams.AND, true)
 		}
-		sharedWithMeRes, sharedWithMeTotal, err = database.QuerySharePath(sharedWithMeQueryParams, 0, 0, "", "", sharedWithMeJoinConditions)
+		sharedToMeRes, sharedToMeTotal, err = database.QuerySharePath(sharedToMeQueryParams, 0, 0, "", "", sharedToMeJoinConditions)
 		if err != nil {
 			klog.Errorf("QuerySharePath error: %v", err)
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -305,7 +363,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 
 	for _, sharePath := range sharedByMeRes {
 		if sharePath.ShareType != common.ShareTypeInternal || sharePath.Owner != owner {
-			continue // always do not continue because of sharedWithMeRes is always internal and owner not me, just for taking position
+			continue // always do not continue because of sharedToMeRes is always internal and owner not me, just for taking position
 		}
 		for _, shareMember := range shareMembers {
 			if shareMember.PathID == sharePath.ID {
@@ -314,7 +372,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	for _, sharePath := range sharedWithMeRes { // only shared with me possibly fit permission for member
+	for _, sharePath := range sharedToMeRes { // only shared with me possibly fit permission for member
 		if sharePath.ShareType == common.ShareTypeInternal && sharePath.Owner != owner {
 			for _, shareMember := range shareMembers {
 				if shareMember.PathID == sharePath.ID {
@@ -325,8 +383,8 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 
 	}
 
-	res := append(sharedWithMeRes, sharedByMeRes...)
-	total := sharedWithMeTotal + sharedByMeTotal
+	res := append(sharedToMeRes, sharedByMeRes...)
+	total := sharedToMeTotal + sharedByMeTotal
 
 	var queryShareIds []string
 	for _, r := range res {
@@ -437,6 +495,225 @@ func UpdateSharePath(ctx context.Context, c *app.RequestContext) {
 	}
 	resp.SharePath.SharedByMe = res[0].Owner == owner
 	c.JSON(consts.StatusOK, resp)
+}
+
+// UpdateSharePathMembers .
+// @router /api/share/share_path/share_members/ [PUT]
+func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req share.UpdateSharePathMembersReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	pathId := req.PathId
+	pathQueryParams := &database.QueryParams{}
+	pathQueryParams.AND = []database.Filter{}
+	database.BuildStringQueryParam(pathId, "share_paths.id", "=", &pathQueryParams.AND, true)
+	sharePaths, total, err := database.QuerySharePath(pathQueryParams, 0, 0, "", "", nil)
+	if err != nil {
+		klog.Errorf("QuerySharePath error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	if total == 0 {
+		klog.Errorf("No SharePath found")
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "SharePath not found"})
+		return
+	}
+	klog.Infof("share_paths: %v", sharePaths)
+	sharePath := sharePaths[0]
+
+	memberInfoMap := make(map[string]*share.AddOrUpdateShareMemberInfo)
+	for _, memberInfo := range req.ShareMembers {
+		memberInfoMap[memberInfo.ShareMember] = memberInfo
+	}
+
+	memberQueryParams := &database.QueryParams{}
+	memberQueryParams.AND = []database.Filter{}
+	database.BuildStringQueryParam(pathId, "share_members.path_id", "=", &memberQueryParams.AND, true)
+
+	shareMembers, total, err := database.QueryShareMember(memberQueryParams, 0, 0, "share_members.id", "ASC", nil)
+	if err != nil {
+		klog.Errorf("QueryShareMember error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	memberMap := make(map[string]*share.ShareMember)
+	for _, member := range shareMembers {
+		memberMap[member.ShareMember] = member
+	}
+
+	var existedShareMembers = []*share.ShareMember{}
+	var updateShareMembers = []*share.ShareMember{}
+	var rollbackShareMembers = []*share.ShareMember{} // for rollback
+	var addShareMembers = []*share.ShareMember{}
+	var deleteShareMembers = []*share.ShareMember{}
+
+	for _, member := range shareMembers {
+		if _, exists := memberInfoMap[member.ShareMember]; exists {
+		} else {
+			deleteShareMembers = append(deleteShareMembers, member)
+		}
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, shareMemberInfo := range memberInfoMap {
+		if targetMember, exists := memberMap[shareMemberInfo.ShareMember]; exists {
+			if targetMember.Permission != shareMemberInfo.Permission {
+				updateShareMembers = append(updateShareMembers, &share.ShareMember{
+					ID:          targetMember.ID,
+					PathID:      pathId,
+					ShareMember: targetMember.ShareMember,
+					Permission:  shareMemberInfo.Permission,
+					CreateTime:  now,
+					UpdateTime:  now,
+				})
+				rollbackShareMembers = append(rollbackShareMembers, targetMember)
+			} else {
+				existedShareMembers = append(existedShareMembers, targetMember)
+			}
+		} else {
+			addShareMembers = append(addShareMembers, &share.ShareMember{
+				PathID:      pathId,
+				ShareMember: shareMemberInfo.ShareMember,
+				Permission:  shareMemberInfo.Permission,
+				CreateTime:  now,
+				UpdateTime:  now,
+			})
+		}
+	}
+	klog.Infof("existedShareMembers: %+v", existedShareMembers)
+	klog.Infof("updateShareMembers: %+v", updateShareMembers)
+	klog.Infof("rollbackShareMembers: %+v", rollbackShareMembers)
+	klog.Infof("addShareMembers: %+v", addShareMembers)
+
+	tx := database.DB.Begin()
+
+	// update
+	for _, shareMember := range updateShareMembers {
+		klog.Infof("updateShareMember: %+v", shareMember)
+		err = database.UpdateShareMember(shareMember.ID, map[string]interface{}{"permission": shareMember.Permission}, tx)
+		if err != nil {
+			for _, rollbackShareMember := range rollbackShareMembers {
+				if sharePath.FileType == "sync" {
+					_, subErr := seahub.HandlePostDirSharedItems(sharePath, rollbackShareMember, "user") // rollback
+					if subErr != nil {
+						klog.Errorf("postgres.HandlePostDirSharedItems error: %v", subErr)
+					}
+				}
+			}
+			klog.Errorf("postgres.UpdateShareMember error: %v", err)
+			tx.Rollback()
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		if sharePath.FileType == "sync" {
+			seaResp, err := seahub.HandlePostDirSharedItems(sharePath, shareMember, "user")
+			if err != nil {
+				klog.Errorf("postgres.HandlePostDirSharedItems error: %v", err)
+				tx.Rollback()
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+				return
+			}
+			klog.Infof("postgres.HandlePostDirSharedItems response: %+v", seaResp)
+		}
+	}
+
+	// delete
+	for _, shareMember := range deleteShareMembers {
+		if sharePath.FileType == "sync" {
+			seaResp, err := seahub.HandleDeleteDirSharedItems(sharePath, shareMember, "user")
+			if err != nil {
+				klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", err)
+				tx.Rollback()
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+				return
+			}
+			klog.Infof("postgres.HandleDeleteDirSharedItems response: %+v", seaResp)
+		}
+
+		klog.Infof("deleteShareMember: %+v", shareMember)
+		err = database.DeleteShareMember(shareMember.ID, tx)
+		if err != nil {
+			klog.Errorf("postgres.DeleteShareMember error: %v", err)
+			tx.Rollback()
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+	}
+
+	// add
+	var addRes = []*share.ShareMember{}
+	if len(addShareMembers) > 0 {
+		addRes, err = database.CreateShareMember(addShareMembers, tx)
+		if err != nil {
+			klog.Errorf("postgres.CreateShareMember error: %v", err)
+			tx.Rollback()
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			return
+		}
+
+		if sharePath.FileType == "sync" {
+			seaResp, err := seahub.HandlePutDirSharedItems(sharePath, addShareMembers, "user")
+			if err != nil {
+				klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
+				tx.Rollback()
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+				return
+			}
+			klog.Infof("postgres.HandlePutDirSharedItems response: %+v", seaResp)
+		}
+	}
+	klog.Infof("add member response: %+v", addRes)
+
+	err = tx.Commit().Error
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	resp := new(share.UpdateSharePathResp)
+
+	var result = new(share.ViewSharePath)
+	if err = json.Unmarshal(common.ToBytes(sharePath), &result); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	result.SharedByMe = true
+	for _, shareMember := range existedShareMembers {
+		resMember := &share.ViewSharePathMembers{
+			ID:          shareMember.ID,
+			ShareMember: shareMember.ShareMember,
+			Permission:  shareMember.Permission,
+		}
+		result.ShareMembers = append(result.ShareMembers, resMember)
+	}
+	for _, shareMember := range updateShareMembers {
+		resMember := &share.ViewSharePathMembers{
+			ID:          shareMember.ID,
+			ShareMember: shareMember.ShareMember,
+			Permission:  shareMember.Permission,
+		}
+		result.ShareMembers = append(result.ShareMembers, resMember)
+	}
+	for _, shareMember := range addRes {
+		resMember := &share.ViewSharePathMembers{
+			ID:          shareMember.ID,
+			ShareMember: shareMember.ShareMember,
+			Permission:  shareMember.Permission,
+		}
+		result.ShareMembers = append(result.ShareMembers, resMember)
+	}
+
+	resp.SharePath = result
+
+	handler.RespSuccess(c, resp)
 }
 
 // DeleteSharePath .
@@ -1927,6 +2204,7 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 	result["owner"] = sharePath.Owner
 	result["share_type"] = sharePath.ShareType
 	result["permission"] = sharePath.Permission
+	result["upload_size_limit"] = sharePath.UploadSizeLimit
 	result["expire_in"] = sharePath.ExpireIn
 	result["expire_time"] = sharePath.ExpireTime
 	result["create_time"] = sharePath.CreateTime

@@ -50,6 +50,10 @@ func Register(r *server.Hertz) {
 				_share_path.GET("/", append(_listsharepathMw(), share.ListSharePath)...)
 				_share_path.PUT("/", append(_updatesharepathMw(), share.UpdateSharePath)...)
 				_share_path.POST("/*path", append(_createsharepathMw(), share.CreateSharePath)...)
+				{
+					_share_members := _share_path.Group("/share_members", _share_membersMw()...)
+					_share_members.PUT("/", append(_updatesharepathmembersMw(), share.UpdateSharePathMembers)...)
+				}
 			}
 			{
 				_share_token := _share.Group("/share_token", _share_tokenMw()...)
