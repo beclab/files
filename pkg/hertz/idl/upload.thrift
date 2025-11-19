@@ -5,6 +5,7 @@ struct UploadLinkReq {
     2: required string From (api.query="from");
     3: string share (api.query="share");
     4: string sharetype (api.query="sharetype");
+    5: string shareby (api.query="shareby");
 }
 
 struct UploadedBytesReq {
@@ -13,6 +14,7 @@ struct UploadedBytesReq {
     4: string Identy (api.query="identy");
     5: string share (api.query="share");
     6: string sharetype (api.query="sharetype");
+    7: string shareby (api.query="shareby");
 }
 
 struct UploadedBytesResp {
@@ -60,8 +62,11 @@ struct UploadChunksFileItem {
     5: optional string taskId
 }
 
+struct SyncUploadChunkResp {}
+
 service UploadService {
     UploadChunksResp UploadChunksMethod(1: UploadChunksReq request) (api.post="/upload/upload-link/:node/:uid");
     string UploadLinkMethod(1: UploadLinkReq request) (api.get="/upload/upload-link/:node/");
     UploadedBytesResp UploadedBytesMethod(1: UploadedBytesReq request) (api.get="/upload/file-uploaded-bytes/:node/");
+    SyncUploadChunkResp SyncUploadChunksMethod(1: UploadChunksReq request) (api.post="/seafhttp/:upload/:uid");
 }

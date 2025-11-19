@@ -6,6 +6,9 @@ import (
 )
 
 func main() {
-	service.Init()
+	go func() {
+		service.Init()
+	}()
+
 	app.Execute()
 }

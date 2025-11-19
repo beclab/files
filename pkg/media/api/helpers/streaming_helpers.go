@@ -172,12 +172,14 @@ func GetStreamingState(
 		}
 		klog.Info(authToken)
 
-		fileParam, err := models.CreateFileParam(bflName, httpContext.Query("PlayPath"))
+		fileParam, err := models.CreateFileParam(bflName, streamingRequest.PlayPath) // + here // httpContext.Query("PlayPath")
 		if err != nil {
 			klog.Infof("parse url error: %v\n", err)
 			return nil, errors.New("parse url error")
 		}
-		if fileParam.FileType == common.Sync {
+		if fileParam.FileType == common.Share { // + todo share
+
+		} else if fileParam.FileType == common.Sync {
 			remoteAccessToken := httpContext.Request.Header.Get("remote-accesstoken")
 			headers = fmt.Sprintf("remote-accesstoken: %s", remoteAccessToken)
 		} else if fileParam.FileType == common.GoogleDrive {
@@ -411,12 +413,12 @@ func GetOutputFilePath(state *streaming.StreamState, outputFileExtension string,
 	data := fmt.Sprintf("%s-%s-%s-%s", state.MediaPath, *state.UserAgent, deviceId, playSessionId)
 	filename := fmt.Sprintf("%x", md5.Sum([]byte(data)))
 	//	filename = "0d26134e6af438e180eddfdbf75cb851"
-	klog.Infof("filename: %v data: %v", filename, data)
+	klog.Infof("[media] GetOutputFilePath, filename: %v data: %v", filename, data)
 	ext := strings.ToLower(outputFileExtension)
 	//	folder := serverConfigurationManager.GetTranscodePath()
 	//	folder := "./cache/transcodes"
 	folder := serverConfigurationManager.GetTranscodePath()
-	klog.Info("GetOutputFilePath", filepath.Join(folder, filename+ext))
+	klog.Infof("[media] GetOutputFilePath, folder: %s", filepath.Join(folder, filename+ext))
 
 	return filepath.Join(folder, filename+ext)
 }

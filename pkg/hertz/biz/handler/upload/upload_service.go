@@ -3,14 +3,18 @@
 package upload
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	"files/pkg/hertz/biz/dal/database"
 	upload "files/pkg/hertz/biz/model/upload"
 	"files/pkg/models"
 	"fmt"
+	"io"
+	"net/http"
 	"reflect"
 	"strings"
 
@@ -37,6 +41,7 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 		From:      req.From,
 		Share:     req.Share,
 		ShareType: req.Sharetype,
+		ShareBy:   req.Shareby,
 	}
 
 	p := req.FilePath
@@ -50,11 +55,17 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	uploadArg.FileParam, err = models.CreateFileParam(owner, p)
+	fileParam, err := models.CreateFileParam(owner, p)
 	if err != nil {
 		klog.Errorf("file param error: %v, owner: %s", err, owner)
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
 		return
+	}
+
+	uploadArg.FileParam = fileParam
+
+	if req.Share == "1" {
+		uploadArg.FileParam.Owner = req.Shareby
 	}
 
 	var handlerParam = &base.HandlerParam{
@@ -154,10 +165,11 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	req.RetJson = 1
 
 	var uploadArg = &models.FileUploadArgs{
-		FileParam:     &models.FileParam{},
-		Node:          c.Param("node"),
-		UploadId:      c.Param("uid"),
-		UserAgentHash: common.Md5String(string(c.GetHeader("User-Agent"))),
+		FileParam:      &models.FileParam{},
+		Node:           c.Param("node"),
+		UploadId:       c.Param("uid"),
+		UserAgentHash:  common.Md5String(string(c.GetHeader("User-Agent"))),
+		RequestContext: c,
 	}
 
 	uploadArg.ChunkInfo = new(models.ResumableInfo)
@@ -267,4 +279,124 @@ func isNil(val reflect.Value) bool {
 	default:
 		return false
 	}
+}
+
+// SyncUploadChunksMethod .
+// @router /seafhttp/:upload/:uid [POST]
+func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var requestPath = string(c.Request.RequestURI())
+	var uploadReq upload.UploadChunksReq
+
+	err = c.BindAndValidate(&uploadReq)
+	if err != nil {
+		klog.Errorf("Sync uploadChunks, bind and validate error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	var share = uploadReq.Share
+	var shareType = uploadReq.Sharetype
+	var shareBy = uploadReq.Shareby
+
+	_ = share
+	_ = shareType
+	_ = shareBy
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	klog.Infof("Sync uploadChunks, path: %s, owner: %s", requestPath, owner)
+
+	uploadPath := uploadReq.ParentDir
+	if !strings.HasSuffix(uploadPath, "/") {
+		uploadPath = uploadPath + "/"
+	}
+
+	fileParam, err := models.CreateFileParam(owner, uploadPath)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
+	}
+
+	if fileParam.FileType == common.Share {
+		shared, err := database.GetSharePath(fileParam.Extend)
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get shared error: %v", err)})
+			return
+		}
+
+		if shared == nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "share not found"})
+			return
+		}
+	} else {
+
+	}
+
+	var uploadType = c.Param("upload")
+	var uid = c.Param("uid")
+	var url = fmt.Sprintf("http://seafile:8082/%s/%s?ret-json=1", uploadType, uid)
+
+	var br io.Reader
+	var req, _ = http.NewRequest(http.MethodPost, url, br)
+
+	c.Request.Header.VisitAll(func(key, value []byte) {
+		req.Header.Set(string(key), string(value))
+	})
+	req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
+
+	body := c.Request.Body()
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		klog.Errorf("Sync uploadChunks, redirect error: %v", err)
+		c.String(http.StatusBadRequest, err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.String(resp.StatusCode, "upload files failed")
+		return
+	}
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			c.Header(k, v)
+		}
+	}
+
+	bodyRes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		klog.Errorf("Sync uploadChunks, read resp error: %v", err)
+		c.String(http.StatusBadRequest, err.Error())
+		return
+	}
+
+	result := new(upload.UploadChunksResp)
+	if uploadReq.ResumableChunkNumber == uploadReq.ResumableTotalChunks {
+		result.Success = nil
+		result.Items = make([]*upload.UploadChunksFileItem, 0)
+		if err = json.Unmarshal(bodyRes, &result.Items); err != nil {
+			klog.Errorf("Sync uploadChunks, failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+	} else {
+		result.Items = nil
+		result.Success = new(upload.UploadChunksSuccess)
+		if err = json.Unmarshal(bodyRes, &result.Success); err != nil {
+			klog.Errorf("Sync uploadChunks, failed to unmarshal response body: %v", err)
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+			return
+		}
+	}
+
+	c.JSON(consts.StatusOK, Coalesce(result.Success, result.Items))
 }

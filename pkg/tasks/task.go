@@ -6,7 +6,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub"
-	"files/pkg/hertz/biz/handler/api/share"
 	"files/pkg/models"
 	"fmt"
 	"strings"
@@ -68,6 +67,7 @@ type Task struct {
 	manager *taskManager
 
 	details []string
+	isShare bool
 }
 
 func (t *Task) Id() string {
@@ -213,12 +213,9 @@ func (t *Task) Execute(fs ...func() error) error {
 		t.progress = 100
 		t.details = append(t.details, "successed")
 
-		// here is task really succeeded, share is better adjusted here
-		err = share.MoveRelativeAdjustShare(t.param.Action, t.param.Src, t.param.Dst, nil)
-		if err != nil {
-			klog.Errorf("relative adjust share err: %v", err)
-			t.message += "\nrelative adjust share err: " + err.Error()
-		}
+		// if t.param.Action == common.ActionMove && !t.isShare {
+		// 	share.UpdateMovedSharePaths(t.param.Owner, t.param.Src, t.param.Dst)
+		// }
 
 		return
 	})

@@ -576,7 +576,8 @@ func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
 	var node = fileUploadArg.Node
 	var from = fileUploadArg.From
 
-	klog.Infof("Posix uploadLink, user: %s, node: %s, from: %s, share: %s %s, param: %s", user, node, from, fileUploadArg.Share, fileUploadArg.ShareType, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Posix uploadLink, user: %s, node: %s, from: %s, share: %s %s %s, param: %s", user, node, from,
+		fileUploadArg.Share, fileUploadArg.ShareType, fileUploadArg.ShareBy, common.ToJson(fileUploadArg.FileParam))
 
 	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
 

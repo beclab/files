@@ -18,16 +18,23 @@ func Register(r *server.Hertz) {
 
 	root := r.Group("/", rootMw()...)
 	{
-		_upload := root.Group("/upload", _uploadMw()...)
+		_seafhttp := root.Group("/seafhttp", _seafhttpMw()...)
 		{
-			_file_uploaded_bytes := _upload.Group("/file-uploaded-bytes", _file_uploaded_bytesMw()...)
+			_upload := _seafhttp.Group("/:upload", _uploadMw()...)
+			_upload.POST("/:uid", append(_syncuploadchunksmethodMw(), upload.SyncUploadChunksMethod)...)
+		}
+	}
+	{
+		_upload0 := root.Group("/upload", _upload0Mw()...)
+		{
+			_file_uploaded_bytes := _upload0.Group("/file-uploaded-bytes", _file_uploaded_bytesMw()...)
 			{
 				_node := _file_uploaded_bytes.Group("/:node", _nodeMw()...)
 				_node.GET("/", append(_uploadedbytesmethodMw(), upload.UploadedBytesMethod)...)
 			}
 		}
 		{
-			_upload_link := _upload.Group("/upload-link", _upload_linkMw()...)
+			_upload_link := _upload0.Group("/upload-link", _upload_linkMw()...)
 			{
 				_node0 := _upload_link.Group("/:node", _node0Mw()...)
 				_node0.GET("/", append(_uploadlinkmethodMw(), upload.UploadLinkMethod)...)

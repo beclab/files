@@ -27,6 +27,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"files/pkg/common"
+	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
 	"files/pkg/models"
 
@@ -431,10 +432,36 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 			return "", err
 		}
 		formalizedPath += url.QueryEscape(string(jsonData))
+	} else if fileParam.FileType == common.Share {
+		shared, err := database.GetSharePath(fileParam.Extend)
+		if err != nil {
+			klog.Errorf("[media] pathCommon, get shared error: %v", err)
+			return "", err
+		}
+
+		if shared == nil {
+			klog.Errorf("[media] pathCommon, shared not exists")
+			return "", fmt.Errorf("shared not exists")
+		}
+
+		var newFileParam = &models.FileParam{
+			Owner:    shared.Owner,
+			FileType: shared.FileType,
+			Extend:   shared.Extend,
+			Path:     fmt.Sprintf("%s/%s", shared.Path, strings.TrimPrefix(fileParam.Path, "/")),
+		}
+
+		resUri, err := newFileParam.GetResourceUri()
+		if err != nil {
+			klog.Errorf("[media] pathCommon convert error: %v", err)
+			return "", errors.New("get path error")
+		}
+		formalizedPath = resUri + "/" + filepath.Clean(newFileParam.Path)
+
 	} else {
 		resUri, err := fileParam.GetResourceUri()
 		if err != nil {
-			d.logger.Errorf("get path error %v\n", err)
+			klog.Errorf("[media] pathCommon convert error: %v", err)
 			return "", errors.New("get path error")
 		}
 		formalizedPath = resUri + "/" + filepath.Clean(fileParam.Path)
@@ -450,9 +477,6 @@ func (d *DynamicHlsController) GetHlsVideoSegment(ctx context.Context, c *app.Re
 	var err error
 	itemId, _ := uuid.Parse(c.Query("itemId"))
 	playlistId := c.Param("playlistId")
-
-	klog.Infof("[media] GetSegment, itemId: %s, playListId: %s", itemId, playlistId)
-
 	filename := string(c.Param("filename"))
 	segId := filename
 	container := ""

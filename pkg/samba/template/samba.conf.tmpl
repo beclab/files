@@ -6,7 +6,6 @@
   client min protocol = SMB2
   client max protocol = SMB3
   server min protocol = SMB2
-
   # disable printing services
   load printers = no
   printing = bsd
@@ -17,11 +16,10 @@
 [{{ $data.Name }}]
   path = {{ $data.Path }}
   comment = "{{ $data.Comment }}"
-  vfs objects = catia fruit streams_xattr acl_xattr
   {{ if $data.Anonymous  -}}
   browseable = yes
-  writable = yes
-  read only = no
+  writable = no
+  read only = yes
   guest ok = yes
   force user = nobody
   force group = {{ $data.ForceGroup }}
@@ -42,12 +40,13 @@
   map acl inherit = yes
   {{ end -}}
   {{ end -}}
+  vfs objects = catia fruit streams_xattr acl_xattr
   ea support = yes
   fruit:resource = xattr
   fruit:metadata = stream
   fruit:aapl = yes
   fruit:posix_rename = yes
   fruit:encoding = native
-  veto files = /.DS_Store/Thumbs.db/._*/
+  veto files = /.DS_Store/Thumbs.db/
   delete veto files = yes
 {{ end }}

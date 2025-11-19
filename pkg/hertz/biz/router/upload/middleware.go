@@ -50,3 +50,18 @@ func _node0Mw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _seafhttpMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _syncuploadchunksmethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _upload0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

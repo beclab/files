@@ -12,11 +12,12 @@ import (
 	resources "files/pkg/hertz/biz/model/api/resources"
 	"files/pkg/models"
 	"fmt"
+	"strings"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"strings"
 )
 
 // GetResourcesMethod .
@@ -136,7 +137,7 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	err = share.RenameRelativeAdjustShare(contextArg.FileParam, contextArg.QueryParam.Destination, true, nil)
+	err = share.RenameRelativeAdjustShare(contextArg.FileParam, contextArg.QueryParam.Destination, contextArg.FileParam.Extend, true, nil)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,

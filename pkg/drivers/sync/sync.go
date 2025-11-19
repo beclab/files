@@ -13,7 +13,6 @@ import (
 	"files/pkg/models"
 	"files/pkg/preview"
 	"fmt"
-	"github.com/spf13/afero"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -24,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/afero"
 
 	"k8s.io/klog/v2"
 )
@@ -565,6 +566,14 @@ func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 }
 
 func (s *SyncStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
+	var user = fileUploadArg.FileParam.Owner
+	var from = fileUploadArg.From
+	var share = fileUploadArg.Share
+	var shareType = fileUploadArg.ShareType
+	var shareBy = fileUploadArg.ShareBy
+
+	klog.Infof("Sync uploadLink, user: %s, from: %s, share: %s %s %s, param: %s", user, from, share, shareType, shareBy, common.ToJson(fileUploadArg.FileParam))
+
 	uploadLink, err := seahub.GetUploadLink(fileUploadArg.FileParam, fileUploadArg.From, false)
 	if err != nil {
 		return nil, err

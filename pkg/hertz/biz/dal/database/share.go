@@ -308,6 +308,10 @@ func DeleteShareMember(memberID int64, db *gorm.DB) error {
 	return db.Where("id = ?", memberID).Delete(&share.ShareMember{}).Error
 }
 
+func DeleteShareSmbMember(memberID int64, db *gorm.DB) error {
+	return db.Where("id = ?", memberID).Delete(&share.ShareSmbMember{}).Error
+}
+
 func UpdateShareMember(memberID int64, updates map[string]interface{}, db *gorm.DB) error {
 	if updates["update_time"] == nil {
 		updates["update_time"] = time.Now().UTC().Format(time.RFC3339Nano)
@@ -320,6 +324,26 @@ func UpdateShareMember(memberID int64, updates map[string]interface{}, db *gorm.
 func QueryShareMember(params *QueryParams, page, pageSize int64, orderBy, order string, joinParams []*JoinCondition) ([]*share.ShareMember, int64, error) {
 	var res []*share.ShareMember
 	total, err := QueryData(&share.ShareMember{}, &res, params, page, pageSize, orderBy, order, joinParams)
+	if err != nil {
+		klog.Error(err)
+		return nil, 0, err
+	}
+	return res, total, nil
+}
+
+func QueryShareSmbMember(params *QueryParams, page, pageSize int64, orderBy, order string, joinParams []*JoinCondition) ([]*share.ShareSmbMember, int64, error) {
+	var res []*share.ShareSmbMember
+	total, err := QueryData(&share.ShareSmbMember{}, &res, params, page, pageSize, orderBy, order, joinParams)
+	if err != nil {
+		klog.Error(err)
+		return nil, 0, err
+	}
+	return res, total, nil
+}
+
+func QueryShareSmbUser(params *QueryParams, page, pageSize int64, orderBy, order string, joinParams []*JoinCondition) ([]*share.ShareSmbUser, int64, error) {
+	var res []*share.ShareSmbUser
+	total, err := QueryData(&share.ShareSmbUser{}, &res, params, page, pageSize, orderBy, order, joinParams)
 	if err != nil {
 		klog.Error(err)
 		return nil, 0, err
@@ -388,6 +412,18 @@ func GetSmbSharePathByPath(shareType string, fileType, extend, path string, owne
 	var res *share.SharePath
 
 	if err := DB.Table("share_paths").Where("share_type = ? AND owner = ? AND file_type = ? AND extend = ? AND path = ? AND smb_share_public = ?", shareType, owner, fileType, extend, path, isPublic).Scan(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, err
+	}
+	return res, nil
+}
+
+func GetSmbSharePathByPrefix(fileType, extend, path string, owner string) ([]*share.SharePath, error) {
+	var res []*share.SharePath
+
+	if err := DB.Table("share_paths").Where("owner = ? AND file_type = ? AND extend = ? AND path LIKE ?", owner, fileType, extend, path+"%").Find(&res).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return nil, err
 		}
@@ -595,5 +631,46 @@ func DeleteSmbShareTx(owner string, pathIds []string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func UpdateMovedChangeSharePathsEx(updateSharePaths map[string][5]string) error {
+	var err error
+	var tx = DB.Begin()
+
+	for k, v := range updateSharePaths {
+		var updates = make(map[string]interface{})
+		var shareType = v[0]
+		var smbOperator = v[1]
+		updates["file_type"] = v[2]
+		updates["extend"] = v[3]
+		updates["path"] = v[4]
+		if err = tx.Table("share_paths").Where("id = ?", k).Updates(updates).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		if shareType == common.ShareTypeSMB {
+			if smbOperator == "del" {
+				if err = tx.Table("share_smb_members").Where("path_id = ?", k).Delete(&share.ShareSmbMember{}).Error; err != nil {
+					tx.Rollback()
+					return err
+				}
+
+				if err = tx.Table("share_paths").Where("id = ?", k).Delete(&share.SharePath{}).Error; err != nil {
+					tx.Rollback()
+					return err
+				}
+			}
+		}
+	}
+
+	err = tx.Commit().Error
+	if err != nil {
+		if err = tx.Rollback().Error; err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
