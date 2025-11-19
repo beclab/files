@@ -47,6 +47,7 @@ var (
 		"/api/unmount",
 		"/api/smb_history",
 		"/api/search",
+		"/videos/",
 	}
 )
 
