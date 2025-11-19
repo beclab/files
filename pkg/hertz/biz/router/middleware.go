@@ -61,6 +61,24 @@ var (
 	ShareApiUploadedPath   = "/upload/file-uploaded-bytes"
 )
 
+func Cors() app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		c.Response.Header.Set("Access-Control-Allow-Origin", string(c.Request.Header.Get("Origin")))
+		c.Response.Header.Set("Access-Control-Allow-Credentials", "true")
+
+		reqHeaders := string(c.Request.Header.Get("Access-Control-Request-Headers"))
+		if reqHeaders != "" {
+			c.Response.Header.Set("Access-Control-Allow-Headers", reqHeaders)
+		} else {
+			c.Response.Header.Set("Access-Control-Allow-Headers", "access-control-allow-headers,access-control-allow-methods,access-control-allow-origin,content-type,x-auth,x-unauth-error,x-authorization")
+		}
+		c.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Response.Header.Set("Access-Control-Max-Age", "600")
+
+		c.Next(ctx)
+	}
+}
+
 func TimingMiddleware() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		start := time.Now()
@@ -298,9 +316,15 @@ func ShareMiddleware() app.HandlerFunc {
 			return
 		}
 
-		if !strings.HasSuffix(rewritePrefix, "/") {
-			rewritePrefix += "/"
+		if strings.HasSuffix(rewritePrefix, "/") {
+			rewritePrefix = strings.TrimSuffix(rewritePrefix, "/")
 		}
+
+		if !strings.HasPrefix(pathRewrite, "/") {
+			pathRewrite = "/" + pathRewrite
+		}
+
+		pathRewrite = common.EscapeURLWithSpace(pathRewrite)
 
 		var permission int32
 		if shared.ShareType == common.ShareTypeInternal {
@@ -323,11 +347,11 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 
 			if uploadLink {
-				url = fmt.Sprintf("%s%s?file_path=/%s&from=%s&share=1&sharetype=%s", redirect, rewritePrefix, pathRewrite, c.Query("from"), shareType)
+				url = fmt.Sprintf("%s%s?file_path=%s&from=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, c.Query("from"), shareType, shareBy)
 			} else if uploadBytes {
-				url = fmt.Sprintf("%s%s?parent_dir=/%s&file_name=%s&share=1&sharetype=%s", redirect, rewritePrefix, pathRewrite, uploadFileName, shareType)
+				url = fmt.Sprintf("%s%s?parent_dir=%s&file_name=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, uploadFileName, shareType, shareBy)
 			} else if uploadChunk {
-				url = fmt.Sprintf("%s%s%s?&ret-json=%s&share=1&sharetype=%s&shareby=%s&shareby_path=/%s", redirect, rewritePrefix, uploadLinkId, c.Query("ret-json"), shareType, shareBy, pathRewrite)
+				url = fmt.Sprintf("%s%s/%s?&ret-json=%s&share=1&sharetype=%s&shareby=%s&shareby_path=%s", redirect, rewritePrefix, uploadLinkId, c.Query("ret-json"), shareType, shareBy, pathRewrite)
 			}
 		} else {
 			accessOwner = shareBy

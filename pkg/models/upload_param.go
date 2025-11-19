@@ -2,6 +2,8 @@ package models
 
 import (
 	"mime/multipart"
+
+	"github.com/cloudwego/hertz/pkg/app"
 )
 
 type ResumableInfo struct {
@@ -28,15 +30,17 @@ type ResumableInfo struct {
 }
 
 type FileUploadArgs struct {
-	Node          string         `json:"node"` // node name
-	FileParam     *FileParam     `json:"fileParam"`
-	FileName      string         `json:"fileName,omitempty"`
-	From          string         `json:"from,omitempty"`
-	Identy        string         `json:"identy"`
-	Share         string         `json:"share"`
-	ShareType     string         `json:"sharetype"`
-	UploadId      string         `json:"uploadId,omitempty"`
-	Ranges        string         `json:"ranges,omitempty"`
-	UserAgentHash string         `json:"userAgentHash"`
-	ChunkInfo     *ResumableInfo `json:"chunkInfo,omitempty"`
+	Node           string         `json:"node"` // node name
+	FileParam      *FileParam     `json:"fileParam"`
+	FileName       string         `json:"fileName,omitempty"`
+	From           string         `json:"from,omitempty"`
+	Identy         string         `json:"identy"`
+	Share          string         `json:"share"`
+	ShareType      string         `json:"sharetype"`
+	ShareBy        string         `json:"shareby"`
+	UploadId       string         `json:"uploadId,omitempty"`
+	Ranges         string         `json:"ranges,omitempty"`
+	UserAgentHash  string         `json:"userAgentHash"`
+	ChunkInfo      *ResumableInfo `json:"chunkInfo,omitempty"`
+	RequestContext *app.RequestContext
 }

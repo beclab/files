@@ -82,6 +82,7 @@ func (t *taskManager) CreateTask(param *models.PasteParam) *Task {
 		ctxCancel: cancel,
 		manager:   t,
 		isFile:    isFile,
+		isShare:   param.Share == 1,
 		createAt:  time.Now(),
 	}
 

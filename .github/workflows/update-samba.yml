@@ -6,13 +6,13 @@ on:
       tags:
         description: "Release Tags"
 
-  push:
-    branches:
-      - "main"
-      - "dev"
-      - "test"
-    tags:
-      - "v*"
+  # push:
+  #   branches:
+  #     - "main"
+  #     - "dev"
+  #     - "test"
+  #   tags:
+  #     - "v*"
 
 jobs:
   update_server:

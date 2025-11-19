@@ -104,7 +104,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 		permission = req.Permission
-	} else if req.ShareType == common.ShareTypeInternal {
+	} else if req.ShareType == common.ShareTypeInternal || req.ShareType == common.ShareTypeSMB {
 		// internal forced use default ADMIN as permission, no matter req.Permission of what value
 		queryParams := &database.QueryParams{}
 		queryParams.AND = []database.Filter{}
@@ -1210,7 +1210,8 @@ func DeleteSharePathRelations(pathId string, tx *gorm.DB) error {
 	return nil
 }
 
-func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, parsePath bool, tx *gorm.DB) error {
+func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, dstExtend string, parsePath bool, tx *gorm.DB) error {
+	return nil
 	commit := false
 	if tx == nil {
 		tx = database.DB.Begin()
@@ -1225,13 +1226,13 @@ func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, pars
 			var srcName, _ = files.GetFileNameFromPath(fileParam.Path)
 			srcName, err = url.PathUnescape(srcName)
 			if err != nil {
-				klog.Errorf("PathUnescape error: %v", err)
+				klog.Errorf("RenameRelativeAdjustShare, PathUnescape error: %v", err)
 				tx.Rollback()
 				return err
 			}
 			dstName, err := url.PathUnescape(dstPath)
 			if err != nil {
-				klog.Errorf("PathUnescape error: %v", err)
+				klog.Errorf("RenameRelativeAdjustShare, PathUnescape error: %v", err)
 				tx.Rollback()
 				return err
 			}
@@ -1247,19 +1248,20 @@ func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, pars
 			database.BuildStringQueryParam(fileParam.Path+"%", "share_paths.path", "LIKE", &pathQueryParams.AND, true)
 			pathRes, pathTotal, err := database.QuerySharePath(pathQueryParams, 0, 0, "LENGTH(share_paths.path)", "DESC NULLS LAST", nil)
 			if err != nil {
-				klog.Errorf("QuerySharePath error: %v", err)
+				klog.Errorf("RenameRelativeAdjustShare, QuerySharePath error: %v", err)
 				tx.Rollback()
 				return err
 			}
-			klog.Infof("pathTotal: %d", pathTotal)
+			klog.Infof("RenameRelativeAdjustShare, pathTotal: %d, pathRes: %s", pathTotal, common.ParseString(pathRes))
 
 			for _, sharePath := range pathRes {
 				updatePath := dstPath + strings.TrimPrefix(sharePath.Path, fileParam.Path)
 				err = database.UpdateSharePath(sharePath.ID, map[string]interface{}{
-					"path": updatePath,
+					"path":   updatePath,
+					"extend": dstExtend,
 				}, tx)
 				if err != nil {
-					klog.Errorf("UpdateSharePath error: %v", err)
+					klog.Errorf("RenameRelativeAdjustShare, UpdateSharePath error: %v", err)
 					tx.Rollback()
 					return err
 				}
@@ -1267,25 +1269,46 @@ func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, pars
 		}
 	}
 	if commit {
-		return tx.Commit().Error
+		if err := tx.Commit().Error; err != nil {
+			klog.Errorf("RenameRelativeAdjustShare, commit error: %v", err)
+			return err
+		} else {
+			var operator = "add"
+			var crd = &share.SmbCreate{
+				Owner: fileParam.Owner,
+				ID:    uuid.NewString(),
+				Path:  fmt.Sprintf("/%s/%s%s", fileParam.FileType, fileParam.Extend, fileParam.Path),
+			}
+
+			if err := samba.SambaService.CreateShareSamba([]*share.SmbCreate{crd}, operator); err != nil {
+				klog.Errorf("RenameRelativeAdjustShare, modify smb share, error: %v", err)
+				return err
+			}
+		}
 	}
 	return nil
 }
 
 func DeleteRelativeAdjustShare(fileParam *models.FileParam, dirents []string, tx *gorm.DB) error {
+	return nil
 	commit := false
 	if tx == nil {
 		tx = database.DB.Begin()
 		commit = true
 	}
+
+	var smbs []*share.SmbCreate
+
 	if fileParam.FileType == "drive" || fileParam.FileType == "sync" {
+		klog.Infof("DeleteRelativeAdjustShare, param: %s, dirents: %v", common.ParseString(fileParam), dirents)
 		var unsharePaths []string
 		for _, dirent := range dirents {
 			if strings.HasSuffix(dirent, "/") {
-				unsharePaths = append(unsharePaths, dirent)
+				unsharePaths = append(unsharePaths, fileParam.Path+strings.TrimPrefix(dirent, "/"))
 			}
 		}
 		if len(unsharePaths) > 0 {
+			klog.Infof("DeleteRelativeAdjustShare, unsharePaths: %v", unsharePaths)
 			pathQueryParams := &database.QueryParams{}
 			pathQueryParams.AND = []database.Filter{}
 			database.BuildStringQueryParam(fileParam.Owner, "share_paths.owner", "=", &pathQueryParams.AND, true)
@@ -1297,19 +1320,22 @@ func DeleteRelativeAdjustShare(fileParam *models.FileParam, dirents []string, tx
 			}
 			pathRes, pathTotal, err := database.QuerySharePath(pathQueryParams, 0, 0, "LENGTH(share_paths.path)", "DESC NULLS LAST", nil)
 			if err != nil {
-				klog.Errorf("QuerySharePath error: %v", err)
+				klog.Errorf("DeleteRelativeAdjustShare, QuerySharePath error: %v", err)
 				tx.Rollback()
 				return err
 			}
-			klog.Infof("pathTotal: %d", pathTotal)
+			klog.Infof("DeleteRelativeAdjustShare, pathTotal: %d, paths: %s", pathTotal, common.ParseString(pathRes))
 
 			var internalSharePaths []*share.SharePath
 			var externalSharePaths []*share.SharePath
+			var smbSharePaths []*share.SharePath
 			for _, sharePath := range pathRes {
 				if sharePath.ShareType == common.ShareTypeInternal {
 					internalSharePaths = append(internalSharePaths, sharePath)
 				} else if sharePath.ShareType == common.ShareTypeExternal {
 					externalSharePaths = append(externalSharePaths, sharePath)
+				} else if sharePath.ShareType == common.ShareTypeSMB {
+					smbSharePaths = append(smbSharePaths, sharePath)
 				}
 			}
 
@@ -1320,15 +1346,15 @@ func DeleteRelativeAdjustShare(fileParam *models.FileParam, dirents []string, tx
 			}
 			tokenRes, tokenTotal, err := database.QueryShareToken(tokenQueryParams, 0, 0, "share_tokens.id", "ASC", nil)
 			if err != nil {
-				klog.Errorf("QueryShareToken error: %v", err)
+				klog.Errorf("DeleteRelativeAdjustShare, QueryShareToken error: %v", err)
 				tx.Rollback()
 				return err
 			}
-			klog.Infof("tokenTotal: %d", tokenTotal)
+			klog.Infof("DeleteRelativeAdjustShare, tokenTotal: %d", tokenTotal)
 			for _, shareToken := range tokenRes {
 				err = database.DeleteShareToken(shareToken.Token, tx)
 				if err != nil {
-					klog.Errorf("DeleteShareToken error: %v", err)
+					klog.Errorf("DeleteRelativeAdjustShare, DeleteShareToken error: %v", err)
 					tx.Rollback()
 					continue
 				}
@@ -1341,25 +1367,87 @@ func DeleteRelativeAdjustShare(fileParam *models.FileParam, dirents []string, tx
 			}
 			memberRes, memberTotal, err := database.QueryShareMember(memberQueryParams, 0, 0, "", "", nil)
 			if err != nil {
-				klog.Errorf("QueryShareMember error: %v", err)
+				klog.Errorf("DeleteRelativeAdjustShare, QueryShareMember error: %v", err)
 				tx.Rollback()
 				return err
 			}
-			klog.Infof("memberTotal: %d", memberTotal)
+			klog.Infof("DeleteRelativeAdjustShare, memberTotal: %d", memberTotal)
 
 			for _, shareMember := range memberRes {
 				err = database.DeleteShareMember(shareMember.ID, tx)
 				if err != nil {
-					klog.Errorf("DeleteShareMember error: %v", err)
+					klog.Errorf("DeleteRelativeAdjustShare, DeleteShareMember error: %v", err)
 					tx.Rollback()
 					return err
 				}
 			}
 
+			// smb
+			smbMemberQueryParams := &database.QueryParams{}
+			smbMemberQueryParams.OR = []database.Filter{}
+			for _, sharePath := range smbSharePaths {
+				database.BuildStringQueryParam(sharePath.ID, "share_smb_members.path_id", "=", &smbMemberQueryParams.OR, true)
+			}
+			smbMemberRes, smbMemberTotal, err := database.QueryShareSmbMember(smbMemberQueryParams, 0, 0, "", "", nil)
+			if err != nil {
+				klog.Errorf("DeleteRelativeAdjustShare, QueryShareSmbMember error: %v", err)
+				tx.Rollback()
+				return err
+			}
+			klog.Infof("DeleteRelativeAdjustShare, smbMemberTotal: %d", smbMemberTotal)
+
+			smbUserQueryParams := &database.QueryParams{}
+			smbUserQueryParams.OR = []database.Filter{}
+			for _, smbMember := range smbMemberRes {
+				database.BuildStringQueryParam(smbMember.UserID, "share_smb_users.user_id", "=", &smbUserQueryParams.OR, true)
+			}
+			smbUserRes, smbUserTotal, err := database.QueryShareSmbUser(smbUserQueryParams, 0, 0, "", "", nil)
+			if err != nil {
+				klog.Errorf("DeleteRelativeAdjustShare, QueryShareSmbUser error: %v", err)
+				tx.Rollback()
+				return err
+			}
+			klog.Infof("DeleteRelativeAdjustShare, smbUserTotal: %d", smbUserTotal)
+
+			for _, shareSmbMember := range smbMemberRes {
+				err = database.DeleteShareSmbMember(shareSmbMember.ID, tx)
+				if err != nil {
+					klog.Errorf("DeleteRelativeAdjustShare, DeleteShareSmbMember error: %v", err)
+					tx.Rollback()
+					return err
+				}
+			}
+
+			for _, smbSharePath := range pathRes {
+				var smbRemoveUsres []string
+				for _, smbShareMember := range smbMemberRes {
+					if smbSharePath.ID != smbShareMember.PathID {
+						continue
+					}
+
+					for _, smbShareUser := range smbUserRes {
+						if smbShareUser.UserID != smbShareMember.UserID {
+							continue
+						}
+						smbRemoveUsres = append(smbRemoveUsres, smbShareUser.UserName)
+					}
+				}
+
+				var smb = &share.SmbCreate{
+					Owner: smbSharePath.Owner,
+					ID:    smbSharePath.ID,
+					Path:  fmt.Sprintf("/%s/%s%s", smbSharePath.FileType, smbSharePath.Extend, smbSharePath.Path),
+				}
+				if len(smbRemoveUsres) > 0 {
+					smb.User = strings.Join(smbRemoveUsres, ",")
+				}
+				smbs = append(smbs, smb)
+			}
+
 			for _, sharePath := range pathRes {
 				err = database.DeleteSharePath(sharePath.ID, tx)
 				if err != nil {
-					klog.Errorf("DeleteSharePath error: %v", err)
+					klog.Errorf("DeleteRelativeAdjustShare, DeleteSharePath error: %v", err)
 					tx.Rollback()
 					return err
 				}
@@ -1367,7 +1455,17 @@ func DeleteRelativeAdjustShare(fileParam *models.FileParam, dirents []string, tx
 		}
 	}
 	if commit {
-		return tx.Commit().Error
+		if err := tx.Commit().Error; err != nil {
+			return err
+		} else {
+			if len(smbs) > 0 {
+				klog.Infof("DeleteRelativeAdjustShare, create smb crd, data: %s", common.ParseString(smbs))
+				if err := samba.SambaService.CreateShareSamba(smbs, "del"); err != nil {
+					klog.Errorf("DeleteRelativeAdjustShare, delete share path, create samba DELETE crd error: %v", err)
+				}
+			}
+
+		}
 	}
 	return nil
 }
@@ -1383,7 +1481,7 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 		if src.FileType == "drive" {
 			if dst.FileType == "drive" {
 				// just update share info, very like rename
-				err = RenameRelativeAdjustShare(src, dst.Path, false, tx)
+				err = RenameRelativeAdjustShare(src, dst.Path, dst.Extend, false, tx)
 				if err != nil {
 					klog.Errorf("MoveRelativeAdjustShare drive-drive error: %v", err)
 					tx.Rollback()
@@ -2130,4 +2228,79 @@ func GetInternalSmbSharePath(ctx context.Context, c *app.RequestContext) {
 	}
 
 	handler.RespSuccess(c, res)
+}
+
+// used for move files
+func UpdateMovedSharePaths(owner string, src *models.FileParam, dst *models.FileParam) error {
+	// /drive/Home/ --> /drive/Home/     smb update
+	// /drive/Home/ --> /drive/Data/     smb update
+	// /drive/Data/ --> /drive/Data/     smb update
+	// /drive/Data/ --> /drive/Home/     smb update
+	// /drive/xxxx/ --> /sync/xxxx/      smb update
+	// /sync/xxxx/  --> /sync/xxxx/
+	// /sync/xxxx/  --> /drive/xxxx/
+
+	if !((src.FileType == common.Drive || src.FileType == common.Sync) && (dst.FileType == common.Drive || dst.FileType == common.Sync)) {
+		return nil
+	}
+
+	klog.Infof("UpdateMovedSharePaths, prepared, owner: %s, src: %s, dst: %s", owner, common.ParseString(src), common.ParseString(dst))
+
+	shared, err := database.GetSmbSharePathByPrefix(src.FileType, src.Extend, src.Path, owner)
+	if err != nil {
+		klog.Errorf("UpdateMovedSharePaths, get paths error: %v", err)
+		return err
+	}
+
+	if len(shared) == 0 {
+		return nil
+	}
+
+	var updates = make(map[string][5]string)
+
+	var srcPath = src.FileType + "/" + src.Extend + src.Path
+	var dstPath string
+	var smbUpdated bool
+
+	for _, share := range shared {
+		var sharedPath = share.FileType + "/" + share.Extend + share.Path
+		if strings.HasPrefix(sharedPath, srcPath) {
+			var smbOperator string
+			if share.ShareType == common.ShareTypeSMB {
+				if dst.FileType == common.Sync {
+					smbOperator = "del"
+				}
+				smbUpdated = true
+			}
+
+			var tmp = strings.TrimPrefix(sharedPath, srcPath)
+			dstPath = dst.Path + strings.TrimPrefix(tmp, "/")
+			var m = [5]string{share.ShareType, smbOperator, dst.FileType, dst.Extend, dstPath}
+
+			updates[share.ID] = m
+		}
+	}
+
+	klog.Infof("UpdateMovedSharePaths, updates: %s", common.ParseString(updates))
+
+	if len(updates) > 0 {
+		if err := database.UpdateMovedChangeSharePathsEx(updates); err != nil {
+			klog.Errorf("UpdateMovedSharePaths, update changes error: %v", err)
+			return err
+		}
+	}
+
+	if smbUpdated {
+		var smbCreate = &share.SmbCreate{
+			Owner: owner,
+			ID:    uuid.NewString(),
+			Path:  "/",
+		}
+		if err := samba.SambaService.CreateShareSamba([]*share.SmbCreate{smbCreate}, "add"); err != nil {
+			klog.Errorf("UpdateMovedSharePaths, update samba config error: %v", err)
+			return nil
+		}
+	}
+
+	return nil
 }

@@ -117,7 +117,7 @@ func GetTaskMethod(ctx context.Context, c *app.RequestContext) {
 	if req.TaskId == "" {
 		res["tasks"] = tasks
 	} else {
-		if tasks != nil && len(tasks) > 0 {
+		if len(tasks) > 0 {
 			res["task"] = tasks[0]
 		} else {
 			res["task"] = tasks

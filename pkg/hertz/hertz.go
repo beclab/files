@@ -5,10 +5,11 @@ package hertz
 import (
 	"files/pkg/hertz/biz/router"
 
+	"time"
+
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/network/standard"
 	"k8s.io/klog/v2"
-	"time"
 )
 
 func HertzServer() {
@@ -25,6 +26,7 @@ func HertzServer() {
 		server.WithIdleTimeout(200*time.Second),
 	)
 
+	h.Use(router.Cors())
 	h.Use(router.TimingMiddleware())
 	h.Use(router.CookieMiddleware())
 	h.Use(router.ShareMiddleware())

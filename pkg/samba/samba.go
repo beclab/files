@@ -185,7 +185,7 @@ func (s *samba) HandlerEvent() cache.ResourceEventHandler {
 
 func (s *samba) deleteExpiredShares() {
 	go func() {
-		for range time.NewTicker(30 * time.Minute).C {
+		for range time.NewTicker(5 * time.Minute).C {
 			klog.Info("samba delete crds with ticker")
 			cli, err := s.factory.DynamicClient()
 			if err != nil {
@@ -207,7 +207,7 @@ func (s *samba) deleteExpiredShares() {
 					continue
 				}
 
-				if !metav1.Now().Time.Add(-6 * time.Hour).After(v.CreationTimestamp.Time) {
+				if !metav1.Now().Time.Add(-5 * time.Minute).After(v.CreationTimestamp.Time) {
 					continue
 				}
 
