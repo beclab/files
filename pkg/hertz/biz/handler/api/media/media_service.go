@@ -4,6 +4,7 @@ package media
 
 import (
 	"context"
+	_ "files/pkg/hertz/biz/model/api/media"
 	"files/pkg/media/service"
 
 	"github.com/cloudwego/hertz/pkg/app"

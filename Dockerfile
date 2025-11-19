@@ -28,6 +28,9 @@ ARG TARGET_ARCH
 
 FROM debian:${OS_VERSION}-slim AS build
 
+RUN mkdir dist
+COPY cmd/backend/dist dist
+
 # Detect the CPU architecture and copy the appropriate binary
 RUN if [ "$(uname -m)" = "x86_64" ]; then \
   cp dist/linux-amd64/filebrowser /filebrowser; \
