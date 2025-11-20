@@ -485,6 +485,34 @@ func (s *SeafileAPI) IsInnerPubRepo(repoId string) (bool, error) {
 	return ReturnBool(ret)
 }
 
+func (s *SeafileAPI) IsRepoSyncable(repoId, user, repoPerm string) bool {
+	// seahub original code below:
+	//		def is_repo_syncable(self, repo_id, user, repo_perm):
+	//		"""
+	//		Check if the permission of the repo is syncable.
+	//		"""
+	//		return '{"is_syncable":true}'
+
+	return true
+}
+
+func (s *SeafileAPI) GetUserQuotaUsage(username string) (int64, error) {
+	ret, err := s.rpcClient.GetUserQuotaUsage(username)
+	if err != nil {
+		return -1, err
+	}
+	return ReturnInt64(ret)
+}
+
+func (s *SeafileAPI) GetUserQuota(username string) (int64, error) {
+	// Return: -2 if quota is unlimited; otherwise it must be number > 0.
+	ret, err := s.rpcClient.GetUserQuota(username)
+	if err != nil {
+		return -1, err
+	}
+	return ReturnInt64(ret)
+}
+
 func (s *SeafileAPI) CheckQuota(repoId string, delta int64) (int, error) {
 	ret, err := s.rpcClient.CheckQuota(repoId, delta)
 	if err != nil {

@@ -25,6 +25,23 @@ func Register(r *server.Hertz) {
 			_repos.GET("/", append(_getreposmethodMw(), repos.GetReposMethod)...)
 			_repos.PATCH("/", append(_patchreposmethodMw(), repos.PatchReposMethod)...)
 			_repos.POST("/", append(_postreposmethodMw(), repos.PostReposMethod)...)
+			{
+				_repo_id := _repos.Group("/:repo_id", _repo_idMw()...)
+				{
+					_download_info := _repo_id.Group("/download_info", _download_infoMw()...)
+					_download_info.GET("/", append(_getreposdonwloadinfomethodMw(), repos.GetReposDonwloadInfoMethod)...)
+				}
+			}
+		}
+		{
+			_sync := _api.Group("/sync", _syncMw()...)
+			{
+				_account := _sync.Group("/account", _accountMw()...)
+				{
+					_info := _account.Group("/info", _infoMw()...)
+					_info.GET("/", append(_getaccountinfomethodMw(), repos.GetAccountInfoMethod)...)
+				}
+			}
 		}
 	}
 }
