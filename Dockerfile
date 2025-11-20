@@ -165,7 +165,7 @@ RUN apt-get install -y p7zip-full && 7z --help
 #    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo && \
 #    flatpak install flathub io.github.peazip.PeaZip -y
 
-RUN apt-get install -y unrar && unrar
+#RUN apt-get install -y unrar && unrar
 
 #RUN apt-get install -y rar && rar
 
