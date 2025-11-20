@@ -9,7 +9,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
-	"files/pkg/hertz/biz/dal/database"
 	upload "files/pkg/hertz/biz/model/upload"
 	"files/pkg/models"
 	"fmt"
@@ -301,33 +300,16 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	klog.Infof("Sync uploadChunks, path: %s, owner: %s", requestPath, owner)
-
 	uploadPath := uploadReq.ParentDir
 	if !strings.HasSuffix(uploadPath, "/") {
 		uploadPath = uploadPath + "/"
 	}
 
-	fileParam, _ := models.CreateFileParam(owner, uploadPath)
-
-	if fileParam.FileType == common.Share {
-		shared, err := database.GetSharePath(fileParam.Extend)
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get shared error: %v", err)})
-			return
-		}
-
-		if shared == nil {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "share not found"})
-			return
-		}
-	} else {
-
-	}
-
 	var uploadType = c.Param("upload")
 	var uid = c.Param("uid")
 	var url = fmt.Sprintf("http://seafile:8082/%s/%s?ret-json=1", uploadType, uid)
+
+	klog.Infof("Sync uploadChunks, path: %s, owner: %s, uploadPath: %s, url: %s", requestPath, owner, uploadPath, url)
 
 	var br io.Reader
 	var req, _ = http.NewRequest(http.MethodPost, url, br)
