@@ -295,14 +295,6 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	var share = uploadReq.Share
-	var shareType = uploadReq.Sharetype
-	var shareBy = uploadReq.Shareby
-
-	_ = share
-	_ = shareType
-	_ = shareBy
-
 	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 	if owner == "" {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
@@ -316,11 +308,7 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		uploadPath = uploadPath + "/"
 	}
 
-	fileParam, err := models.CreateFileParam(owner, uploadPath)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
-		return
-	}
+	fileParam, _ := models.CreateFileParam(owner, uploadPath)
 
 	if fileParam.FileType == common.Share {
 		shared, err := database.GetSharePath(fileParam.Extend)
