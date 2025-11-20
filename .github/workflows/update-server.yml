@@ -63,7 +63,7 @@ jobs:
         run: |
           go mod tidy
           for GOOS in linux; do
-            for GOARCH in amd64; do
+            for GOARCH in amd64 arm64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
 
