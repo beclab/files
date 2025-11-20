@@ -6,17 +6,22 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
 	"files/pkg/hertz/biz/model/api/paste"
 	"files/pkg/hertz/biz/model/api/share"
+	"files/pkg/hertz/biz/model/upload"
 	"files/pkg/models"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	urlx "net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,6 +54,7 @@ var (
 		"/api/search",
 		"/videos/",
 	}
+	syncUploadChunks = "/seafhttp/"
 )
 
 var (
@@ -696,4 +702,171 @@ func checkExpired(expireAt string) bool {
 		return true
 	}
 	return false
+}
+
+func ShareUpload() app.HandlerFunc {
+	return func(c context.Context, ctx *app.RequestContext) {
+		var err error
+		var reqMethod = string(ctx.Request.Method())
+		var path = string(ctx.Request.Path())
+
+		if !(strings.HasPrefix(path, syncUploadChunks) && reqMethod == http.MethodPost) {
+			ctx.Next(c)
+			return
+		}
+
+		var uploadReq upload.UploadChunksReq
+		if err = ctx.BindAndValidate(&uploadReq); err != nil {
+			klog.Errorf("Sync uploadChunks, bind and validate error: %v", err)
+			handler.RespBadRequest(ctx, err.Error())
+			return
+		}
+
+		var share = uploadReq.Share
+		if share != "1" {
+			ctx.Next(c)
+			return
+		}
+
+		owner := string(ctx.GetHeader(common.REQUEST_HEADER_OWNER))
+		if owner == "" {
+			handler.RespBadRequest(ctx, "user not found")
+			return
+		}
+
+		fp, _ := models.CreateFileParam(owner, uploadReq.ParentDir)
+
+		shared, err := database.GetSharePath(fp.Extend)
+		if err != nil {
+			klog.Errorf("Sync uploadChunks, share get error: %v", err)
+			handler.RespBadRequest(ctx, err.Error())
+			return
+		}
+		if shared == nil {
+			handler.RespBadRequest(ctx, common.ErrorMessageWrongShare)
+			return
+		}
+
+		repo, err := seaserv.GlobalSeafileAPI.GetRepo(shared.Extend)
+		if err != nil {
+			klog.Errorf("Sync uploadChunks, get repo error: %v", err)
+			handler.RespBadRequest(ctx, err.Error())
+			return
+		}
+
+		klog.Infof("Sync uploadChunks, repo info: %s", common.ParseString(repo))
+
+		var repoName = repo["name"]
+		var repoId = repo["id"]
+		var fullPath = getSyncUploadFullPath(shared.Path)
+		var seahubPath = fmt.Sprintf("/Seahub/%s/%s/?id=%s", common.EscapeURLWithSpace(repoName), fullPath, repoId)
+
+		mf, err := ctx.MultipartForm()
+		if err != nil {
+			klog.Errorf("Sync uploadChunks, parse multipart error: %v", err)
+			handler.RespBadRequest(ctx, err.Error())
+			return
+		}
+		defer mf.RemoveAll()
+
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+
+		for name, vals := range mf.Value {
+			switch name {
+			case "parent_dir":
+				err = createPart(name, []string{shared.Path}, mw)
+			case "fullPath":
+				err = createPart(name, []string{seahubPath}, mw)
+			case "pathname":
+				err = createPart(name, []string{shared.Path}, mw)
+			case "repoId":
+				err = createPart(name, []string{shared.Extend}, mw)
+			case "driveType":
+				err = createPart(name, []string{"sync"}, mw)
+			default:
+				err = createPart(name, vals, mw)
+			}
+
+			if err != nil {
+				break
+			}
+		}
+
+		if err != nil {
+			klog.Errorf("Sync uploadChunks, create MultipartForm error: %v", err)
+			handler.RespBadRequest(ctx, err.Error())
+			return
+		}
+
+		for field, fhs := range mf.File {
+			for _, fh := range fhs {
+				src, err := fh.Open()
+				if err != nil {
+					ctx.String(http.StatusInternalServerError, "open file err: %v", err)
+					_ = mw.Close()
+					return
+				}
+				part, err := mw.CreateFormFile(field, fh.Filename)
+				if err != nil {
+					src.Close()
+					ctx.String(http.StatusInternalServerError, "create form file err: %v", err)
+					_ = mw.Close()
+					return
+				}
+				if _, err := io.Copy(part, src); err != nil {
+					src.Close()
+					ctx.String(http.StatusInternalServerError, "copy file err: %v", err)
+					_ = mw.Close()
+					return
+				}
+				src.Close()
+			}
+		}
+
+		if err := mw.Close(); err != nil {
+			ctx.String(http.StatusInternalServerError, "close mw err: %v", err)
+			return
+		}
+
+		newCT := mw.FormDataContentType()
+		ctx.Request.SetBody(buf.Bytes())
+		ctx.Request.Header.Set("Content-Type", newCT)
+		ctx.Request.Header.Set("Content-Length", strconv.Itoa(buf.Len()))
+
+		ctx.Next(c)
+	}
+
+}
+
+func createPart(name string, vals []string, mw *multipart.Writer) error {
+	for _, v := range vals {
+		hdr := make(textproto.MIMEHeader)
+		hdr.Set("Content-Disposition", `form-data; name="`+name+`"; attr="modified"`)
+
+		part, err := mw.CreatePart(hdr)
+		if err != nil {
+			_ = mw.Close()
+			return fmt.Errorf("create part %s error: %v", name, err)
+		}
+
+		if _, err := io.WriteString(part, v); err != nil {
+			_ = mw.Close()
+			return fmt.Errorf("write part %s %v error: %v", name, v, err)
+		}
+	}
+
+	return nil
+}
+
+func getSyncUploadFullPath(sharePath string) string {
+	var p = strings.Trim(sharePath, "/")
+	var ps = strings.Split(p, "/")
+
+	var result []string
+	for _, tmp := range ps {
+		result = append(result, common.EscapeURLWithSpace(tmp))
+	}
+
+	return strings.Join(result, "/")
 }

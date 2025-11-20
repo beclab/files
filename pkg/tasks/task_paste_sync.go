@@ -491,7 +491,7 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 
 	request, err := http.NewRequestWithContext(t.ctx, "GET", dlUrl, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("url: %s, error: %v", dlUrl, err)
 	}
 
 	client := http.Client{}
