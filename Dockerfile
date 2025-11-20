@@ -179,8 +179,26 @@ RUN apt-get install -y p7zip-full && 7z --help
 #      sudo make install && \
 #      cd ..; \
 
+#RUN if [ "$(uname -m)" = "x86_64" ]; then \
+#        apt-get install -y rar && rar; \
+#    elif [ "$(uname -m)" = "aarch64" ]; then \
+#        echo "There is no rar compressor for arm64"; \
+#    else \
+#        echo "Unsupported CPU architecture" && exit 1; \
+#    fi
+
 RUN if [ "$(uname -m)" = "x86_64" ]; then \
-        apt-get install -y rar && rar; \
+        # 安装依赖工具
+        apt-get update && apt-get install -y wget; \
+        # 下载 rar for Linux
+        wget https://www.rarlab.com/rar/rarlinux-x64-720b1.tar.gz -O /tmp/rar.tar.gz; \
+        # 解压并安装
+        tar -xvf /tmp/rar.tar.gz -C /tmp && \
+        cp /tmp/rar/rar /usr/local/bin/ && \
+        cp /tmp/rar/unrar /usr/local/bin/ && \
+        # 清理
+        rm -rf /tmp/rar* && \
+        apt-get remove --purge -y wget && apt-get autoremove -y; \
     elif [ "$(uname -m)" = "aarch64" ]; then \
         echo "There is no rar compressor for arm64"; \
     else \
