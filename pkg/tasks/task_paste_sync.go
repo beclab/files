@@ -37,6 +37,9 @@ func (t *Task) DownloadFromSync() error {
 	var user = t.param.Owner
 	var action = t.param.Action
 	var src = t.param.Src
+	var share = t.param.Share
+	var srcOwner = t.param.SrcOwner
+	var dstOwner = t.param.DstOwner
 
 	var tempParam *models.FileParam
 	var dst *models.FileParam
@@ -79,6 +82,11 @@ func (t *Task) DownloadFromSync() error {
 		}
 	} else {
 		dst = t.param.Dst
+	}
+
+	if share == 1 {
+		src.Owner = srcOwner
+		dst.Owner = dstOwner
 	}
 
 	klog.Infof("[Task] Id: %s, start, downloadFormSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s, psrc: %s, pdst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst), common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
@@ -154,6 +162,9 @@ func (t *Task) UploadToSync() error {
 	var cmd = rclone.Command
 	var user = t.param.Owner
 	var action = t.param.Action
+	var share = t.param.Share
+	var srcOwner = t.param.SrcOwner
+	var dstOwner = t.param.DstOwner
 
 	var src *models.FileParam
 	var dst *models.FileParam
@@ -175,6 +186,11 @@ func (t *Task) UploadToSync() error {
 		dst = t.pausedParam
 	} else {
 		dst = t.param.Dst
+	}
+
+	if share == 1 {
+		src.Owner = srcOwner
+		dst.Owner = dstOwner
 	}
 
 	t.updateProgress(0, 0)
@@ -245,6 +261,14 @@ func (t *Task) SyncCopy() error {
 	var action = t.param.Action
 	var src = t.param.Src
 	var dst = t.param.Dst
+	var share = t.param.Share
+	var srcOwner = t.param.SrcOwner
+	var dstOwner = t.param.DstOwner
+
+	if share == 1 {
+		src.Owner = srcOwner
+		dst.Owner = dstOwner
+	}
 
 	klog.Infof("[Task] Id: %s, start, sync, user: %s, action: %s, src: %s, dst: %s",
 		t.id, user, action, common.ToJson(src), common.ToJson(dst))

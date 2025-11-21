@@ -1449,7 +1449,7 @@ func DeleteSharePathRelations(pathId string, tx *gorm.DB) error {
 		tx.Rollback()
 		return err
 	}
-	klog.Infof("memberTotal: %d", memberTotal)
+	klog.Infof("memberTotal: %d, deletePath: %s, memberRes: %s", memberTotal, common.ParseString(deletePath), common.ParseString(memberRes))
 
 	if deletePath.FileType == "sync" {
 		for _, shareMember := range memberRes {

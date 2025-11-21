@@ -33,6 +33,10 @@ func (t *Task) DownloadFromCloud() error {
 	var src = t.param.Src
 	var dst *models.FileParam
 
+	var share = t.param.Share
+	var srcOwner = t.param.SrcOwner
+	var dstOwner = t.param.DstOwner
+
 	if t.param.Dst.IsSync() { // cloud->sync, if phase 1 complete
 		if t.pausedPhase == t.totalPhases {
 			klog.Infof("[Task] Id: %s, resume phase: %d", t.id, t.pausedPhase)
@@ -72,6 +76,11 @@ func (t *Task) DownloadFromCloud() error {
 		}
 	} else {
 		dst = t.param.Dst // posix
+	}
+
+	if share == 1 {
+		src.Owner = srcOwner
+		dst.Owner = dstOwner
 	}
 
 	klog.Infof("[Task] Id: %s, start, downloadFromCloud, phase: %d/%d, paused: %v, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, t.wasPaused, user, action, common.ToJson(src), common.ToJson(dst))

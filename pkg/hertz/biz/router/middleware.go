@@ -614,21 +614,23 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 		}
 
 		// check member
-		member, err := database.GetShareMember(shared.ID, owner)
-		if err != nil {
-			handler.RespError(c, fmt.Sprintf("Get Share Destination Member Error: %v", err))
-			return
-		}
+		if owner != shared.Owner {
+			member, err := database.GetShareMember(shared.ID, owner)
+			if err != nil {
+				handler.RespError(c, fmt.Sprintf("Get Share Destination Member Error: %v", err))
+				return
+			}
 
-		if member == nil {
-			handler.RespError(c, common.ErrorMessagePasteWrongDestinationShare)
-			return
-		}
+			if member == nil {
+				handler.RespError(c, common.ErrorMessagePasteWrongDestinationShare)
+				return
+			}
 
-		// check permission, view, edit, admin
-		if owner != shared.Owner && member.Permission < 2 {
-			handler.RespError(c, common.ErrorMessagePermissionDenied)
-			return
+			// check permission, view, edit, admin
+			if owner != shared.Owner && member.Permission < 2 {
+				handler.RespError(c, common.ErrorMessagePermissionDenied)
+				return
+			}
 		}
 
 		//
