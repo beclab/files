@@ -111,7 +111,7 @@ func (t *Task) DownloadFromSync() error {
 		return fmt.Errorf("not enough free space on disk, required: %s, available: %s", common.FormatBytes(requiredSpace), common.FormatBytes(dstSize))
 	}
 
-	t.updateProgress(0, 0)
+	t.resetProgressZero()
 	t.updateTotalSize(srcTotalSize)
 
 	defer func() {
@@ -193,7 +193,7 @@ func (t *Task) UploadToSync() error {
 		dst.Owner = dstOwner
 	}
 
-	t.updateProgress(0, 0)
+	t.resetProgressZero()
 
 	posixSize, err := cmd.GetFilesSize(src)
 	if err != nil {

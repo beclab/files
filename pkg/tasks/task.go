@@ -229,9 +229,14 @@ func (t *Task) Execute(fs ...func() error) error {
 
 func (t *Task) updateProgress(progress int, transfer int64) {
 	t.progress = progress
-	// t.transfer = transfer
 	t.transfer += transfer
 	t.details = append(t.details, fmt.Sprintf("rsync files progress: %d, transfer: %d", progress, transfer))
+}
+
+func (t *Task) resetProgressZero() {
+	t.progress = 0
+	t.transfer = 0
+	t.details = append(t.details, fmt.Sprintf("rsync files progress: 0, transfer: 0"))
 }
 
 func (t *Task) updateTotalSize(totalSize int64) {

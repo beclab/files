@@ -255,7 +255,7 @@ func (t *Task) UploadToCloud() error {
 		return fmt.Errorf("uploaded parent path invalid")
 	}
 
-	t.updateProgress(0, 0)
+	t.resetProgressZero()
 
 	// get src size
 	posixSize, err := cmd.GetFilesSize(src)
