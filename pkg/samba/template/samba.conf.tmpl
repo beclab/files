@@ -17,7 +17,7 @@
   path = {{ $data.Path }}
   comment = "{{ $data.Comment }}"
   {{ if $data.Anonymous  -}}
-  browseable = yes
+  browseable = no
   writable = no
   read only = yes
   guest ok = yes
@@ -27,9 +27,9 @@
   directory mask = 0775
   {{ else -}}
   valid users = {{ $data.ForceUser }}
-  browseable = yes
-  writable = {{ $data.Writable }}
-  read only = {{ $data.ReadOnly }}
+  browseable = no
+  writable = no
+  read only = yes
   read list = {{ $data.ReadList }}
   write list = {{ $data.WriteList }}
   force group = {{ $data.ForceGroup }}

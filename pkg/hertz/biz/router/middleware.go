@@ -758,7 +758,7 @@ func ShareUpload() app.HandlerFunc {
 
 		var repoName = repo["name"]
 		var repoId = repo["id"]
-		var fullPath = getSyncUploadFullPath(shared.Path)
+		var fullPath = common.UrlEncode(shared.Path)
 		var seahubPath = fmt.Sprintf("/Seahub/%s/%s/?id=%s", common.EscapeURLWithSpace(repoName), fullPath, repoId)
 
 		mf, err := ctx.MultipartForm()
@@ -857,16 +857,4 @@ func createPart(name string, vals []string, mw *multipart.Writer) error {
 	}
 
 	return nil
-}
-
-func getSyncUploadFullPath(sharePath string) string {
-	var p = strings.Trim(sharePath, "/")
-	var ps = strings.Split(p, "/")
-
-	var result []string
-	for _, tmp := range ps {
-		result = append(result, common.EscapeURLWithSpace(tmp))
-	}
-
-	return strings.Join(result, "/")
 }

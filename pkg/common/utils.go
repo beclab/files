@@ -391,3 +391,15 @@ func EscapeGlob(s string) string {
 	}
 	return b.String()
 }
+
+func UrlEncode(sharePath string) string {
+	var p = strings.Trim(sharePath, "/")
+	var ps = strings.Split(p, "/")
+
+	var result []string
+	for _, tmp := range ps {
+		result = append(result, EscapeURLWithSpace(tmp))
+	}
+
+	return strings.Join(result, "/")
+}

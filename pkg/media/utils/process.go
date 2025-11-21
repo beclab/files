@@ -34,7 +34,10 @@ func (p *Process) Kill() error {
 	klog.Infoln(p)
 	klog.Infoln(p.cmd)
 	klog.Infoln(p.cmd.Process)
-	return p.cmd.Process.Signal(syscall.SIGKILL)
+	if p.cmd.Process != nil {
+		return p.cmd.Process.Signal(syscall.SIGKILL)
+	}
+	return nil
 }
 
 func (p *Process) CloseMainWindow() error {
