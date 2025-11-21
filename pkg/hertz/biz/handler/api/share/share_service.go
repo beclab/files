@@ -8,6 +8,7 @@ import (
 	"files/pkg/client"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/files"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
@@ -166,14 +167,16 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 
 	var addShareMembers = []*share.ShareMember{}
 	for _, shareMemberInfo := range req.ShareMembers {
-		shareMember := &share.ShareMember{
-			PathID:      res[0].ID,
-			ShareMember: shareMemberInfo.ShareMember,
-			Permission:  shareMemberInfo.Permission,
-			CreateTime:  now,
-			UpdateTime:  now,
+		if shareMemberInfo.ShareMember != owner { // owner can't be added or updated
+			shareMember := &share.ShareMember{
+				PathID:      res[0].ID,
+				ShareMember: shareMemberInfo.ShareMember,
+				Permission:  shareMemberInfo.Permission,
+				CreateTime:  now,
+				UpdateTime:  now,
+			}
+			addShareMembers = append(addShareMembers, shareMember)
 		}
-		addShareMembers = append(addShareMembers, shareMember)
 	}
 
 	// add member
@@ -187,7 +190,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 
-		if sharePath.FileType == "sync" {
+		if sharePath.FileType == common.Sync {
 			seaResp, err := seahub.HandlePutDirSharedItems(sharePath, addShareMembers, "user")
 			if err != nil {
 				klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
@@ -220,6 +223,15 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			Permission:  shareMember.Permission,
 		}
 		result.ShareMembers = append(result.ShareMembers, resMember)
+	}
+
+	if result.FileType == common.Sync {
+		repo, err := seaserv.GlobalSeafileAPI.GetRepo(result.Extend)
+		if err != nil {
+			klog.Errorf("GetRepo error: %v", err)
+		} else {
+			result.SyncRepoName = repo["repo_name"]
+		}
 	}
 
 	handler.RespSuccess(c, result)
@@ -410,6 +422,15 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 			viewPath.SharedByMe = true
 		}
 
+		if viewPath.FileType == common.Sync {
+			repo, err := seaserv.GlobalSeafileAPI.GetRepo(viewPath.Extend)
+			if err != nil {
+				klog.Errorf("GetRepo error: %v", err)
+			} else {
+				viewPath.SyncRepoName = repo["repo_name"]
+			}
+		}
+
 		if sharePath.ShareType == common.ShareTypeInternal {
 			if len(internalShareMembers) > 0 {
 				for _, u := range internalShareMembers {
@@ -508,6 +529,12 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
 	pathId := req.PathId
 	pathQueryParams := &database.QueryParams{}
 	pathQueryParams.AND = []database.Filter{}
@@ -528,7 +555,9 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 
 	memberInfoMap := make(map[string]*share.AddOrUpdateShareMemberInfo)
 	for _, memberInfo := range req.ShareMembers {
-		memberInfoMap[memberInfo.ShareMember] = memberInfo
+		if memberInfo.ShareMember != owner {
+			memberInfoMap[memberInfo.ShareMember] = memberInfo
+		}
 	}
 
 	memberQueryParams := &database.QueryParams{}
@@ -709,6 +738,14 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 			Permission:  shareMember.Permission,
 		}
 		result.ShareMembers = append(result.ShareMembers, resMember)
+	}
+	if result.FileType == common.Sync {
+		repo, err := seaserv.GlobalSeafileAPI.GetRepo(result.Extend)
+		if err != nil {
+			klog.Errorf("GetRepo error: %v", err)
+		} else {
+			result.SyncRepoName = repo["repo_name"]
+		}
 	}
 
 	resp.SharePath = result
