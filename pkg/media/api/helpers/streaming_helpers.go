@@ -81,13 +81,12 @@ func GetStreamingState(
 	transcodingJobType mediaencoding.TranscodingJobType,
 	ctx context.Context,
 ) (*streaming.StreamState, error) {
-	klog.Infof("%+v\n", request)
+
 	streamingRequest, ok := request.(*streaming.VideoRequestDto)
 	if !ok {
-		klog.Info("notttttttttttttttttttttttttttttttttt ok")
+		klog.Warningf("[media] GetStreamingState, parse request invalid")
 	}
-	klog.Infof("look        -->        %+v %+v\n", streamingRequest, ok)
-	klog.Info(streamingRequest.SegmentContainer)
+	klog.Infof("[media] GetStreamingState, request: %v, segmentContainer: %s", common.ParseString(streamingRequest), *streamingRequest.SegmentContainer)
 	if streamingRequest.Params != nil && *streamingRequest.Params != "" {
 		ParseParams(streamingRequest)
 	}
@@ -164,7 +163,6 @@ func GetStreamingState(
 	if protocol == mediaprotocol.Http {
 		// bflName := httpContext.Header[common.REQUEST_HEADER_OWNER][0]
 		bflName := httpContext.Request.Header.Get(common.REQUEST_HEADER_OWNER)
-
 		authToken, err := utils.GetAuthToken(bflName)
 		if err != nil {
 			klog.Error(err)
@@ -172,12 +170,13 @@ func GetStreamingState(
 		}
 		klog.Info(authToken)
 
-		fileParam, err := models.CreateFileParam(bflName, streamingRequest.PlayPath) // + here // httpContext.Query("PlayPath")
+		fileParam, err := models.CreateFileParam(bflName, streamingRequest.PlayPath)
 		if err != nil {
-			klog.Infof("parse url error: %v\n", err)
+			klog.Infof("[media] GetStreamingState, parse url error: %v\n", err)
 			return nil, errors.New("parse url error")
 		}
-		if fileParam.FileType == common.Share { // + todo share
+
+		if fileParam.FileType == common.Share { // todo share
 
 		} else if fileParam.FileType == common.Sync {
 			remoteAccessToken := httpContext.Request.Header.Get("remote-accesstoken")
@@ -198,7 +197,7 @@ func GetStreamingState(
 		} else if fileParam.FileType == common.AwsS3 {
 		}
 
-		klog.Infof("headers: %+v \n", headers)
+		klog.Infof("[media] GetStreamingState, headers: %s", headers)
 
 		state.Headers = headers
 	}
@@ -224,10 +223,10 @@ func GetStreamingState(
 				MediaType:       dlna.Video,
 			}, ctx, headers)
 			if err != nil {
-				fmt.Errorf("err: %s\n", err)
+				klog.Errorf("[media] GetStreamingState, get media info error: %v, playPath: %s", err, streamingRequest.PlayPath)
 				return nil, err
 			}
-			klog.Infof("____________________________%+v\n", mediaInfo)
+			klog.Infof("[media] GetStreamingState, get media info: %s", common.ParseString(mediaInfo))
 			mediaSource = &mediaInfo.MediaSourceInfo
 		}
 	} else {

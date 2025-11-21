@@ -27,6 +27,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"files/pkg/common"
+	"files/pkg/drivers/sync/seahub"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
 	"files/pkg/models"
@@ -353,7 +355,7 @@ func destType(dest interface{}) reflect.Type {
 	}
 }
 func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, error) {
-	d.logger.Infof("pathCommon: %v %v", playPath, bflName)
+	klog.Infof("[media] pathCommon, playPath: %s, owner: %s", playPath, bflName)
 	if utils.IsTestEnv() {
 		return playPath, nil
 	}
@@ -433,6 +435,7 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 		}
 		formalizedPath += url.QueryEscape(string(jsonData))
 	} else if fileParam.FileType == common.Share {
+		klog.Infof("[media] get share path, param: %s", common.ParseString(fileParam))
 		shared, err := database.GetSharePath(fileParam.Extend)
 		if err != nil {
 			klog.Errorf("[media] pathCommon, get shared error: %v", err)
@@ -444,11 +447,26 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 			return "", fmt.Errorf("shared not exists")
 		}
 
+		var repo map[string]string
+		var repoId string
+		_ = repoId
+		if shared.FileType == common.Sync {
+			repo, err = seaserv.GlobalSeafileAPI.GetRepo(shared.Extend)
+			if err != nil {
+				return "", fmt.Errorf("get sync repo error: %v", err)
+			}
+			repoId = repo["id"]
+
+			klog.Infof("[media] pathCommon, repo data: %s", common.ParseString(repo))
+		}
+
+		var sharedPath = shared.Path
+
 		var newFileParam = &models.FileParam{
 			Owner:    shared.Owner,
 			FileType: shared.FileType,
 			Extend:   shared.Extend,
-			Path:     fmt.Sprintf("%s/%s", shared.Path, strings.TrimPrefix(fileParam.Path, "/")),
+			Path:     fmt.Sprintf("%s/%s", strings.Trim(sharedPath, "/"), strings.TrimPrefix(fileParam.Path, "/")),
 		}
 
 		resUri, err := newFileParam.GetResourceUri()
@@ -456,8 +474,23 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 			klog.Errorf("[media] pathCommon convert error: %v", err)
 			return "", errors.New("get path error")
 		}
-		formalizedPath = resUri + "/" + filepath.Clean(newFileParam.Path)
 
+		if shared.FileType == common.Sync {
+			data, err := seahub.ViewLibFile(newFileParam, "dict")
+			if err != nil {
+				klog.Errorf("[media] pathCommon, get sync file info error: %v", err)
+				return "", err
+			}
+			var fileInfo *models.SyncFile
+			if err = json.Unmarshal(data, &fileInfo); err != nil {
+				klog.Errorf("[media] pathCommon, get sync file unmarshal error: %v", err)
+				return "", errors.New("file not found")
+			}
+			seafileServiceName := os.Getenv("SEAFILE_SERVICE")
+			formalizedPath = "http://" + seafileServiceName + fileInfo.RawPath
+		} else {
+			formalizedPath = resUri + "/" + filepath.Clean(newFileParam.Path)
+		}
 	} else {
 		resUri, err := fileParam.GetResourceUri()
 		if err != nil {
@@ -468,7 +501,7 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 
 	}
 
-	d.logger.Infof("pathCommon: %v", formalizedPath)
+	klog.Infof("[media] pathCommon, formalizedPath: %s, owner: %s", formalizedPath, bflName)
 
 	return formalizedPath, nil
 }

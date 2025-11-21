@@ -75,6 +75,7 @@ RUN apt-get update \
   wv \
   unrtf \
   tidy \
+  procps \
   inotify-tools \
   mailcap  \
   rsync \
