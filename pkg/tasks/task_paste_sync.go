@@ -246,6 +246,9 @@ func (t *Task) SyncCopy() error {
 	var src = t.param.Src
 	var dst = t.param.Dst
 
+	klog.Infof("[Task] Id: %s, start, sync, user: %s, action: %s, src: %s, dst: %s",
+		t.id, user, action, common.ToJson(src), common.ToJson(dst))
+
 	totalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
 	if err != nil {
 		klog.Errorf("DownloadFromSync - GetFromSyncFileCount - %v", err)
@@ -1205,8 +1208,11 @@ func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool, up
 				if fileInfo == nil {
 					break
 				}
+				var objId = fileInfo["obj_id"].(string)
+				if objId == "" {
+					break
+				}
 			}
-
 		} else {
 			if _, err = os.Stat(source); err != nil {
 				break
