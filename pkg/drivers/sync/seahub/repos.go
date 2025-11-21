@@ -534,6 +534,10 @@ func HandleRepoPost(owner, repoName, passwd string) ([]byte, error) {
 	}
 
 	resp, err := repoDownloadInfo(repoId, username, true)
+	if err != nil {
+		klog.Errorf("Get repo download info error: %v", err)
+		return nil, err
+	}
 
 	return common.ToBytes(resp), nil
 }
@@ -617,4 +621,78 @@ func HandleRepoPatch(owner, repoId, repoName, repoDesc, op string) ([]byte, erro
 	default:
 		return nil, errors.New("unsupported operation")
 	}
+}
+
+func getAccountInfo(username string) (map[string]interface{}, error) {
+	info := make(map[string]interface{})
+	email := username
+
+	quotaTotal, err := seaserv.GlobalSeafileAPI.GetUserQuota(email)
+	if err != nil {
+		klog.Errorf("Error getting quota info: %v", err)
+		return nil, err
+	}
+	quotaUsage, err := seaserv.GlobalSeafileAPI.GetUserQuotaUsage(email)
+	if err != nil {
+		klog.Errorf("Error getting quota info: %v", err)
+		return nil, err
+	}
+
+	if quotaTotal > 0 {
+		usagePercent := float64(quotaUsage) / float64(quotaTotal) * 100
+		info["space_usage"] = fmt.Sprintf("%.1f%%", usagePercent)
+	} else {
+		info["space_usage"] = "0%"
+	}
+
+	url := ""
+	info["avatar_url"] = url
+	info["email"] = email
+	info["name"] = seaserv.Email2Nickname(seaserv.Email2ContactEmail(email))
+	info["total"] = quotaTotal
+	info["usage"] = quotaUsage
+	info["login_id"] = ""
+	info["department"] = ""
+	info["contact_email"] = seaserv.Email2ContactEmail(email)
+	info["institution"] = ""
+	info["is_staff"] = false
+	info["is_inst_admin"] = false
+	info["file_updates_email_interval"] = 0
+	info["collaborate_email_interval"] = 0
+
+	return info, nil
+}
+
+func HandleGetAccountInfo(owner string) ([]byte, error) {
+	info, err := getAccountInfo(owner + "@auth.local")
+	if err != nil {
+		return nil, err
+	}
+	return common.ToBytes(info), nil
+}
+
+func HandleGetReposDownloadInfo(owner, repoId string) ([]byte, error) {
+	username := owner + "@auth.local"
+
+	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
+	if err != nil || repo == nil {
+		return nil, fmt.Errorf("library %s not found", repoId)
+	}
+
+	perm, err := CheckFolderPermission(username, repoId, "/")
+	if perm == "" {
+		return nil, fmt.Errorf("you do not have permission to access this library")
+	}
+
+	if !seaserv.GlobalSeafileAPI.IsRepoSyncable(repoId, username, perm) {
+		return nil, fmt.Errorf("unsyncable share permission")
+	}
+
+	resp, err := repoDownloadInfo(repoId, username, true)
+	if err != nil {
+		klog.Errorf("Get repo download info error: %v", err)
+		return nil, err
+	}
+
+	return common.ToBytes(resp), nil
 }

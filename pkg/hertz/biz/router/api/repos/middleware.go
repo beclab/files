@@ -40,3 +40,38 @@ func _reposMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _repo_idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _download_infoMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getreposdonwloadinfomethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _syncMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _accountMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _infoMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getaccountinfomethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

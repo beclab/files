@@ -204,6 +204,14 @@ func (c *SeafServerThreadedRpcClient) IsInnerPubRepo(repoId string) (interface{}
 	return CreateRPCMethod(c, "is_inner_pub_repo", "int", []string{"string"})(repoId)
 }
 
+func (c *SeafServerThreadedRpcClient) GetUserQuotaUsage(userId string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_get_user_quota_usage", "int64", []string{"string"})(userId)
+}
+
+func (c *SeafServerThreadedRpcClient) GetUserQuota(user string) (interface{}, error) {
+	return CreateRPCMethod(c, "get_user_quota", "int64", []string{"string"})(user)
+}
+
 func (c *SeafServerThreadedRpcClient) CheckQuota(repoId string, delta int64) (interface{}, error) {
 	return CreateRPCMethod(c, "check_quota", "int", []string{"string", "int64"})(repoId, delta)
 }

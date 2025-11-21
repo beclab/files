@@ -229,3 +229,64 @@ func PatchReposMethod(ctx context.Context, c *app.RequestContext) {
 
 	c.String(consts.StatusOK, string(res))
 }
+
+// GetAccountInfoMethod .
+// @router /api/sync/account/info/ [GET]
+func GetAccountInfoMethod(ctx context.Context, c *app.RequestContext) {
+	var err error
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	var res []byte
+
+	res, err = seahub.HandleGetAccountInfo(owner)
+	if err != nil {
+		klog.Errorf("get account info error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get account info error: %v", err)})
+		return
+	}
+	klog.Infof("get account info: %s", string(res))
+
+	resp := new(repos.GetAccountInfoResp)
+	if err = json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetReposDonwloadInfoMethod .
+// @router /api/repos/:repo_id/download_info/ [GET]
+func GetReposDonwloadInfoMethod(ctx context.Context, c *app.RequestContext) {
+	var err error
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+	repoId := c.Param("repo_id")
+
+	var res []byte
+
+	res, err = seahub.HandleGetReposDownloadInfo(owner, repoId)
+	if err != nil {
+		klog.Errorf("get repos download info error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("get repos download info error: %v", err)})
+		return
+	}
+	klog.Infof("get repos download info: %s", string(res))
+
+	resp := new(repos.GetReposDownloadInfoResp)
+	if err = json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
+}
