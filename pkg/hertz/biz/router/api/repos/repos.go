@@ -28,7 +28,7 @@ func Register(r *server.Hertz) {
 			{
 				_repo_id := _repos.Group("/:repo_id", _repo_idMw()...)
 				{
-					_download_info := _repo_id.Group("/download_info", _download_infoMw()...)
+					_download_info := _repo_id.Group("/download-info", _download_infoMw()...)
 					_download_info.GET("/", append(_getreposdonwloadinfomethodMw(), repos.GetReposDonwloadInfoMethod)...)
 				}
 			}

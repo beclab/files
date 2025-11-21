@@ -77,6 +77,7 @@ struct ViewSharePath {
     16: list<ViewSharePathMembers> share_members (go.tag='json:"share_members,omitempty"')
     17: list<ViewSharePathUsers> users (go.tag='json:"users,omitempty"')
     18: string smb_link (go.tag='json:"smb_link,omitempty"')
+    19: string sync_repo_name (go.tag='json:"sync_repo_name,omitempty"')
 }
 
 struct ViewSharePathMembers {

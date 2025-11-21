@@ -100,6 +100,6 @@ service ReposService {
     string PatchReposMethod(1: PatchReposReq request) (api.patch="/api/repos/");
 
     GetAccountInfoResp GetAccountInfoMethod() (api.get="/api/sync/account/info/");
-    GetReposDownloadInfoResp GetReposDonwloadInfoMethod() (api.get="/api/repos/:repo_id/download_info/");
+    GetReposDownloadInfoResp GetReposDonwloadInfoMethod() (api.get="/api/repos/:repo_id/download-info/");
 }
 
