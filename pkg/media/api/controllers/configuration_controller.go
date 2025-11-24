@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	"files/pkg/hertz/biz/handler"
+	"files/pkg/hertz/biz/model/api/media"
 	"files/pkg/media/mediabrowser/controller/configuration"
 	"files/pkg/media/mediabrowser/controller/mediaencoding"
 
@@ -45,8 +46,15 @@ func (c *ConfigurationController) GetNamedConfiguration(ctx context.Context, r *
 		return
 	}
 
+	var result *media.UpdateNamedConfigData
+	if err := json.Unmarshal(jsonData, &result); err != nil {
+		klog.Errorf("[media] GetNamedConfiguration, error marshaling to JSON: %v", err)
+		handler.RespStatusInternalServerError(r, "error marshaling to JSON")
+		return
+	}
+
 	r.Response.Header.Set("Content-Type", "application/json")
-	r.JSON(200, string(jsonData))
+	r.JSON(200, result)
 }
 
 func (c *ConfigurationController) UpdateNamedConfiguration(ctx context.Context, r *app.RequestContext) {

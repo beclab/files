@@ -127,7 +127,7 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 
 		if resp.StatusCode >= 400 {
 			klog.Errorf("Failed to mount by %s to %s", url, files.TerminusdHost)
-			klog.Infof("response status: %d, response body: %v", resp.Status, res)
+			klog.Infof("response status: %s, response body: %v", resp.Status, res)
 			continue
 		}
 
@@ -135,7 +135,8 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		break
 	}
 	if !mounted {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "failed to mount samba"})
+		// c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "failed to mount samba"})
+		klog.Errorf("failed to mount samba")
 	}
 
 	if int(res["code"].(float64)) != consts.StatusOK {
@@ -158,8 +159,9 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		klog.Errorf("Failed to unmarshal response body: %v", err)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 		return
+	} else {
+		c.JSON(consts.StatusOK, resp)
 	}
-	c.JSON(consts.StatusOK, resp)
 }
 
 // UnmountMethod .
