@@ -60,7 +60,9 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	klog.Infof("[samba] CreateSharePath, owner: %s, data: %s", owner, common.ParseString(req))
+	p = strings.TrimSpace(p)
+
+	klog.Infof("[samba] CreateSharePath, owner: %s, data: %s, path: %s", owner, common.ParseString(req), p)
 
 	fileParam, err := models.CreateFileParam(owner, p)
 	if err != nil {
@@ -2295,7 +2297,13 @@ func ListSmbUser(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	res, err := database.QuerySmbUsers(nil)
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
+	res, err := database.QuerySmbUsers(owner, nil)
 	if err != nil {
 		handler.RespError(c, err.Error())
 		return
@@ -2419,6 +2427,8 @@ func DeleteSmbUser(ctx context.Context, c *app.RequestContext) {
 
 // ~ internal func
 func createSambaShare(c *app.RequestContext, owner string, req *share.CreateSharePathReq, fileParam *models.FileParam) {
+	klog.Infof("[samba] CreateSharePath, samba, owner: %s, data: %s", owner, common.ParseString(fileParam))
+
 	var isSmbSharePublic int32
 	if req.PublicSmb {
 		isSmbSharePublic = 1

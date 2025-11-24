@@ -659,7 +659,7 @@ func (s *samba) ModifySambaShareMembers(owner string, publicSmb bool, sharePath 
 	for _, member := range members {
 		userIds = append(userIds, member.UserID)
 	}
-	smbUsers, _ := database.QuerySmbUsers(userIds)
+	smbUsers, _ := database.QuerySmbUsers(owner, userIds)
 
 	addMembers, editMembers, delMembers := CompareSmbShareMembers(publicSmb, members, modifyMembers)
 
