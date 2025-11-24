@@ -158,6 +158,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		Permission:      permission,
 		CreateTime:      now,
 		UpdateTime:      now,
+		SyncVirtualID:   "",
 	}
 	res, err := database.CreateSharePath([]*share.SharePath{sharePath}, tx)
 	if err != nil {
@@ -181,7 +182,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	syncVirtualId := ""
+	syncVirtualId := sharePath.SyncVirtualID
 	// add member
 	var addRes = []*share.ShareMember{}
 	if len(addShareMembers) > 0 {
@@ -219,6 +220,20 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 					}
 				}
 			}
+
+			if syncVirtualId == "" && sharePath.Path != "/" {
+				virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner)
+				if err != nil {
+					klog.Errorf("GetVirtualRepo error: %v", err)
+					tx.Rollback()
+					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+					return
+				} else {
+					klog.Infof("GetVirtualRepo response: %+v", virtualRepo)
+					syncVirtualId = virtualRepo["repo_id"]
+				}
+			}
+
 			if syncVirtualId != "" {
 				err = database.UpdateSharePath(res[0].ID, map[string]interface{}{
 					"sync_virtual_id": syncVirtualId,
@@ -743,6 +758,7 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 				return
 			}
 			klog.Infof("postgres.HandlePutDirSharedItems seaRespJson: %+v", seaRespJson)
+
 			if syncVirtualId == "" {
 				if success, ok := seaRespJson["success"].([]interface{}); ok && len(success) > 0 {
 					if firstItem, ok := success[0].(map[string]interface{}); ok {
@@ -751,6 +767,20 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 						}
 					}
 				}
+
+				if syncVirtualId == "" && sharePath.Path != "/" {
+					virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner)
+					if err != nil {
+						klog.Errorf("GetVirtualRepo error: %v", err)
+						tx.Rollback()
+						c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+						return
+					} else {
+						klog.Infof("GetVirtualRepo response: %+v", virtualRepo)
+						syncVirtualId = virtualRepo["repo_id"]
+					}
+				}
+
 				if syncVirtualId != "" {
 					err = database.UpdateSharePath(sharePath.ID, map[string]interface{}{
 						"sync_virtual_id": syncVirtualId,
@@ -1027,6 +1057,12 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
 	queryParams := &database.QueryParams{}
 	queryParams.AND = []database.Filter{}
 	database.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &queryParams.AND, true)
@@ -1153,6 +1189,20 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 						}
 					}
 				}
+
+				if syncVirtualId == "" && sharePath.Path != "/" {
+					virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner)
+					if err != nil {
+						klog.Errorf("GetVirtualRepo error: %v", err)
+						tx.Rollback()
+						c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+						return
+					} else {
+						klog.Infof("GetVirtualRepo response: %+v", virtualRepo)
+						syncVirtualId = virtualRepo["repo_id"]
+					}
+				}
+
 				if syncVirtualId != "" {
 					err = database.UpdateSharePath(sharePath.ID, map[string]interface{}{
 						"sync_virtual_id": syncVirtualId,

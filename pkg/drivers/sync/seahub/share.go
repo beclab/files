@@ -417,6 +417,7 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 				}
 
 				virtualRepoId, err := ShareDirToUser(repo, path, repoOwner, username, toUser, SharePermissionMap[permission])
+				klog.Infof("virtualRepoId: %s", virtualRepoId)
 
 				if err != nil {
 					klog.Error(err)
