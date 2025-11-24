@@ -211,6 +211,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 				return
 			}
+			klog.Infof("postgres.HandlePutDirSharedItems seaRespJson: %+v", seaRespJson)
 			if success, ok := seaRespJson["success"].([]interface{}); ok && len(success) > 0 {
 				if firstItem, ok := success[0].(map[string]interface{}); ok {
 					if syncId, ok := firstItem["sync_virtual_id"].(string); ok && syncId != "" {
@@ -741,6 +742,7 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 				return
 			}
+			klog.Infof("postgres.HandlePutDirSharedItems seaRespJson: %+v", seaRespJson)
 			if syncVirtualId == "" {
 				if success, ok := seaRespJson["success"].([]interface{}); ok && len(success) > 0 {
 					if firstItem, ok := success[0].(map[string]interface{}); ok {
@@ -1143,6 +1145,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 					return
 				}
+				klog.Infof("postgres.HandlePutDirSharedItems seaRespJson: %+v", seaRespJson)
 				if success, ok := seaRespJson["success"].([]interface{}); ok && len(success) > 0 {
 					if firstItem, ok := success[0].(map[string]interface{}); ok {
 						if syncId, ok := firstItem["sync_virtual_id"].(string); ok && syncId != "" {
