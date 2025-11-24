@@ -499,9 +499,9 @@ func QuerySmbMembers(pathID string) ([]*share.ShareSmbMember, error) {
 	return res, nil
 }
 
-func QuerySmbUsers(userIds []string) ([]*share.ShareSmbUser, error) {
+func QuerySmbUsers(owner string, userIds []string) ([]*share.ShareSmbUser, error) {
 	var res []*share.ShareSmbUser
-	var tx = DB.Table("share_smb_users")
+	var tx = DB.Table("share_smb_users").Where("owner = ?", owner)
 	if len(userIds) > 0 {
 		tx.Where("user_id IN ?", userIds)
 	}
