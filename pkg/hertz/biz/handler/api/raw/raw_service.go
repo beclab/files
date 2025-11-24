@@ -31,6 +31,8 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	var share = req.Share
+
 	_ = new(raw.RawResp) // file stream, won't use
 	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/raw", false, false)
 	if err != nil {
@@ -90,8 +92,12 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if file.Redirect {
-		klog.Infof("redirect to %s", file.FileName)
-		c.Redirect(consts.StatusFound, []byte(file.FileName))
+		var redirectHost = file.FileName
+		if share == "1" {
+			redirectHost = fmt.Sprintf("http://127.0.0.1%s", file.FileName)
+		}
+		klog.Infof("redirect to %s", redirectHost)
+		c.Redirect(consts.StatusFound, []byte(redirectHost))
 		return
 	}
 
