@@ -29,8 +29,8 @@ func HertzServer() {
 	h.Use(router.Cors())
 	h.Use(router.TimingMiddleware())
 	h.Use(router.CookieMiddleware())
-	h.Use(router.ShareMiddleware())
 	h.Use(router.ShareUpload())
+	h.Use(router.ShareMiddleware())
 
 	register(h)
 	h.Spin()

@@ -44,3 +44,7 @@ type FileUploadArgs struct {
 	ChunkInfo      *ResumableInfo `json:"chunkInfo,omitempty"`
 	RequestContext *app.RequestContext
 }
+
+type SyncUploadError struct {
+	Error string `json:"error"`
+}
