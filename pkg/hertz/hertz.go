@@ -26,6 +26,7 @@ func HertzServer() {
 		server.WithIdleTimeout(200*time.Second),
 	)
 
+	h.Use(router.Options())
 	h.Use(router.Cors())
 	h.Use(router.TimingMiddleware())
 	h.Use(router.CookieMiddleware())
