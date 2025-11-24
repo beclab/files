@@ -181,6 +181,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
+	syncVirtualId := ""
 	// add member
 	var addRes = []*share.ShareMember{}
 	if len(addShareMembers) > 0 {
@@ -201,6 +202,33 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 				return
 			}
 			klog.Infof("postgres.HandlePutDirSharedItems response: %+v", seaResp)
+
+			var seaRespJson map[string]interface{}
+			err = json.Unmarshal([]byte(seaResp), &seaRespJson)
+			if err != nil {
+				klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
+				tx.Rollback()
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+				return
+			}
+			if success, ok := seaRespJson["success"].([]interface{}); ok && len(success) > 0 {
+				if firstItem, ok := success[0].(map[string]interface{}); ok {
+					if syncId, ok := firstItem["sync_virtual_id"].(string); ok && syncId != "" {
+						syncVirtualId = syncId
+					}
+				}
+			}
+			if syncVirtualId != "" {
+				err = database.UpdateSharePath(res[0].ID, map[string]interface{}{
+					"sync_virtual_id": syncVirtualId,
+				}, tx)
+				if err != nil {
+					klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
+					tx.Rollback()
+					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+					return
+				}
+			}
 		}
 	}
 	klog.Infof("add member response: %+v", addRes)
@@ -234,6 +262,10 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		} else {
 			result.SyncRepoName = repo["repo_name"]
 		}
+	}
+
+	if syncVirtualId != "" {
+		result.SyncVirtualID = syncVirtualId
 	}
 
 	handler.RespSuccess(c, result)
@@ -622,6 +654,8 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("rollbackShareMembers: %+v", rollbackShareMembers)
 	klog.Infof("addShareMembers: %+v", addShareMembers)
 
+	syncVirtualId := sharePath.SyncVirtualID
+
 	tx := database.DB.Begin()
 
 	// update
@@ -630,7 +664,7 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 		err = database.UpdateShareMember(shareMember.ID, map[string]interface{}{"permission": shareMember.Permission}, tx)
 		if err != nil {
 			for _, rollbackShareMember := range rollbackShareMembers {
-				if sharePath.FileType == "sync" {
+				if sharePath.FileType == common.Sync {
 					_, subErr := seahub.HandlePostDirSharedItems(sharePath, rollbackShareMember, "user") // rollback
 					if subErr != nil {
 						klog.Errorf("postgres.HandlePostDirSharedItems error: %v", subErr)
@@ -643,7 +677,7 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 
-		if sharePath.FileType == "sync" {
+		if sharePath.FileType == common.Sync {
 			seaResp, err := seahub.HandlePostDirSharedItems(sharePath, shareMember, "user")
 			if err != nil {
 				klog.Errorf("postgres.HandlePostDirSharedItems error: %v", err)
@@ -657,7 +691,7 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 
 	// delete
 	for _, shareMember := range deleteShareMembers {
-		if sharePath.FileType == "sync" {
+		if sharePath.FileType == common.Sync {
 			seaResp, err := seahub.HandleDeleteDirSharedItems(sharePath, shareMember, "user")
 			if err != nil {
 				klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", err)
@@ -689,7 +723,7 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 
-		if sharePath.FileType == "sync" {
+		if sharePath.FileType == common.Sync {
 			seaResp, err := seahub.HandlePutDirSharedItems(sharePath, addShareMembers, "user")
 			if err != nil {
 				klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
@@ -698,6 +732,35 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 				return
 			}
 			klog.Infof("postgres.HandlePutDirSharedItems response: %+v", seaResp)
+
+			var seaRespJson map[string]interface{}
+			err = json.Unmarshal([]byte(seaResp), &seaRespJson)
+			if err != nil {
+				klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
+				tx.Rollback()
+				c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+				return
+			}
+			if syncVirtualId == "" {
+				if success, ok := seaRespJson["success"].([]interface{}); ok && len(success) > 0 {
+					if firstItem, ok := success[0].(map[string]interface{}); ok {
+						if syncId, ok := firstItem["sync_virtual_id"].(string); ok && syncId != "" {
+							syncVirtualId = syncId
+						}
+					}
+				}
+				if syncVirtualId != "" {
+					err = database.UpdateSharePath(sharePath.ID, map[string]interface{}{
+						"sync_virtual_id": syncVirtualId,
+					}, tx)
+					if err != nil {
+						klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
+						tx.Rollback()
+						c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+						return
+					}
+				}
+			}
 		}
 	}
 	klog.Infof("add member response: %+v", addRes)
@@ -748,6 +811,11 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 		} else {
 			result.SyncRepoName = repo["repo_name"]
 		}
+	}
+
+	if syncVirtualId != "" {
+		// may be added newly
+		result.SyncVirtualID = syncVirtualId
 	}
 
 	resp.SharePath = result
@@ -1041,6 +1109,8 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("rollbackShareMembers: %+v", rollbackShareMembers)
 	klog.Infof("existedShareMembers: %+v", existedShareMembers)
 
+	syncVirtualId := sharePath.SyncVirtualID
+
 	tx := database.DB.Begin()
 
 	// add
@@ -1054,7 +1124,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 
-		if sharePath.FileType == "sync" {
+		if sharePath.FileType == common.Sync {
 			seaResp, err := seahub.HandlePutDirSharedItems(sharePath, addShareMembers, "user")
 			if err != nil {
 				klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
@@ -1063,6 +1133,35 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 				return
 			}
 			klog.Infof("postgres.HandlePutDirSharedItems response: %+v", seaResp)
+
+			if syncVirtualId == "" {
+				var seaRespJson map[string]interface{}
+				err = json.Unmarshal([]byte(seaResp), &seaRespJson)
+				if err != nil {
+					klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
+					tx.Rollback()
+					c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+					return
+				}
+				if success, ok := seaRespJson["success"].([]interface{}); ok && len(success) > 0 {
+					if firstItem, ok := success[0].(map[string]interface{}); ok {
+						if syncId, ok := firstItem["sync_virtual_id"].(string); ok && syncId != "" {
+							syncVirtualId = syncId
+						}
+					}
+				}
+				if syncVirtualId != "" {
+					err = database.UpdateSharePath(sharePath.ID, map[string]interface{}{
+						"sync_virtual_id": syncVirtualId,
+					}, tx)
+					if err != nil {
+						klog.Errorf("postgres.HandlePutDirSharedItems error: %v", err)
+						tx.Rollback()
+						c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+						return
+					}
+				}
+			}
 		}
 	}
 
@@ -1071,7 +1170,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 		klog.Infof("updateShareMember: %+v", shareMember)
 		err = database.UpdateShareMember(shareMember.ID, map[string]interface{}{"permission": shareMember.Permission}, tx)
 		if err != nil {
-			if sharePath.FileType == "sync" {
+			if sharePath.FileType == common.Sync {
 				for _, rollbackShareMember := range rollbackShareMembers {
 					_, subErr := seahub.HandlePostDirSharedItems(sharePath, rollbackShareMember, "user") // rollback
 					if subErr != nil {
@@ -1085,7 +1184,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 
-		if sharePath.FileType == "sync" {
+		if sharePath.FileType == common.Sync {
 			seaResp, err := seahub.HandlePostDirSharedItems(sharePath, shareMember, "user")
 			if err != nil {
 				klog.Errorf("postgres.HandlePostDirSharedItems error: %v", err)
@@ -1258,7 +1357,7 @@ func UpdateShareMemberPermission(ctx context.Context, c *app.RequestContext) {
 		if err != nil {
 			for _, rollbackShareMember := range rollbackShareMembers {
 				sharePath := pathMap[rollbackShareMember.ID]
-				if sharePath.FileType == "sync" {
+				if sharePath.FileType == common.Sync {
 					_, subErr := seahub.HandlePostDirSharedItems(sharePath, rollbackShareMember, "user") // rollback
 					if subErr != nil {
 						klog.Errorf("postgres.HandlePostDirSharedItems error: %v", subErr)
@@ -1272,7 +1371,7 @@ func UpdateShareMemberPermission(ctx context.Context, c *app.RequestContext) {
 		}
 
 		sharePath := pathMap[shareMember.ID]
-		if sharePath.FileType == "sync" {
+		if sharePath.FileType == common.Sync {
 			seaResp, err := seahub.HandlePostDirSharedItems(sharePath, shareMember, "user")
 			if err != nil {
 				klog.Errorf("postgres.HandlePostDirSharedItems error: %v", err)
@@ -1289,7 +1388,7 @@ func UpdateShareMemberPermission(ctx context.Context, c *app.RequestContext) {
 		klog.Infof("shareDeletedShareMember: %+v", shareMember)
 		err = database.DeleteShareMember(shareMember.MemberId, tx)
 		if err != nil {
-			// no share path, cannot judge if it is "sync"
+			// no share path, cannot judge if it is common.Sync
 			klog.Errorf("postgres.DeleteShareMember error: %v", err)
 			tx.Rollback()
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -1370,7 +1469,7 @@ func RemoveShareMember(ctx context.Context, c *app.RequestContext) {
 		if sharePath, exist := pathMap[shareMember.ID]; exist {
 			// for every share member, it is a individual transaction
 			tx := database.DB.Begin()
-			if sharePath.FileType == "sync" {
+			if sharePath.FileType == common.Sync {
 				seaResp, err := seahub.HandleDeleteDirSharedItems(sharePath, shareMember, "user")
 				if err != nil {
 					klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", err)
@@ -1383,7 +1482,7 @@ func RemoveShareMember(ctx context.Context, c *app.RequestContext) {
 
 			err = database.DeleteShareMember(shareMember.ID, tx)
 			if err != nil {
-				if sharePath.FileType == "sync" {
+				if sharePath.FileType == common.Sync {
 					_, subErr := seahub.HandlePutDirSharedItems(sharePath, []*share.ShareMember{shareMember}, "user") // rollback
 					if subErr != nil {
 						klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", subErr)
@@ -1490,7 +1589,7 @@ func DeleteSharePathRelations(pathId string, tx *gorm.DB) error {
 	}
 	klog.Infof("memberTotal: %d, deletePath: %s, memberRes: %s", memberTotal, common.ParseString(deletePath), common.ParseString(memberRes))
 
-	if deletePath.FileType == "sync" {
+	if deletePath.FileType == common.Sync {
 		for _, shareMember := range memberRes {
 			seaResp, err := seahub.HandleDeleteDirSharedItems(deletePath, shareMember, "user")
 			if err != nil {
@@ -1534,7 +1633,7 @@ func RenameRelativeAdjustShare(fileParam *models.FileParam, dstPath string, dstE
 		commit = true
 	}
 	if strings.HasSuffix(fileParam.Path, "/") &&
-		(fileParam.FileType == "drive" || fileParam.FileType == "sync") {
+		(fileParam.FileType == common.Drive || fileParam.FileType == common.Sync) {
 		var err error
 
 		srcPath := fileParam.Path
@@ -1615,7 +1714,7 @@ func DeleteRelativeAdjustShare(fileParam *models.FileParam, dirents []string, tx
 
 	var smbs []*share.SmbCreate
 
-	if fileParam.FileType == "drive" || fileParam.FileType == "sync" {
+	if fileParam.FileType == common.Drive || fileParam.FileType == common.Sync {
 		klog.Infof("DeleteRelativeAdjustShare, param: %s, dirents: %v", common.ParseString(fileParam), dirents)
 		var unsharePaths []string
 		for _, dirent := range dirents {
@@ -1794,8 +1893,8 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 	}
 	var err error
 	if action == "move" && strings.HasSuffix(src.Path, "/") {
-		if src.FileType == "drive" {
-			if dst.FileType == "drive" {
+		if src.FileType == common.Drive {
+			if dst.FileType == common.Drive {
 				// just update share info, very like rename
 				err = RenameRelativeAdjustShare(src, dst.Path, dst.Extend, false, tx)
 				if err != nil {
@@ -1803,7 +1902,7 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 					tx.Rollback()
 					return err
 				}
-			} else if dst.FileType == "sync" {
+			} else if dst.FileType == common.Sync {
 				// when internal, create sync share; else remove share info
 				pathQueryParams := &database.QueryParams{}
 				pathQueryParams.AND = []database.Filter{}
@@ -1937,7 +2036,7 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 					return err
 				}
 			}
-		} else if src.FileType == "sync" {
+		} else if src.FileType == common.Sync {
 			pathQueryParams := &database.QueryParams{}
 			pathQueryParams.AND = []database.Filter{}
 			database.BuildStringQueryParam(src.Owner, "share_paths.owner", "=", &pathQueryParams.AND, true)
@@ -1965,7 +2064,7 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 			}
 			klog.Infof("memberTotal: %d", memberTotal)
 
-			if dst.FileType == "drive" {
+			if dst.FileType == common.Drive {
 				// remove sync share, and update share info
 				for _, sharePath := range pathRes {
 					err = database.UpdateSharePath(sharePath.ID, map[string]interface{}{
@@ -1979,7 +2078,7 @@ func MoveRelativeAdjustShare(action string, src, dst *models.FileParam, tx *gorm
 						return err
 					}
 				}
-			} else if dst.FileType == "sync" {
+			} else if dst.FileType == common.Sync {
 				// update sync share (same repo don't need) and share info
 				for _, sharePath := range pathRes {
 					err = database.UpdateSharePath(sharePath.ID, map[string]interface{}{
@@ -2105,7 +2204,7 @@ func RemoveUserRelativeAdjustShare(bflName string, tx *gorm.DB) error {
 
 	for _, shareMember := range shareMembers {
 		if inPath, exists := inPathMap[shareMember.ID]; exists {
-			if inPath.FileType == "sync" {
+			if inPath.FileType == common.Sync {
 				seaResp, err := seahub.HandleDeleteDirSharedItems(inPath, shareMember, "user")
 				if err != nil {
 					klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", err)

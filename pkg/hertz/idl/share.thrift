@@ -16,8 +16,9 @@ struct SharePath {
     11: required i32 permission (go.tag = 'gorm:"column:permission;not null;default:0"')
     12: i32 smb_share_public (go.tag = 'gorm:"column:smb_share_public;not null;default:0"')
     13: i64 upload_size_limit (go.tag = 'gorm:"column:upload_size_limit"')
-    14: required string create_time (go.tag = 'gorm:"column:create_time;type:timestamptz;not null;autoCreateTime:milli"')
-    15: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime:milli"')
+    14: string sync_virtual_id (go.tag = 'gorm:"column:sync_virtual_id;text"')
+    15: required string create_time (go.tag = 'gorm:"column:create_time;type:timestamptz;not null;autoCreateTime:milli"')
+    16: required string update_time (go.tag = 'gorm:"column:update_time;type:timestamptz;not null;autoUpdateTime:milli"')
 }
 
 struct ShareToken {
@@ -78,6 +79,7 @@ struct ViewSharePath {
     17: list<ViewSharePathUsers> users (go.tag='json:"users,omitempty"')
     18: string smb_link (go.tag='json:"smb_link,omitempty"')
     19: string sync_repo_name (go.tag='json:"sync_repo_name,omitempty"')
+    20: string sync_virtual_id (go.tag='json:"sync_virtual_id,omitempty"')
 }
 
 struct ViewSharePathMembers {

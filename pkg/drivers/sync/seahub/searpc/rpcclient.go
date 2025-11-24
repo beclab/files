@@ -204,6 +204,11 @@ func (c *SeafServerThreadedRpcClient) IsInnerPubRepo(repoId string) (interface{}
 	return CreateRPCMethod(c, "is_inner_pub_repo", "int", []string{"string"})(repoId)
 }
 
+func (c *SeafServerThreadedRpcClient) GetVirtualRepo(originRepo, path, owner string) (interface{}, error) {
+	return CreateRPCMethod(c, "get_virtual_repo", "object", []string{"string", "string", "string"})(
+		originRepo, path, owner)
+}
+
 func (c *SeafServerThreadedRpcClient) GetUserQuotaUsage(userId string) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_get_user_quota_usage", "int64", []string{"string"})(userId)
 }

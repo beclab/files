@@ -274,7 +274,7 @@ func HasSharedToUser(sharePathId, repoID, path, username string) bool {
 	return false
 }
 
-func ShareDirToUser(repo map[string]string, path, owner, shareFrom, shareTo, permission string) error {
+func ShareDirToUser(repo map[string]string, path, owner, shareFrom, shareTo, permission string) (string, error) {
 	//var extraPermission string
 
 	if permission == PERMISSION_ADMIN {
@@ -285,16 +285,16 @@ func ShareDirToUser(repo map[string]string, path, owner, shareFrom, shareTo, per
 	if path == "/" {
 		_, err := seaserv.GlobalSeafileAPI.ShareRepo(repo["repo_id"], owner, shareTo, permission)
 		if err != nil {
-			return err
+			return "", err
 		}
 	} else {
-		_, err := seaserv.GlobalSeafileAPI.ShareSubdirToUser(repo["repo_id"], path, owner, shareTo, permission, "")
+		virtualRepoId, err := seaserv.GlobalSeafileAPI.ShareSubdirToUser(repo["repo_id"], path, owner, shareTo, permission, "")
 		if err != nil {
-			return err
+			return virtualRepoId, err
 		}
 	}
 
-	return nil
+	return "", nil
 }
 
 func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.ShareMember, shareType string) ([]byte, error) {
@@ -416,7 +416,7 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 					return
 				}
 
-				err = ShareDirToUser(repo, path, repoOwner, username, toUser, SharePermissionMap[permission])
+				virtualRepoId, err := ShareDirToUser(repo, path, repoOwner, username, toUser, SharePermissionMap[permission])
 
 				if err != nil {
 					klog.Error(err)
@@ -432,7 +432,7 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 					permDisplay = PERMISSION_ADMIN
 				}
 
-				result.Success = append(result.Success, map[string]interface{}{
+				resTemp := map[string]interface{}{
 					"share_type": "user",
 					"user_info": map[string]interface{}{
 						"name":          toUser,
@@ -441,7 +441,11 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 					},
 					"permission": permDisplay,
 					"is_admin":   SharePermissionMap[permission] == PERMISSION_ADMIN,
-				})
+				}
+				if virtualRepoId != "" {
+					resTemp["virtual_repo_id"] = virtualRepoId
+				}
+				result.Success = append(result.Success, resTemp)
 			}()
 		}
 	}

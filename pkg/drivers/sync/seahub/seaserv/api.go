@@ -521,6 +521,14 @@ func (s *SeafileAPI) CheckQuota(repoId string, delta int64) (int, error) {
 	return ReturnInt(ret)
 }
 
+func (s *SeafileAPI) GetVirtualRepo(originRepo, path, owner string) (map[string]string, error) {
+	ret, err := s.rpcClient.GetVirtualRepo(originRepo, path, owner)
+	if err != nil {
+		return nil, err
+	}
+	return ReturnObject(ret)
+}
+
 func (s *SeafileAPI) CheckPermissionByPath(repoId, path, user string) (string, error) {
 	ret, err := s.rpcClient.CheckPermissionByPath(repoId, path, user)
 	if err != nil {
