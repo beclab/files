@@ -761,7 +761,14 @@ func ShareUpload() app.HandlerFunc {
 		var repoName = repo["name"]
 		var repoId = repo["id"]
 		var fullPath = common.UrlEncode(shared.Path)
-		var seahubPath = fmt.Sprintf("/Seahub/%s/%s/?id=%s", common.EscapeURLWithSpace(repoName), fullPath, repoId)
+		if fullPath != "" {
+			fullPath += "/"
+		}
+		var subPath = common.UrlEncode(fp.Path)
+		if subPath != "" {
+			subPath += "/"
+		}
+		var seahubPath = fmt.Sprintf("/Seahub/%s/%s%s?id=%s&type=mine&p=rw", common.EscapeURLWithSpace(repoName), fullPath, subPath, repoId)
 
 		mf, err := ctx.MultipartForm()
 		if err != nil {
@@ -771,17 +778,31 @@ func ShareUpload() app.HandlerFunc {
 		}
 		defer mf.RemoveAll()
 
+		var hasPathname, hasRepoId, hasDriveType, hasfullPath bool
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
+
+		for name := range mf.Value {
+			switch name {
+			case "pathname":
+				hasPathname = true
+			case "repoId":
+				hasRepoId = true
+			case "driveType":
+				hasDriveType = true
+			case "fullPath":
+				hasfullPath = true
+			}
+		}
 
 		for name, vals := range mf.Value {
 			switch name {
 			case "parent_dir":
-				err = createPart(name, []string{shared.Path}, mw)
+				err = createPart(name, []string{shared.Path + strings.TrimPrefix(fp.Path, "/")}, mw)
 			case "fullPath":
 				err = createPart(name, []string{seahubPath}, mw)
 			case "pathname":
-				err = createPart(name, []string{shared.Path}, mw)
+				err = createPart(name, []string{shared.Path + strings.TrimPrefix(fp.Path, "/")}, mw)
 			case "repoId":
 				err = createPart(name, []string{shared.Extend}, mw)
 			case "driveType":
@@ -793,6 +814,19 @@ func ShareUpload() app.HandlerFunc {
 			if err != nil {
 				break
 			}
+		}
+
+		if !hasPathname {
+			createPart("pathname", []string{shared.Path + strings.TrimPrefix(fp.Path, "/")}, mw)
+		}
+		if !hasRepoId {
+			err = createPart("repoId", []string{shared.Extend}, mw)
+		}
+		if !hasDriveType {
+			err = createPart("driveType", []string{"sync"}, mw)
+		}
+		if !hasfullPath {
+			// err = createPart("fullPath", []string{seahubPath}, mw)
 		}
 
 		if err != nil {

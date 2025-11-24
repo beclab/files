@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 
@@ -307,16 +308,22 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 
 	var uploadType = c.Param("upload")
 	var uid = c.Param("uid")
-	var url = fmt.Sprintf("http://seafile:8082/%s/%s?ret-json=1", uploadType, uid)
+	var reqUrl = fmt.Sprintf("http://seafile:8082/%s/%s?ret-json=1", uploadType, uid)
 
-	klog.Infof("Sync uploadChunks, path: %s, owner: %s, uploadPath: %s, url: %s", requestPath, owner, uploadPath, url)
+	klog.Infof("Sync uploadChunks, path: %s, owner: %s, uploadPath: %s, url: %s", requestPath, owner, uploadPath, reqUrl)
 
 	var br io.Reader
-	var req, _ = http.NewRequest(http.MethodPost, url, br)
+	var req, _ = http.NewRequest(http.MethodPost, reqUrl, br)
 
 	c.Request.Header.VisitAll(func(key, value []byte) {
 		req.Header.Set(string(key), string(value))
 	})
+
+	contentDisposition := req.Header.Get("Content-Disposition")
+	if contentDisposition == "" {
+		req.Header.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", url.QueryEscape(uploadReq.ResumableFilename)))
+	}
+
 	req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
 
 	body := c.Request.Body()
@@ -332,7 +339,20 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		c.String(resp.StatusCode, "upload files failed")
+		bodyRes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			c.String(resp.StatusCode, err.Error())
+			return
+		}
+		klog.Errorf("Sync uploadChunks, proxy error: %v", string(bodyRes))
+		var errMsg *models.SyncUploadError
+		if err = json.Unmarshal(bodyRes, &errMsg); err != nil {
+			c.String(resp.StatusCode, err.Error())
+			return
+		} else {
+			c.String(resp.StatusCode, errMsg.Error)
+		}
+
 		return
 	}
 
