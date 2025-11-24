@@ -222,7 +222,7 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 			}
 
 			if syncVirtualId == "" && sharePath.Path != "/" {
-				virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner)
+				virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner+"@auth.local")
 				if err != nil {
 					klog.Errorf("GetVirtualRepo error: %v", err)
 					tx.Rollback()
@@ -769,7 +769,7 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 				}
 
 				if syncVirtualId == "" && sharePath.Path != "/" {
-					virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner)
+					virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner+"@auth.local")
 					if err != nil {
 						klog.Errorf("GetVirtualRepo error: %v", err)
 						tx.Rollback()
@@ -1191,7 +1191,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 				}
 
 				if syncVirtualId == "" && sharePath.Path != "/" {
-					virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner)
+					virtualRepo, err := seaserv.GlobalSeafileAPI.GetVirtualRepo(sharePath.Extend, sharePath.Path, owner+"@auth.local")
 					if err != nil {
 						klog.Errorf("GetVirtualRepo error: %v", err)
 						tx.Rollback()
