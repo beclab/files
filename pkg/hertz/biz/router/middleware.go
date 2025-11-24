@@ -71,17 +71,29 @@ func Cors() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		c.Response.Header.Set("Access-Control-Allow-Origin", string(c.Request.Header.Get("Origin")))
 		c.Response.Header.Set("Access-Control-Allow-Credentials", "true")
-
-		reqHeaders := string(c.Request.Header.Get("Access-Control-Request-Headers"))
-		if reqHeaders != "" {
-			c.Response.Header.Set("Access-Control-Allow-Headers", reqHeaders)
-		} else {
-			c.Response.Header.Set("Access-Control-Allow-Headers", "access-control-allow-headers,access-control-allow-methods,access-control-allow-origin,content-type,x-auth,x-unauth-error,x-authorization")
-		}
+		c.Response.Header.Set("Access-Control-Allow-Headers", "access-control-allow-headers,access-control-allow-methods,access-control-allow-origin,content-type,x-auth,x-unauth-error,x-authorization")
 		c.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Response.Header.Set("Access-Control-Max-Age", "600")
 
 		c.Next(ctx)
+	}
+}
+
+func Options() app.HandlerFunc {
+	return func(c context.Context, ctx *app.RequestContext) {
+		if bytes.Equal(ctx.Method(), []byte("OPTIONS")) {
+			origin := string(ctx.Request.Header.Peek("Origin"))
+			if origin != "" {
+				ctx.Header("Access-Control-Allow-Origin", origin)
+				ctx.Header("Vary", "Origin")
+			}
+			ctx.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+			ctx.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			ctx.Header("Access-Control-Max-Age", "86400")
+			ctx.Status(204)
+			return
+		}
+		ctx.Next(c)
 	}
 }
 
