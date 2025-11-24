@@ -162,34 +162,34 @@ func _fret_obj(retStr string) (*SearpcObj, error) {
 		return nil, &SearpcError{"Invalid response format"}
 	}
 
-	//if errCode, ok := dicts["err_code"]; ok {
-	//	klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
-	//	return nil, &SearpcError{dicts["err_msg"].(string)}
-	//}
 	if errCode, ok := dicts["err_code"]; ok {
-		var errCodeStr string
-		var errMsg string
-
-		switch codeVal := errCode.(type) {
-		case float64:
-			errCodeStr = strconv.FormatFloat(codeVal, 'f', -1, 64)
-		case string:
-			errCodeStr = codeVal
-		default:
-			errCodeStr = fmt.Sprintf("%v", codeVal)
-		}
-
-		if msg, ok := dicts["err_msg"].(string); ok {
-			errMsg = msg
-		} else if msg, ok := dicts["err_msg"].(float64); ok {
-			errMsg = strconv.FormatFloat(msg, 'f', -1, 64)
-		} else {
-			errMsg = fmt.Sprintf("%v", dicts["err_msg"])
-		}
-
-		klog.Errorf("errCode: %s, errMsg: %s", errCodeStr, errMsg)
-		return nil, &SearpcError{errMsg}
+		klog.Errorf("errCode: %d, errMsg: %s", errCode.(int), dicts["err_msg"].(string))
+		return nil, &SearpcError{dicts["err_msg"].(string)}
 	}
+	//if errCode, ok := dicts["err_code"]; ok {
+	//	var errCodeStr string
+	//	var errMsg string
+	//
+	//	switch codeVal := errCode.(type) {
+	//	case float64:
+	//		errCodeStr = strconv.FormatFloat(codeVal, 'f', -1, 64)
+	//	case string:
+	//		errCodeStr = codeVal
+	//	default:
+	//		errCodeStr = fmt.Sprintf("%v", codeVal)
+	//	}
+	//
+	//	if msg, ok := dicts["err_msg"].(string); ok {
+	//		errMsg = msg
+	//	} else if msg, ok := dicts["err_msg"].(float64); ok {
+	//		errMsg = strconv.FormatFloat(msg, 'f', -1, 64)
+	//	} else {
+	//		errMsg = fmt.Sprintf("%v", dicts["err_msg"])
+	//	}
+	//
+	//	klog.Errorf("errCode: %s, errMsg: %s", errCodeStr, errMsg)
+	//	return nil, &SearpcError{errMsg}
+	//}
 
 	if ret, ok := dicts["ret"].(map[string]interface{}); ok {
 		return NewSearpcObj(ret), nil

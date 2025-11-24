@@ -522,6 +522,7 @@ func (s *SeafileAPI) CheckQuota(repoId string, delta int64) (int, error) {
 }
 
 func (s *SeafileAPI) GetVirtualRepo(originRepo, path, owner string) (map[string]string, error) {
+	klog.Infof("oring repo: %s, path: %s, owner: %s", originRepo, path, owner)
 	ret, err := s.rpcClient.GetVirtualRepo(originRepo, path, owner)
 	if err != nil {
 		return nil, err
