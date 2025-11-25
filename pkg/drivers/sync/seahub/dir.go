@@ -28,6 +28,10 @@ var (
 )
 
 func CheckFolderPermission(username, repoId, path string) (string, error) {
+	if !strings.HasSuffix(path, "/") {
+		path += "/"
+	}
+	klog.Infof("[sync] username: %s, repoId: %s, path: %s", username, repoId, path)
 	repoStatus, err := seaserv.GlobalSeafileAPI.GetRepoStatus(repoId)
 	if err != nil {
 		return "", err
@@ -40,7 +44,7 @@ func CheckFolderPermission(username, repoId, path string) (string, error) {
 		return "", err
 	}
 	result = strings.Trim(result, " ")
-	klog.Infof("%s!!", result)
+	klog.Infof("[sync] %s!!", result)
 	return result, nil
 }
 

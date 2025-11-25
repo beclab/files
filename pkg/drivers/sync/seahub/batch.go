@@ -151,9 +151,11 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 	}
 
 	dstPerm, err := CheckFolderPermission(username, dstRepoId, dstParentDir)
-	if err != nil || dstPerm != "rw" {
-		klog.Error("Permission denied.")
+	if err != nil {
+		klog.Errorf("Permission denied. err: %s, dstPerm: %s", err, dstPerm)
 		return nil, errors.New("permission denied")
+	} else {
+		klog.Infof("dstPerm: %s", dstPerm)
 	}
 
 	_, err = seaserv.GlobalSeafileAPI.CopyFile(
