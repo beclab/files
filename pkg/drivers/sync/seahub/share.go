@@ -288,6 +288,10 @@ func ShareDirToUser(repo map[string]string, path, owner, shareFrom, shareTo, per
 			return err
 		}
 	} else {
+		if !strings.HasSuffix(path, "/") {
+			path += "/"
+		}
+		klog.Infof("[sync share] repoId: %s, path: %s, owner: %s, shareTo: %s, permission: %s", repo["repo_id"], path, owner, shareTo, permission)
 		_, err := seaserv.GlobalSeafileAPI.ShareSubdirToUser(repo["repo_id"], path, owner, shareTo, permission, "")
 		if err != nil {
 			return err
