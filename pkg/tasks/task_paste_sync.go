@@ -164,7 +164,7 @@ func (t *Task) UploadToSync() error {
 	var action = t.param.Action
 	var share = t.param.Share
 	var srcOwner = t.param.SrcOwner
-	var dstOwner = t.param.DstOwner
+	//var dstOwner = t.param.DstOwner
 
 	var src *models.FileParam
 	var dst *models.FileParam
@@ -190,7 +190,7 @@ func (t *Task) UploadToSync() error {
 
 	if share == 1 {
 		src.Owner = srcOwner
-		dst.Owner = dstOwner
+		//dst.Owner = dstOwner
 	}
 
 	t.resetProgressZero()
