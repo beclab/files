@@ -18,9 +18,9 @@ func Register(r *server.Hertz) {
 
 	root := r.Group("/", rootMw()...)
 	{
-		_system := root.Group("/System", _systemMw()...)
+		_system := root.Group("/system", _systemMw()...)
 		{
-			_configuration := _system.Group("/Configuration", _configurationMw()...)
+			_configuration := _system.Group("/configuration", _configurationMw()...)
 			_configuration.GET("/:key", append(_getnamedconfigMw(), media.GetNamedConfig)...)
 			_configuration.POST("/:key", append(_updatenamedconfigMw(), media.UpdateNamedConfig)...)
 		}

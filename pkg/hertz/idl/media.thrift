@@ -78,6 +78,6 @@ service MediaService {
   GetMasterHlsVideoPlaylistResp GetMasterHlsVideoPlaylist(1: GetMasterHlsVideoPlaylistReq request) (api.get="/videos/master.m3u8");
   GetVariantHlsVideoPlaylistResp GetVariantHlsVideoPlaylist(1: GetVariantHlsVideoPlaylistReq request) (api.get="/videos/:node/main.m3u8");
   GetVideoSegmentResp GetHlsVideoSegment(1: GetVideoSegmentReq request) (api.get="/videos/:node/hls1/:playlistId/:filename");
-  GetNamedConfigResp GetNamedConfig(1: GetNamedConfigReq request) (api.get="/System/Configuration/:key");
-  UpdateNamedConfigResp UpdateNamedConfig(1: UpdateNamedConfigReq request) (api.post="/System/Configuration/:key");
+  GetNamedConfigResp GetNamedConfig(1: GetNamedConfigReq request) (api.get="/system/configuration/:key");
+  UpdateNamedConfigResp UpdateNamedConfig(1: UpdateNamedConfigReq request) (api.post="/system/configuration/:key");
 }
