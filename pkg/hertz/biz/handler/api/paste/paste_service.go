@@ -64,6 +64,7 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		SrcOwner:     req.SrcOwner,
 		DstOwner:     req.DstOwner,
 	}
+	klog.Infof("[paste] create paste param: %v", pasteParam)
 
 	handler := drivers.Adaptor.NewFileHandler(pasteParam.Src.FileType, &base.HandlerParam{})
 
