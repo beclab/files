@@ -56,6 +56,14 @@ func HandleReposGet(owner string, types []string) ([]byte, error) {
 
 	username := owner + "@auth.local"
 
+	//temp
+	virturlRepos, err := seaserv.GlobalSeafileAPI.GetVirtualReposByOwner(username)
+	if err != nil {
+		klog.Errorf("Error getting virtual repos: %v", err)
+	} else {
+		klog.Infof("Virtual repos: %+v", virturlRepos)
+	}
+
 	usernameCache := make(map[string]string)
 	nicknameCache := make(map[string]string)
 

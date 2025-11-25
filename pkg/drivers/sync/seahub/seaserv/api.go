@@ -521,6 +521,15 @@ func (s *SeafileAPI) CheckQuota(repoId string, delta int64) (int, error) {
 	return ReturnInt(ret)
 }
 
+func (s *SeafileAPI) GetVirtualReposByOwner(owner string) ([]map[string]string, error) {
+	klog.Infof("owner is %s", owner)
+	ret, err := s.rpcClient.GetVirtualReposByOwner(owner)
+	if err != nil {
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
 func (s *SeafileAPI) GetVirtualRepo(originRepo, path, owner string) (map[string]string, error) {
 	klog.Infof("oring repo: %s, path: %s, owner: %s", originRepo, path, owner)
 	ret, err := s.rpcClient.GetVirtualRepo(originRepo, path, owner)
