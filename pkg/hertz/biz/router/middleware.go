@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
@@ -54,7 +53,8 @@ var (
 		"/api/search",
 		"/videos/",
 	}
-	syncUploadChunks = "/seafhttp/"
+	syncUploadChunks  = "/seafhttp/"
+	posixUploadChunks = "/upload/upload-link/"
 )
 
 var (
@@ -164,8 +164,7 @@ func ShareMiddleware() app.HandlerFunc {
 		var pasteDstParam *models.FileParam
 
 		var uploadLink, uploadBytes, uploadChunk bool
-		var uploadLinkId, uploadParentDir, uploadFileName string
-		_ = uploadParentDir
+		var uploadFileName string
 
 		if strings.HasPrefix(path, ShareApiResourcesPath) {
 			paramPath = strings.TrimPrefix(path, ShareApiResourcesPath)
@@ -203,24 +202,6 @@ func ShareMiddleware() app.HandlerFunc {
 					paramPath = c.Query("file_path")
 					uploadLink = true
 				} else {
-					if c.Query("share") == "1" {
-						paramPath = c.Query("shareby_path")
-					} else {
-						paramPath = c.PostForm("parent_dir")
-					}
-
-					var tPath = strings.TrimPrefix(path, ShareApiUploadLinkPath)
-					var tPos = strings.LastIndex(tPath, "/")
-					if tPos == 0 {
-						handler.RespError(c, "upload-link path invalid")
-						return
-					}
-					uploadLinkId = tPath[tPos+1:]
-					if uploadLinkId == "" {
-						handler.RespError(c, "upload-link path invalid")
-						return
-					}
-
 					uploadChunk = true
 				}
 			} else if strings.HasPrefix(path, ShareApiUploadedPath) {
@@ -232,7 +213,7 @@ func ShareMiddleware() app.HandlerFunc {
 
 		klog.Infof("[share] share param path: %s, bflName: %s, shareAccess: %+v", paramPath, bflName, shareAccess)
 
-		if paramPath == "" {
+		if paramPath == "" || uploadChunk {
 			c.Next(ctx)
 			return
 		}
@@ -368,8 +349,6 @@ func ShareMiddleware() app.HandlerFunc {
 				url = fmt.Sprintf("%s%s?file_path=%s&from=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, c.Query("from"), shareType, shareBy)
 			} else if uploadBytes {
 				url = fmt.Sprintf("%s%s?parent_dir=%s&file_name=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, uploadFileName, shareType, shareBy)
-			} else if uploadChunk {
-				url = fmt.Sprintf("%s%s/%s?&ret-json=%s&share=1&sharetype=%s&shareby=%s&shareby_path=%s", redirect, rewritePrefix, uploadLinkId, c.Query("ret-json"), shareType, shareBy, pathRewrite)
 			}
 		} else {
 			accessOwner = shareBy
@@ -724,7 +703,7 @@ func ShareUpload() app.HandlerFunc {
 		var reqMethod = string(ctx.Request.Method())
 		var path = string(ctx.Request.Path())
 
-		if !(strings.HasPrefix(path, syncUploadChunks) && reqMethod == http.MethodPost) {
+		if !((strings.HasPrefix(path, syncUploadChunks) || strings.HasPrefix(path, posixUploadChunks)) && reqMethod == http.MethodPost) {
 			ctx.Next(c)
 			return
 		}
@@ -761,27 +740,6 @@ func ShareUpload() app.HandlerFunc {
 			return
 		}
 
-		repo, err := seaserv.GlobalSeafileAPI.GetRepo(shared.Extend)
-		if err != nil {
-			klog.Errorf("Sync uploadChunks, get repo error: %v", err)
-			handler.RespBadRequest(ctx, err.Error())
-			return
-		}
-
-		klog.Infof("Sync uploadChunks, repo info: %s", common.ParseString(repo))
-
-		var repoName = repo["name"]
-		var repoId = repo["id"]
-		var fullPath = common.UrlEncode(shared.Path)
-		if fullPath != "" {
-			fullPath += "/"
-		}
-		var subPath = common.UrlEncode(fp.Path)
-		if subPath != "" {
-			subPath += "/"
-		}
-		var seahubPath = fmt.Sprintf("/Seahub/%s/%s%s?id=%s&type=mine&p=rw", common.EscapeURLWithSpace(repoName), fullPath, subPath, repoId)
-
 		mf, err := ctx.MultipartForm()
 		if err != nil {
 			klog.Errorf("Sync uploadChunks, parse multipart error: %v", err)
@@ -790,7 +748,8 @@ func ShareUpload() app.HandlerFunc {
 		}
 		defer mf.RemoveAll()
 
-		var hasPathname, hasRepoId, hasDriveType, hasfullPath bool
+		var hasPathname, hasRepoId, hasDriveType bool
+		var hasShareBy bool
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
 
@@ -802,23 +761,25 @@ func ShareUpload() app.HandlerFunc {
 				hasRepoId = true
 			case "driveType":
 				hasDriveType = true
-			case "fullPath":
-				hasfullPath = true
+			case "shareby":
+				hasShareBy = true
 			}
 		}
 
 		for name, vals := range mf.Value {
 			switch name {
-			case "parent_dir":
-				err = createPart(name, []string{shared.Path + strings.TrimPrefix(fp.Path, "/")}, mw)
-			case "fullPath":
-				err = createPart(name, []string{seahubPath}, mw)
-			case "pathname":
-				err = createPart(name, []string{shared.Path + strings.TrimPrefix(fp.Path, "/")}, mw)
+			case "parent_dir", "pathname":
+				if shared.FileType == common.Sync {
+					err = createPart(name, []string{shared.Path + strings.TrimPrefix(fp.Path, "/")}, mw)
+				} else {
+					err = createPart(name, []string{fmt.Sprintf("/%s/%s/%s", shared.FileType, shared.Extend, strings.TrimPrefix(shared.Path, "/")+strings.TrimPrefix(fp.Path, "/"))}, mw)
+				}
 			case "repoId":
-				err = createPart(name, []string{shared.Extend}, mw)
+				if shared.FileType == common.Sync {
+					err = createPart(name, []string{shared.Extend}, mw)
+				}
 			case "driveType":
-				err = createPart(name, []string{"sync"}, mw)
+				err = createPart(name, []string{shared.FileType}, mw)
 			default:
 				err = createPart(name, vals, mw)
 			}
@@ -829,16 +790,20 @@ func ShareUpload() app.HandlerFunc {
 		}
 
 		if !hasPathname {
-			createPart("pathname", []string{shared.Path + strings.TrimPrefix(fp.Path, "/")}, mw)
+			if shared.FileType == common.Sync {
+				err = createPart("pathname", []string{shared.Path + strings.TrimPrefix(fp.Path, "/")}, mw)
+			} else {
+				err = createPart("pathname", []string{fmt.Sprintf("/%s/%s/%s", shared.FileType, shared.Extend, strings.TrimPrefix(shared.Path, "/")+strings.TrimPrefix(fp.Path, "/"))}, mw)
+			}
 		}
-		if !hasRepoId {
+		if !hasRepoId && shared.FileType == common.Sync {
 			err = createPart("repoId", []string{shared.Extend}, mw)
 		}
 		if !hasDriveType {
-			err = createPart("driveType", []string{"sync"}, mw)
+			err = createPart("driveType", []string{shared.FileType}, mw)
 		}
-		if !hasfullPath {
-			// err = createPart("fullPath", []string{seahubPath}, mw)
+		if !hasShareBy && shared.FileType == common.Drive {
+			err = createPart("shareby", []string{shared.Owner}, mw)
 		}
 
 		if err != nil {
