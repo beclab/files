@@ -204,7 +204,7 @@ func (c *SeafServerThreadedRpcClient) IsInnerPubRepo(repoId string) (interface{}
 	return CreateRPCMethod(c, "is_inner_pub_repo", "int", []string{"string"})(repoId)
 }
 
-func (c *SeafServerThreadedRpcClient) GetVirtualRepos(owner string) (interface{}, error) {
+func (c *SeafServerThreadedRpcClient) GetVirtualReposByOwner(owner string) (interface{}, error) {
 	return CreateRPCMethod(c, "get_virtual_repos_by_owner", "objlist", []string{"string"})(owner)
 }
 
