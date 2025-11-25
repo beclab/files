@@ -53,7 +53,7 @@ func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool) (s
 	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission != "rw" {
+	if err != nil {
 		return "", errors.New("permission denied")
 	}
 
