@@ -163,7 +163,7 @@ func _fret_obj(retStr string) (*SearpcObj, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Errorf("errCode: %d, errMsg: %s", errCode.(int), dicts["err_msg"].(string))
+		klog.Errorf("errCode: %f, errMsg: %s", errCode.(float64), dicts["err_msg"].(string))
 		return nil, &SearpcError{dicts["err_msg"].(string)}
 	}
 	//if errCode, ok := dicts["err_code"]; ok {
@@ -204,7 +204,7 @@ func _fret_objlist(retStr string) ([]*SearpcObj, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
+		klog.Errorf("errCode: %f, errMsg: %s", errCode.(float64), dicts["err_msg"].(string))
 		return nil, &SearpcError{dicts["err_msg"].(string)}
 	}
 
