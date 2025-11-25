@@ -1518,7 +1518,7 @@ func DeleteSharePathRelations(pathId string, tx *gorm.DB) error {
 	if deletePath.FileType == "sync" {
 		for _, shareMember := range memberRes {
 			seaResp, err := seahub.HandleDeleteDirSharedItems(deletePath, shareMember, "user")
-			if err != nil {
+			if err != nil && !strings.Contains(err.Error(), "not found") {
 				klog.Errorf("postgres.HandleDeleteDirSharedItems error: %v", err)
 				tx.Rollback()
 				return err
