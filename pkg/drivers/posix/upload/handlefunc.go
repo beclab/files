@@ -111,7 +111,7 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string, fileIdent
 	// }
 
 	if strings.HasSuffix(fileName, "/") {
-		return nil, errors.New(fmt.Sprintf("full path %s is a dir", fullPath))
+		return nil, fmt.Errorf("full path %s is a dir", fullPath)
 	}
 
 	// todo add identy
@@ -166,10 +166,8 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 	var uploadPath string
 	var uploadTempPath string
 	var share = resumableInfo.Share
-	var shareType = resumableInfo.ShareType
 	var shareby = resumableInfo.Shareby
-	var sharebyPath = resumableInfo.SharebyPath
-	_, _, _, _ = share, shareType, shareby, sharebyPath
+	// _, _ = share, shareby
 
 	klog.Infof("[upload] uploadedChunks, user: %s, uploadId: %s, param: %s", user, uploadId, common.ToJson(fileParam))
 
@@ -211,7 +209,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 	// dst storage path, if shared, fileParam must be sharedby Param
 	// uploadPath = uri + fileParam.Path
 	if share != "" {
-		shareParam, err := models.CreateFileParam(shareby, sharebyPath)
+		shareParam, err := models.CreateFileParam(shareby, resumableInfo.ParentDir) // sharebyPath
 		if err != nil {
 			return false, nil, err
 		}
@@ -266,12 +264,12 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 
 		if strings.HasSuffix(resumableInfo.ResumableRelativePath, "/") {
 			klog.Warningf("[upload] uploadId: %s, full path %s is a dir", uploadId, fullPath)
-			return false, nil, errors.New(fmt.Sprintf("full path %s is a dir", fullPath))
+			return false, nil, fmt.Errorf("full path %s is a dir", fullPath)
 		}
 
 		if !CheckType(resumableInfo.ResumableType) {
 			klog.Warningf("[upload] uploadId: %s, unsupported filetype:%s", uploadId, resumableInfo.ResumableType)
-			return false, nil, errors.New(fmt.Sprintf("unsupported filetype:%s", resumableInfo.ResumableType))
+			return false, nil, fmt.Errorf("unsupported filetype:%s", resumableInfo.ResumableType)
 		}
 
 		if !CheckSize(resumableInfo.ResumableTotalSize) {
@@ -367,7 +365,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 	if ranges != "" {
 		offsetStart, offsetEnd, parsed = ParseContentRange(ranges)
 		if !parsed {
-			return false, nil, errors.New(fmt.Sprintf("Invalid content range:%s", ranges))
+			return false, nil, fmt.Errorf("Invalid content range:%s", ranges)
 		}
 	}
 
@@ -432,7 +430,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		}
 
 		if resumableInfo.Share != "" { // upload to shared directory
-			sharedParam, err := models.CreateFileParam(resumableInfo.Shareby, resumableInfo.SharebyPath)
+			sharedParam, err := models.CreateFileParam(resumableInfo.Shareby, resumableInfo.ParentDir)
 			if err != nil {
 				return false, data, err
 			}
@@ -442,7 +440,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 				return false, data, err
 			}
 
-			info.FullPath = uri + sharedParam.Path + resumableInfo.ResumableRelativePath //resumableInfo.ResumableFilename
+			info.FullPath = uri + sharedParam.Path + resumableInfo.ResumableRelativePath
 		}
 
 		klog.Infof("[upload] uploadId: %s, move by, src: %s, dst: %s", uploadId, uploadTempPath, info.FullPath)

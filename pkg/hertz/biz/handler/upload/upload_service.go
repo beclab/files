@@ -64,9 +64,9 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 
 	uploadArg.FileParam = fileParam
 
-	if req.Share == "1" {
-		uploadArg.FileParam.Owner = req.Shareby
-	}
+	// if req.Share == "1" {
+	// 	uploadArg.FileParam.Owner = req.Shareby
+	// }
 
 	var handlerParam = &base.HandlerParam{
 		Ctx:   ctx,
@@ -164,6 +164,14 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	req.RetJson = 1
 
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
+		return
+	}
+
+	klog.Infof("Posix uploadChunks, owner: %s, share: %s, shareby: %s, parentDir: %s", owner, req.Share, req.Shareby, req.ParentDir)
+
 	var uploadArg = &models.FileUploadArgs{
 		FileParam:      &models.FileParam{},
 		Node:           c.Param("node"),
@@ -188,14 +196,8 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	uploadArg.ChunkInfo.Share = req.Share
-	uploadArg.ChunkInfo.ShareType = req.Sharetype
 	uploadArg.ChunkInfo.Shareby = req.Shareby
-	uploadArg.ChunkInfo.SharebyPath = req.SharebyPath
 	uploadArg.ChunkInfo.File = header
-
-	if req.Share == "1" {
-		uploadArg.ChunkInfo.ParentDir = req.SharebyPath
-	}
 
 	p := uploadArg.ChunkInfo.ParentDir
 	if p == "" {
@@ -206,12 +208,6 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	uploadArg.Ranges = string(c.GetHeader("Content-Range"))
 	if !strings.HasSuffix(p, "/") {
 		p = p + "/"
-	}
-
-	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
-	if owner == "" {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
-		return
 	}
 
 	uploadArg.FileParam, err = models.CreateFileParam(owner, p)
