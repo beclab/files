@@ -66,6 +66,9 @@ func _fret_string(retStr string) (string, error) {
 	}
 
 	if ret, ok := dicts["ret"]; ok {
+		if ret == nil {
+			return "", nil
+		}
 		switch v := ret.(type) {
 		case string:
 			return v, nil
