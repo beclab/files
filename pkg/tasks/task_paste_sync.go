@@ -829,7 +829,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		Extend:   dst.Extend,
 		Path:     filepath.Dir(dst.Path),
 	}
-	uploadLink, err := seahub.GetUploadLink(uploadParam, "api", false)
+	uploadLink, err := seahub.GetUploadLink(uploadParam, "web", false)
 	if err != nil {
 		return err
 	}
