@@ -232,6 +232,11 @@ func ShareMiddleware() app.HandlerFunc {
 			return
 		}
 
+		esp := strings.Split(shareParam.Extend, "_")
+		if len(esp) > 1 {
+			shareParam.Extend = esp[0]
+		}
+
 		shared, expires, err := checkSharePath(bflName, shareParam.Extend, shareAccess.FromShare)
 		if err != nil {
 			klog.Errorf("[share] check sharePath error: %v", err)
