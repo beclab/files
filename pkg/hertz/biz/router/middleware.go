@@ -414,11 +414,6 @@ func checkSharePath(currentUser string, shareId string, fromShare bool) (*share.
 		return nil, 0, errors.New(common.ErrorMessageWrongShare)
 	}
 
-	if !((sharePath.FileType == common.Drive && sharePath.Extend == common.Home) || sharePath.FileType == common.Sync) {
-		klog.Errorf("sharePath invalid, type: %s, extend: %s", sharePath.FileType, sharePath.Extend)
-		return nil, 0, errors.New(common.ErrorMessageWrongShare)
-	}
-
 	if !fromShare && currentUser == sharePath.Owner {
 		return sharePath, 0, nil
 	}

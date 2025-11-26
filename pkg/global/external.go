@@ -167,6 +167,9 @@ func (m *Mount) CheckExternalType(path string, isDir bool) string {
 	var exists bool
 	var mountType string
 	for _, mount := range m.Mounted {
+		if mount.Invalid {
+			continue
+		}
 		if strings.HasPrefix(path, "/"+mount.Path+"/") {
 			exists = true
 			mountType = mount.Type

@@ -96,6 +96,8 @@ var (
 	ShareTypeExternal = "external"
 	ShareTypeSMB      = "smb"
 
+	ErrorMessageDirNotExists               = "Directory not exist."
+	ErrorMessageShareNotExists             = "This share no longer exists. The link may have been deleted."
 	ErrorMessageShareTypeInvalid           = "Share type invalid."
 	ErrorMessagePathInvalid                = "Path invalid."
 	ErrorMessageOwnerNotFound              = "Owner not found."
