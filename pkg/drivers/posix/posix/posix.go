@@ -53,7 +53,12 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 	fileData, err := s.getFiles(fileParam, Expand, Content)
 	if err != nil {
 		if strings.Contains(err.Error(), "no such file or directory") {
-			return nil, errors.New("Directory not exist")
+			if shareId == "" {
+				return nil, errors.New(common.ErrorMessageDirNotExists)
+			} else {
+				return nil, errors.New(common.ErrorMessageShareNotExists)
+			}
+
 		}
 		return nil, err
 	}
@@ -187,7 +192,8 @@ func (s *PosixStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 	}, nil
 }
 
-func (s *PosixStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+func (s *PosixStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan struct{}, dataChan chan string) error {
+	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
 	klog.Infof("Posix tree, user: %s, args: %s", owner, fileParam.Json())

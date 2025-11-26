@@ -26,8 +26,8 @@ func (s *CacheStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	return s.posix.Preview(contextArgs)
 }
 
-func (s *CacheStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	return s.posix.Tree(fileParam, stopChan, dataChan)
+func (s *CacheStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan struct{}, dataChan chan string) error {
+	return s.posix.Tree(contextArgs, stopChan, dataChan)
 }
 
 func (s *CacheStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {

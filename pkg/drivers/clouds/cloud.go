@@ -42,11 +42,12 @@ func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
  */
 func (s *CloudStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
 	var fileParam = contextArgs.FileParam
+	var driveId = contextArgs.QueryParam.DriveId
 	var owner = fileParam.Owner
 
-	klog.Infof("Cloud list, user: %s, param: %s", owner, fileParam.Json())
+	klog.Infof("Cloud list, user: %s, param: %s, driveId: %s", owner, fileParam.Json(), driveId)
 
-	fileData, err := s.getFiles(fileParam)
+	fileData, err := s.getFiles(fileParam, driveId)
 	if err != nil {
 		return nil, err
 	}
@@ -223,16 +224,18 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 /**
  * ~ Tree
  */
-func (s *CloudStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+func (s *CloudStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan struct{}, dataChan chan string) error {
+	var fileParam = contextArgs.FileParam
+	var driveId = contextArgs.QueryParam.DriveId
 	var owner = fileParam.Owner
 	klog.Infof("Cloud tree, user: %s, param: %s", owner, fileParam.Json())
 
-	fileData, err := s.getFiles(fileParam)
+	fileData, err := s.getFiles(fileParam, driveId)
 	if err != nil {
 		return err
 	}
 
-	if fileData.Data != nil && len(fileData.Data) > 0 {
+	if len(fileData.Data) > 0 {
 		for _, item := range fileData.Data {
 			item.FsType = fileParam.FileType
 			item.FsExtend = fileParam.Extend
@@ -240,7 +243,7 @@ func (s *CloudStorage) Tree(fileParam *models.FileParam, stopChan chan struct{},
 		}
 	}
 
-	go s.generateListingData(fileParam, fileData, stopChan, dataChan)
+	go s.generateListingData(fileParam, fileData, driveId, stopChan, dataChan)
 
 	return nil
 }
@@ -547,7 +550,7 @@ func (s *CloudStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHa
 }
 
 func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
-	files *models.CloudListResponse, stopChan <-chan struct{}, dataChan chan<- string) {
+	files *models.CloudListResponse, driveId string, stopChan <-chan struct{}, dataChan chan<- string) {
 	defer close(dataChan)
 
 	var streamFiles []*models.CloudResponseData
@@ -572,7 +575,7 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 				Path:     firstItemPath,
 			}
 
-			nestFileData, err := s.getFiles(nestFileParam)
+			nestFileData, err := s.getFiles(nestFileParam, driveId)
 			if err != nil {
 				return
 			}
@@ -594,8 +597,8 @@ func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
 	}
 }
 
-func (s *CloudStorage) getFiles(fileParam *models.FileParam) (*models.CloudListResponse, error) {
-	res, err := s.service.List(fileParam)
+func (s *CloudStorage) getFiles(fileParam *models.FileParam, driveId string) (*models.CloudListResponse, error) {
+	res, err := s.service.List(fileParam, driveId)
 	if err != nil {
 		if strings.Contains(err.Error(), "config not found,") {
 			return nil, fmt.Errorf("Query failed. Please check whether the integration account has been added. If it has been added, the integration account may be in the process of being configured. Please try again later.")

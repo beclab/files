@@ -302,12 +302,22 @@ func (s *service) QueryJob(jobId int) (*job.JobStatusResp, error) {
 	return data, nil
 }
 
-func (s *service) List(fileParam *models.FileParam) (*models.CloudListResponse, error) {
-	var fsPrefix, err = s.command.GetFsPrefix(fileParam)
+func (s *service) List(fileParam *models.FileParam, driveId string) (*models.CloudListResponse, error) {
+	var fs, fsPrefix string
+	var err error
+
+	if fileParam.FileType == common.GoogleDrive && driveId != "" {
+		fsPrefix, err = s.command.GetGoogleDriveFsPrefix(fileParam, driveId)
+		fs = fsPrefix
+	} else {
+		fsPrefix, err = s.command.GetFsPrefix(fileParam)
+		fs = fsPrefix + fileParam.Path
+	}
+
 	if err != nil {
 		return nil, err
 	}
-	var fs string = fsPrefix + fileParam.Path
+
 	var opts = &operations.OperationsOpt{
 		NoMimeType: true,
 		NoModTime:  true,
