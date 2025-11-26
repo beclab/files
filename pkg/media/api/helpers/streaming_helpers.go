@@ -168,9 +168,8 @@ func GetStreamingState(
 			klog.Error(err)
 			return nil, err
 		}
-		klog.Info(authToken)
-
-		fileParam, err := models.CreateFileParam(bflName, streamingRequest.PlayPath)
+		klog.Infof("[media] protocol, authToken: %s", authToken)
+		fileParam, err := models.CreateFileParam(bflName, httpContext.Query("PlayPath"))
 		if err != nil {
 			klog.Infof("[media] GetStreamingState, parse url error: %v\n", err)
 			return nil, errors.New("parse url error")

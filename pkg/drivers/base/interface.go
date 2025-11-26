@@ -10,7 +10,7 @@ type Execute interface {
 
 	Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error)
 
-	Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error
+	Tree(contextArgs *models.HttpContextArgs, stopChan chan struct{}, dataChan chan string) error
 
 	Create(contextArgs *models.HttpContextArgs) ([]byte, error)
 

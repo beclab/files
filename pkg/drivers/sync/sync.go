@@ -210,7 +210,7 @@ func NewSyncStorage(handler *base.HandlerParam) *SyncStorage {
 }
 
 func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
-
+	var shareId = contextArgs.QueryParam.ShareId
 	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
@@ -218,6 +218,9 @@ func (s *SyncStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) 
 
 	filesData, err := s.getFiles(fileParam)
 	if err != nil {
+		if shareId != "" && strings.Contains(err.Error(), "not found") {
+			return nil, errors.New(common.ErrorMessageShareNotExists)
+		}
 		return nil, err
 	}
 
@@ -460,7 +463,8 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 	}, nil
 }
 
-func (s *SyncStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
+func (s *SyncStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan struct{}, dataChan chan string) error {
+	var fileParam = contextArgs.FileParam
 	var owner = fileParam.Owner
 
 	klog.Infof("SYNC tree, owner: %s, param: %s", owner, fileParam.Json())

@@ -26,8 +26,8 @@ func (s *ExternalStorage) Preview(contextArgs *models.HttpContextArgs) (*models.
 	return s.posix.Preview(contextArgs)
 }
 
-func (s *ExternalStorage) Tree(fileParam *models.FileParam, stopChan chan struct{}, dataChan chan string) error {
-	return s.posix.Tree(fileParam, stopChan, dataChan)
+func (s *ExternalStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan struct{}, dataChan chan string) error {
+	return s.posix.Tree(contextArgs, stopChan, dataChan)
 }
 
 func (s *ExternalStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {

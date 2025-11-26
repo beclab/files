@@ -12,6 +12,7 @@ type Interface interface {
 	InitServes()
 	StartHttp(configs []*config.Config) error
 	GetFsPrefix(param *models.FileParam) (string, error)
+	GetGoogleDriveFsPrefix(param *models.FileParam, driveId string) (string, error)
 
 	GetConfig() config.Interface
 	GetOperation() operations.Interface

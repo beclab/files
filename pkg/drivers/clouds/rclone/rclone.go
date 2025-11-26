@@ -155,6 +155,10 @@ func (r *rclone) GetFsPrefix(param *models.FileParam) (string, error) {
 	return "", errors.New("fs invalid")
 }
 
+func (r *rclone) GetGoogleDriveFsPrefix(param *models.FileParam, driveId string) (string, error) {
+	return fmt.Sprintf("%s_%s_%s,root_folder_id=%s:", param.Owner, param.FileType, param.Extend, driveId), nil
+}
+
 func (r *rclone) restartServe(createConfig *config.Config) error {
 	if err := r.stopServe(createConfig.ConfigName); err != nil {
 		klog.Errorf("restart serve, stop error: %v, configName: %s", err, createConfig.ConfigName)
