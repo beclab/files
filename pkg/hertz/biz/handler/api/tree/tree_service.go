@@ -10,13 +10,14 @@ import (
 	"files/pkg/hertz/biz/model/api/tree"
 	"files/pkg/models"
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/cloudwego/hertz/pkg/protocol/sse"
 	"k8s.io/klog/v2"
-	"strconv"
-	"strings"
 )
 
 // TreeMethod .
@@ -34,14 +35,14 @@ func TreeMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	fileParam, err := models.CreateFileParam(owner, path)
+	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/tree", false, false)
 	if err != nil {
-		klog.Errorf("file param error: %v, owner: %s", err, owner)
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	klog.Infof("[Incoming] tree, user: %s, fsType: %s, method: %s, args: %s", owner, fileParam.FileType, c.Method(), fileParam.Json())
+	klog.Infof("[Incoming] tree, user: %s, fsType: %s, method: %s, args: %s", owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
 
 	var handlerParam = &base.HandlerParam{
 		Ctx:   ctx,
@@ -51,13 +52,13 @@ func TreeMethod(ctx context.Context, c *app.RequestContext) {
 	stopChan := make(chan struct{})
 	dataChan := make(chan string)
 
-	var handler = drivers.Adaptor.NewFileHandler(fileParam.FileType, handlerParam)
+	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
 	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", fileParam.FileType)})
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
 		return
 	}
 
-	err = handler.Tree(fileParam, stopChan, dataChan)
+	err = handler.Tree(contextArg, stopChan, dataChan)
 	if err != nil {
 		klog.Errorf("tree error: %v, user: %s, url: %s", err, owner, strings.TrimPrefix(string(c.Path()), "/api/tree"))
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{

@@ -77,11 +77,6 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	if fileParam.FileType != common.Drive && fileParam.FileType != common.Sync {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "file type not supported"})
-		return
-	}
-
 	if fileParam.FileType == common.Sync && req.ShareType != common.Internal {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "share type not supported for file type sync"})
 		return
@@ -491,6 +486,15 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 
 		resp.SharePaths = append(resp.SharePaths, viewPath)
+
+		// todo
+		// if len(resp.SharePaths) > 0 {
+		// 	for _, p := range resp.SharePaths {
+		// 		if p.FileType == common.Cache || p.FileType == common.External {
+		// 			p.ID = fmt.Sprintf("%s-%s", p.ID, p.Extend)
+		// 		}
+		// 	}
+		// }
 	}
 	c.JSON(consts.StatusOK, resp)
 }
@@ -787,7 +791,7 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	var req share.DeleteSharePathReq
 	err = c.BindAndValidate(&req)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		handler.RespBadRequest(c, err.Error())
 		return
 	}
 
@@ -811,14 +815,14 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 		if err != nil {
 			klog.Errorf("[samba] DeleteSharePath error: %v", err)
 			tx.Rollback()
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			handler.RespStatusInternalServerError(c, err.Error())
 			return
 		}
 
 		err = database.DeleteSharePath(pathId, tx)
 		if err != nil {
 			tx.Rollback()
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+			handler.RespStatusInternalServerError(c, err.Error())
 			return
 		}
 
@@ -830,12 +834,12 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if len(failedPathIds) == len(pathIds) {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to delete all identified shared paths"})
+		handler.RespStatusInternalServerError(c, "Failed to delete all identified shared paths")
 		return
 	}
 
 	if len(failedPathIds) > 0 {
-		c.AbortWithStatusJSON(consts.StatusOK, utils.H{"msg": "Part of identified shared paths delete failed: " + strings.Join(failedPathIds, ",")})
+		handler.RespSuccess(c, "Part of identified shared paths delete failed: "+strings.Join(failedPathIds, ","))
 		return
 	}
 
@@ -874,7 +878,7 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 
 	resp := new(share.DeleteSharePathResp)
 	resp.Success = true
-	c.JSON(consts.StatusOK, resp)
+	handler.RespSuccess(c, resp)
 }
 
 // GenerateShareToken .
