@@ -71,6 +71,8 @@ type Task struct {
 
 	// compress below
 	compressParam *models.CompressParam
+	pausedIndex   *int
+	pausedBytes   *int64
 }
 
 func (t *Task) Id() string {

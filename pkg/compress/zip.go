@@ -14,19 +14,27 @@ import (
 // ZIP压缩器（保持原有实现）
 type ZipCompressor struct{}
 
-func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64, callbackup func(p int, t int64)) error {
-	// 保持原有addFileToZip实现
-	// 进度通过全局变量processedBytes和lastReported同步更新到klog
-	// 初始化进度跟踪变量
-	processedBytes := int64(0)
-	lastReported := -1.0  // 初始化为-1确保首次触发
-	reportInterval := 0.5 // 进度报告阈值(百分比)
+func getFileSize(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
 
-	select {
-	case <-ctx.Done():
-		klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
-		return ctx.Err()
-	default:
+func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
+	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumeBytes *int64) error {
+	// 初始化或恢复进度跟踪变量
+	processedBytes := int64(0)
+	if resumeBytes != nil {
+		processedBytes = *resumeBytes
+	}
+	lastReported := -1.0
+	reportInterval := 0.5
+
+	currentFileIndex := 0
+	if resumeIndex != nil {
+		currentFileIndex = *resumeIndex
 	}
 
 	zipFile, err := os.Create(outputPath)
@@ -34,50 +42,139 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		klog.Errorf("Failed to create zip file: %v", err)
 		return err
 	}
-	defer zipFile.Close()
+	defer func() {
+		if err := zipFile.Close(); err != nil {
+			klog.Errorf("Failed to close zip file: %v", err)
+		}
+	}()
 
 	zipWriter := zip.NewWriter(zipFile)
-	defer zipWriter.Close()
+	defer func() {
+		if err := zipWriter.Close(); err != nil {
+			klog.Errorf("Failed to close zip writer: %v", err)
+		}
+	}()
 
-	for index, filePath := range fileList {
+	for index := currentFileIndex; index < len(fileList); index++ {
+		// 保存当前处理位置到外部参数（关键状态同步点）
+		*resumeIndex = index
+		*resumeBytes = processedBytes
+
 		select {
 		case <-ctx.Done():
-			klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
-			err = os.RemoveAll(outputPath)
-			if err != nil {
-				klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
-			}
+			// 保留已压缩内容，仅中断后续处理
+			klog.Infof("Compression interrupted at file %d", index)
 			return ctx.Err()
 		default:
 		}
 
 		relPath := relPathList[index]
-		klog.Infof("Processing file: %s", filePath)
+		fileSize := getFileSize(fileList[index]) // 保留原有文件大小获取逻辑
+
+		klog.Infof("Processing file: %s (offset: %d, size: %d)",
+			fileList[index], processedBytes, fileSize)
+
+		// 保留原有进度回调封装逻辑
+		progressWrapper := func(p int, t int64) {
+			// 原有进度回调
+			callbackup(p, t)
+
+			// 实时同步字节进度到恢复参数
+			if resumeBytes != nil {
+				*resumeBytes = processedBytes
+			}
+		}
+
 		err = addFileToZip(
 			zipWriter,
-			filePath,
+			fileList[index],
 			relPath,
 			totalSize,
 			&processedBytes,
 			&lastReported,
 			reportInterval,
-			callbackup,
+			progressWrapper, // 使用封装后的回调
 		)
+
 		if err != nil {
 			klog.Errorf("Compression failed: %v", err)
 			return err
 		}
 	}
 
-	// 最终进度报告
+	// 最终进度报告（保留原有逻辑）
 	if totalSize > 0 {
-		//progress := float64(processedBytes) / float64(totalSize) * 100
 		progress := 100.0
 		klog.Infof("Compression completed: %.2f%%", progress)
 		callbackup(int(progress), 0)
 	}
 	return nil
 }
+
+//func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64, callbackup func(p int, t int64)) error {
+//	// 保持原有addFileToZip实现
+//	// 进度通过全局变量processedBytes和lastReported同步更新到klog
+//	// 初始化进度跟踪变量
+//	processedBytes := int64(0)
+//	lastReported := -1.0  // 初始化为-1确保首次触发
+//	reportInterval := 0.5 // 进度报告阈值(百分比)
+//
+//	select {
+//	case <-ctx.Done():
+//		klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
+//		return ctx.Err()
+//	default:
+//	}
+//
+//	zipFile, err := os.Create(outputPath)
+//	if err != nil {
+//		klog.Errorf("Failed to create zip file: %v", err)
+//		return err
+//	}
+//	defer zipFile.Close()
+//
+//	zipWriter := zip.NewWriter(zipFile)
+//	defer zipWriter.Close()
+//
+//	for index, filePath := range fileList {
+//		select {
+//		case <-ctx.Done():
+//			klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
+//			err = os.RemoveAll(outputPath)
+//			if err != nil {
+//				klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
+//			}
+//			return ctx.Err()
+//		default:
+//		}
+//
+//		relPath := relPathList[index]
+//		klog.Infof("Processing file: %s", filePath)
+//		err = addFileToZip(
+//			zipWriter,
+//			filePath,
+//			relPath,
+//			totalSize,
+//			&processedBytes,
+//			&lastReported,
+//			reportInterval,
+//			callbackup,
+//		)
+//		if err != nil {
+//			klog.Errorf("Compression failed: %v", err)
+//			return err
+//		}
+//	}
+//
+//	// 最终进度报告
+//	if totalSize > 0 {
+//		//progress := float64(processedBytes) / float64(totalSize) * 100
+//		progress := 100.0
+//		klog.Infof("Compression completed: %.2f%%", progress)
+//		callbackup(int(progress), 0)
+//	}
+//	return nil
+//}
 
 func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 	processedBytes *int64, lastReported *float64, reportInterval float64, callbackup func(p int, t int64)) error {
