@@ -2,10 +2,11 @@ package database
 
 import (
 	"files/pkg/common"
+	"files/pkg/hertz/biz/model/api/search"
 	"files/pkg/hertz/biz/model/api/share"
+	hertzcommon "files/pkg/hertz/common"
 	"files/pkg/models"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
@@ -229,7 +230,7 @@ func GetInternalSmbSharePath(owner string, shareType string, shareFileType, shar
 				SharedByMe: item.Owner == owner,
 				PublicSmb:  &publicSmb,
 				Users:      make([]*models.InternalSmbSharePathUsers, 0),
-				SmbLink:    fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), item.Name),
+				SmbLink:    hertzcommon.FormatSmbLink(item.FileType, item.Extend, item.Name),
 			}
 
 			for _, d := range data {
@@ -382,13 +383,14 @@ func QueryShareExternalById(shareId string, token string) (*share.ShareToken, er
 	return res, nil
 }
 
-func QuerySearchSharedDirectories(owner string) ([]*share.ShareMember, []*share.SharePath, error) {
+func QuerySearchSharedDirectories(owner string) ([]*search.SearchDirectoryList, []*share.SharePath, error) {
+	var fileTypes = []string{common.Drive, common.External, common.Cache}
 	// searched directories
 	var selectFields = "id,owner,file_type,extend,path,share_type,name,permission"
 
 	// ~ internal
-	var internalSharePaths []*share.ShareMember
-	if err := DB.Table("share_paths").Select("share_members.*").Joins("INNER JOIN share_members ON share_paths.id = share_members.path_id").Where("share_paths.share_type = ? AND share_members.share_member = ? AND share_paths.expire_time > now()", common.ShareTypeInternal, owner).Find(&internalSharePaths).Error; err != nil {
+	var internalSharePaths []*search.SearchDirectoryList
+	if err := DB.Table("share_paths").Select("share_paths.id, share_paths.owner, share_paths.file_type, share_paths.extend, share_paths.path, share_paths.share_type, share_paths.name, share_paths.permission,share_members.permission as member_permission").Joins("INNER JOIN share_members ON share_paths.id = share_members.path_id").Where("share_paths.share_type = ? AND share_paths.file_type IN (?) AND share_members.share_member = ? AND share_paths.expire_time > now()", common.ShareTypeInternal, fileTypes, owner).Find(&internalSharePaths).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return nil, nil, err
 		}
@@ -400,7 +402,7 @@ func QuerySearchSharedDirectories(owner string) ([]*share.ShareMember, []*share.
 	var externalSub = DB.Model(&share.ShareToken{})
 	externalSub.Select("path_id").Where("expire_at > now()")
 
-	if err := DB.Table("share_paths").Select(selectFields).Where("share_type = ? AND permission IN ? AND expire_time > now() AND id IN (?)", "external", permissions, externalSub).Find(&externalSharePaths).Error; err != nil {
+	if err := DB.Table("share_paths").Select(selectFields).Where("share_type = ? AND file_type IN (?) AND permission IN ? AND expire_time > now() AND id IN (?)", common.ShareTypeExternal, fileTypes, permissions, externalSub).Find(&externalSharePaths).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return nil, nil, err
 		}

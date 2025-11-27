@@ -56,6 +56,7 @@ type FileInfo struct {
 	ExternalType    string            `json:"externalType,omitempty"`
 	ReadOnly        *bool             `json:"readOnly,omitempty"`
 	SharePermission int32             `json:"permission,omitempty"`
+	ShareNode       string            `json:"node"`
 	SyncDirId       string            `json:"dir_id,omitempty"`
 	SyncItemId      string            `json:"id,omitempty"`
 	SyncPermission  string            `json:"user_permission,omitempty"`

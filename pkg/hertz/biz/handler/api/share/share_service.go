@@ -28,6 +28,7 @@ import (
 	"k8s.io/klog/v2"
 
 	share "files/pkg/hertz/biz/model/api/share"
+	hertzcommon "files/pkg/hertz/common"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -229,6 +230,8 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		} else {
 			result.SyncRepoName = repo["repo_name"]
 		}
+	} else if result.FileType == common.External || result.FileType == common.Cache {
+		result.ID = fmt.Sprintf("%s_%s", result.ID, os.Getenv("NODE_NAME"))
 	}
 
 	handler.RespSuccess(c, result)
@@ -244,6 +247,8 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	if req.Permission != "" {
 		permissions := strings.Split(req.Permission, ",")
@@ -468,8 +473,10 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 				}
 			}
 		} else if sharePath.ShareType == common.ShareTypeSMB {
+
 			viewPath.PublicSmb = sharePath.SmbSharePublic == 1
-			viewPath.SmbLink = fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), viewPath.Name)
+			viewPath.SmbLink = hertzcommon.FormatSmbLink(sharePath.FileType, sharePath.Extend, viewPath.Name)
+
 			if len(smbShareMembers) > 0 {
 				for _, u := range smbShareMembers {
 					if u.PathId != viewPath.ID {
@@ -486,16 +493,16 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		}
 
 		resp.SharePaths = append(resp.SharePaths, viewPath)
-
-		// todo
-		// if len(resp.SharePaths) > 0 {
-		// 	for _, p := range resp.SharePaths {
-		// 		if p.FileType == common.Cache || p.FileType == common.External {
-		// 			p.ID = fmt.Sprintf("%s-%s", p.ID, p.Extend)
-		// 		}
-		// 	}
-		// }
 	}
+
+	if len(resp.SharePaths) > 0 {
+		for _, p := range resp.SharePaths {
+			if p.FileType == common.Cache || p.FileType == common.External {
+				p.ID = fmt.Sprintf("%s_%s", p.ID, p.Extend)
+			}
+		}
+	}
+
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -509,6 +516,8 @@ func UpdateSharePath(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	err = database.UpdateSharePath(req.PathId, map[string]interface{}{"name": req.Name}, database.DB)
 	if err != nil {
@@ -559,6 +568,8 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 	if owner == "" {
@@ -801,7 +812,11 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	pathIds := strings.Split(req.PathIds, ",")
+	pathIdsTmp := strings.Split(req.PathIds, ",")
+	var pathIds []string
+	for _, id := range pathIdsTmp {
+		pathIds = append(pathIds, common.TrimShareId(id))
+	}
 
 	klog.Infof("[samba] DeleteSharePath, owner: %s, pathIds: %v", owner, pathIds)
 
@@ -892,6 +907,8 @@ func GenerateShareToken(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	req.PathId = common.TrimShareId(req.PathId)
+
 	queryParams := &database.QueryParams{}
 	queryParams.AND = []database.Filter{}
 	database.BuildStringQueryParam(req.PathId, "share_paths.id", "=", &queryParams.AND, true)
@@ -934,6 +951,8 @@ func ListShareToken(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	queryParams := &database.QueryParams{}
 	queryParams.AND = []database.Filter{}
@@ -985,6 +1004,8 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	queryParams := &database.QueryParams{}
 	queryParams.AND = []database.Filter{}
@@ -1149,6 +1170,8 @@ func ListShareMember(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	if req.Permission != "" {
 		permissions := strings.Split(req.Permission, ",")
@@ -2169,23 +2192,25 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	klog.Infof("GetToken, shareId: %s", req.ShareId)
+	klog.Infof("GetToken, pathId: %s", req.PathId)
 
-	sharePath, err := database.QueryShareById(req.ShareId)
+	req.PathId = common.TrimShareId(req.PathId)
+
+	sharePath, err := database.QueryShareById(req.PathId)
 	if err != nil {
-		klog.Errorf("GetToken, query share failed, shareId: %s, error: %v", req.ShareId, err)
+		klog.Errorf("GetToken, query share failed, shareId: %s, error: %v", req.PathId, err)
 		handler.RespError(c, fmt.Sprintf("GetToken Error, %v", err))
 		return
 	}
 
 	if sharePath == nil {
-		klog.Errorf("GetToken, share path not found, shareId: %s", req.ShareId)
+		klog.Errorf("GetToken, share path not found, shareId: %s", req.PathId)
 		handler.RespError(c, common.ErrorMessageWrongShare)
 		return
 	}
 
 	if sharePath.ShareType != common.ShareTypeExternal {
-		klog.Errorf("GetToken, shareType %s invalid, shareId: %s", sharePath.ShareType, req.ShareId)
+		klog.Errorf("GetToken, shareType %s invalid, shareId: %s", sharePath.ShareType, req.PathId)
 		handler.RespError(c, common.ErrorMessageWrongShare)
 		return
 	}
@@ -2195,7 +2220,7 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	klog.Infof("GetToken, sharePath expireTime: %s, shareId: %s", sharePath.ExpireTime, req.ShareId)
+	klog.Infof("GetToken, sharePath expireTime: %s, shareId: %s", sharePath.ExpireTime, req.PathId)
 
 	expireTime, _ := time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
 	if time.Now().After(expireTime) {
@@ -2205,13 +2230,13 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 
 	// create token
 	var token = &share.ShareToken{
-		PathID:   req.ShareId,
+		PathID:   req.PathId,
 		ExpireAt: time.Now().Add(6 * time.Hour).Format(time.RFC3339Nano),
 	}
 
 	res, err := database.CreateShareToken([]*share.ShareToken{token}, database.DB)
 	if err != nil {
-		klog.Errorf("GetToken generate token error: %v, shareId: %s", err, req.ShareId)
+		klog.Errorf("GetToken generate token error: %v, shareId: %s", err, req.PathId)
 		handler.RespError(c, common.ErrorMessageGetTokenError)
 		return
 	}
@@ -2222,7 +2247,7 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 	result["code"] = 0
 	result["data"] = defaultToken.Token
 
-	klog.Infof("GetToken, get external shared, shareId: %s, token: %s", req.ShareId, defaultToken.Token)
+	klog.Infof("GetToken, get external shared, shareId: %s, token: %s", req.PathId, defaultToken.Token)
 
 	c.JSON(consts.StatusOK, result)
 }
@@ -2237,6 +2262,8 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	shareToken, err := database.GetShareToken(req.Token)
 	if err != nil {
@@ -2293,6 +2320,8 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 	}
 
 	klog.Infof("[samba] ResetPassword, data: %s", req.PathId)
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	sharePath, err := database.QueryShareById(req.PathId)
 	if err != nil {
@@ -2498,7 +2527,7 @@ func createSambaShare(c *app.RequestContext, owner string, req *share.CreateShar
 		CreateTime: result.CreateTime,
 		UpdateTime: result.UpdateTime,
 		SharedByMe: true,
-		SmbLink:    fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), result.Name),
+		SmbLink:    hertzcommon.FormatSmbLink(result.FileType, result.Extend, result.Name),
 	}
 
 	handler.RespSuccess(c, data)
@@ -2522,6 +2551,8 @@ func ModifySmbMember(ctx context.Context, c *app.RequestContext) {
 	}
 
 	klog.Infof("[samba] ModifySmbMember, req: %s", common.ParseString(req))
+
+	req.PathId = common.TrimShareId(req.PathId)
 
 	shared, err := database.GetSharePath(req.PathId)
 	if err != nil {

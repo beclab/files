@@ -26,6 +26,8 @@ type QueryParam struct {
 	DriveId                 string          `json:"driveid"`
 	Destination             string          `json:"destination,omitempty"`
 	ShareType               string          `json:"shareType,omitempty"`
+	ShareNode               string          `json:"shareNode,omitempty"`
+	ShareFileType           string          `json:"shareFileType,omitempty"`
 	ShareId                 string          `json:"shareId,omitempty"`
 	SharePath               string          `json:"sharePath,omitempty"`
 	SharePermission         string          `json:"sharePermission,omitempty"`
@@ -65,6 +67,8 @@ func CreateQueryParam(owner string, ctx context.Context, c *app.RequestContext, 
 		Destination:             strings.TrimSpace(c.Query("destination")),
 		ShareType:               strings.TrimSpace(c.Query("type")), // "mine", "shared", "share_with_me"
 		ShareId:                 strings.TrimSpace(c.Query("shareid")),
+		ShareNode:               strings.TrimSpace(c.Query("sharenode")),
+		ShareFileType:           strings.TrimSpace(c.Query("sharefiletype")),
 		SharePath:               strings.TrimSpace(c.Query("sharepath")),
 		SharePermission:         strings.TrimSpace(c.Query("sharepermission")),
 		ShareByType:             strings.TrimSpace(c.Query("sharetype")),

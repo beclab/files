@@ -195,7 +195,7 @@ func ShareMiddleware() app.HandlerFunc {
 
 			pasteDstParam, _ = models.CreateFileParam(bflName, pasteDst)
 
-		} else if strings.HasPrefix(path, ShareApiUploadPath) { // ~ upload
+		} else if strings.HasPrefix(path, ShareApiUploadPath) { // ! upload
 			shareAccess.Upload = true
 			if strings.HasPrefix(path, ShareApiUploadLinkPath) {
 				if method == http.MethodGet {
@@ -232,9 +232,8 @@ func ShareMiddleware() app.HandlerFunc {
 			return
 		}
 
-		esp := strings.Split(shareParam.Extend, "_")
-		if len(esp) > 1 {
-			shareParam.Extend = esp[0]
+		if shareParam.FileType == common.Share {
+			shareParam.Extend = common.TrimShareId(shareParam.Extend)
 		}
 
 		shared, expires, err := checkSharePath(bflName, shareParam.Extend, shareAccess.FromShare)
@@ -252,10 +251,18 @@ func ShareMiddleware() app.HandlerFunc {
 
 		klog.Infof("[share] share path: %s", common.ToJson(shared))
 
+		var shareNode string
 		var sharedPath = shared.Path
 		var shareType = strings.ToLower(shared.ShareType)
 		var shareBy = shared.Owner
 		var shareMember *share.ShareMember
+		var shareFileType = shared.FileType
+
+		if shared.FileType == common.External || shared.FileType == common.Cache {
+			shareNode = urlx.PathEscape(shared.Extend)
+		} else {
+			shareNode = global.GlobalNode.GetMasterNode()
+		}
 
 		switch shareType {
 		case common.ShareTypeInternal:
@@ -263,7 +270,7 @@ func ShareMiddleware() app.HandlerFunc {
 				shareMember, err = checkInternal(bflName, shared, shareAccess)
 				if err != nil {
 					klog.Errorf("[share] check internal error: %v", err)
-					handler.RespError(c, "No permission")
+					handler.RespError(c, common.ErrorMessagePermissionDenied)
 					return
 				}
 			}
@@ -316,7 +323,7 @@ func ShareMiddleware() app.HandlerFunc {
 				rewritePrefix = ShareApiUploadLinkPath + "/" + masterNodeName
 			}
 		} else {
-			handler.RespError(c, "No permission")
+			handler.RespError(c, common.ErrorMessagePermissionDenied)
 			return
 		}
 
@@ -360,12 +367,12 @@ func ShareMiddleware() app.HandlerFunc {
 
 			url = redirect + rewritePrefix + pathRewrite
 			if query != "" {
-				url += fmt.Sprintf("?%s&share=1&sharetype=%s", query, shareType)
+				url += fmt.Sprintf("?%s&share=1&sharetype=%s&sharenode=%s&sharefiletype=%s", query, shareType, shareNode, shareFileType)
 			} else {
-				url += fmt.Sprintf("?share=1&sharetype=%s", shareType)
+				url += fmt.Sprintf("?share=1&sharetype=%s&sharenode=%s&sharefiletype=%s", shareType, shareNode, shareFileType)
 			}
 			if shareAccess.Resource && method == http.MethodGet {
-				url += fmt.Sprintf("&sharepermission=%d&shareid=%s&sharepath=%s", permission, shareParam.Extend, urlx.PathEscape(shareParam.Path))
+				url += fmt.Sprintf("&sharepermission=%d&shareid=%s&sharepath=%s&sharenode=%s&sharefiletype=%s", permission, shareParam.Extend, urlx.PathEscape(shareParam.Path), shareNode, shareFileType)
 			}
 		}
 
@@ -437,6 +444,10 @@ func checkInternal(currentOwner string, sharePaths *share.SharePath, shareAccess
 	shareMember, err := database.QueryShareMemberById(currentOwner, sharePaths.ID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres.QueryShareMemberById error: %v", err)
+	}
+
+	if shareMember == nil {
+		return nil, errors.New("shareMember not found")
 	}
 
 	if shareMember.ShareMember == "" {
@@ -529,7 +540,15 @@ func checkNonSharedPath(path string) bool {
 func proxySharePaste(c *app.RequestContext, owner string, action string, src, dst *models.FileParam) {
 	var isSrcShare, isDstShare = src.FileType == common.Share, dst.FileType == common.Share
 
-	klog.Infof("[share] Paste, owern: %s, src: %s, dst: %s", owner, common.ParseString(src), common.ParseString(dst))
+	klog.Infof("[share] Paste, owner: %s, src: %s, dst: %s", owner, common.ParseString(src), common.ParseString(dst))
+
+	if src.FileType == common.Share {
+		src.Extend = common.TrimShareId(src.Extend)
+	}
+
+	if dst.FileType == common.Share {
+		dst.Extend = common.TrimShareId(dst.Extend)
+	}
 
 	var srcDriveParam, dstDriveParam *models.FileParam
 	var srcShareType, dstShareType string
@@ -553,20 +572,22 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 		}
 
 		// check member
-		member, err := database.GetShareMember(shared.ID, owner)
-		if err != nil {
-			handler.RespError(c, fmt.Sprintf("Get Share Source Member Error: %v", err))
-			return
-		}
-		if member == nil {
-			handler.RespError(c, common.ErrorMessagePasteWrongSourceShare)
-			return
-		}
+		if owner != shared.Owner {
+			member, err := database.GetShareMember(shared.ID, owner)
+			if err != nil {
+				handler.RespError(c, fmt.Sprintf("Get Share Source Member Error: %v", err))
+				return
+			}
+			if member == nil {
+				handler.RespError(c, common.ErrorMessagePasteWrongSourceShare)
+				return
+			}
 
-		// check permission
-		if member.Permission < 1 {
-			handler.RespError(c, common.ErrorMessagePermissionDenied)
-			return
+			// check permission
+			if member.Permission < 1 {
+				handler.RespError(c, common.ErrorMessagePermissionDenied)
+				return
+			}
 		}
 
 		//
@@ -702,6 +723,7 @@ func ShareUpload() app.HandlerFunc {
 		var err error
 		var reqMethod = string(ctx.Request.Method())
 		var path = string(ctx.Request.Path())
+		var host = string(ctx.GetHeader("X-Forwarded-Host"))
 
 		if !((strings.HasPrefix(path, syncUploadChunks) || strings.HasPrefix(path, posixUploadChunks)) && reqMethod == http.MethodPost) {
 			ctx.Next(c)
@@ -716,7 +738,7 @@ func ShareUpload() app.HandlerFunc {
 		}
 
 		var share = uploadReq.Share
-		if share != "1" {
+		if share != "1" && !strings.HasPrefix(host, "share.") {
 			ctx.Next(c)
 			return
 		}
@@ -728,6 +750,9 @@ func ShareUpload() app.HandlerFunc {
 		}
 
 		fp, _ := models.CreateFileParam(owner, uploadReq.ParentDir)
+		if fp.FileType == common.Share {
+			fp.Extend = common.TrimShareId(fp.Extend)
+		}
 
 		shared, err := database.GetSharePath(fp.Extend)
 		if err != nil {

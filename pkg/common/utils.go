@@ -403,3 +403,10 @@ func UrlEncode(sharePath string) string {
 
 	return strings.Join(result, "/")
 }
+
+func TrimShareId(str string) string {
+	if len(str) > 36 {
+		return str[:36]
+	}
+	return str
+}

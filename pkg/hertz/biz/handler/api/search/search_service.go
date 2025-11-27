@@ -5,8 +5,10 @@ package search
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"files/pkg/common"
+	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
@@ -39,26 +41,36 @@ func GetDirectories(ctx context.Context, c *app.RequestContext) {
 
 	var result []*search.DirectoryInfo
 	for _, s := range internalShares {
-		var di = &search.DirectoryInfo{
-			Path:       fmt.Sprintf("/share/%s/", s.PathID),
-			Permission: s.Permission,
+		if s.Owner != owner {
+			var di = &search.DirectoryInfo{
+				Path:       fmt.Sprintf("/%s/%s/%s/", s.FileType, s.Extend, strings.Trim(s.Path, "/")),
+				SharePath:  fmt.Sprintf("/share/%s/", s.ID),
+				Owner:      s.Owner,
+				Permission: s.Permission,
+			}
+			result = append(result, di)
 		}
-		result = append(result, di)
 	}
 	for _, s := range externalShares {
-		var di = &search.DirectoryInfo{
-			Path:       fmt.Sprintf("/share/%s/", s.ID),
-			Permission: s.Permission,
+		if s.Owner != owner {
+			var di = &search.DirectoryInfo{
+				Path:       fmt.Sprintf("/%s/%s/%s/", s.FileType, s.Extend, strings.Trim(s.Path, "/")),
+				SharePath:  fmt.Sprintf("/share/%s/", s.ID),
+				Owner:      s.Owner,
+				Permission: s.Permission,
+			}
+			result = append(result, di)
 		}
-		result = append(result, di)
 	}
 
 	for _, n := range nodes {
 		result = append(result, &search.DirectoryInfo{
 			Path:       fmt.Sprintf("/cache/%s/", n.Name),
+			Owner:      owner,
 			Permission: 4,
 		}, &search.DirectoryInfo{
 			Path:       fmt.Sprintf("/external/%s/", n.Name),
+			Owner:      owner,
 			Permission: 4,
 		})
 	}
@@ -66,10 +78,12 @@ func GetDirectories(ctx context.Context, c *app.RequestContext) {
 	result = append(result,
 		&search.DirectoryInfo{
 			Path:       "/drive/Home/",
+			Owner:      owner,
 			Permission: 4,
 		},
 		&search.DirectoryInfo{
 			Path:       "/drive/Data/",
+			Owner:      owner,
 			Permission: 4,
 		},
 	)
@@ -96,11 +110,15 @@ func CheckDirectory(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	var shareId = fileParam.Extend
+	fileParam.Extend = common.TrimShareId(fileParam.Extend)
 
+	var uri string
+	var realPath string
+	var realOwner string
 	var permission int32
+
 	if fileParam.FileType == common.Share {
-		shared, err := database.GetSharePath(shareId)
+		shared, err := database.GetSharePath(fileParam.Extend)
 		if err != nil {
 			klog.Errorf("[search] CheckDirectory, get share failed, owner: %s, error: %v", owner, err)
 			handler.RespError(c, fmt.Sprintf("Check Directory Error: %v", err))
@@ -108,9 +126,15 @@ func CheckDirectory(ctx context.Context, c *app.RequestContext) {
 		}
 
 		if shared == nil {
-			handler.RespSuccess(c, nil)
+			handler.RespError(c, common.ErrorMessageShareNotExists)
 			return
 		}
+
+		if shared.FileType == common.Sync {
+			handler.RespError(c, common.ErrorMessageSyncNotSupport)
+			return
+		}
+
 		member, err := database.GetShareMember(shared.ID, owner)
 		if err != nil {
 			klog.Errorf("[search] CheckDirectory, get member failed, owner: %s, error: %v", owner, err)
@@ -123,9 +147,52 @@ func CheckDirectory(ctx context.Context, c *app.RequestContext) {
 		} else {
 			permission = member.Permission
 		}
+
+		realPath = fmt.Sprintf("/%s/%s/%s/", shared.FileType, shared.Extend, strings.Trim(shared.Path, "/"))
+		realOwner = shared.Owner
+
+		realParam, err := models.CreateFileParam(realOwner, realPath)
+		if err != nil {
+			klog.Errorf("[search] CheckDirectory, get param failed, owner: %s, error: %v, path: %s", realOwner, err, realPath)
+			handler.RespError(c, fmt.Sprintf("Check Directory Error: %v", err))
+			return
+		}
+		uri, err = realParam.GetResourceUri()
+		if err != nil {
+			klog.Errorf("[search] CheckDirectory, get uri error: %v", err)
+			handler.RespError(c, fmt.Sprintf("Check Directory Error: %v", err))
+			return
+		}
+
+		uri = strings.TrimSuffix(uri, "/") + realParam.Path
+	} else {
+		uri, err = fileParam.GetResourceUri()
+		if err != nil {
+			klog.Errorf("[search] CheckDirectory, get uri error: %v", err)
+			handler.RespError(c, fmt.Sprintf("Check Directory Error: %v", err))
+			return
+		}
+		uri = strings.TrimSuffix(uri, "/") + fileParam.Path
 	}
 
-	var result = &search.DirectoryInfo{
+	klog.Infof("[search] CheckDirectory, owner: %s, uri: %s", owner, uri)
+
+	permit, exists := files.CanWriteDir(uri)
+	if !exists {
+		handler.RespError(c, common.ErrorMessageDirNotExists)
+		return
+	}
+	if permit {
+		permission = 3
+	} else {
+		permission = 1
+	}
+
+	if !strings.HasPrefix(sharePath, "/") {
+		sharePath = "/" + sharePath
+	}
+
+	var result = &search.CheckDirectoryResp{
 		Path:       sharePath,
 		Permission: permission,
 	}

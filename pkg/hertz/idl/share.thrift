@@ -194,7 +194,7 @@ struct RevokeShareTokenResp {
 }
 
 struct GetTokenReq {
-    1: required string ShareId (api.body="id");
+    1: required string PathId (api.body="id");
     2: required string Password (api.body="pass");
 }
 

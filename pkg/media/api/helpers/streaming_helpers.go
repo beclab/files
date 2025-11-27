@@ -161,7 +161,6 @@ func GetStreamingState(
 	protocol := GetPathProtocol(streamingRequest.PlayPath)
 	var headers string
 	if protocol == mediaprotocol.Http {
-		// bflName := httpContext.Header[common.REQUEST_HEADER_OWNER][0]
 		bflName := httpContext.Request.Header.Get(common.REQUEST_HEADER_OWNER)
 		authToken, err := utils.GetAuthToken(bflName)
 		if err != nil {
@@ -174,6 +173,8 @@ func GetStreamingState(
 			klog.Infof("[media] GetStreamingState, parse url error: %v\n", err)
 			return nil, errors.New("parse url error")
 		}
+
+		fileParam.Extend = common.TrimShareId(fileParam.Extend)
 
 		if fileParam.FileType == common.Share { // todo share
 

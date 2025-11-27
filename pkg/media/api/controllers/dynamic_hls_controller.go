@@ -365,6 +365,8 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 		return "", errors.New("parse url error")
 	}
 
+	fileParam.Extend = common.TrimShareId(fileParam.Extend)
+
 	formalizedPath := ""
 	if fileParam.FileType == common.Sync {
 		seafileServiceName := os.Getenv("SEAFILE_SERVICE")
