@@ -30,7 +30,8 @@ const (
 
 // 统一压缩接口（同步版本）
 type Compressor interface {
-	Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64, callbackup func(p int, t int64)) error
+	Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64,
+		callbackup func(p int, t int64), resumeIndex *int, resumBytes *int64) error
 	Uncompress(ctx context.Context, src, dest string, override bool, callbackup func(p int, t int64)) error
 }
 

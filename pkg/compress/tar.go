@@ -14,7 +14,8 @@ import (
 // 纯TAR压缩器（仅归档不压缩）
 type TarCompressor struct{}
 
-func (c *TarCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64, callbackup func(p int, t int64)) error {
+func (c *TarCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
+	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumBytes *int64) error {
 	outFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("create output: %v", err)

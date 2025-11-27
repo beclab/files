@@ -19,7 +19,8 @@ import (
 // TAR.GZ压缩器
 type TarGzipCompressor struct{}
 
-func (c *TarGzipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64, callbackup func(p int, t int64)) error {
+func (c *TarGzipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
+	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumBytes *int64) error {
 	// 创建输出文件
 	outFile, err := os.Create(outputPath)
 	if err != nil {
