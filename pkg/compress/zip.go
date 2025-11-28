@@ -285,7 +285,8 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 					formatBytes(*processedBytes),
 					formatBytes(totalSize))
 				*lastReported = progress
-				callbackup(int(progress), int64(n))
+				callbackup(int(progress), int64(bytesRead))
+				bytesRead = 0
 			}
 		}
 
