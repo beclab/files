@@ -218,13 +218,13 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		// 关键修改2：更新进度（空目录也计入处理）
 		*processedBytes += 4096 // 占位但计入进度
 		progress := float64(*processedBytes) * 100 / float64(totalSize)
-		if shouldReport(progress, *lastReported, reportInterval) {
-			klog.Infof("Progress: %.2f%% (Directory: %s)",
-				progress,
-				relPath+"/")
-			*lastReported = progress
-			callbackup(int(progress), 4096)
-		}
+		//if shouldReport(progress, *lastReported, reportInterval) {
+		klog.Infof("Progress: %.2f%% (Directory: %s)",
+			progress,
+			relPath+"/")
+		*lastReported = progress
+		callbackup(int(progress), 4096)
+		//}
 		return nil // 目录处理完成直接返回
 	}
 
