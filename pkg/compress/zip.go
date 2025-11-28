@@ -23,7 +23,7 @@ func getFileSize(path string) int64 {
 }
 
 func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
-	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumeBytes *int64) error {
+	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumeBytes *int64, paused *bool) error {
 	// 初始化或恢复进度跟踪变量
 	processedBytes := int64(0)
 	if resumeBytes != nil {
@@ -35,6 +35,17 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	currentFileIndex := 0
 	if resumeIndex != nil {
 		currentFileIndex = *resumeIndex
+	}
+
+	select {
+	case <-ctx.Done():
+		if paused != nil && *paused {
+			klog.Infof("[ZIP running LOG] Paused compressing before starting")
+		} else {
+			klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
+		}
+		return ctx.Err()
+	default:
 	}
 
 	zipFile, err := os.Create(outputPath)
@@ -56,15 +67,22 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	}()
 
 	for index := currentFileIndex; index < len(fileList); index++ {
-		// 保存当前处理位置到外部参数（关键状态同步点）
-		*resumeIndex = index
-		*resumeBytes = processedBytes
+		filePath := fileList[index]
 
 		select {
 		case <-ctx.Done():
-			// 保留已压缩内容，仅中断后续处理
-			klog.Infof("Compression interrupted at file %d", index)
-			return ctx.Err()
+			if paused != nil && *paused {
+				// 保留已压缩内容，仅中断后续处理
+				klog.Infof("Compression interrupted at file %d", index)
+				return ctx.Err()
+			} else {
+				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
+				err = os.RemoveAll(outputPath)
+				if err != nil {
+					klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
+				}
+				return ctx.Err()
+			}
 		default:
 		}
 
@@ -100,6 +118,10 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 			klog.Errorf("Compression failed: %v", err)
 			return err
 		}
+
+		// 保存当前处理位置到外部参数（关键状态同步点）
+		*resumeIndex = index
+		*resumeBytes = processedBytes
 	}
 
 	// 最终进度报告（保留原有逻辑）
