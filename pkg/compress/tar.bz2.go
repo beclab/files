@@ -18,7 +18,7 @@ import (
 type TarBzip2Compressor struct{}
 
 func (c *TarBzip2Compressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
-	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumBytes *int64) error {
+	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumBytes *int64, paused *bool) error {
 	outFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("create output: %v", err)

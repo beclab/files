@@ -23,7 +23,7 @@ type SevenZipCompressor struct {
 }
 
 func (c *SevenZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
-	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumBytes *int64) error {
+	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumBytes *int64, paused *bool) error {
 	// 创建临时工作目录
 	tempDir, err := os.MkdirTemp("", "7z-compress-")
 	klog.Infof("Create temp dir: %s", tempDir)

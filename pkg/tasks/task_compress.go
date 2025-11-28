@@ -16,7 +16,7 @@ func (t *Task) Compress() error {
 		t.ctx,
 		t.compressParam.DstPath, t.compressParam.FileList,
 		t.compressParam.RelPathList, t.compressParam.TotalSize,
-		t.updateProgress, t.pausedIndex, t.pausedBytes)
+		t.updateProgress, t.pausedIndex, t.pausedBytes, &t.suspend)
 	if err != nil {
 		klog.Errorf("compression failed: %v", err)
 		return fmt.Errorf("compression failed: %v", err)
