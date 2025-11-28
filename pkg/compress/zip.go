@@ -255,6 +255,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 	// 动态缓冲区
 	buf := make([]byte, bufferSize(info.Size()))
 	bytesRead := 0
+	progress := 0.0
 
 	for {
 		n, err := srcFile.Read(buf)
@@ -276,7 +277,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 			// 更新全局进度
 			*processedBytes += int64(n)
 			bytesRead += n
-			progress := float64(*processedBytes) * 100 / float64(totalSize)
+			progress = float64(*processedBytes) * 100 / float64(totalSize)
 
 			// 阈值触发式进度报告
 			if shouldReport(progress, *lastReported, reportInterval) {
@@ -291,6 +292,15 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		}
 
 		if err == io.EOF {
+			if bytesRead != 0 {
+				klog.Infof("Progress: %.2f%% (%s/%s)",
+					progress,
+					formatBytes(*processedBytes),
+					formatBytes(totalSize))
+				*lastReported = progress
+				callbackup(int(progress), int64(bytesRead))
+				bytesRead = 0
+			}
 			break
 		}
 	}
