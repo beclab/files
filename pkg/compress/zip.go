@@ -133,7 +133,8 @@ func getFileSize(path string) int64 {
 //	return nil
 //}
 
-func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64, callbackup func(p int, t int64)) error {
+func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
+	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumeBytes *int64, paused *bool) error {
 	// 保持原有addFileToZip实现
 	// 进度通过全局变量processedBytes和lastReported同步更新到klog
 	// 初始化进度跟踪变量
