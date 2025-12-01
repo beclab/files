@@ -123,6 +123,7 @@ CREATE TABLE public.emailuser (
     passwd character varying(256),
     is_staff smallint NOT NULL,
     is_active smallint NOT NULL,
+    is_department_owner smallint NOT NULL,
     ctime bigint,
     reference_id character varying(255)
 );
@@ -149,6 +150,18 @@ ALTER TABLE public.emailuser_id_seq OWNER TO seafile_os_framework;
 --
 
 ALTER SEQUENCE public.emailuser_id_seq OWNED BY public.emailuser.id;
+
+--
+-- Name: emailuser_is_active_idx; Type: INDEX; Schema: public; Owner: seafile_os_framework
+--
+
+CREATE INDEX emailuser_is_active_idx ON public.EmailUser USING btree (is_active);
+
+--
+-- Name: emailuser_is_department_owner_idx; Type: INDEX; Schema: public; Owner: seafile_os_framework
+--
+
+CREATE INDEX emailuser_is_department_owner_idx ON public.EmailUser USING btree (is_department_owner);
 
 
 --
@@ -952,3 +965,36 @@ CREATE UNIQUE INDEX userrole_email_role_key ON public.userrole USING btree (emai
 -- PostgreSQL database dump complete
 --
 
+--
+-- Name: OrgFileExtWhiteList; Type: TABLE; Schema: public; Owner: seafile_os_framework
+--
+CREATE TABLE IF NOT EXISTS public.OrgFileExtWhiteList (
+                                                          id BIGINT NOT NULL PRIMARY KEY DEFAULT nextval('public.orgfileextwhitelist_id_seq'),
+    org_id INTEGER,
+    white_list TEXT
+    );
+--
+-- Name: TABLE OrgFileExtWhiteList; Type: OWNER; Schema: public; Owner: seafile_os_framework
+--
+ALTER TABLE public.OrgFileExtWhiteList OWNER TO seafile_os_framework;
+--
+-- Name: orgfileextwhitelist_id_seq; Type: SEQUENCE; Schema: public; Owner: seafile_os_framework
+--
+CREATE SEQUENCE public.orgfileextwhitelist_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+--
+-- Name: orgfileextwhitelist_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: seafile_os_framework
+--
+ALTER SEQUENCE public.orgfileextwhitelist_id_seq OWNED BY public.OrgFileExtWhiteList.id;
+--
+-- Name: orgfileextwhitelist_id_seq; Type: OWNER; Schema: public; Owner: seafile_os_framework
+--
+ALTER SEQUENCE public.orgfileextwhitelist_id_seq OWNER TO seafile_os_framework;
+--
+-- Name: orgfileextwhitelist_org_id_unique; Type: UNIQUE INDEX; Schema: public; Owner: seafile_os_framework
+--
+CREATE UNIQUE INDEX orgfileextwhitelist_org_id_unique ON public.OrgFileExtWhiteList USING btree (org_id);
