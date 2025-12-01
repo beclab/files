@@ -44,6 +44,7 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 			select {
 			case result, ok := <-c.Ch:
 				if !ok {
+					errChan <- errors.New("chan is closed")
 					return
 				}
 				if result == "" {
@@ -58,6 +59,9 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 				if progress, trans, err := formatProgress(result); err == nil {
 					callbackup(progress, trans)
 					continue
+				} else {
+					errChan <- err
+					return
 				}
 
 				if formatFinished(result) {
@@ -92,7 +96,7 @@ func formatFailed(l string) string {
 		result = msg[strings.LastIndex(msg, "failed:")+7:]
 		result = strings.TrimSpace(result)
 	} else {
-		result = msg
+		result = l //msg
 	}
 
 	return result
