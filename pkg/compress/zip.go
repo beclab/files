@@ -15,21 +15,22 @@ import (
 // ZIP压缩器（保持原有实现）
 type ZipCompressor struct{}
 
-func getFileSize(path string) int64 {
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0
-	}
-	return info.Size()
-}
+//func getFileSize(path string) int64 {
+//	info, err := os.Stat(path)
+//	if err != nil {
+//		return 0
+//	}
+//	return info.Size()
+//}
 
 func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
 	totalSize int64, updateProgress func(p int, t int64),
-	getPauseInfo func() (int, int64, bool),
+	getPauseInfo func() (int, int64),
 	setPauseInfo func(i int, b int64),
+	getPaused func() bool,
 ) error {
-	resumeIndex, resumeBytes, paused := getPauseInfo()
-	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d, paused: %t", resumeIndex, resumeBytes, paused)
+	resumeIndex, resumeBytes := getPauseInfo()
+	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
 
 	// 初始化或恢复进度跟踪变量
 	processedBytes := int64(0)
@@ -43,11 +44,11 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	if resumeIndex != 0 {
 		currentFileIndex = resumeIndex
 	}
-	klog.Infof("[ZIP running LOG] processedBytes: %d, currentFileIndex: %d, paused: %t", processedBytes, currentFileIndex, paused)
+	klog.Infof("[ZIP running LOG] processedBytes: %d, currentFileIndex: %d", processedBytes, currentFileIndex)
 
 	select {
 	case <-ctx.Done():
-		if paused {
+		if getPaused() {
 			klog.Infof("[ZIP running LOG] Paused compressing before starting")
 			setPauseInfo(currentFileIndex, processedBytes)
 		} else {
@@ -63,34 +64,30 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		return err
 	}
 	defer func() {
-		if err := zipFile.Close(); err != nil {
+		if err = zipFile.Close(); err != nil {
 			klog.Errorf("Failed to close zip file: %v", err)
 		}
 	}()
 
 	zipWriter := zip.NewWriter(zipFile)
 	defer func() {
-		if err := zipWriter.Close(); err != nil {
+		if err = zipWriter.Close(); err != nil {
 			klog.Errorf("Failed to close zip writer: %v", err)
 		}
 	}()
 
 	for index := currentFileIndex; index < len(fileList); index++ {
 		filePath := fileList[index]
-		//if index < currentFileIndex {
-		//	klog.Infof("[ZIP running LOG] the %d file %s already compressed before paused", currentFileIndex, filePath)
-		//	continue
-		//}
 
 		klog.Infof("[ZIP running LOG] index: %d, filePath: %s", index, filePath)
 		klog.Infof("[ZIP running LOG] filePath: %s", filePath)
 
 		select {
 		case <-ctx.Done():
-			if paused {
+			if getPaused() {
 				// 保留已压缩内容，仅中断后续处理
 				klog.Infof("Compression interrupted at file %d", index)
-				setPauseInfo(currentFileIndex, processedBytes)
+				setPauseInfo(index, processedBytes)
 				return ctx.Err()
 			} else {
 				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
@@ -104,23 +101,9 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		}
 
 		relPath := relPathList[index]
-		fileSize := getFileSize(filePath) // 保留原有文件大小获取逻辑
+		//fileSize := getFileSize(filePath) // 保留原有文件大小获取逻辑
 
-		klog.Infof("Processing file: %s (offset: %d, size: %d)", filePath, processedBytes, fileSize)
-
-		// 保留原有进度回调封装逻辑
-		//progressWrapper := func(p int, t int64) {
-		//	klog.Infof("[ZIP running LOG] progress: %d, bytes: %d", p, t)
-		//	// 原有进度回调
-		//	callbackup(p, t)
-		//
-		//	klog.Infof("[ZIP running LOG] resumeBytes: %d", *resumeBytes)
-		//	// 实时同步字节进度到恢复参数
-		//	if resumeBytes != nil {
-		//		*resumeBytes = processedBytes
-		//	}
-		//	return
-		//}
+		//klog.Infof("Processing file: %s (offset: %d, size: %d)", filePath, processedBytes, fileSize)
 
 		err = addFileToZip(
 			zipWriter,
@@ -135,12 +118,17 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		klog.Infof("[ZIP running LOG] after adding %s", filePath)
 
 		if err != nil {
-			klog.Errorf("Compression failed: %v", err)
-			return err
+			if getPaused() {
+				klog.Infof("Compression paused at file %d", index)
+				return ctx.Err()
+			} else {
+				klog.Errorf("Compression failed: %v", err)
+				return err
+			}
 		}
 
 		// 保存当前处理位置到外部参数（关键状态同步点）
-		setPauseInfo(currentFileIndex, processedBytes)
+		setPauseInfo(index, processedBytes)
 		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
 
 		klog.Infof("[ZIP running LOG] for pause test, will sleep 5 seconds...")

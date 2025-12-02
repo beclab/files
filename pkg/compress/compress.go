@@ -32,8 +32,9 @@ const (
 type Compressor interface {
 	Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64,
 		updateProgress func(p int, t int64),
-		getPauseInfo func() (int, int64, bool),
+		getPauseInfo func() (int, int64),
 		setPauseInfo func(i int, b int64),
+		getPaused func() bool,
 	) error
 	Uncompress(ctx context.Context, src, dest string, override bool, callbackup func(p int, t int64)) error
 }
