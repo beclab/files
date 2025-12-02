@@ -42,7 +42,7 @@ func (s *ExternalStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, err
  * ~ copyToDrive
  */
 func (s *ExternalStorage) copyToDrive() (task *tasks.Task, err error) {
-	klog.Info("External copyToDrive")
+	klog.Infof("External copyToDrive, currentnode: %s", global.CurrentNodeName)
 
 	var srcNode = s.paste.Src.Extend
 
@@ -65,7 +65,7 @@ func (s *ExternalStorage) copyToDrive() (task *tasks.Task, err error) {
  * ~ copyToExternal
  */
 func (s *ExternalStorage) copyToExternal() (task *tasks.Task, err error) {
-	klog.Info("External copyToExternal")
+	klog.Infof("External copyToExternal, currentnode: %s", global.CurrentNodeName)
 
 	var srcNode = s.paste.Src.Extend
 	var dstNode = s.paste.Dst.Extend
@@ -97,7 +97,7 @@ func (s *ExternalStorage) copyToExternal() (task *tasks.Task, err error) {
  * ~ copyToCache
  */
 func (s *ExternalStorage) copyToCache() (task *tasks.Task, err error) {
-	klog.Info("External copyToCache")
+	klog.Infof("External copyToCache, currentnode: %s", global.CurrentNodeName)
 
 	var srcNode = s.paste.Src.Extend
 	var dstNode = s.paste.Dst.Extend

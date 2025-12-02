@@ -64,10 +64,6 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 
 	uploadArg.FileParam = fileParam
 
-	// if req.Share == "1" {
-	// 	uploadArg.FileParam.Owner = req.Shareby
-	// }
-
 	var handlerParam = &base.HandlerParam{
 		Ctx:   ctx,
 		Owner: uploadArg.FileParam.Owner,

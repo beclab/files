@@ -94,6 +94,24 @@ func (g *Node) GetNodes() []NodeInfo {
 	return nodes
 }
 
+func (g *Node) GetNodeIp(nodeName string) string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	for _, n := range g.Nodes {
+		if nodeName == n.Name {
+			if len(n.Status.Addresses) > 0 {
+				for _, addr := range n.Status.Addresses {
+					if addr.Type == "InternalIP" {
+						return addr.Address
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
 func (g *Node) GetMasterNode() string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()

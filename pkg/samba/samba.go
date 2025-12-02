@@ -15,6 +15,7 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -207,7 +208,7 @@ func (s *samba) deleteExpiredShares() {
 					continue
 				}
 
-				if !metav1.Now().Time.Add(-5 * time.Minute).After(v.CreationTimestamp.Time) {
+				if !metav1.Now().Time.Add(-2 * time.Minute).After(v.CreationTimestamp.Time) {
 					continue
 				}
 
@@ -279,6 +280,11 @@ func (s *samba) generateConf() {
 	for _, item := range smbShares { // ~ map
 		if !s.checkUserExists(item.Owner) {
 			continue
+		}
+		if item.FileType == common.External || item.FileType == common.Cache {
+			if item.Extend != os.Getenv("NODE_NAME") {
+				continue
+			}
 		}
 		expire, err := time.Parse(timeFormat, item.ExpireTime)
 		if err != nil {
@@ -527,6 +533,12 @@ func (s *samba) recoverSharedOwner(sharedPaths []string) {
 		if err != nil {
 			klog.Errorf("samba recover create file param error: %v, owner: %s, path: %s", err, smb.Owner, smb.Path)
 			continue
+		}
+
+		if m.FileType == common.External || m.FileType == common.Cache {
+			if m.Extend != os.Getenv("NODE_NAME") {
+				continue
+			}
 		}
 
 		uri, err := m.GetResourceUri()

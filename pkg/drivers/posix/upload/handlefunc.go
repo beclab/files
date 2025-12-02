@@ -35,12 +35,7 @@ func HandleUploadLink(fileParam *models.FileParam, from string) ([]byte, error) 
 	}
 
 	uploadPath = uri + fileParam.Path
-
-	if fileParam.FileType == common.External {
-		uploadTempPath = filepath.Join(uri, fileParam.Path, common.DefaultUploadTempDir)
-	} else {
-		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
-	}
+	uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
 
 	// if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
 	// 	if !CheckDirExist(uploadPath) {
@@ -80,12 +75,7 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string, fileIdent
 	}
 
 	uploadPath = uri + fileParam.Path
-
-	if fileParam.FileType == common.External {
-		uploadTempPath = filepath.Join(uri, fileParam.Path, common.DefaultUploadTempDir)
-	} else {
-		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
-	}
+	uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
 
 	// if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
 	// 	if !common.PathExists(uploadPath) {
@@ -188,11 +178,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		return false, nil, err
 	}
 
-	if fileParam.FileType == common.External {
-		uploadTempPath = filepath.Join(uri, fileParam.Path, common.DefaultUploadTempDir)
-	} else {
-		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
-	}
+	uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
 
 	if !common.PathExists(uploadTempPath) {
 		if err = os.MkdirAll(uploadTempPath, os.ModePerm); err != nil {

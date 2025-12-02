@@ -116,6 +116,7 @@ var (
 	ErrorMesssageSambaPasswordInvalid      = "Samba share password invalid."
 	ErrorMessageWrongPassword              = "Wrong password. Please check the password and try again."
 	ErrorMessageInternalPathExists         = "Share for a path can be only one at a time."
+	ErrorMessageSyncNotSupport             = "Sync not support."
 
 	CodeLinkExpired  = 559
 	CodeTokenExpired = 569

@@ -820,3 +820,21 @@ func minimizeDirs(dirs []string) []string {
 	}
 	return result
 }
+
+func CanWriteDir(dir string) (bool, bool) {
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return false, false
+	}
+
+	testFile := filepath.Join(dir, ".perm_check_tmp")
+
+	f, err := os.OpenFile(testFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return false, true
+	}
+
+	f.Close()
+	_ = os.Remove(testFile)
+	return true, true
+}
