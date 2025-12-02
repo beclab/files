@@ -42,6 +42,8 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	case <-ctx.Done():
 		if paused != nil && *paused {
 			klog.Infof("[ZIP running LOG] Paused compressing before starting")
+			*resumeIndex = currentFileIndex
+			*resumeBytes = processedBytes
 		} else {
 			klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
 		}
@@ -67,11 +69,12 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		}
 	}()
 
-	for index, filePath := range fileList {
-		if index < currentFileIndex {
-			klog.Infof("[ZIP running LOG] the %d file %s already compressed before paused", currentFileIndex, filePath)
-			continue
-		}
+	for index := currentFileIndex; index < len(fileList); index++ {
+		filePath := fileList[index]
+		//if index < currentFileIndex {
+		//	klog.Infof("[ZIP running LOG] the %d file %s already compressed before paused", currentFileIndex, filePath)
+		//	continue
+		//}
 
 		klog.Infof("[ZIP running LOG] index: %d", index)
 		klog.Infof("[ZIP running LOG] filePath: %s", filePath)
@@ -81,6 +84,8 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 			if paused != nil && *paused {
 				// 保留已压缩内容，仅中断后续处理
 				klog.Infof("Compression interrupted at file %d", index)
+				*resumeIndex = index
+				*resumeBytes = processedBytes
 				return ctx.Err()
 			} else {
 				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
@@ -99,18 +104,18 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		klog.Infof("Processing file: %s (offset: %d, size: %d)", filePath, processedBytes, fileSize)
 
 		// 保留原有进度回调封装逻辑
-		progressWrapper := func(p int, t int64) {
-			klog.Infof("[ZIP running LOG] progress: %d, bytes: %d", p, t)
-			// 原有进度回调
-			callbackup(p, t)
-
-			klog.Infof("[ZIP running LOG] resumeBytes: %d", *resumeBytes)
-			// 实时同步字节进度到恢复参数
-			if resumeBytes != nil {
-				*resumeBytes = processedBytes
-			}
-			return
-		}
+		//progressWrapper := func(p int, t int64) {
+		//	klog.Infof("[ZIP running LOG] progress: %d, bytes: %d", p, t)
+		//	// 原有进度回调
+		//	callbackup(p, t)
+		//
+		//	klog.Infof("[ZIP running LOG] resumeBytes: %d", *resumeBytes)
+		//	// 实时同步字节进度到恢复参数
+		//	if resumeBytes != nil {
+		//		*resumeBytes = processedBytes
+		//	}
+		//	return
+		//}
 
 		err = addFileToZip(
 			zipWriter,
@@ -120,7 +125,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 			&processedBytes,
 			&lastReported,
 			reportInterval,
-			progressWrapper, // 使用封装后的回调
+			callbackup, // progressWrapper, // 使用封装后的回调
 		)
 		klog.Infof("[ZIP running LOG] after adding %s", filePath)
 
