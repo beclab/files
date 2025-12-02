@@ -76,7 +76,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		//	continue
 		//}
 
-		klog.Infof("[ZIP running LOG] index: %d", index)
+		klog.Infof("[ZIP running LOG] index: %d, filePath: %s", index, filePath)
 		klog.Infof("[ZIP running LOG] filePath: %s", filePath)
 
 		select {
