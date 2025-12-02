@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ZIP压缩器（保持原有实现）
@@ -141,6 +142,9 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		// 保存当前处理位置到外部参数（关键状态同步点）
 		setPauseInfo(currentFileIndex, processedBytes)
 		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
+
+		klog.Infof("[ZIP running LOG] for pause test, will sleep 5 seconds...")
+		time.Sleep(5 * time.Second)
 	}
 
 	// 最终进度报告（保留原有逻辑）
