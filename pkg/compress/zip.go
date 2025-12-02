@@ -67,9 +67,13 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		}
 	}()
 
-	for index := currentFileIndex; index < len(fileList); index++ {
+	for index, filePath := range fileList {
+		if index < currentFileIndex {
+			klog.Infof("[ZIP running LOG] the %d file %s already compressed before paused", currentFileIndex, filePath)
+			continue
+		}
+
 		klog.Infof("[ZIP running LOG] index: %d", index)
-		filePath := fileList[index]
 		klog.Infof("[ZIP running LOG] filePath: %s", filePath)
 
 		select {
@@ -90,20 +94,22 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		}
 
 		relPath := relPathList[index]
-		fileSize := getFileSize(fileList[index]) // 保留原有文件大小获取逻辑
+		fileSize := getFileSize(filePath) // 保留原有文件大小获取逻辑
 
-		klog.Infof("Processing file: %s (offset: %d, size: %d)",
-			fileList[index], processedBytes, fileSize)
+		klog.Infof("Processing file: %s (offset: %d, size: %d)", filePath, processedBytes, fileSize)
 
 		// 保留原有进度回调封装逻辑
 		progressWrapper := func(p int, t int64) {
+			klog.Infof("[ZIP running LOG] progress: %d, bytes: %d", p, t)
 			// 原有进度回调
 			callbackup(p, t)
 
+			klog.Infof("[ZIP running LOG] resumeBytes: %d", *resumeBytes)
 			// 实时同步字节进度到恢复参数
 			if resumeBytes != nil {
 				*resumeBytes = processedBytes
 			}
+			return
 		}
 
 		err = addFileToZip(
@@ -116,6 +122,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 			reportInterval,
 			progressWrapper, // 使用封装后的回调
 		)
+		klog.Infof("[ZIP running LOG] after adding %s", filePath)
 
 		if err != nil {
 			klog.Errorf("Compression failed: %v", err)
@@ -213,8 +220,11 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 
 	// 关键修改1：处理目录类型
 	if info.IsDir() {
+		if !strings.HasSuffix(relPath, "/") {
+			relPath += "/"
+		}
 		// 创建目录占位符（必须以/结尾）
-		_, err = zw.Create(relPath + "/")
+		_, err = zw.Create(relPath)
 		if err != nil {
 			klog.Errorf("Failed to create directory entry: %v", err)
 			return err
@@ -223,9 +233,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		*processedBytes += 4096 // 占位但计入进度
 		progress := float64(*processedBytes) * 100 / float64(totalSize)
 		//if shouldReport(progress, *lastReported, reportInterval) {
-		klog.Infof("Progress: %.2f%% (Directory: %s)",
-			progress,
-			relPath+"/")
+		klog.Infof("Progress: %.2f%% (Directory: %s)", progress, relPath)
 		*lastReported = progress
 		callbackup(int(progress), 4096)
 		//}
