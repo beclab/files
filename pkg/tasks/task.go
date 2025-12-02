@@ -71,8 +71,8 @@ type Task struct {
 
 	// compress below
 	compressParam *models.CompressParam
-	pausedIndex   *int
-	pausedBytes   *int64
+	pausedIndex   int
+	pausedBytes   int64
 }
 
 func (t *Task) Id() string {
@@ -242,6 +242,16 @@ func (t *Task) updateProgressRsync(progress int, transfer int64) {
 	t.progress = progress
 	t.transfer = transfer
 	t.details = append(t.details, fmt.Sprintf("rsync files progress: %d, transfer: %d", progress, transfer))
+}
+
+func (t *Task) getCompressPauseInfo() (int, int64, bool) {
+	return t.pausedIndex, t.pausedBytes, t.suspend
+}
+
+func (t *Task) setCompressPauseInfo(index int, bytes int64) {
+	klog.Infof("[Task] Set compress pause index: %d, bytes: %d", index, bytes)
+	t.pausedIndex = index
+	t.pausedBytes = bytes
 }
 
 func (t *Task) resetProgressZero() {

@@ -23,27 +23,32 @@ func getFileSize(path string) int64 {
 }
 
 func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
-	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumeBytes *int64, paused *bool) error {
+	totalSize int64, updateProgress func(p int, t int64),
+	getPauseInfo func() (int, int64, bool),
+	setPauseInfo func(i int, b int64),
+) error {
+	resumeIndex, resumeBytes, paused := getPauseInfo()
+	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d, paused: %t", resumeIndex, resumeBytes, paused)
+
 	// 初始化或恢复进度跟踪变量
 	processedBytes := int64(0)
-	if resumeBytes != nil {
-		processedBytes = *resumeBytes
+	if resumeBytes != int64(0) {
+		processedBytes = resumeBytes
 	}
 	lastReported := -1.0
 	reportInterval := 0.5
 
 	currentFileIndex := 0
-	if resumeIndex != nil {
-		currentFileIndex = *resumeIndex
+	if resumeIndex != 0 {
+		currentFileIndex = resumeIndex
 	}
-	klog.Infof("[ZIP running LOG] processedBytes: %d, currentFileIndex: %d, paused: %t", processedBytes, currentFileIndex, *paused)
+	klog.Infof("[ZIP running LOG] processedBytes: %d, currentFileIndex: %d, paused: %t", processedBytes, currentFileIndex, paused)
 
 	select {
 	case <-ctx.Done():
-		if paused != nil && *paused {
+		if paused {
 			klog.Infof("[ZIP running LOG] Paused compressing before starting")
-			*resumeIndex = currentFileIndex
-			*resumeBytes = processedBytes
+			setPauseInfo(currentFileIndex, processedBytes)
 		} else {
 			klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
 		}
@@ -81,11 +86,10 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 
 		select {
 		case <-ctx.Done():
-			if paused != nil && *paused {
+			if paused {
 				// 保留已压缩内容，仅中断后续处理
 				klog.Infof("Compression interrupted at file %d", index)
-				*resumeIndex = index
-				*resumeBytes = processedBytes
+				setPauseInfo(currentFileIndex, processedBytes)
 				return ctx.Err()
 			} else {
 				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
@@ -125,7 +129,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 			&processedBytes,
 			&lastReported,
 			reportInterval,
-			callbackup, // progressWrapper, // 使用封装后的回调
+			updateProgress, // progressWrapper, // 使用封装后的回调
 		)
 		klog.Infof("[ZIP running LOG] after adding %s", filePath)
 
@@ -135,8 +139,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		}
 
 		// 保存当前处理位置到外部参数（关键状态同步点）
-		*resumeIndex = index
-		*resumeBytes = processedBytes
+		setPauseInfo(currentFileIndex, processedBytes)
 		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
 	}
 
@@ -144,7 +147,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	if totalSize > 0 {
 		progress := 100.0
 		klog.Infof("Compression completed: %.2f%%", progress)
-		callbackup(int(progress), 0)
+		updateProgress(int(progress), 0)
 	}
 	return nil
 }
@@ -216,7 +219,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 //}
 
 func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
-	processedBytes *int64, lastReported *float64, reportInterval float64, callbackup func(p int, t int64)) error {
+	processedBytes *int64, lastReported *float64, reportInterval float64, updateProgress func(p int, t int64)) error {
 
 	info, err := os.Stat(srcPath)
 	if err != nil {
@@ -240,7 +243,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		//if shouldReport(progress, *lastReported, reportInterval) {
 		klog.Infof("Progress: %.2f%% (Directory: %s)", progress, relPath)
 		*lastReported = progress
-		callbackup(int(progress), 4096)
+		updateProgress(int(progress), 4096)
 		//}
 		return nil // 目录处理完成直接返回
 	}
@@ -303,7 +306,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 					formatBytes(*processedBytes),
 					formatBytes(totalSize))
 				*lastReported = progress
-				callbackup(int(progress), int64(bytesRead))
+				updateProgress(int(progress), int64(bytesRead))
 				bytesRead = 0
 			}
 		}
@@ -315,7 +318,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 					formatBytes(*processedBytes),
 					formatBytes(totalSize))
 				*lastReported = progress
-				callbackup(int(progress), int64(bytesRead))
+				updateProgress(int(progress), int64(bytesRead))
 				bytesRead = 0
 			}
 			break

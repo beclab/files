@@ -31,7 +31,10 @@ const (
 // 统一压缩接口（同步版本）
 type Compressor interface {
 	Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64,
-		callbackup func(p int, t int64), resumeIndex *int, resumBytes *int64, paused *bool) error
+		updateProgress func(p int, t int64),
+		getPauseInfo func() (int, int64, bool),
+		setPauseInfo func(i int, b int64),
+	) error
 	Uncompress(ctx context.Context, src, dest string, override bool, callbackup func(p int, t int64)) error
 }
 
@@ -40,26 +43,26 @@ func GetCompressor(format string) (Compressor, error) {
 	switch format {
 	case FormatZIP:
 		return &ZipCompressor{}, nil
-	case FormatTAR:
-		return &TarCompressor{}, nil
-	case FormatTARGZ, "tgz":
-		return &TarGzipCompressor{}, nil
-	case FormatTARBZ2, "tbz2":
-		return &TarBzip2Compressor{}, nil
-	case FormatTARXZ, "txz":
-		return &TarXzCompressor{}, nil
-	case FormatRAR:
-		binPath := findRarBin()
-		if binPath == "" {
-			return nil, fmt.Errorf("RAR executable not found")
-		}
-		return &RarCompressor{binPath: binPath}, nil
-	case Format7Z:
-		binPath := find7zBin()
-		if binPath == "" {
-			return nil, fmt.Errorf("7z executable not found")
-		}
-		return &SevenZipCompressor{binPath: binPath}, nil
+	//case FormatTAR:
+	//	return &TarCompressor{}, nil
+	//case FormatTARGZ, "tgz":
+	//	return &TarGzipCompressor{}, nil
+	//case FormatTARBZ2, "tbz2":
+	//	return &TarBzip2Compressor{}, nil
+	//case FormatTARXZ, "txz":
+	//	return &TarXzCompressor{}, nil
+	//case FormatRAR:
+	//	binPath := findRarBin()
+	//	if binPath == "" {
+	//		return nil, fmt.Errorf("RAR executable not found")
+	//	}
+	//	return &RarCompressor{binPath: binPath}, nil
+	//case Format7Z:
+	//	binPath := find7zBin()
+	//	if binPath == "" {
+	//		return nil, fmt.Errorf("7z executable not found")
+	//	}
+	//	return &SevenZipCompressor{binPath: binPath}, nil
 	default:
 		return nil, fmt.Errorf("unsupported format: %s", format)
 	}
