@@ -12,11 +12,18 @@ func (t *Task) Compress() error {
 		return err
 	}
 
+	tFuncs := &compress.TaskFuncs{
+		UpdateProgress:       t.UpdateProgress,
+		GetCompressPauseInfo: t.GetCompressPauseInfo,
+		SetCompressPauseInfo: t.SetCompressPauseInfo,
+		GetCompressPaused:    t.GetCompressPaused,
+	}
+	
 	err = compressor.Compress(
 		t.ctx,
 		t.compressParam.DstPath, t.compressParam.FileList,
 		t.compressParam.RelPathList, t.compressParam.TotalSize,
-		t.UpdateProgress, t.GetCompressPauseInfo, t.SetCompressPauseInfo, t.GetCompressPaused)
+		tFuncs)
 	if err != nil {
 		klog.Errorf("compression failed: %v", err)
 		return fmt.Errorf("compression failed: %v", err)
