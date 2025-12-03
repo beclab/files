@@ -10,6 +10,7 @@ import (
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/files"
+	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
 	"files/pkg/models"
@@ -2304,6 +2305,7 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 	result["expire_time"] = sharePath.ExpireTime
 	result["create_time"] = sharePath.CreateTime
 	result["update_time"] = sharePath.UpdateTime
+	result["node"] = global.GlobalNode.GetMasterNode()
 
 	handler.RespSuccess(c, result)
 }

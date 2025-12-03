@@ -73,7 +73,6 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 			fileData.Path = sharePath
 			fileData.Name = sharePath
 			fileData.SharePermission = int32(permission)
-			fileData.ShareNode = shareNode
 			if sharePath == "/" {
 				fileData.Name = ""
 			}
@@ -94,7 +93,6 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 				item.FsType = common.Share
 				item.FsExtend = shareId
 				item.SharePermission = int32(permission)
-				item.ShareNode = shareNode
 				if item.IsDir {
 					item.Path = filepath.Join(sharePath, item.Name) + "/"
 				} else {
