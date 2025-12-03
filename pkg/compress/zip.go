@@ -3,7 +3,6 @@ package compress
 import (
 	"archive/zip"
 	"context"
-	"files/pkg/tasks"
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
@@ -17,7 +16,7 @@ import (
 type ZipCompressor struct{}
 
 func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
-	totalSize int64, t *tasks.Task) error {
+	totalSize int64, t *TaskFuncs) error {
 	klog.Infof("[ZIP running LOG] task: %+v", t)
 	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
 	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
@@ -197,7 +196,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 //}
 
 func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
-	processedBytes *int64, lastReported *float64, reportInterval float64, t *tasks.Task) error {
+	processedBytes *int64, lastReported *float64, reportInterval float64, t *TaskFuncs) error {
 
 	info, err := os.Stat(srcPath)
 	if err != nil {
