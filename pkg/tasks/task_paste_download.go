@@ -234,7 +234,7 @@ func (t *Task) DownloadFromFiles() error {
 				}
 
 				var progress = (t.transfer * 100) / int64(totalSize)
-				t.updateProgress(int(progress), int64(nw))
+				t.UpdateProgress(int(progress), int64(nw))
 			}
 
 			if er != nil {

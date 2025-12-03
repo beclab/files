@@ -2,6 +2,7 @@ package compress
 
 import (
 	"context"
+	"files/pkg/tasks"
 	"fmt"
 	"github.com/h2non/filetype"
 	"io"
@@ -30,12 +31,7 @@ const (
 
 // 统一压缩接口（同步版本）
 type Compressor interface {
-	Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64,
-		updateProgress func(p int, t int64),
-		getPauseInfo func() (int, int64),
-		setPauseInfo func(i int, b int64),
-		getPaused func() bool,
-	) error
+	Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64, t *tasks.Task) error
 	Uncompress(ctx context.Context, src, dest string, override bool, callbackup func(p int, t int64)) error
 }
 

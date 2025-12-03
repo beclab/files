@@ -540,7 +540,7 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)
 				var progress = (totalTransfers * 100) / totalSize
 				transferFinished = true
-				t.updateProgress(int(progress), transfers)
+				t.UpdateProgress(int(progress), transfers)
 				done = true
 				err = nil
 				break
@@ -549,7 +549,7 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 			if transfers != totalSize {
 				var progress = (totalTransfers * 100) / totalSize
 				klog.Infof("[Task] Id: %s, dst: %s, progress: %d (%s/%s)", t.id, dstPath, progress, common.FormatBytes(totalTransfers), common.FormatBytes(totalSize))
-				t.updateProgress(int(progress), transfers)
+				t.UpdateProgress(int(progress), transfers)
 				continue
 			}
 
@@ -557,7 +557,7 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 				klog.Infof("[Task] Id: %s, upload success, dst: %s", t.id, dstPath)
 				var progress = (totalTransfers * 100) / totalSize
 				transferFinished = true
-				t.updateProgress(int(progress), transfers)
+				t.UpdateProgress(int(progress), transfers)
 			}
 
 			if !jobStatusData.Finished {
