@@ -2,6 +2,7 @@ package compress
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -307,88 +308,252 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 }
 
 // ZIP解压
+//func (c *ZipCompressor) Uncompress(
+//	ctx context.Context,
+//	src, dest string,
+//	override bool,
+//	callbackup func(p int, t int64),
+//) error {
+//	r, err := zip.OpenReader(src)
+//	if err != nil {
+//		return err
+//	}
+//	defer r.Close()
+//
+//	total := len(r.File)
+//	processed := 0
+//
+//	for _, f := range r.File {
+//		select {
+//		case <-ctx.Done():
+//			klog.Infof("[ZIP running LOG] Cancelling uncompressed file: %s", f.Name)
+//			err = os.RemoveAll(dest)
+//			if err != nil {
+//				klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
+//			}
+//			return ctx.Err()
+//		default:
+//		}
+//
+//		fpath := filepath.Join(dest, f.Name)
+//		if !strings.HasPrefix(fpath, dest+"/") {
+//			return fmt.Errorf("非法路径: %s", f.Name)
+//		}
+//
+//		if f.FileInfo().IsDir() {
+//			os.MkdirAll(fpath, 0755)
+//			processed++
+//			klog.Infof("进度: %d/%d (%.2f%%) - %s",
+//				processed, total,
+//				float64(processed)/float64(total)*100,
+//				f.Name)
+//			callbackup(int(float64(processed)/float64(total)*100), 0)
+//			continue
+//		}
+//
+//		if !override {
+//			if _, err := os.Stat(fpath); err == nil {
+//				klog.Infof("跳过已存在的文件: %s", fpath)
+//				processed++
+//				klog.Infof("进度: %d/%d (%.2f%%)",
+//					processed, total,
+//					float64(processed)/float64(total)*100)
+//				callbackup(int(float64(processed)/float64(total)*100), 0)
+//				continue
+//			}
+//		}
+//
+//		os.MkdirAll(filepath.Dir(fpath), 0755)
+//
+//		out, err := os.Create(fpath)
+//		if err != nil {
+//			return err
+//		}
+//
+//		rc, err := f.Open()
+//		if err != nil {
+//			out.Close()
+//			return err
+//		}
+//
+//		_, err = io.Copy(out, rc)
+//		out.Close()
+//		rc.Close()
+//
+//		if err != nil {
+//			return err
+//		}
+//
+//		processed++
+//		klog.Infof("进度: %d/%d (%.2f%%) - %s",
+//			processed, total,
+//			float64(processed)/float64(total)*100,
+//			f.Name)
+//		callbackup(int(float64(processed)/float64(total)*100), 0)
+//	}
+//	return nil
+//}
+
 func (c *ZipCompressor) Uncompress(
 	ctx context.Context,
 	src, dest string,
 	override bool,
-	callbackup func(p int, t int64),
+	//callbackup func(p int, t int64),
+	t *TaskFuncs, // 新增任务控制参数
 ) error {
+	// 获取暂停恢复点
+	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
+	klog.Infof("[ZIP running LOG] Uncompress resume: index=%d, bytes=%d", resumeIndex, resumeBytes)
+
+	// 初始化进度跟踪
+	processedBytes := int64(0)
+	currentFileIndex := 0
+	if resumeBytes != 0 {
+		processedBytes = resumeBytes
+	}
+	if resumeIndex != 0 {
+		currentFileIndex = resumeIndex
+	}
+
+	// 打开ZIP文件
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
 
-	total := len(r.File)
-	processed := 0
+	// 预计算文件尺寸和总大小
+	fileSizes := make([]int64, len(r.File))
+	totalSize := int64(0)
+	for i, f := range r.File {
+		size := f.UncompressedSize64
+		fileSizes[i] = int64(size)
+		totalSize += int64(size)
+	}
 
-	for _, f := range r.File {
+	processedFiles := 0
+	//lastReport := time.Now()
+	//reportInterval := 500 * time.Millisecond
+
+	// 上下文取消检查
+	select {
+	case <-ctx.Done():
+		if t.GetCompressPaused() {
+			t.SetCompressPauseInfo(currentFileIndex, processedBytes)
+			return ctx.Err()
+		}
+		os.RemoveAll(dest)
+		return ctx.Err()
+	default:
+	}
+
+	for index := currentFileIndex; index < len(r.File); index++ {
+		f := r.File[index]
+		fpath := filepath.Join(dest, f.Name)
+
+		// 上下文检查
 		select {
 		case <-ctx.Done():
-			klog.Infof("[ZIP running LOG] Cancelling uncompressed file: %s", f.Name)
-			err = os.RemoveAll(dest)
-			if err != nil {
-				klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
+			if t.GetCompressPaused() {
+				t.SetCompressPauseInfo(index, processedBytes)
+				return ctx.Err()
 			}
+			os.RemoveAll(dest)
 			return ctx.Err()
 		default:
 		}
 
-		fpath := filepath.Join(dest, f.Name)
-		if !strings.HasPrefix(fpath, dest+"/") {
+		// 路径安全校验
+		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(filepath.Separator)) {
 			return fmt.Errorf("非法路径: %s", f.Name)
 		}
 
+		// 处理目录
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(fpath, 0755)
-			processed++
+			processedFiles++
 			klog.Infof("进度: %d/%d (%.2f%%) - %s",
-				processed, total,
-				float64(processed)/float64(total)*100,
+				processedFiles, len(r.File),
+				float64(processedFiles)/float64(len(r.File))*100,
 				f.Name)
-			callbackup(int(float64(processed)/float64(total)*100), 0)
+			t.UpdateProgress(int(float64(processedFiles)/float64(len(r.File))*100), processedBytes)
+			t.SetCompressPauseInfo(index+1, processedBytes)
 			continue
 		}
 
+		// 文件存在性检查
 		if !override {
 			if _, err := os.Stat(fpath); err == nil {
-				klog.Infof("跳过已存在的文件: %s", fpath)
-				processed++
+				klog.Infof("跳过已存在文件: %s", fpath)
+				processedFiles++
 				klog.Infof("进度: %d/%d (%.2f%%)",
-					processed, total,
-					float64(processed)/float64(total)*100)
-				callbackup(int(float64(processed)/float64(total)*100), 0)
+					processedFiles, len(r.File),
+					float64(processedFiles)/float64(len(r.File))*100)
+				t.UpdateProgress(int(float64(processedFiles)/float64(len(r.File))*100), processedBytes)
+				t.SetCompressPauseInfo(index+1, processedBytes)
 				continue
 			}
 		}
 
+		// 创建目标目录
 		os.MkdirAll(filepath.Dir(fpath), 0755)
 
+		// 打开源文件
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+
+		// ★★★ 关键修改1：恢复点处理（零Seek实现）
+		var reader io.Reader = rc
+		if index == currentFileIndex && resumeBytes > 0 {
+			prevTotal := int64(0)
+			for i := 0; i < currentFileIndex; i++ {
+				prevTotal += fileSizes[i]
+			}
+			offset := resumeBytes - prevTotal
+			if offset < 0 {
+				offset = 0
+			}
+			// 使用LimitReader实现断点续传
+			reader = io.LimitReader(rc, offset)
+		}
+
+		// ★★★ 关键修改2：内存缓冲区桥接
+		buf := new(bytes.Buffer)
+		_, err = io.Copy(buf, reader)
+		if err != nil {
+			return err
+		}
+
+		// 打开目标文件
 		out, err := os.Create(fpath)
 		if err != nil {
 			return err
 		}
+		defer out.Close()
 
-		rc, err := f.Open()
-		if err != nil {
-			out.Close()
-			return err
-		}
-
-		_, err = io.Copy(out, rc)
-		out.Close()
-		rc.Close()
-
+		// ★★★ 关键修改3：写入数据（零Seek实现）
+		_, err = out.Write(buf.Bytes())
 		if err != nil {
 			return err
 		}
 
-		processed++
-		klog.Infof("进度: %d/%d (%.2f%%) - %s",
-			processed, total,
-			float64(processed)/float64(total)*100,
-			f.Name)
-		callbackup(int(float64(processed)/float64(total)*100), 0)
+		// 更新进度
+		processedBytes += fileSizes[index]
+		processedFiles++
+
+		// 进度报告
+		progress := float64(processedBytes) / float64(totalSize) * 100
+		t.UpdateProgress(int(progress), processedBytes)
+		t.SetCompressPauseInfo(index+1, processedBytes)
+
+		klog.Infof("解压完成: %s (大小: %d字节)", f.Name, fileSizes[index])
 	}
+
+	// 最终完成处理
+	t.UpdateProgress(100, processedBytes)
+	klog.Infof("解压任务完成，总处理量: %d字节", processedBytes)
 	return nil
 }
