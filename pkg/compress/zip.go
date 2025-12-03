@@ -48,23 +48,43 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	default:
 	}
 
-	zipFile, err := os.Create(outputPath)
+	// 关键修改1：以读写模式打开文件，支持追加
+	zipFile, err := os.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		klog.Errorf("Failed to create zip file: %v", err)
+		klog.Errorf("Failed to open zip file: %v", err)
 		return err
 	}
-	defer func() {
-		if err = zipFile.Close(); err != nil {
-			klog.Errorf("Failed to close zip file: %v", err)
-		}
-	}()
+	defer zipFile.Close()
 
+	// 关键修改2：检查文件是否为空，决定是否创建新压缩器
+	fi, err := zipFile.Stat()
+	if err != nil {
+		klog.Errorf("Stat zip file error: %v", err)
+		return err
+	}
 	zipWriter := zip.NewWriter(zipFile)
-	defer func() {
-		if err = zipWriter.Close(); err != nil {
-			klog.Errorf("Failed to close zip writer: %v", err)
+	if fi.Size() > 0 {
+		// 关键修改3：读取现有压缩文件内容，定位到末尾
+		reader, err := zip.OpenReader(zipFile.Name())
+		if err != nil {
+			klog.Errorf("Open existing zip error: %v", err)
+			return err
 		}
-	}()
+		defer reader.Close()
+
+		// 关键修改4：跳过已处理的文件条目
+		processedFiles := make(map[string]bool)
+		for _, f := range reader.File {
+			processedFiles[f.Name] = true
+		}
+
+		// 调整索引跳过已处理文件
+		for i := 0; i < currentFileIndex; i++ {
+			if !processedFiles[relPathList[i]] {
+				klog.Warningf("Detected unprocessed file in existing zip: %s", relPathList[i])
+			}
+		}
+	}
 
 	for index := currentFileIndex; index < len(fileList); index++ {
 		filePath := fileList[index]
@@ -90,7 +110,16 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		default:
 		}
 
+		// 关键修改5：检查文件是否已存在
 		relPath := relPathList[index]
+		if fi, err := zipFile.Stat(); err == nil && fi.Size() > 0 {
+			if isFileInZip(zipFile, relPath) {
+				klog.Infof("Skipping already compressed file: %s", relPath)
+				t.SetCompressPauseInfo(index+1, processedBytes)
+				continue
+			}
+		}
+
 		err = addFileToZip(
 			zipWriter,
 			fileList[index],
@@ -128,6 +157,22 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		t.UpdateProgress(int(progress), 0)
 	}
 	return nil
+}
+
+// 新增辅助函数：检查文件是否存在于ZIP中
+func isFileInZip(f *os.File, targetPath string) bool {
+	reader, err := zip.OpenReader(f.Name())
+	if err != nil {
+		return false
+	}
+	defer reader.Close()
+
+	for _, file := range reader.File {
+		if file.Name == targetPath {
+			return true
+		}
+	}
+	return false
 }
 
 //func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
