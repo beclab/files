@@ -1,10 +1,10 @@
 package compress
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/klauspost/compress/zip"
 	"io"
 	"k8s.io/klog/v2"
 	"os"
@@ -22,7 +22,6 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
 	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
 
-	// 初始化或恢复进度跟踪变量
 	processedBytes := int64(0)
 	if resumeBytes != int64(0) {
 		processedBytes = resumeBytes
@@ -48,80 +47,50 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	default:
 	}
 
-	// 关键修改1：以读写模式打开文件，支持追加
-	zipFile, err := os.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0644)
+	f, err := os.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		klog.Errorf("Failed to open zip file: %v", err)
 		return err
 	}
-	defer zipFile.Close()
+	defer f.Close()
 
-	// 关键修改2：检查文件是否为空，决定是否创建新压缩器
-	fi, err := zipFile.Stat()
-	if err != nil {
-		klog.Errorf("Stat zip file error: %v", err)
-		return err
-	}
-	zipWriter := zip.NewWriter(zipFile)
-	if fi.Size() > 0 {
-		// 关键修改3：读取现有压缩文件内容，定位到末尾
-		reader, err := zip.OpenReader(zipFile.Name())
+	stat, _ := f.Stat()
+	var zw *zip.Writer
+	if stat.Size() > 0 {
+		r, err := zip.NewReader(f, stat.Size())
 		if err != nil {
-			klog.Errorf("Open existing zip error: %v", err)
-			return err
-		}
-		defer reader.Close()
-
-		// 关键修改4：跳过已处理的文件条目
-		processedFiles := make(map[string]bool)
-		for _, f := range reader.File {
-			processedFiles[f.Name] = true
-		}
-
-		// 调整索引跳过已处理文件
-		for i := 0; i < currentFileIndex; i++ {
-			if !processedFiles[relPathList[i]] {
-				klog.Warningf("Detected unprocessed file in existing zip: %s", relPathList[i])
+			zw = zip.NewWriter(f)
+		} else {
+			zw = zip.NewWriter(f)
+			for _, file := range r.File {
+				zw.Create(file.Name)
 			}
 		}
+	} else {
+		zw = zip.NewWriter(f)
 	}
+	defer zw.Close()
 
 	for index := currentFileIndex; index < len(fileList); index++ {
 		filePath := fileList[index]
-
 		klog.Infof("[ZIP running LOG] index: %d, filePath: %s", index, filePath)
-		klog.Infof("[ZIP running LOG] filePath: %s", filePath)
 
 		select {
 		case <-ctx.Done():
 			if t.GetCompressPaused() {
-				// 保留已压缩内容，仅中断后续处理
 				klog.Infof("Compression interrupted at file %d", index)
 				t.SetCompressPauseInfo(index, processedBytes)
 				return ctx.Err()
 			} else {
 				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
-				err = os.RemoveAll(outputPath)
-				if err != nil {
-					klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
-				}
 				return ctx.Err()
 			}
 		default:
 		}
 
-		// 关键修改5：检查文件是否已存在
 		relPath := relPathList[index]
-		if fi, err := zipFile.Stat(); err == nil && fi.Size() > 0 {
-			if isFileInZip(zipFile, relPath) {
-				klog.Infof("Skipping already compressed file: %s", relPath)
-				t.SetCompressPauseInfo(index+1, processedBytes)
-				continue
-			}
-		}
-
 		err = addFileToZip(
-			zipWriter,
+			zw,
 			fileList[index],
 			relPath,
 			totalSize,
@@ -142,37 +111,17 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 			}
 		}
 
-		// 保存当前处理位置到外部参数（关键状态同步点）
 		t.SetCompressPauseInfo(index, processedBytes)
 		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
-
-		klog.Infof("[ZIP running LOG] for pause test, will sleep 5 seconds...")
 		time.Sleep(5 * time.Second)
 	}
 
-	// 最终进度报告（保留原有逻辑）
 	if totalSize > 0 {
 		progress := 100.0
 		klog.Infof("Compression completed: %.2f%%", progress)
 		t.UpdateProgress(int(progress), 0)
 	}
 	return nil
-}
-
-// 新增辅助函数：检查文件是否存在于ZIP中
-func isFileInZip(f *os.File, targetPath string) bool {
-	reader, err := zip.OpenReader(f.Name())
-	if err != nil {
-		return false
-	}
-	defer reader.Close()
-
-	for _, file := range reader.File {
-		if file.Name == targetPath {
-			return true
-		}
-	}
-	return false
 }
 
 //func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
@@ -250,29 +199,23 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		return fmt.Errorf("stat error: %v", err)
 	}
 
-	// 关键修改1：处理目录类型
 	if info.IsDir() {
 		if !strings.HasSuffix(relPath, "/") {
 			relPath += "/"
 		}
-		// 创建目录占位符（必须以/结尾）
 		_, err = zw.Create(relPath)
 		if err != nil {
 			klog.Errorf("Failed to create directory entry: %v", err)
 			return err
 		}
-		// 关键修改2：更新进度（空目录也计入处理）
-		*processedBytes += 4096 // 占位但计入进度
+		*processedBytes += 4096
 		progress := float64(*processedBytes) * 100 / float64(totalSize)
-		//if shouldReport(progress, *lastReported, reportInterval) {
 		klog.Infof("Progress: %.2f%% (Directory: %s)", progress, relPath)
 		*lastReported = progress
 		t.UpdateProgress(int(progress), 4096)
-		//}
-		return nil // 目录处理完成直接返回
+		return nil
 	}
 
-	// 创建ZIP文件头（关键修正：使用NewEntry避免路径问题）
 	klog.Infof("Adding file: %s -> %s", srcPath, relPath)
 	header, err := zip.FileInfoHeader(info)
 	if err != nil {
@@ -282,15 +225,12 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 	header.Name = relPath
 	header.Method = zip.Deflate
 
-	// 关键修正1：使用Create()代替CreateHeader()确保路径正确处理
 	fileInZip, err := zw.Create(header.Name)
 	if err != nil {
-		// 添加详细错误日志
 		klog.Errorf("Zip create failed: %s (relPath: %s)", err, relPath)
 		return fmt.Errorf("failed to create zip entry: %v", err)
 	}
 
-	// 关键修正2：延迟打开源文件直到确认ZIP条目创建成功
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		klog.Errorf("Failed to open zip file: %v", err)
@@ -298,8 +238,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 	}
 	defer srcFile.Close()
 
-	// 动态缓冲区
-	buf := make([]byte, bufferSize(info.Size()))
+	buf := make([]byte, 4096)
 	bytesRead := 0
 	progress := 0.0
 
@@ -311,21 +250,16 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		}
 
 		if n > 0 {
-			// 关键修正3：捕获写入错误的详细上下文
 			_, err = fileInZip.Write(buf[:n])
 			if err != nil {
-				// 添加写入错误的详细诊断信息
 				klog.Errorf("Write error: %v (offset: %d, size: %d, path: %s)", err, bytesRead, n, relPath)
 				return fmt.Errorf("write failed at offset %d: %v", bytesRead, err)
 			}
-
-			// 更新全局进度
 			*processedBytes += int64(n)
 			bytesRead += n
 			progress = float64(*processedBytes) * 100 / float64(totalSize)
 
-			// 阈值触发式进度报告
-			if shouldReport(progress, *lastReported, reportInterval) {
+			if progress-*lastReported >= reportInterval {
 				klog.Infof("Progress: %.2f%% (%s/%s)", progress, formatBytes(*processedBytes), formatBytes(totalSize))
 				*lastReported = progress
 				t.UpdateProgress(int(progress), int64(bytesRead))
@@ -344,7 +278,6 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		}
 	}
 
-	// 关键修正4：显式刷新ZIP条目
 	if closer, ok := fileInZip.(io.Closer); ok {
 		closer.Close()
 	}
