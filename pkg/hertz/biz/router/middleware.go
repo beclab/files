@@ -671,11 +671,15 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 		DstShareType: dstShareType,
 		SrcOwner:     srcDriveParam.Owner,
 		DstOwner:     dstDriveParam.Owner,
+		SrcSharePath: fmt.Sprintf("/%s/%s/%s", src.FileType, src.Extend, strings.TrimPrefix(src.Path, "/")),
+		DstSharePath: fmt.Sprintf("/%s/%s/%s", dst.FileType, dst.Extend, strings.TrimPrefix(dst.Path, "/")),
 	}
 
 	var masterNodeName = global.GlobalNode.GetMasterNode()
 	var query = string(c.Request.QueryString())
 	var url = fmt.Sprintf("http://%s/%s/%s?%s", common.SERVER_HOST, strings.TrimPrefix(ShareApiPastePath, "/"), masterNodeName, query)
+
+	klog.Infof("[share] share paste rewrite url: %s", url)
 
 	var br io.Reader
 	bodyBytes, err := json.Marshal(param)

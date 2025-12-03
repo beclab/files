@@ -233,6 +233,12 @@ func (t *Task) updateProgress(progress int, transfer int64) {
 	t.details = append(t.details, fmt.Sprintf("rsync files progress: %d, transfer: %d", progress, transfer))
 }
 
+func (t *Task) updateProgressRsync(progress int, transfer int64) {
+	t.progress = progress
+	t.transfer = transfer
+	t.details = append(t.details, fmt.Sprintf("rsync files progress: %d, transfer: %d", progress, transfer))
+}
+
 func (t *Task) resetProgressZero() {
 	t.progress = 0
 	t.transfer = 0

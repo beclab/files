@@ -140,7 +140,7 @@ func (t *Task) rsync() error {
 		dstPath,
 	}
 
-	_, err = common.ExecRsync(t.ctx, rsync, args, t.updateProgress)
+	_, err = common.ExecRsync(t.ctx, rsync, args, t.updateProgressRsync)
 	if err != nil {
 		klog.Errorf("exec rsync error: %v", err)
 		return err

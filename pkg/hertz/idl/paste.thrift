@@ -9,6 +9,8 @@ struct PasteReq {
     6: string DstShareType (api.body="dstShareType");
     7: string SrcOwner (api.body="srcOwner");
     8: string DstOwner (api.body="dstOwner");
+    9: string SrcSharePath (api.body="srcSharePath");
+    10: string DstSharePath (api.body="dstSharePath");
 }
 
 struct PasteResp {
