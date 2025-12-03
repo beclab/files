@@ -181,8 +181,15 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 	var src = task.param.Src
 	var dst = task.param.Dst
 
-	var srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
-	var dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
+	var srcUri, dstUri string
+	if task.isShare {
+		srcUri = fmt.Sprintf("/%s/%s/%s", task.param.SrcSharePath.FileType, task.param.SrcSharePath.Extend, strings.TrimPrefix(task.param.SrcSharePath.Path, "/"))
+		dstUri = fmt.Sprintf("/%s/%s/%s", task.param.DstSharePath.FileType, task.param.DstSharePath.Extend, strings.TrimPrefix(task.param.DstSharePath.Path, "/"))
+	} else {
+		srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
+		dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
+	}
+
 	var dstFileName = files.GetPathName(dst.Path)
 	var srcFileName = files.GetPathName(src.Path)
 
@@ -242,8 +249,16 @@ func (t *taskManager) GetTasksByStatus(owner, status string) []*TaskInfo {
 		var src = task.param.Src
 		var dst = task.param.Dst
 
-		var srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
-		var dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
+		var srcUri, dstUri string
+
+		if task.isShare {
+			srcUri = fmt.Sprintf("/%s/%s/%s", task.param.SrcSharePath.FileType, task.param.SrcSharePath.Extend, strings.TrimPrefix(task.param.SrcSharePath.Path, "/"))
+			dstUri = fmt.Sprintf("/%s/%s/%s", task.param.DstSharePath.FileType, task.param.DstSharePath.Extend, strings.TrimPrefix(task.param.DstSharePath.Path, "/"))
+		} else {
+			srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
+			dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
+		}
+
 		var dstFileName = files.GetPathName(dst.Path)
 		var srcFileName = files.GetPathName(src.Path)
 

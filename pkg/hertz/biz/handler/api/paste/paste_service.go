@@ -65,6 +65,25 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		DstOwner:     req.DstOwner,
 	}
 
+	if pasteParam.Share == 1 {
+		srcShareParam, err := models.CreateFileParam(req.SrcOwner, req.SrcSharePath)
+		if err != nil {
+			klog.Errorf("file param error: %v, owner: %s", err, owner)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("src share file param error: %v", err)})
+			return
+		}
+		pasteParam.SrcSharePath = srcShareParam
+
+		dstShareParam, err := models.CreateFileParam(req.DstOwner, req.DstSharePath)
+		if err != nil {
+			klog.Errorf("file param error: %v, owner: %s", err, owner)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("dst share file param error: %v", err)})
+			return
+		}
+		pasteParam.DstSharePath = dstShareParam
+
+	}
+
 	handler := drivers.Adaptor.NewFileHandler(pasteParam.Src.FileType, &base.HandlerParam{})
 
 	task, err := handler.Paste(pasteParam)

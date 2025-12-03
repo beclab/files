@@ -44,7 +44,6 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 			select {
 			case result, ok := <-c.Ch:
 				if !ok {
-					errChan <- errors.New("chan is closed")
 					return
 				}
 				if result == "" {
@@ -59,9 +58,6 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 				if progress, trans, err := formatProgress(result); err == nil {
 					callbackup(progress, trans)
 					continue
-				} else {
-					errChan <- err
-					return
 				}
 
 				if formatFinished(result) {
@@ -116,9 +112,10 @@ func formatProgress(l string) (int, int64, error) {
 	// sent 479,087,779 bytes  received 184 bytes  8,189,537.83 bytes/sec
 	var lines = strings.Split(l, "\n")
 	for _, line := range lines {
-		if !strings.Contains(line, "% ") {
+		if !strings.Contains(line, "% ") || strings.Contains(line, "sending incremental file list") {
 			continue
 		}
+
 		var transfer int64
 		var s = strings.Fields(line)
 		if len(s) == 4 {
@@ -134,6 +131,7 @@ func formatProgress(l string) (int, int64, error) {
 			}
 		}
 	}
+	fmt.Println(">>>> rsync message: ", l)
 
 	return 0, 0, fmt.Errorf("not the progress")
 }

@@ -13,4 +13,6 @@ type PasteParam struct {
 	DstShareType            string `json:"dstShareType"`
 	SrcOwner                string `json:"srcOwner"`
 	DstOwner                string `json:"dstOwner"`
+	SrcSharePath            *FileParam
+	DstSharePath            *FileParam
 }
