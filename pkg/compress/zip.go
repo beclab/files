@@ -18,6 +18,7 @@ type ZipCompressor struct{}
 
 func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
 	totalSize int64, t *tasks.Task) error {
+	klog.Infof("[ZIP running LOG] task: %+v", t)
 	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
 	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
 
