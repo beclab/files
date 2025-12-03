@@ -3,6 +3,7 @@ package compress
 import (
 	"archive/zip"
 	"context"
+	"files/pkg/tasks"
 	"fmt"
 	"io"
 	"k8s.io/klog/v2"
@@ -15,21 +16,9 @@ import (
 // ZIP压缩器（保持原有实现）
 type ZipCompressor struct{}
 
-//func getFileSize(path string) int64 {
-//	info, err := os.Stat(path)
-//	if err != nil {
-//		return 0
-//	}
-//	return info.Size()
-//}
-
 func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
-	totalSize int64, updateProgress func(p int, t int64),
-	getPauseInfo func() (int, int64),
-	setPauseInfo func(i int, b int64),
-	getPaused func() bool,
-) error {
-	resumeIndex, resumeBytes := getPauseInfo()
+	totalSize int64, t *tasks.Task) error {
+	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
 	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
 
 	// 初始化或恢复进度跟踪变量
@@ -48,9 +37,9 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 
 	select {
 	case <-ctx.Done():
-		if getPaused() {
+		if t.GetCompressPaused() {
 			klog.Infof("[ZIP running LOG] Paused compressing before starting")
-			setPauseInfo(currentFileIndex, processedBytes)
+			t.SetCompressPauseInfo(currentFileIndex, processedBytes)
 		} else {
 			klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
 		}
@@ -84,10 +73,10 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 
 		select {
 		case <-ctx.Done():
-			if getPaused() {
+			if t.GetCompressPaused() {
 				// 保留已压缩内容，仅中断后续处理
 				klog.Infof("Compression interrupted at file %d", index)
-				setPauseInfo(index, processedBytes)
+				t.SetCompressPauseInfo(index, processedBytes)
 				return ctx.Err()
 			} else {
 				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
@@ -101,10 +90,6 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		}
 
 		relPath := relPathList[index]
-		//fileSize := getFileSize(filePath) // 保留原有文件大小获取逻辑
-
-		//klog.Infof("Processing file: %s (offset: %d, size: %d)", filePath, processedBytes, fileSize)
-
 		err = addFileToZip(
 			zipWriter,
 			fileList[index],
@@ -113,12 +98,12 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 			&processedBytes,
 			&lastReported,
 			reportInterval,
-			updateProgress, // progressWrapper, // 使用封装后的回调
+			t,
 		)
 		klog.Infof("[ZIP running LOG] after adding %s", filePath)
 
 		if err != nil {
-			if getPaused() {
+			if t.GetCompressPaused() {
 				klog.Infof("Compression paused at file %d", index)
 				return ctx.Err()
 			} else {
@@ -128,7 +113,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		}
 
 		// 保存当前处理位置到外部参数（关键状态同步点）
-		setPauseInfo(index, processedBytes)
+		t.SetCompressPauseInfo(index, processedBytes)
 		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
 
 		klog.Infof("[ZIP running LOG] for pause test, will sleep 5 seconds...")
@@ -139,7 +124,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	if totalSize > 0 {
 		progress := 100.0
 		klog.Infof("Compression completed: %.2f%%", progress)
-		updateProgress(int(progress), 0)
+		t.UpdateProgress(int(progress), 0)
 	}
 	return nil
 }
@@ -211,10 +196,11 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 //}
 
 func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
-	processedBytes *int64, lastReported *float64, reportInterval float64, updateProgress func(p int, t int64)) error {
+	processedBytes *int64, lastReported *float64, reportInterval float64, t *tasks.Task) error {
 
 	info, err := os.Stat(srcPath)
 	if err != nil {
+		klog.Errorf("stat error: %v", err)
 		return fmt.Errorf("stat error: %v", err)
 	}
 
@@ -235,7 +221,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		//if shouldReport(progress, *lastReported, reportInterval) {
 		klog.Infof("Progress: %.2f%% (Directory: %s)", progress, relPath)
 		*lastReported = progress
-		updateProgress(int(progress), 4096)
+		t.UpdateProgress(int(progress), 4096)
 		//}
 		return nil // 目录处理完成直接返回
 	}
@@ -244,6 +230,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 	klog.Infof("Adding file: %s -> %s", srcPath, relPath)
 	header, err := zip.FileInfoHeader(info)
 	if err != nil {
+		klog.Errorf("Failed to create zip header: %v", err)
 		return err
 	}
 	header.Name = relPath
@@ -260,6 +247,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 	// 关键修正2：延迟打开源文件直到确认ZIP条目创建成功
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
+		klog.Errorf("Failed to open zip file: %v", err)
 		return err
 	}
 	defer srcFile.Close()
@@ -281,8 +269,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 			_, err = fileInZip.Write(buf[:n])
 			if err != nil {
 				// 添加写入错误的详细诊断信息
-				klog.Errorf("Write error: %v (offset: %d, size: %d, path: %s)",
-					err, bytesRead, n, relPath)
+				klog.Errorf("Write error: %v (offset: %d, size: %d, path: %s)", err, bytesRead, n, relPath)
 				return fmt.Errorf("write failed at offset %d: %v", bytesRead, err)
 			}
 
@@ -293,24 +280,18 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 
 			// 阈值触发式进度报告
 			if shouldReport(progress, *lastReported, reportInterval) {
-				klog.Infof("Progress: %.2f%% (%s/%s)",
-					progress,
-					formatBytes(*processedBytes),
-					formatBytes(totalSize))
+				klog.Infof("Progress: %.2f%% (%s/%s)", progress, formatBytes(*processedBytes), formatBytes(totalSize))
 				*lastReported = progress
-				updateProgress(int(progress), int64(bytesRead))
+				t.UpdateProgress(int(progress), int64(bytesRead))
 				bytesRead = 0
 			}
 		}
 
 		if err == io.EOF {
 			if bytesRead != 0 {
-				klog.Infof("Progress: %.2f%% (%s/%s)",
-					progress,
-					formatBytes(*processedBytes),
-					formatBytes(totalSize))
+				klog.Infof("Progress: %.2f%% (%s/%s)", progress, formatBytes(*processedBytes), formatBytes(totalSize))
 				*lastReported = progress
-				updateProgress(int(progress), int64(bytesRead))
+				t.UpdateProgress(int(progress), int64(bytesRead))
 				bytesRead = 0
 			}
 			break

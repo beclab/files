@@ -16,7 +16,7 @@ func (t *Task) Compress() error {
 		t.ctx,
 		t.compressParam.DstPath, t.compressParam.FileList,
 		t.compressParam.RelPathList, t.compressParam.TotalSize,
-		t.updateProgress, t.getCompressPauseInfo, t.setCompressPauseInfo, t.getCompressPaused)
+		t.UpdateProgress, t.GetCompressPauseInfo, t.SetCompressPauseInfo, t.GetCompressPaused)
 	if err != nil {
 		klog.Errorf("compression failed: %v", err)
 		return fmt.Errorf("compression failed: %v", err)
@@ -38,7 +38,7 @@ func (t *Task) Uncompress() error {
 	err = compressor.Uncompress(
 		t.ctx, t.compressParam.SrcPath,
 		t.compressParam.DstPath, t.compressParam.Override,
-		t.updateProgress)
+		t.UpdateProgress)
 	if err != nil {
 		klog.Errorf("uncompression failed: %v", err)
 		return fmt.Errorf("uncompression failed: %v", err)
