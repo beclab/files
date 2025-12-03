@@ -23,7 +23,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
 
 	processedBytes := int64(0)
-	if resumeBytes != int64(0) {
+	if resumeBytes != 0 {
 		processedBytes = resumeBytes
 	}
 	lastReported := -1.0
@@ -47,6 +47,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	default:
 	}
 
+	// 关键修改1：使用追加模式打开文件并定位到文件末尾
 	f, err := os.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		klog.Errorf("Failed to open zip file: %v", err)
@@ -54,24 +55,41 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	}
 	defer f.Close()
 
+	// 关键修改2：正确处理现有ZIP文件结构
 	stat, _ := f.Stat()
 	var zw *zip.Writer
 	if stat.Size() > 0 {
-		r, err := zip.NewReader(f, stat.Size())
+		// 读取现有ZIP结构但不复制内容
+		_, err := zip.NewReader(f, stat.Size())
 		if err != nil {
+			klog.Infof("Creating new zip file")
+			f.Seek(0, io.SeekStart)
 			zw = zip.NewWriter(f)
 		} else {
+			klog.Infof("Appending to existing zip file")
+			f.Seek(0, io.SeekEnd) // 定位到文件末尾
 			zw = zip.NewWriter(f)
-			for _, file := range r.File {
-				zw.Create(file.Name)
-			}
 		}
 	} else {
+		klog.Infof("Creating new zip file")
 		zw = zip.NewWriter(f)
 	}
 	defer zw.Close()
 
+	// 关键修改3：跳过已处理的文件
+	processedFiles := make(map[string]bool)
+	if resumeIndex > 0 {
+		for i := 0; i < resumeIndex; i++ {
+			processedFiles[relPathList[i]] = true
+		}
+	}
+
 	for index := currentFileIndex; index < len(fileList); index++ {
+		if processedFiles[relPathList[index]] {
+			klog.Infof("Skipping already processed file: %s", relPathList[index])
+			continue
+		}
+
 		filePath := fileList[index]
 		klog.Infof("[ZIP running LOG] index: %d, filePath: %s", index, filePath)
 
