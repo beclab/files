@@ -38,7 +38,7 @@ type TaskFuncs struct {
 // 统一压缩接口（同步版本）
 type Compressor interface {
 	Compress(ctx context.Context, outputPath string, fileList, relPathList []string, totalSize int64, t *TaskFuncs) error
-	Uncompress(ctx context.Context, src, dest string, override bool, callbackup func(p int, t int64)) error
+	Uncompress(ctx context.Context, src, dest string, override bool, t *TaskFuncs) error
 }
 
 // 工厂函数扩展
