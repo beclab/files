@@ -564,11 +564,13 @@ func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHan
 	filePrefix := files.GetPrefixPath(fileParam.Path)
 	fileName, isFile := files.GetFileNameFromPath(fileParam.Path)
 	if !isFile {
+		klog.Errorf("Sync edit, path %s is not file", fileParam.Path)
 		return nil, fmt.Errorf("path %s is not file", fileParam.Path)
 	}
 
 	getRespBody, err := seahub.HandleUpdateLink(contextArgs.FileParam, "api")
 	if err != nil {
+		klog.Errorf("Sync edit, update link error: %v, path: %s", err, fileParam.Path)
 		return nil, err
 	}
 
@@ -580,6 +582,7 @@ func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHan
 
 	bodyBytes, err := io.ReadAll(contextArgs.QueryParam.Body)
 	if err != nil {
+		klog.Errorf("Sync edit, read body error: %v, path: %s", err, fileParam.Path)
 		return nil, err
 	}
 
@@ -592,26 +595,35 @@ func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHan
 
 	fileWriter, err := writer.CreateFormFile("files_content", fileName)
 	if err != nil {
+		klog.Errorf("Sync edit, create form file error: %v, path: %s", err, fileParam.Path)
 		return nil, err
 	}
 
 	if _, err = fileWriter.Write(bodyBytes); err != nil {
+		klog.Errorf("Sync edit, write form file error: %v, path: %s", err, fileParam.Path)
 		return nil, err
 	}
 
 	if err = writer.Close(); err != nil {
+		klog.Errorf("Sync edit, close writer error: %v, path: %s", err, fileParam.Path)
 		return nil, err
 	}
+
+	boundary := writer.Boundary()
+	contentType := "multipart/form-data; boundary=" + boundary
 
 	client := &http.Client{}
 	req, err := http.NewRequest("POST", updateUrl, bytes.NewReader(body.Bytes()))
 	if err != nil {
+		klog.Errorf("Sync edit, create request error: %v, path: %s", err, fileParam.Path)
 		return nil, err
 	}
 	req.Header = contextArgs.QueryParam.Header.Clone()
+	req.Header.Set("Content-Type", contentType)
 
 	resp, err := client.Do(req)
 	if err != nil {
+		klog.Errorf("Sync edit, http request error: %v, path: %s", err, fileParam.Path)
 		return nil, err
 	}
 
@@ -622,23 +634,23 @@ func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHan
 
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		klog.Errorf("Sync edit, read response body error: %v, path: %s", err, fileParam.Path)
 		return nil, err
 	}
 
-	var responseMap map[string]interface{}
-	err = json.Unmarshal(respBody, &responseMap)
-	if err != nil {
-		return nil, err
+	etag := resp.Header.Get("ETag")
+	if etag != "" {
+		klog.Infof("ETag: %s", etag)
+	} else {
+		klog.Info("No ETag in response header")
 	}
+
+	klog.Infof("Sync edit, path: %s, resp: %s", fileParam.Path, string(respBody))
 	defer resp.Body.Close()
 
-	if err != nil {
-		klog.Errorf("Sync edit, path: %s, error: %v", fileParam.Path, err)
-		return nil, err
-	}
-	klog.Infof("Sync edit, path: %s, resp: %s", fileParam.Path, string(respBody))
-
-	return nil, nil
+	return &models.EditHandlerResponse{
+		Etag: etag,
+	}, nil
 }
 
 func (s *SyncStorage) generateDirentsData(fileParam *models.FileParam, filesData *Files, stopChan <-chan struct{}, dataChan chan<- string) {
