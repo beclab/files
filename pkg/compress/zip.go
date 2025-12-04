@@ -402,6 +402,24 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 			continue
 		}
 
+		if info.IsDir() {
+			if !strings.HasSuffix(relPath, "/") {
+				relPath += "/"
+			}
+			_, err = zw.Create(relPath)
+			if err != nil {
+				klog.Errorf("Failed to create directory entry: %v", err)
+				return err
+			}
+			processedBytes += 4096
+			progress := float64(processedBytes) * 100 / float64(totalSize)
+			klog.Infof("Progress: %.2f%% (Directory: %s)", progress, relPath)
+			lastReported = progress
+			t.UpdateProgress(int(progress), 4096)
+			t.SetCompressPauseInfo(index, processedBytes)
+			continue
+		}
+
 		// 关键修改2：使用正确的CreateHeader方法
 		header, _ := zip.FileInfoHeader(info)
 		header.Name = relPath
