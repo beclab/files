@@ -104,6 +104,7 @@ func (t *taskManager) CreateCompressTask(param *models.CompressParam) *Task {
 		manager:       t,
 		createAt:      time.Now(),
 		totalSize:     param.TotalSize,
+		isShare:       false,
 	}
 	return task
 }
