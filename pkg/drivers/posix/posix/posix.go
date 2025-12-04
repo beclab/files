@@ -466,7 +466,8 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 func (s *PosixStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
 	var fileParam = contextArgs.FileParam
 	var user = fileParam.Owner
-	klog.Infof("Posix edit, user: %s, path: %s", user, fileParam.Path)
+
+	klog.Infof("Posix edit, user: %s, path: %s, param: %s", user, fileParam.Path, common.ParseString(fileParam))
 
 	fileName, isFile := files.GetFileNameFromPath(fileParam.Path)
 	if !isFile {
@@ -485,10 +486,9 @@ func (s *PosixStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHa
 
 	filePath := uri + fileParam.Path
 
-	exists, err := afero.Exists(files.DefaultFs, filePath)
-	if err != nil {
-		return nil, err
-	}
+	klog.Infof("Posix edit, user: %s, file path: %s", user, filePath)
+
+	exists := files.FilePathExists(filePath)
 	if !exists {
 		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
 	}
