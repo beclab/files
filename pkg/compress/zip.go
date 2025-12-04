@@ -334,7 +334,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	default:
 	}
 
-	f, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	f, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		klog.Errorf("Failed to open zip file: %v", err)
 		return err
@@ -343,24 +343,6 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 
 	zw := zip.NewWriter(f)
 	defer zw.Close()
-	//defer func() {
-	//	if err := zw.Close(); err != nil {
-	//		klog.Errorf("Failed to close zip writer: %v", err)
-	//	}
-	//}()
-
-	// 正确记录已存在的文件头
-	//existingFiles := make(map[string]*zip.FileHeader)
-	//if resumeIndex > 0 {
-	//	r, err := zip.NewReader(f, totalSize)
-	//	if err == nil {
-	//		for _, file := range r.File {
-	//			// 深拷贝文件头信息
-	//			headerCopy := file.FileHeader
-	//			existingFiles[file.Name] = &headerCopy
-	//		}
-	//	}
-	//}
 
 	processedFiles := make(map[string]struct{}, len(relPathList))
 	for i := 0; i < resumeIndex; i++ {
