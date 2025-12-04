@@ -16,131 +16,131 @@ import (
 // ZIP压缩器（保持原有实现）
 type ZipCompressor struct{}
 
-func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
-	totalSize int64, t *TaskFuncs) error {
-	klog.Infof("[ZIP running LOG] task: %+v", t)
-	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
-	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
-
-	processedBytes := int64(0)
-	if resumeBytes != 0 {
-		processedBytes = resumeBytes
-	}
-	lastReported := -1.0
-	reportInterval := 0.5
-
-	currentFileIndex := 0
-	if resumeIndex != 0 {
-		currentFileIndex = resumeIndex
-	}
-	klog.Infof("[ZIP running LOG] processedBytes: %d, currentFileIndex: %d", processedBytes, currentFileIndex)
-
-	select {
-	case <-ctx.Done():
-		if t.GetCompressPaused() {
-			klog.Infof("[ZIP running LOG] Paused compressing before starting")
-			t.SetCompressPauseInfo(currentFileIndex, processedBytes)
-		} else {
-			klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
-		}
-		return ctx.Err()
-	default:
-	}
-
-	// 关键修改1：使用追加模式打开文件并定位到文件末尾
-	f, err := os.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		klog.Errorf("Failed to open zip file: %v", err)
-		return err
-	}
-	defer f.Close()
-
-	// 关键修改2：正确处理现有ZIP文件结构
-	stat, _ := f.Stat()
-	var zw *zip.Writer
-	if stat.Size() > 0 {
-		// 读取现有ZIP结构但不复制内容
-		_, err := zip.NewReader(f, stat.Size())
-		if err != nil {
-			klog.Infof("Creating new zip file")
-			f.Seek(0, io.SeekStart)
-			zw = zip.NewWriter(f)
-		} else {
-			klog.Infof("Appending to existing zip file")
-			f.Seek(0, io.SeekEnd) // 定位到文件末尾
-			zw = zip.NewWriter(f)
-		}
-	} else {
-		klog.Infof("Creating new zip file")
-		zw = zip.NewWriter(f)
-	}
-	defer zw.Close()
-
-	// 关键修改3：跳过已处理的文件
-	processedFiles := make(map[string]bool)
-	if resumeIndex > 0 {
-		for i := 0; i < resumeIndex; i++ {
-			processedFiles[relPathList[i]] = true
-		}
-	}
-
-	for index := currentFileIndex; index < len(fileList); index++ {
-		if processedFiles[relPathList[index]] {
-			klog.Infof("Skipping already processed file: %s", relPathList[index])
-			continue
-		}
-
-		filePath := fileList[index]
-		klog.Infof("[ZIP running LOG] index: %d, filePath: %s", index, filePath)
-
-		select {
-		case <-ctx.Done():
-			if t.GetCompressPaused() {
-				klog.Infof("Compression interrupted at file %d", index)
-				t.SetCompressPauseInfo(index, processedBytes)
-				return ctx.Err()
-			} else {
-				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
-				return ctx.Err()
-			}
-		default:
-		}
-
-		relPath := relPathList[index]
-		err = addFileToZip(
-			zw,
-			fileList[index],
-			relPath,
-			totalSize,
-			&processedBytes,
-			&lastReported,
-			reportInterval,
-			t,
-		)
-		klog.Infof("[ZIP running LOG] after adding %s", filePath)
-
-		if err != nil {
-			if t.GetCompressPaused() {
-				klog.Infof("Compression paused at file %d", index)
-				return ctx.Err()
-			} else {
-				klog.Errorf("Compression failed: %v", err)
-				return err
-			}
-		}
-
-		t.SetCompressPauseInfo(index, processedBytes)
-		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
-		time.Sleep(5 * time.Second)
-	}
-
-	if totalSize > 0 {
-		progress := 100.0
-		klog.Infof("Compression completed: %.2f%%", progress)
-		t.UpdateProgress(int(progress), 0)
-	}
-	return nil
-}
+//func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
+//	totalSize int64, t *TaskFuncs) error {
+//	klog.Infof("[ZIP running LOG] task: %+v", t)
+//	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
+//	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
+//
+//	processedBytes := int64(0)
+//	if resumeBytes != 0 {
+//		processedBytes = resumeBytes
+//	}
+//	lastReported := -1.0
+//	reportInterval := 0.5
+//
+//	currentFileIndex := 0
+//	if resumeIndex != 0 {
+//		currentFileIndex = resumeIndex
+//	}
+//	klog.Infof("[ZIP running LOG] processedBytes: %d, currentFileIndex: %d", processedBytes, currentFileIndex)
+//
+//	select {
+//	case <-ctx.Done():
+//		if t.GetCompressPaused() {
+//			klog.Infof("[ZIP running LOG] Paused compressing before starting")
+//			t.SetCompressPauseInfo(currentFileIndex, processedBytes)
+//		} else {
+//			klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
+//		}
+//		return ctx.Err()
+//	default:
+//	}
+//
+//	// 关键修改1：使用追加模式打开文件并定位到文件末尾
+//	f, err := os.OpenFile(outputPath, os.O_RDWR|os.O_CREATE, 0666)
+//	if err != nil {
+//		klog.Errorf("Failed to open zip file: %v", err)
+//		return err
+//	}
+//	defer f.Close()
+//
+//	// 关键修改2：正确处理现有ZIP文件结构
+//	stat, _ := f.Stat()
+//	var zw *zip.Writer
+//	if stat.Size() > 0 {
+//		// 读取现有ZIP结构但不复制内容
+//		_, err := zip.NewReader(f, stat.Size())
+//		if err != nil {
+//			klog.Infof("Creating new zip file")
+//			f.Seek(0, io.SeekStart)
+//			zw = zip.NewWriter(f)
+//		} else {
+//			klog.Infof("Appending to existing zip file")
+//			f.Seek(0, io.SeekEnd) // 定位到文件末尾
+//			zw = zip.NewWriter(f)
+//		}
+//	} else {
+//		klog.Infof("Creating new zip file")
+//		zw = zip.NewWriter(f)
+//	}
+//	defer zw.Close()
+//
+//	// 关键修改3：跳过已处理的文件
+//	processedFiles := make(map[string]bool)
+//	if resumeIndex > 0 {
+//		for i := 0; i < resumeIndex; i++ {
+//			processedFiles[relPathList[i]] = true
+//		}
+//	}
+//
+//	for index := currentFileIndex; index < len(fileList); index++ {
+//		if processedFiles[relPathList[index]] {
+//			klog.Infof("Skipping already processed file: %s", relPathList[index])
+//			continue
+//		}
+//
+//		filePath := fileList[index]
+//		klog.Infof("[ZIP running LOG] index: %d, filePath: %s", index, filePath)
+//
+//		select {
+//		case <-ctx.Done():
+//			if t.GetCompressPaused() {
+//				klog.Infof("Compression interrupted at file %d", index)
+//				t.SetCompressPauseInfo(index, processedBytes)
+//				return ctx.Err()
+//			} else {
+//				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
+//				return ctx.Err()
+//			}
+//		default:
+//		}
+//
+//		relPath := relPathList[index]
+//		err = addFileToZip(
+//			zw,
+//			fileList[index],
+//			relPath,
+//			totalSize,
+//			&processedBytes,
+//			&lastReported,
+//			reportInterval,
+//			t,
+//		)
+//		klog.Infof("[ZIP running LOG] after adding %s", filePath)
+//
+//		if err != nil {
+//			if t.GetCompressPaused() {
+//				klog.Infof("Compression paused at file %d", index)
+//				return ctx.Err()
+//			} else {
+//				klog.Errorf("Compression failed: %v", err)
+//				return err
+//			}
+//		}
+//
+//		t.SetCompressPauseInfo(index, processedBytes)
+//		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
+//		time.Sleep(5 * time.Second)
+//	}
+//
+//	if totalSize > 0 {
+//		progress := 100.0
+//		klog.Infof("Compression completed: %.2f%%", progress)
+//		t.UpdateProgress(int(progress), 0)
+//	}
+//	return nil
+//}
 
 //func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
 //	totalSize int64, callbackup func(p int, t int64), resumeIndex *int, resumeBytes *int64, paused *bool) error {
@@ -208,57 +208,248 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 //	return nil
 //}
 
-func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
-	processedBytes *int64, lastReported *float64, reportInterval float64, t *TaskFuncs) error {
+//func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
+//	processedBytes *int64, lastReported *float64, reportInterval float64, t *TaskFuncs) error {
+//
+//	info, err := os.Stat(srcPath)
+//	if err != nil {
+//		klog.Errorf("stat error: %v", err)
+//		return fmt.Errorf("stat error: %v", err)
+//	}
+//
+//	if info.IsDir() {
+//		if !strings.HasSuffix(relPath, "/") {
+//			relPath += "/"
+//		}
+//		_, err = zw.Create(relPath)
+//		if err != nil {
+//			klog.Errorf("Failed to create directory entry: %v", err)
+//			return err
+//		}
+//		*processedBytes += 4096
+//		progress := float64(*processedBytes) * 100 / float64(totalSize)
+//		klog.Infof("Progress: %.2f%% (Directory: %s)", progress, relPath)
+//		*lastReported = progress
+//		t.UpdateProgress(int(progress), 4096)
+//		return nil
+//	}
+//
+//	klog.Infof("Adding file: %s -> %s", srcPath, relPath)
+//	header, err := zip.FileInfoHeader(info)
+//	if err != nil {
+//		klog.Errorf("Failed to create zip header: %v", err)
+//		return err
+//	}
+//	header.Name = relPath
+//	header.Method = zip.Deflate
+//
+//	fileInZip, err := zw.Create(header.Name)
+//	if err != nil {
+//		klog.Errorf("Zip create failed: %s (relPath: %s)", err, relPath)
+//		return fmt.Errorf("failed to create zip entry: %v", err)
+//	}
+//
+//	srcFile, err := os.Open(srcPath)
+//	if err != nil {
+//		klog.Errorf("Failed to open zip file: %v", err)
+//		return err
+//	}
+//	defer srcFile.Close()
+//
+//	buf := make([]byte, 4096)
+//	bytesRead := 0
+//	progress := 0.0
+//
+//	for {
+//		n, err := srcFile.Read(buf)
+//		if err != nil && err != io.EOF {
+//			klog.Errorf("Read error: %v", err)
+//			return err
+//		}
+//
+//		if n > 0 {
+//			_, err = fileInZip.Write(buf[:n])
+//			if err != nil {
+//				klog.Errorf("Write error: %v (offset: %d, size: %d, path: %s)", err, bytesRead, n, relPath)
+//				return fmt.Errorf("write failed at offset %d: %v", bytesRead, err)
+//			}
+//			*processedBytes += int64(n)
+//			bytesRead += n
+//			progress = float64(*processedBytes) * 100 / float64(totalSize)
+//
+//			if progress-*lastReported >= reportInterval {
+//				klog.Infof("Progress: %.2f%% (%s/%s)", progress, formatBytes(*processedBytes), formatBytes(totalSize))
+//				*lastReported = progress
+//				t.UpdateProgress(int(progress), int64(bytesRead))
+//				bytesRead = 0
+//			}
+//		}
+//
+//		if err == io.EOF {
+//			if bytesRead != 0 {
+//				klog.Infof("Progress: %.2f%% (%s/%s)", progress, formatBytes(*processedBytes), formatBytes(totalSize))
+//				*lastReported = progress
+//				t.UpdateProgress(int(progress), int64(bytesRead))
+//				bytesRead = 0
+//			}
+//			break
+//		}
+//	}
+//
+//	if closer, ok := fileInZip.(io.Closer); ok {
+//		closer.Close()
+//	}
+//
+//	return nil
+//}
 
-	info, err := os.Stat(srcPath)
-	if err != nil {
-		klog.Errorf("stat error: %v", err)
-		return fmt.Errorf("stat error: %v", err)
+func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
+	totalSize int64, t *TaskFuncs) error {
+	klog.Infof("[ZIP running LOG] task: %+v", t)
+	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
+	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
+
+	processedBytes := int64(0)
+	if resumeBytes != 0 {
+		processedBytes = resumeBytes
+	}
+	lastReported := -1.0
+	reportInterval := 0.5
+
+	currentFileIndex := 0
+	if resumeIndex != 0 {
+		currentFileIndex = resumeIndex
+	}
+	klog.Infof("[ZIP running LOG] processedBytes: %d, currentFileIndex: %d", processedBytes, currentFileIndex)
+
+	select {
+	case <-ctx.Done():
+		if t.GetCompressPaused() {
+			klog.Infof("[ZIP running LOG] Paused compressing before starting")
+			t.SetCompressPauseInfo(currentFileIndex, processedBytes)
+		} else {
+			klog.Infof("[ZIP running LOG] Cancelled compressing before starting")
+		}
+		return ctx.Err()
+	default:
 	}
 
-	if info.IsDir() {
-		if !strings.HasSuffix(relPath, "/") {
-			relPath += "/"
-		}
-		_, err = zw.Create(relPath)
-		if err != nil {
-			klog.Errorf("Failed to create directory entry: %v", err)
-			return err
-		}
-		*processedBytes += 4096
-		progress := float64(*processedBytes) * 100 / float64(totalSize)
-		klog.Infof("Progress: %.2f%% (Directory: %s)", progress, relPath)
-		*lastReported = progress
-		t.UpdateProgress(int(progress), 4096)
-		return nil
-	}
-
-	klog.Infof("Adding file: %s -> %s", srcPath, relPath)
-	header, err := zip.FileInfoHeader(info)
+	f, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
-		klog.Errorf("Failed to create zip header: %v", err)
+		klog.Errorf("Failed to open zip file: %v", err)
 		return err
 	}
-	header.Name = relPath
-	header.Method = zip.Deflate
+	defer f.Close()
 
-	fileInZip, err := zw.Create(header.Name)
-	if err != nil {
-		klog.Errorf("Zip create failed: %s (relPath: %s)", err, relPath)
-		return fmt.Errorf("failed to create zip entry: %v", err)
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+	//defer func() {
+	//	if err := zw.Close(); err != nil {
+	//		klog.Errorf("Failed to close zip writer: %v", err)
+	//	}
+	//}()
+
+	// 正确记录已存在的文件头
+	//existingFiles := make(map[string]*zip.FileHeader)
+	//if resumeIndex > 0 {
+	//	r, err := zip.NewReader(f, totalSize)
+	//	if err == nil {
+	//		for _, file := range r.File {
+	//			// 深拷贝文件头信息
+	//			headerCopy := file.FileHeader
+	//			existingFiles[file.Name] = &headerCopy
+	//		}
+	//	}
+	//}
+
+	processedFiles := make(map[string]struct{}, len(relPathList))
+	for i := 0; i < resumeIndex; i++ {
+		processedFiles[relPathList[i]] = struct{}{}
 	}
+
+	for index := currentFileIndex; index < len(fileList); index++ {
+		relPath := relPathList[index]
+		filePath := fileList[index]
+
+		select {
+		case <-ctx.Done():
+			klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
+			err = os.RemoveAll(outputPath)
+			if err != nil {
+				klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
+			}
+			return ctx.Err()
+		default:
+		}
+
+		info, err := os.Stat(filePath)
+		if err != nil {
+			klog.Errorf("stat error: %v", err)
+			continue
+		}
+
+		//// 关键修改1：正确处理已存在文件的跳过逻辑
+		//if processedFiles[relPath] || existingFiles[relPath] != nil {
+		//	klog.Infof("Skipping existing file: %s", relPath)
+		//	processedBytes += info.Size()
+		//	t.UpdateProgress(int(float64(processedBytes)*100/float64(totalSize)), info.Size())
+		//	continue
+		//}
+		if _, processed := processedFiles[relPath]; processed {
+			// 关键修正2：直接使用已记录的resumeBytes
+			klog.Infof("Skipping processed file: %s", relPath)
+			t.SetCompressPauseInfo(index, processedBytes)
+			continue
+		}
+
+		// 关键修改2：使用正确的CreateHeader方法
+		header, _ := zip.FileInfoHeader(info)
+		header.Name = relPath
+		header.Method = zip.Deflate
+
+		// 关键修改3：使用CreateHeader创建文件头
+		fileInZip, err := zw.CreateHeader(header)
+		if err != nil {
+			klog.Errorf("CreateHeader failed: %v", err)
+			continue
+		}
+
+		// 关键修改4：传递文件头信息到写入函数
+		err = addFileToZip(fileInZip, filePath,
+			totalSize, &processedBytes, &lastReported, reportInterval, t)
+		if err != nil {
+			klog.Errorf("Add file failed: %v", err)
+			return err
+		}
+
+		t.SetCompressPauseInfo(index, processedBytes)
+		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
+		time.Sleep(5 * time.Second)
+	}
+
+	if totalSize > 0 {
+		progress := 100.0
+		klog.Infof("Compression completed: %.2f%%", progress)
+		t.UpdateProgress(int(progress), 0)
+	}
+	return nil
+}
+
+// 完全修正版 addFileToZip 函数
+func addFileToZip(fileInZip io.Writer, srcPath string,
+	totalSize int64, processedBytes *int64, lastReported *float64,
+	reportInterval float64, t *TaskFuncs) error {
 
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
-		klog.Errorf("Failed to open zip file: %v", err)
+		klog.Errorf("Failed to open file: %v", err)
 		return err
 	}
 	defer srcFile.Close()
 
 	buf := make([]byte, 4096)
 	bytesRead := 0
-	progress := 0.0
+	progress := float64(0)
 
 	for {
 		n, err := srcFile.Read(buf)
@@ -270,8 +461,8 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		if n > 0 {
 			_, err = fileInZip.Write(buf[:n])
 			if err != nil {
-				klog.Errorf("Write error: %v (offset: %d, size: %d, path: %s)", err, bytesRead, n, relPath)
-				return fmt.Errorf("write failed at offset %d: %v", bytesRead, err)
+				klog.Errorf("Write error: %v", err)
+				return fmt.Errorf("write failed: %v", err)
 			}
 			*processedBytes += int64(n)
 			bytesRead += n
@@ -296,6 +487,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		}
 	}
 
+	// 关键修改12：显式关闭文件写入器
 	if closer, ok := fileInZip.(io.Closer); ok {
 		closer.Close()
 	}
