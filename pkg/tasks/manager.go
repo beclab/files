@@ -200,17 +200,27 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 	var src = task.param.Src
 	var dst = task.param.Dst
 
-	var srcUri, dstUri string
-	if task.isShare {
-		srcUri = fmt.Sprintf("/%s/%s/%s", task.param.SrcSharePath.FileType, task.param.SrcSharePath.Extend, strings.TrimPrefix(task.param.SrcSharePath.Path, "/"))
-		dstUri = fmt.Sprintf("/%s/%s/%s", task.param.DstSharePath.FileType, task.param.DstSharePath.Extend, strings.TrimPrefix(task.param.DstSharePath.Path, "/"))
-	} else {
-		srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
-		dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
+	srcUri := ""
+	dstUri := ""
+	srcFileName := ""
+	dstFileName := ""
+	if src != nil {
+		if task.isShare {
+			srcUri = fmt.Sprintf("/%s/%s/%s", task.param.SrcSharePath.FileType, task.param.SrcSharePath.Extend, strings.TrimPrefix(task.param.SrcSharePath.Path, "/"))
+		} else {
+			srcUri = "/" + src.FileType + "/" + src.Extend + src.Path
+		}
+		srcFileName = files.GetPathName(src.Path)
 	}
 
-	var dstFileName = files.GetPathName(dst.Path)
-	var srcFileName = files.GetPathName(src.Path)
+	if dst != nil {
+		if task.isShare {
+			dstUri = fmt.Sprintf("/%s/%s/%s", task.param.DstSharePath.FileType, task.param.DstSharePath.Extend, strings.TrimPrefix(task.param.DstSharePath.Path, "/"))
+		} else {
+			dstUri = "/" + dst.FileType + "/" + dst.Extend + dst.Path
+		}
+		dstFileName = files.GetPathName(dst.Path)
+	}
 
 	var pauseAble bool = true
 
