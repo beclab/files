@@ -473,11 +473,7 @@ func (s *PosixStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHa
 	if !isFile {
 		return nil, fmt.Errorf("path %s is not file", fileParam.Path)
 	}
-
-	var _, fileExt = common.SplitNameExt(fileName)
-	if fileExt != ".txt" {
-		return nil, fmt.Errorf("file %s not supported", fileName)
-	}
+	_ = fileName
 
 	uri, err := fileParam.GetResourceUri()
 	if err != nil {
