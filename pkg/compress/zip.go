@@ -96,15 +96,15 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 			return err
 		}
 		// 关键修改2：更新进度（空目录也计入处理）
-		*processedBytes += 0 // 占位但计入进度
+		*processedBytes += 4096 // 占位但计入进度
 		progress := float64(*processedBytes) * 100 / float64(totalSize)
-		if shouldReport(progress, *lastReported, reportInterval) {
-			klog.Infof("Progress: %.2f%% (Directory: %s)",
-				progress,
-				relPath+"/")
-			*lastReported = progress
-			callbackup(int(progress), 0)
-		}
+		//if shouldReport(progress, *lastReported, reportInterval) {
+		klog.Infof("Progress: %.2f%% (Directory: %s)",
+			progress,
+			relPath+"/")
+		*lastReported = progress
+		callbackup(int(progress), 4096)
+		//}
 		return nil // 目录处理完成直接返回
 	}
 
@@ -135,6 +135,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 	// 动态缓冲区
 	buf := make([]byte, bufferSize(info.Size()))
 	bytesRead := 0
+	progress := float64(0)
 
 	for {
 		n, err := srcFile.Read(buf)
@@ -156,7 +157,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 			// 更新全局进度
 			*processedBytes += int64(n)
 			bytesRead += n
-			progress := float64(*processedBytes) * 100 / float64(totalSize)
+			progress = float64(*processedBytes) * 100 / float64(totalSize)
 
 			// 阈值触发式进度报告
 			if shouldReport(progress, *lastReported, reportInterval) {
@@ -170,6 +171,7 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 		}
 
 		if err == io.EOF {
+			callbackup(int(progress), int64(n))
 			break
 		}
 	}
