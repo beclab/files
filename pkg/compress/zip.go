@@ -166,12 +166,13 @@ func addFileToZip(zw *zip.Writer, srcPath, relPath string, totalSize int64,
 					formatBytes(*processedBytes),
 					formatBytes(totalSize))
 				*lastReported = progress
-				callbackup(int(progress), int64(n))
+				callbackup(int(progress), int64(bytesRead))
 			}
 		}
 
 		if err == io.EOF {
-			callbackup(int(progress), int64(n))
+			*lastReported = progress
+			callbackup(int(progress), int64(bytesRead))
 			break
 		}
 	}
