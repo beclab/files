@@ -144,8 +144,7 @@ func (t *Task) DownloadFromSync() error {
 		}
 	}
 
-	_, _, transferred, _ := t.GetProgress()
-	t.updateProgress(100, transferred)
+	t.updateProgress(100, 0)
 
 	if t.param.Dst.IsCloud() {
 		klog.Infof("[Task] Id: %s, download from sync done! temp: %s", t.id, common.ToJson(t.param.Temp))
@@ -247,8 +246,7 @@ func (t *Task) UploadToSync() error {
 		}
 	}
 
-	_, _, transferred, _ := t.GetProgress()
-	t.updateProgress(100, transferred)
+	t.updateProgress(100, 0)
 
 	return nil
 }
@@ -555,9 +553,8 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 
 	dstFileStat, err := os.Stat(downloadFilePath)
 	if dstFileStat != nil && dstFileStat.Size() == fileSize {
-		t.transfer += fileSize
-		var p = int(float64(t.transfer) / float64(t.totalSize) * 100)
-		t.updateProgress(p, t.transfer)
+		var p = int(float64(t.transfer+fileSize) / float64(t.totalSize) * 100)
+		t.updateProgress(p, fileSize)
 		klog.Infof("[Task] Id: %s, %s exists, skip", t.id, downloadFilePathShortName)
 		return nil
 	}
@@ -613,14 +610,13 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 				return err
 			}
 			transferred += int64(nr)
-			t.transfer += int64(nr)
-			progress := int(float64(t.transfer) / float64(t.totalSize) * 100)
+			progress := int(float64(t.transfer+int64(nr)) / float64(t.totalSize) * 100)
 
 			if progress > 100 {
 				progress = 100
 			}
 
-			t.updateProgress(progress, t.transfer)
+			t.updateProgress(progress, int64(nr))
 		}
 
 		if er != nil {
@@ -807,7 +803,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		if getFileId != "" {
 			klog.Infof("[Task] Id: %s, upload file %s exists, skip", t.id, dst.Path)
 			_, _, right := t.CalculateSyncProgressRange(diskSize)
-			t.updateProgress(right, diskSize)
+			t.updateProgress(right, 0)
 			return nil
 		}
 	}
@@ -850,7 +846,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 
 	var chunkStart int64 = 0
 	for chunkNumber := int64(1); chunkNumber <= totalChunks; chunkNumber++ {
-		status, _, transferred, _ := t.GetProgress()
+		status, _, _, _ := t.GetProgress()
 		if status != "running" && status != "pending" {
 			return nil
 		}
@@ -1092,7 +1088,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		}
 
 		klog.Infof("Chunk %d/%d from of bytes %d-%d/%d successfully transferred.", chunkNumber, totalChunks, chunkStart, chunkStart+int64(bytesRead)-1, diskSize)
-		t.updateProgress(finalProgress, transferred+chunkSize)
+		t.updateProgress(finalProgress, int64(bytesRead))
 
 		if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
 			return ctxErr
@@ -1102,8 +1098,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 	}
 	klog.Infoln("upload file to sync success!")
 
-	_, _, transferred, _ := t.GetProgress()
-	t.updateProgress(right, transferred)
+	t.updateProgress(right, 0)
 
 	return nil
 }
@@ -1188,11 +1183,11 @@ func (t *Task) SimulateProgress(left, right int, speed int64) {
 		default:
 			// Simulate progress update
 			usedTime := int(time.Now().Sub(startTime).Seconds())
-			status, _, transferred, size := t.GetProgress()
+			status, _, _, size := t.GetProgress()
 			progress := MapProgressByTime(left, right, size, speed, usedTime)
 
 			if status == "running" {
-				t.updateProgress(progress, transferred)
+				t.updateProgress(progress, 0)
 			}
 			time.Sleep(1 * time.Second)
 		}
