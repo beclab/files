@@ -357,6 +357,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		case <-ctx.Done():
 			if t.GetCompressPaused() {
 				klog.Infof("[ZIP running LOG] Paused compressing file: %s", filepath.Base(filePath))
+				t.SetCompressPauseInfo(index, processedBytes)
 			} else {
 				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
 				err = os.RemoveAll(outputPath)
@@ -381,12 +382,6 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		//	t.UpdateProgress(int(float64(processedBytes)*100/float64(totalSize)), info.Size())
 		//	continue
 		//}
-		if _, processed := processedFiles[relPath]; processed {
-			// 关键修正2：直接使用已记录的resumeBytes
-			klog.Infof("Skipping processed file: %s", relPath)
-			t.SetCompressPauseInfo(index, processedBytes)
-			continue
-		}
 
 		if info.IsDir() {
 			if !strings.HasSuffix(relPath, "/") {
