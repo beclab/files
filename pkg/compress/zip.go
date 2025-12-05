@@ -355,10 +355,14 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 
 		select {
 		case <-ctx.Done():
-			klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
-			err = os.RemoveAll(outputPath)
-			if err != nil {
-				klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
+			if t.GetCompressPaused() {
+				klog.Infof("[ZIP running LOG] Paused compressing file: %s", filepath.Base(filePath))
+			} else {
+				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
+				err = os.RemoveAll(outputPath)
+				if err != nil {
+					klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
+				}
 			}
 			return ctx.Err()
 		default:
