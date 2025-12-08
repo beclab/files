@@ -316,38 +316,51 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		os.Remove(tempPath) // 确保清理
 	}()
 
-	// 复制原始文件内容（关键修改2）
-	if _, err := os.Stat(outputPath); err == nil {
-		src, _ := os.Open(outputPath)
-		defer src.Close()
-		io.Copy(tmpFile, src)
-		// 重置文件指针
-		tmpFile.Seek(0, io.SeekStart)
+	// 处理原始文件内容
+	processedFiles := make(map[string]bool)
+	if stat, err := os.Stat(outputPath); err == nil && stat.Size() > 0 {
+		// 尝试读取原始ZIP内容
+		r, err := zip.NewReader(tmpFile, stat.Size())
+
+		// 只有有效ZIP文件才复制内容
+		if err == nil {
+			// 复制原始文件内容
+			src, _ := os.Open(outputPath)
+			defer src.Close()
+			io.Copy(tmpFile, src)
+
+			// 重置文件指针
+			tmpFile.Seek(0, io.SeekStart)
+
+			// 记录已处理文件
+			for _, f := range r.File {
+				processedFiles[f.Name] = true
+			}
+		} else {
+			klog.Infof("Warning: %s is not a valid ZIP file, creating new archive", outputPath)
+		}
 	}
 
-	// 创建ZIP写入器（关键修改3）
+	// 创建ZIP写入器
 	zw := zip.NewWriter(tmpFile)
-	defer func() {
-		zw.Close()
-		tmpFile.Close()
-	}()
+	defer zw.Close()
 
 	// 读取原始文件列表（如果存在）
 	// 获取文件信息
-	fileInfo, err := tmpFile.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to read tepFile info: %v", err)
-	}
-
-	// 创建ZIP读取器
-	r, err := zip.NewReader(tmpFile, fileInfo.Size())
-	if err != nil {
-		return fmt.Errorf("failed to create ZIP reader: %v", err)
-	}
-	processedFiles := make(map[string]bool)
-	for _, f := range r.File {
-		processedFiles[f.Name] = true
-	}
+	//fileInfo, err := tmpFile.Stat()
+	//if err != nil {
+	//	return fmt.Errorf("failed to read tmpFile info: %v", err)
+	//}
+	//
+	//// 创建ZIP读取器
+	//r, err := zip.NewReader(tmpFile, fileInfo.Size())
+	//if err != nil {
+	//	return fmt.Errorf("failed to create ZIP reader: %v", err)
+	//}
+	//processedFiles = make(map[string]bool)
+	//for _, f := range r.File {
+	//	processedFiles[f.Name] = true
+	//}
 
 	klog.Infof("[ZIP running LOG] task: %+v", t)
 	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
