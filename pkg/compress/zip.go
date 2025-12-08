@@ -313,7 +313,12 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	}
 	defer func() {
 		tmpFile.Close()
-		os.Remove(tempPath) // 确保清理
+		if t.GetCompressPaused() {
+			os.Remove(outputPath)
+			os.Rename(tempPath, outputPath)
+		} else {
+			os.Remove(tempPath) // 确保清理
+		}
 	}()
 
 	// 处理原始文件内容
