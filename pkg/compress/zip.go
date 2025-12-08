@@ -305,68 +305,67 @@ type ZipCompressor struct{}
 
 func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileList, relPathList []string,
 	totalSize int64, t *TaskFuncs) error {
-	// 创建临时文件路径（关键修改1）
+
+	// 创建临时文件路径
 	tempPath := outputPath + ".tmp"
-	tmpFile, err := os.Create(tempPath)
-	if err != nil {
-		return err
+	var tmpFile *os.File
+	var w *zip.Writer
+	var processedFiles map[string]bool
+
+	// 恢复逻辑（保持原始结构）
+	if _, err := os.Stat(tempPath); err == nil {
+		// 恢复场景：读取临时文件
+		file, err := os.Open(tempPath)
+		if err != nil {
+			return fmt.Errorf("open temp file failed: %v", err)
+		}
+		defer file.Close()
+
+		// 读取已处理文件列表
+		info, _ := file.Stat()
+		r, err := zip.NewReader(file, info.Size())
+		if err != nil {
+			return fmt.Errorf("read temp zip failed: %v", err)
+		}
+
+		processedFiles = make(map[string]bool)
+		for _, f := range r.File {
+			processedFiles[f.Name] = true
+		}
+
+		// 重新打开临时文件用于写入
+		tmpFile, err = os.OpenFile(tempPath, os.O_RDWR, 0666)
+		if err != nil {
+			return fmt.Errorf("reopen temp file failed: %v", err)
+		}
+
+		// 定位到文件末尾
+		_, err = tmpFile.Seek(0, io.SeekEnd)
+		if err != nil {
+			return fmt.Errorf("seek end failed: %v", err)
+		}
+
+		// 重新创建ZIP写入器
+		w = zip.NewWriter(tmpFile)
+	} else {
+		// 首次压缩场景
+		var err error
+		tmpFile, err = os.Create(tempPath)
+		if err != nil {
+			return fmt.Errorf("create temp file failed: %v", err)
+		}
+
+		w = zip.NewWriter(tmpFile)
+		processedFiles = make(map[string]bool)
 	}
 	defer func() {
+		w.Close()
 		tmpFile.Close()
-		if t.GetCompressPaused() {
-			os.Remove(outputPath)
-			os.Rename(tempPath, outputPath)
-		} else {
-			os.Remove(tempPath) // 确保清理
-		}
+		os.Remove(outputPath)
+		os.Rename(tempPath, outputPath)
 	}()
 
-	// 处理原始文件内容
-	processedFiles := make(map[string]bool)
-	if stat, err := os.Stat(outputPath); err == nil && stat.Size() > 0 {
-		// 尝试读取原始ZIP内容
-		r, err := zip.NewReader(tmpFile, stat.Size())
-
-		// 只有有效ZIP文件才复制内容
-		if err == nil {
-			// 复制原始文件内容
-			src, _ := os.Open(outputPath)
-			defer src.Close()
-			io.Copy(tmpFile, src)
-
-			// 重置文件指针
-			tmpFile.Seek(0, io.SeekStart)
-
-			// 记录已处理文件
-			for _, f := range r.File {
-				processedFiles[f.Name] = true
-			}
-		} else {
-			klog.Infof("Warning: %s is not a valid ZIP file, creating new archive", outputPath)
-		}
-	}
-
-	// 创建ZIP写入器
-	zw := zip.NewWriter(tmpFile)
-	defer zw.Close()
-
-	// 读取原始文件列表（如果存在）
-	// 获取文件信息
-	//fileInfo, err := tmpFile.Stat()
-	//if err != nil {
-	//	return fmt.Errorf("failed to read tmpFile info: %v", err)
-	//}
-	//
-	//// 创建ZIP读取器
-	//r, err := zip.NewReader(tmpFile, fileInfo.Size())
-	//if err != nil {
-	//	return fmt.Errorf("failed to create ZIP reader: %v", err)
-	//}
-	//processedFiles = make(map[string]bool)
-	//for _, f := range r.File {
-	//	processedFiles[f.Name] = true
-	//}
-
+	// 原始控制逻辑保持不变
 	klog.Infof("[ZIP running LOG] task: %+v", t)
 	resumeIndex, resumeBytes := t.GetCompressPauseInfo()
 	klog.Infof("[ZIP running LOG] got pause info: resumeIndex: %d, resumeBytes: %d", resumeIndex, resumeBytes)
@@ -396,21 +395,6 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 	default:
 	}
 
-	//f, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
-	//if err != nil {
-	//	klog.Errorf("Failed to open zip file: %v", err)
-	//	return err
-	//}
-	//defer f.Close()
-	//
-	//zw := zip.NewWriter(f)
-	//defer zw.Close()
-	//
-	//processedFiles := make(map[string]struct{}, len(relPathList))
-	//for i := 0; i < resumeIndex; i++ {
-	//	processedFiles[relPathList[i]] = struct{}{}
-	//}
-
 	for index := currentFileIndex; index < len(fileList); index++ {
 		if processedFiles[relPathList[index]] {
 			continue // 跳过已处理文件
@@ -426,7 +410,7 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 				t.SetCompressPauseInfo(index, processedBytes)
 			} else {
 				klog.Infof("[ZIP running LOG] Cancelled compressing file: %s", filepath.Base(filePath))
-				err = os.RemoveAll(outputPath)
+				err := os.RemoveAll(outputPath)
 				if err != nil {
 					klog.Errorf("[ZIP running LOG] Failed to remove file: %v", err)
 				}
@@ -435,44 +419,8 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		default:
 		}
 
-		//info, err := os.Stat(filePath)
-		//if err != nil {
-		//	klog.Errorf("stat error: %v", err)
-		//	continue
-		//}
-
-		//if info.IsDir() {
-		//	if !strings.HasSuffix(relPath, "/") {
-		//		relPath += "/"
-		//	}
-		//	_, err = zw.Create(relPath)
-		//	if err != nil {
-		//		klog.Errorf("Failed to create directory entry: %v", err)
-		//		return err
-		//	}
-		//	processedBytes += 4096
-		//	progress := float64(processedBytes) * 100 / float64(totalSize)
-		//	klog.Infof("Progress: %.2f%% (Directory: %s)", progress, relPath)
-		//	lastReported = progress
-		//	t.UpdateProgress(int(progress), 4096)
-		//	t.SetCompressPauseInfo(index, processedBytes)
-		//	continue
-		//}
-		//
-		//// 关键修改2：使用正确的CreateHeader方法
-		//header, _ := zip.FileInfoHeader(info)
-		//header.Name = relPath
-		//header.Method = zip.Deflate
-		//
-		//// 关键修改3：使用CreateHeader创建文件头
-		//fileInZip, err := zw.CreateHeader(header)
-		//if err != nil {
-		//	klog.Errorf("CreateHeader failed: %v", err)
-		//	continue
-		//}
-
-		// 关键修改4：传递文件头信息到写入函数
-		err = addFileToZip(zw, filePath, relPath,
+		// 关键修改：传递文件头信息到写入函数
+		err := addFileToZip(w, filePath, relPath,
 			totalSize, &processedBytes, &lastReported, reportInterval, t)
 		if err != nil {
 			klog.Errorf("Add file failed: %v", err)
@@ -483,12 +431,6 @@ func (c *ZipCompressor) Compress(ctx context.Context, outputPath string, fileLis
 		klog.Infof("[ZIP running LOG] index: %d, processedBytes: %d", index, processedBytes)
 		time.Sleep(5 * time.Second)
 	}
-
-	// 原子替换（关键修改4）
-	zw.Close()
-	tmpFile.Close()
-	os.Remove(outputPath)
-	os.Rename(tempPath, outputPath)
 
 	if totalSize > 0 {
 		progress := 100.0
