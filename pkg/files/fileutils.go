@@ -625,6 +625,7 @@ func CollectDupNames(p string, prefixName string, ext string, isDir bool) ([]str
 
 func GenerateDupName(existNames []string, targetName string, isFile bool) string {
 	if existNames == nil || len(existNames) == 0 {
+		klog.Infof("No exist name found for %s", targetName)
 		return targetName
 	}
 
@@ -655,8 +656,10 @@ func GenerateDupName(existNames []string, targetName string, isFile bool) string
 	}
 
 	if len(dupNames) == 0 {
+		klog.Infof("No duplicated name found for %s", targetName)
 		return targetName
 	}
+	klog.Infof("Duplicated names found for %s: %v", targetName, dupNames)
 
 	var count = 0
 	var matchedCount = 0
@@ -681,6 +684,7 @@ func GenerateDupName(existNames []string, targetName string, isFile bool) string
 		}
 	}
 
+	klog.Infof("matchedCount: %d", matchedCount)
 	var newFileName string
 	if matchedCount == 0 {
 		newFileName = targetPrefix
@@ -749,6 +753,35 @@ func CheckKeepFile(p string) error {
 	}
 
 	if err := os.WriteFile(p, []byte{}, 0o644); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CheckCloudCreateCacheFile(p string, body io.ReadCloser) error {
+	var err error
+	if f := FilePathExists(filepath.Dir(p)); !f {
+		err = os.MkdirAll(filepath.Dir(p), 0755)
+		if err != nil {
+			return err
+		}
+	}
+
+	var file *os.File
+	file, err = os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		klog.Errorf("File create error: %v", err)
+		return err
+	}
+	defer file.Close()
+
+	if body == nil {
+		err = os.WriteFile(p, []byte{}, 0o644)
+	} else {
+		_, err = WriteFile(DefaultFs, p, body)
+	}
+	if err != nil {
 		return err
 	}
 

@@ -3,6 +3,7 @@ package seaserv
 import (
 	"files/pkg/drivers/sync/seahub/searpc"
 	"fmt"
+
 	"k8s.io/klog/v2"
 )
 
@@ -354,6 +355,14 @@ func (s *SeafileAPI) RenameFile(repoId, parentDir, oldname, newname, username st
 
 func (s *SeafileAPI) PostDir(repoId, parentDir, dirname, username string) (int, error) {
 	ret, err := s.rpcClient.SeafilePostDir(repoId, parentDir, dirname, username)
+	if err != nil {
+		return -1, err
+	}
+	return ReturnInt(ret)
+}
+
+func (s *SeafileAPI) PostEmptyFile(repoId, parentDir, filename, username string) (int, error) {
+	ret, err := s.rpcClient.SeafilePostEmptyFile(repoId, parentDir, filename, username)
 	if err != nil {
 		return -1, err
 	}

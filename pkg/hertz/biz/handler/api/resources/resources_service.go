@@ -64,6 +64,14 @@ func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 // PostResourcesMethod .
 // @router /api/resources/*path [POST]
 func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req resources.PostResourcesReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
 	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
 	if err != nil {
 		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))

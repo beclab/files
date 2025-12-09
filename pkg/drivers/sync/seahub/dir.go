@@ -6,8 +6,6 @@ import (
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
 	"fmt"
-	"github.com/gorilla/mux"
-	"k8s.io/klog/v2"
 	"net/http"
 	"os"
 	"path"
@@ -16,6 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/gorilla/mux"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -430,7 +431,7 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 	return dirInfoList, fileInfoList, nil
 }
 
-func HandleDirOperation(owner, repoId, pathParam, destName, operation string) ([]byte, error) {
+func HandleDirOperation(owner, repoId, pathParam, destName, operation string, forceNew bool) ([]byte, error) {
 	if pathParam == "" || pathParam[0] != '/' {
 		klog.Errorf("invalid path param: %s", pathParam)
 		return nil, errors.New("p invalid")
@@ -464,6 +465,16 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string) ([
 
 	switch operation {
 	case "mkdir":
+		dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, pathParam)
+		if err != nil {
+			klog.Error(err)
+			return nil, err
+		}
+		if dirId != "" && !forceNew {
+			klog.Infof("folder %s already exists", pathParam)
+			return nil, nil
+		}
+
 		parentDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
 		if err != nil {
 			klog.Error(err)

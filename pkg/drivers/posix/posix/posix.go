@@ -254,8 +254,6 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, err
 	}
 
-	dirName := filepath.Join(resourceUri, contextArgs.FileParam.Path)
-
 	mode, err := strconv.ParseUint(contextArgs.QueryParam.FileMode, 8, 32)
 	if err != nil {
 		mode = 0755
@@ -266,7 +264,8 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	var afs = afero.NewOsFs()
 	entries, err := afero.ReadDir(afs, filepath.Join(resourceUri, dstPrefixPath))
 	if err != nil {
-		return nil, err
+		klog.Errorf("Posix create read dir error: %v", err)
+		entries = []os.FileInfo{}
 	}
 
 	var dupNames []string
@@ -277,7 +276,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 			if infoExt != dstFileExt {
 				continue
 			}
-			dupNames = append(dupNames, strings.TrimSuffix(infoName, dstFileExt))
+			dupNames = append(dupNames, infoName)
 		} else {
 			if strings.Contains(infoName, dstFileOrDirName) {
 				dupNames = append(dupNames, infoName)
@@ -285,37 +284,46 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		}
 	}
 
-	klog.Infof("Posix create, dupNames: %d", len(dupNames))
+	klog.Infof("Posix create, dupNames %d: %+v", len(dupNames), dupNames)
 
 	newName := files.GenerateDupName(dupNames, dstFileOrDirName, isFile)
-	if newName != "" {
-		if isFile {
-			newName = newName + dstFileExt
-		}
-
-	} else {
+	if newName == "" {
 		newName = dstFileOrDirName
 	}
 
-	dirName = filepath.Join(resourceUri, dstPrefixPath, newName)
-	klog.Infof("Posix create, file path: %s, filename: %s", dirName, dstFileOrDirName)
+	createPath := filepath.Join(resourceUri, dstPrefixPath, newName)
+	klog.Infof("Posix create, create path: %s", createPath)
+
 	if isFile {
-		file, err := os.OpenFile(dirName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fileMode)
+		parentDir := filepath.Dir(createPath)
+		if err = afs.MkdirAll(parentDir, fileMode); err != nil {
+			klog.Errorf("Parent dir create error: %v", err)
+			return nil, err
+		}
+
+		var file *os.File
+		file, err = os.OpenFile(createPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fileMode)
 		if err != nil {
-			klog.Errorf("Posix create, file error: %v, dirName: %s", err, dirName)
+			klog.Errorf("File create error: %v", err)
 			return nil, err
 		}
 		defer file.Close()
-	} else {
-		if !strings.HasSuffix(dirName, "/") {
-			dirName = dirName + "/"
-		}
 
-		if err := afs.MkdirAll(dirName, fileMode); err != nil {
-			klog.Errorf("Posix create, dir error: %v, dir: %s", err, dirName)
+		if contextArgs.QueryParam.Body != nil {
+			_, err = files.WriteFile(files.DefaultFs, createPath, contextArgs.QueryParam.Body)
+			if err != nil {
+				klog.Errorf("File write error: %v", err)
+				return nil, err
+			}
+		}
+	} else {
+		if !strings.HasSuffix(createPath, "/") {
+			createPath += "/"
+		}
+		if err = afs.MkdirAll(createPath, fileMode); err != nil {
+			klog.Errorf("Directory create error: %v", err)
 			return nil, err
 		}
-
 	}
 
 	return nil, nil

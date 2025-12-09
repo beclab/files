@@ -260,11 +260,11 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	klog.Infof("Cloud create, user: %s, param: %s, prefixPath: %s, name: %s, isFile: %v", owner, fileParam.Json(), prefixPath, fileName, isFile)
 
-	var createName, createExt string
+	var createName string
 	_, isDstFile := fileParam.IsFile()
 
 	if isDstFile {
-		createName, createExt = common.SplitNameExt(fileName)
+		createName, _ = common.SplitNameExt(fileName)
 	}
 
 	fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
@@ -283,6 +283,36 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		FilterRule: s.service.command.FormatFilter(createName, true, true, true),
 	}
 
+	parentDir := filepath.Dir(strings.TrimSuffix(fileParam.Path, "/"))
+	if parentDir != "/" {
+		parentDirSplit := strings.Split(strings.Trim(parentDir, "/"), "/")
+		tempDir := "/"
+		for _, dir := range parentDirSplit {
+			if dir == "" || dir == "." {
+				continue
+			}
+			tempDir = filepath.Join(tempDir, dir)
+
+			var existsDir *operations.OperationsList
+			existsDir, err = s.service.command.GetMatchedItems(tempDir, opts, filter)
+			if err != nil {
+				klog.Infof("Cloud create, user: %s, get parent dir matched items error: %v, path: %s", owner, err, tempDir)
+			}
+			if existsDir == nil || existsDir.List == nil || len(existsDir.List) == 0 {
+				_, err = s.service.CreateFolder(&models.FileParam{
+					Owner:    fileParam.Owner,
+					FileType: fileParam.FileType,
+					Extend:   fileParam.Extend,
+					Path:     tempDir + "/",
+				})
+				if err != nil {
+					klog.Errorf("Cloud create, user: %s, create parent dir error: %v, path: %s", owner, err, tempDir)
+					return nil, err
+				}
+			}
+		}
+	}
+
 	existsItems, err := s.service.command.GetMatchedItems(fsPrefix+prefixPath, opts, filter)
 	if err != nil {
 		klog.Errorf("Cloud create, user: %s, get dst matched items error: %v", owner, err)
@@ -297,9 +327,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	newName := files.GenerateDupName(dupNames, fileName, isFile)
-	if newName != "" {
-		newName = newName + createExt
-	} else {
+	if newName == "" {
 		newName = fileName
 	}
 
@@ -323,7 +351,7 @@ func (s *CloudStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		klog.Infof("Cloud create, dir done! result: %s, user: %s, path: %s", string(res), owner, fileParam.Path)
 		return nil, nil
 	} else {
-		if _, err := s.service.CopyFile(fileParam, prefixPath, newName); err != nil {
+		if _, err := s.service.CreateFile(fileParam, newName, contextArgs.QueryParam.Body); err != nil {
 			klog.Errorf("Cloud create, file error: %v, dstPrefixPath: %s, newName: %s", err, prefixPath, newName)
 			return nil, err
 		}
@@ -546,7 +574,20 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
  * ~ Edit
  */
 func (s *CloudStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
-	return nil, errors.New("not supported")
+	if strings.HasSuffix(contextArgs.FileParam.Path, "/") {
+		return nil, errors.New("only support editing file")
+	}
+
+	filename := filepath.Base(contextArgs.FileParam.Path)
+	if _, err := s.service.CreateFile(contextArgs.FileParam, filename, contextArgs.QueryParam.Body); err != nil {
+		klog.Errorf("Cloud edit, file error: %v, path: %s", err, contextArgs.FileParam.Path)
+		return nil, err
+	}
+
+	klog.Errorf("Cloud create, file done! path: %s", contextArgs.FileParam.Path)
+	return &models.EditHandlerResponse{
+		Etag: "",
+	}, nil
 }
 
 func (s *CloudStorage) generateListingData(fileParam *models.FileParam,
