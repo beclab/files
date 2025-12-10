@@ -3,7 +3,6 @@ package upload
 import (
 	"fmt"
 	"path/filepath"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -79,7 +78,7 @@ func (m *FileInfoMgr) DeleteOldInfos() {
 		v := value.(FileInfo)
 		klog.Infof("Key: %v, Value: %v\n", key, v)
 		if time.Since(v.LastUpdateTime) > expireTime {
-			klog.Infof("id %s expire del in map, stack:%s", key, debug.Stack())
+			klog.Infof("id %s expire del in map", key)
 			InfoSyncMap.Delete(key)
 			for _, uploadsFile := range UploadsFiles {
 				RemoveTempFileAndInfoFile(filepath.Base(uploadsFile), filepath.Dir(uploadsFile))
