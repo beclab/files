@@ -7,11 +7,14 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	"files/pkg/files"
 	raw "files/pkg/hertz/biz/model/api/raw"
 	"files/pkg/models"
 	"fmt"
 	"mime"
+	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -19,6 +22,21 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
 )
+
+var noCacheFilesExt = []string{
+	"txt", "py", "c", "cpp", "java", "js", "ts", "php", "sql",
+	"html", "htm", "css", "sh", "swift", "m", "cs", "go",
+	"rb", "pl", "pm", "lua", "vbp", ".for", "f90", "pas",
+	"dpr", "rs", "asm", "kt", "r", "sb3", "epub",
+}
+
+var noCacheFilesMap sync.Map
+
+func init() {
+	for _, name := range noCacheFilesExt {
+		noCacheFilesMap.Store(fmt.Sprintf(".%s", name), 1)
+	}
+}
 
 // RawMethod .
 // @router /api/raw/*path [GET]
@@ -57,6 +75,18 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 		rawMeta = *req.Meta
 	}
 	var fileType = contextArg.FileParam.FileType
+	var fileName, isFile = files.GetFileNameFromPath(contextArg.FileParam.Path)
+	if !isFile {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("not a file, path: %s", contextArg.FileParam.Path)})
+		return
+	}
+
+	var fileExt = path.Ext(fileName)
+	var noCache bool
+	_, ok := noCacheFilesMap.Load(fileExt)
+	if ok {
+		noCache = true
+	}
 
 	var handler = drivers.Adaptor.NewFileHandler(fileType, handlerParam)
 	if handler == nil {
@@ -80,7 +110,10 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 		} else {
 			c.SetContentType(common.MimeTypeByExtension(file.FileName))
 		}
-		c.Header("Cache-Control", "private")
+		if !noCache {
+			c.Header("Cache-Control", "private")
+		}
+
 		c.Header("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
 			"filename": file.FileName,
 		}))
@@ -102,17 +135,24 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if !file.IsCloud {
-		c.Header("Last-Modified", file.FileModified.UTC().Format(time.RFC1123))
-		ifMatch := string(c.GetHeader("If-Modified-Since"))
-		if ifMatch != "" {
-			t, _ := time.Parse(time.RFC1123, ifMatch)
-			if !file.FileModified.After(t) {
-				c.AbortWithStatusJSON(consts.StatusNotModified, utils.H{
-					"message": "file not modified",
-				})
-				return
+		if !noCache {
+			c.Header("Last-Modified", file.FileModified.UTC().Format(time.RFC1123))
+			ifMatch := string(c.GetHeader("If-Modified-Since"))
+			if ifMatch != "" {
+				t, _ := time.Parse(time.RFC1123, ifMatch)
+				if !file.FileModified.After(t) {
+					c.AbortWithStatusJSON(consts.StatusNotModified, utils.H{
+						"message": "file not modified",
+					})
+					return
+				}
 			}
+		} else {
+			c.Header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+			c.Header("Pragma", "no-cache")
+			c.Header("Expires", "0")
 		}
+
 		c.SetBodyStream(file.Reader, int(file.FileLength))
 	} else {
 		for k, vs := range file.RespHeader {

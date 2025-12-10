@@ -133,7 +133,7 @@ func formatProgress(l string) (int, int64, error) {
 	}
 	fmt.Println(">>>> rsync message: ", l)
 
-	return 0, 0, fmt.Errorf("not the progress")
+	return 0, 0, fmt.Errorf("progress invalid, msg: %s", l)
 }
 
 type Command struct {

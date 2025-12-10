@@ -117,6 +117,7 @@ var (
 	ErrorMessageWrongPassword              = "Wrong password. Please check the password and try again."
 	ErrorMessageInternalPathExists         = "Share for a path can be only one at a time."
 	ErrorMessageSyncNotSupport             = "Sync not support."
+	ErrorMessageNoSpace                    = "Insufficient space on the disk, usage exceeds 85%."
 
 	CodeLinkExpired  = 559
 	CodeTokenExpired = 569

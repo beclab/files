@@ -21,6 +21,8 @@ var externalWatcher *fsnotify.Watcher = nil
 
 type Mount struct {
 	Mounted map[string]*files.DiskInfo
+	Usage   float64
+	Free    uint64
 	mu      sync.RWMutex
 }
 
@@ -39,6 +41,7 @@ func init() {
 func InitGlobalMounted() {
 	GlobalMounted.getMounted()
 	GlobalMounted.watchMounted()
+	GlobalMounted.watchDiskUsage()
 }
 
 func (m *Mount) Updated() {
@@ -49,7 +52,7 @@ func (m *Mount) GetMountedData() []files.DiskInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if m.Mounted == nil || len(m.Mounted) == 0 {
+	if len(m.Mounted) == 0 {
 		return []files.DiskInfo{}
 	}
 
@@ -59,6 +62,23 @@ func (m *Mount) GetMountedData() []files.DiskInfo {
 	}
 
 	return res
+}
+
+func (m *Mount) watchDiskUsage() {
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			usage, free, err := common.CheckDiskUsage()
+			if err != nil {
+				klog.Errorf("watch disk usage error: %v", err)
+				continue
+			}
+			m.Usage = usage
+			m.Free = free
+		}
+	}()
 }
 
 func (m *Mount) watchMounted() {

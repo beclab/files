@@ -141,7 +141,7 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string, fileIdent
 		} else if info.Offset == 0 {
 			klog.Warningf("innerIdentifier:%s, info.Offset:%d", innerIdentifier, info.Offset)
 		} else {
-			FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath)
+			FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath) // handlerUploadedBytes
 		}
 	}
 
@@ -178,7 +178,11 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		return false, nil, err
 	}
 
-	uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
+	if fileParam.FileType == common.External {
+		uploadTempPath = filepath.Join(uri, fileParam.Path, common.DefaultUploadTempDir)
+	} else {
+		uploadTempPath = filepath.Join(common.CACHE_PREFIX, cachePvcPath, common.DefaultUploadToCloudTempPath)
+	}
 
 	if !common.PathExists(uploadTempPath) {
 		if err = os.MkdirAll(uploadTempPath, os.ModePerm); err != nil {
@@ -436,7 +440,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 			return false, nil, err
 		}
 
-		FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath)
+		FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath) // handlerfunc
 
 		return true, data, nil
 	}

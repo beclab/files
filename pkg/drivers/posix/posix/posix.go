@@ -626,7 +626,11 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	var identy = chunkInfo.ResumableIdenty
 	var ua = fileUploadArg.UserAgentHash
 
-	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby)
+	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s, disk usage: %f", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby, global.GlobalMounted.Usage)
+
+	if global.GlobalMounted.Usage >= common.FreeLimit {
+		return nil, errors.New(common.ErrorMessageNoSpace)
+	}
 
 	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
 
