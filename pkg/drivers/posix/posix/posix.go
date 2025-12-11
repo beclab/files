@@ -630,6 +630,9 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 
 	if chunkInfo.ResumableChunkNumber == 1 {
 		klog.Infof("Posix uploadChunks, global.GlobalMounted: %+v", global.GlobalMounted)
+		for _, mounted := range global.GlobalMounted.Mounted {
+			klog.Infof("Posix uploadChunks, mounted: %+v", mounted)
+		}
 	}
 
 	found := false
@@ -648,10 +651,12 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 		}
 	}
 
-	if !found && global.GlobalMounted.Usage >= common.FreeLimit {
-		return nil, errors.New(common.ErrorMessageNoSpace)
-	} else {
-		klog.Infof("global.GlobalMounted.Usage = %f", global.GlobalMounted.Usage)
+	if !found {
+		if global.GlobalMounted.Usage >= common.FreeLimit {
+			return nil, errors.New(common.ErrorMessageNoSpace)
+		} else {
+			klog.Infof("global.GlobalMounted.Usage = %f", global.GlobalMounted.Usage)
+		}
 	}
 
 	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
