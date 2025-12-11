@@ -12,5 +12,6 @@ func FormatSmbLink(fileType string, extend string, smbName string) string {
 		return fmt.Sprintf("smb://%s/%s", os.Getenv("NODE_IP"), smbName)
 	}
 
-	return fmt.Sprintf("smb://%s/%s", global.GlobalNode.GetNodeIp(extend), smbName)
+	var masterNodeName = global.GlobalNode.GetMasterNode()
+	return fmt.Sprintf("smb://%s/%s", global.GlobalNode.GetNodeIp(masterNodeName), smbName)
 }
