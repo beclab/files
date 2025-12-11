@@ -631,16 +631,13 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	if chunkInfo.ResumableChunkNumber == 1 {
 		klog.Infof("Posix uploadChunks, global.GlobalMounted: %+v", global.GlobalMounted)
 	}
-	if fileUploadArg.FileParam.FileType != common.External {
-		if global.GlobalMounted.Usage >= common.FreeLimit {
-			return nil, errors.New(common.ErrorMessageNoSpace)
-		} else {
-			klog.Infof("global.GlobalMounted.Usage = %f", global.GlobalMounted.Usage)
-		}
-	} else {
+
+	found := false
+	if fileUploadArg.FileParam.FileType == common.External {
 		externalPath := strings.Split(strings.Trim(fileUploadArg.FileParam.Path, "/"), "/")[0]
 		for _, mounted := range global.GlobalMounted.Mounted {
 			if externalPath == mounted.Path {
+				found = true
 				if mounted.UsedPercent >= common.ExternalFreeLimit {
 					return nil, errors.New(common.ErrorMessageNoSpace)
 				} else {
@@ -649,6 +646,12 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 				}
 			}
 		}
+	}
+
+	if !found && global.GlobalMounted.Usage >= common.FreeLimit {
+		return nil, errors.New(common.ErrorMessageNoSpace)
+	} else {
+		klog.Infof("global.GlobalMounted.Usage = %f", global.GlobalMounted.Usage)
 	}
 
 	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
