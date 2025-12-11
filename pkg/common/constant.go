@@ -3,7 +3,8 @@ package common
 import "os"
 
 var (
-	FreeLimit float64 = 85.00
+	FreeLimit         float64 = 85.00
+	ExternalFreeLimit float64 = 99.00
 )
 
 const (
