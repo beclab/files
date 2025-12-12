@@ -232,7 +232,7 @@ func (g *Node) CheckDiskPressure() (bool, error) {
 	}
 
 	// 构造kubelet API URL
-	url := fmt.Sprintf("https://%s:10250/api/v1/nodes/%s/proxy/stats/summary", node.Name, node.Name)
+	url := fmt.Sprintf("https://%s:10250/api/v1/nodes/%s/proxy/stats/summary", g.GetNodeIp(node.Name), node.Name)
 
 	// 创建HTTP请求
 	req, err := http.NewRequest("GET", url, nil)
