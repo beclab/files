@@ -171,24 +171,22 @@ func (g *Node) Handlerevent() cache.ResourceEventHandler {
 	}
 }
 
-func (g *Node) CheckDiskPressure() bool {
-	config := ctrl.GetConfigOrDie()
-	client := kubernetes.NewForConfigOrDie(config)
-
-	node, err := client.CoreV1().Nodes().Get(context.TODO(), CurrentNodeName, metav1.GetOptions{})
-	if err != nil {
-		fmt.Printf("Get node info failed: %v\n", err)
-		os.Exit(1)
+func (g *Node) CheckDiskPressure() (bool, error) {
+	node, exists := g.Nodes[CurrentNodeName]
+	if !exists {
+		klog.Infof("Get node info failed")
+		return false, fmt.Errorf("get node info failed") // TODO
 	}
 
 	for _, cond := range node.Status.Conditions {
-		if cond.Type == corev1.NodeMemoryPressure && cond.Status == corev1.ConditionTrue {
-			fmt.Printf("Disk pressure detected! Node %s is suffering disk pressure\n", CurrentNodeName)
+		klog.Infof("Node %s condition: %+v\n", CurrentNodeName, cond)
+		if cond.Type == corev1.NodeDiskPressure && cond.Status == corev1.ConditionTrue {
+			klog.Infof("Disk pressure detected! Node %s is suffering disk pressure\n", CurrentNodeName)
 			//executeDefenseActions()
-			return true
+			return true, nil
 		}
 	}
 
-	fmt.Println("No disk pressure detected")
-	return false
+	klog.Infof("No disk pressure detected")
+	return false, nil
 }
