@@ -260,46 +260,49 @@ func (g *Node) CheckDiskPressure() (bool, error) {
 	}
 
 	// 解析响应
-	var summary struct {
-		Node struct {
-			Runtime struct {
-				ImageFs struct {
-					AvailableBytes uint64
-					CapacityBytes  uint64
-					UsedBytes      uint64
-				}
-			}
-		}
-	}
+	//var summary struct {
+	//	Node struct {
+	//		Runtime struct {
+	//			ImageFs struct {
+	//				AvailableBytes uint64
+	//				CapacityBytes  uint64
+	//				UsedBytes      uint64
+	//			}
+	//		}
+	//	}
+	//}
 
+	var summary map[string]interface{}
 	err = json.Unmarshal(body, &summary)
 	if err != nil {
-		fmt.Printf("JSON解析失败: %v\n", err)
+		klog.Error("JSON解析失败: %v\n", err)
+		klog.Infof("disk usage response: %s\n", string(body))
 		return false, err
 	}
+	klog.Infof("disk usage status: %v\n", summary)
 
 	// 计算使用率
-	imageFs := summary.Node.Runtime.ImageFs
-	usagePercent := float64(0)
-	if imageFs.CapacityBytes > 0 {
-		usagePercent = float64(imageFs.UsedBytes) / float64(imageFs.CapacityBytes) * 100
-	}
+	//imageFs := summary.Node.Runtime.ImageFs
+	//usagePercent := float64(0)
+	//if imageFs.CapacityBytes > 0 {
+	//	usagePercent = float64(imageFs.UsedBytes) / float64(imageFs.CapacityBytes) * 100
+	//}
 
 	// 保存结果
-	result := &NodeDiskUsage{
-		NodeName:        node.Name,
-		Capacity:        imageFs.CapacityBytes,
-		Used:            imageFs.UsedBytes,
-		Available:       imageFs.AvailableBytes,
-		UsagePercentage: usagePercent,
-	}
-
-	jsonOutput, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return false, fmt.Errorf("JSON序列化失败: %v", err)
-	}
-
-	klog.Infof("节点磁盘使用详情:\n%s\n", jsonOutput)
+	//result := &NodeDiskUsage{
+	//	NodeName:        node.Name,
+	//	Capacity:        imageFs.CapacityBytes,
+	//	Used:            imageFs.UsedBytes,
+	//	Available:       imageFs.AvailableBytes,
+	//	UsagePercentage: usagePercent,
+	//}
+	//
+	//jsonOutput, err := json.MarshalIndent(result, "", "  ")
+	//if err != nil {
+	//	return false, fmt.Errorf("JSON序列化失败: %v", err)
+	//}
+	//
+	//klog.Infof("节点磁盘使用详情:\n%s\n", jsonOutput)
 	klog.Infof("====================================")
 
 	info := NodeDetailedInfo{
