@@ -21,9 +21,9 @@ var externalWatcher *fsnotify.Watcher = nil
 
 type Mount struct {
 	Mounted map[string]*files.DiskInfo
-	Usage   float64
-	Free    uint64
-	mu      sync.RWMutex
+	//Usage   float64
+	//Free    uint64
+	mu sync.RWMutex
 }
 
 type MountedDevice struct {
@@ -41,7 +41,7 @@ func init() {
 func InitGlobalMounted() {
 	GlobalMounted.getMounted()
 	GlobalMounted.watchMounted()
-	GlobalMounted.watchDiskUsage()
+	//GlobalMounted.watchDiskUsage()
 }
 
 func (m *Mount) Updated() {
@@ -64,22 +64,22 @@ func (m *Mount) GetMountedData() []files.DiskInfo {
 	return res
 }
 
-func (m *Mount) watchDiskUsage() {
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			usage, free, err := common.CheckDiskUsage()
-			if err != nil {
-				klog.Errorf("watch disk usage error: %v", err)
-				continue
-			}
-			m.Usage = usage
-			m.Free = free
-		}
-	}()
-}
+//func (m *Mount) watchDiskUsage() {
+//	go func() {
+//		ticker := time.NewTicker(10 * time.Second)
+//		defer ticker.Stop()
+//
+//		for range ticker.C {
+//			usage, free, err := common.CheckDiskUsage()
+//			if err != nil {
+//				klog.Errorf("watch disk usage error: %v", err)
+//				continue
+//			}
+//			m.Usage = usage
+//			m.Free = free
+//		}
+//	}()
+//}
 
 func (m *Mount) watchMounted() {
 	var err error
