@@ -2,6 +2,7 @@ package global
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
@@ -172,6 +173,39 @@ func (g *Node) Handlerevent() cache.ResourceEventHandler {
 	}
 }
 
+type NodeDetailedInfo struct {
+	Name           string
+	Labels         map[string]string
+	Conditions     []Condition
+	Capacity       ResourceInfo
+	Allocatable    ResourceInfo
+	UsedStorage    ResourceInfo
+	FreeStorage    ResourceInfo
+	StorageMetrics StorageMetrics
+}
+
+type Condition struct {
+	Type          corev1.NodeConditionType
+	Status        corev1.ConditionStatus
+	LastHeartbeat string
+	Reason        string
+	Message       string
+}
+
+type ResourceInfo struct {
+	CPU              string
+	Memory           string
+	EphemeralStorage string
+	Storage          string
+}
+
+type StorageMetrics struct {
+	TotalCapacity   resource.Quantity
+	UsedCapacity    resource.Quantity
+	FreeCapacity    resource.Quantity
+	UsagePercentage float64
+}
+
 func (g *Node) CheckDiskPressure() (bool, error) {
 	node, exists := g.Nodes[CurrentNodeName]
 	if !exists {
@@ -179,20 +213,56 @@ func (g *Node) CheckDiskPressure() (bool, error) {
 		return false, fmt.Errorf("get node info failed") // TODO
 	}
 
+	info := NodeDetailedInfo{
+		Name:   node.Name,
+		Labels: node.Labels,
+	}
+
+	// 收集节点条件
+	for _, cond := range node.Status.Conditions {
+		info.Conditions = append(info.Conditions, Condition{
+			Type:          cond.Type,
+			Status:        cond.Status,
+			LastHeartbeat: cond.LastHeartbeatTime.String(),
+			Reason:        cond.Reason,
+			Message:       cond.Message,
+		})
+	}
+
+	// 获取资源信息
+	info.Capacity = getResourceInfo(node.Status.Capacity)
+	info.Allocatable = getResourceInfo(node.Status.Allocatable)
+	info.UsedStorage = calculateUsedResources(node.Status.Capacity, node.Status.Allocatable)
+	info.FreeStorage = calculateFreeResources(node.Status.Capacity, node.Status.Allocatable)
+
+	// 计算存储指标
+	if cap, exists := node.Status.Capacity[corev1.ResourceEphemeralStorage]; exists {
+		info.StorageMetrics = calculateStorageMetrics(cap, info.UsedStorage.EphemeralStorage)
+	}
+
+	// 格式化输出
+	jsonOutput, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		panic(fmt.Sprintf("JSON序列化失败: %v", err))
+	}
+
+	klog.Infof("节点详细信息:\n%s\n", jsonOutput)
+	klog.Infof("====================================")
+
 	var capacity resource.Quantity
 	if capacity, exists = node.Status.Capacity[corev1.ResourceEphemeralStorage]; exists {
-		fmt.Printf("  All storage space: %s bytes\n", capacity.String())
+		klog.Infof("  All storage space: %s bytes\n", capacity.String())
 	}
 
 	if allocatable, exists := node.Status.Allocatable[corev1.ResourceEphemeralStorage]; exists {
-		fmt.Printf("  Available storage space: %s bytes\n", allocatable.String())
+		klog.Infof("  Available storage space: %s bytes\n", allocatable.String())
 
 		used := capacity.DeepCopy()
 		used.Sub(allocatable)
 		usedPercent := float64(used.Value()) / float64(capacity.Value()) * 100
-		fmt.Printf("  Storage use percentage: %.2f%%\n", usedPercent)
+		klog.Infof("  Storage use percentage: %.2f%%\n", usedPercent)
 	}
-	fmt.Println("====================================")
+	klog.Infof("====================================")
 
 	for _, cond := range node.Status.Conditions {
 		klog.Infof("Node %s condition: %+v\n", CurrentNodeName, cond)
@@ -205,4 +275,96 @@ func (g *Node) CheckDiskPressure() (bool, error) {
 
 	klog.Infof("No disk pressure detected")
 	return false, nil
+}
+
+func getResourceInfo(resourceList corev1.ResourceList) ResourceInfo {
+	return ResourceInfo{
+		CPU:              getResourceValue(resourceList, corev1.ResourceCPU),
+		Memory:           getResourceValue(resourceList, corev1.ResourceMemory),
+		EphemeralStorage: getResourceValue(resourceList, corev1.ResourceEphemeralStorage),
+		Storage:          getResourceValue(resourceList, corev1.ResourceStorage),
+	}
+}
+
+func getResourceValue(resourceList corev1.ResourceList, resource corev1.ResourceName) string {
+	if val, exists := resourceList[resource]; exists {
+		return val.String()
+	}
+	return "N/A"
+}
+
+func calculateUsedResources(capacity, allocatable corev1.ResourceList) ResourceInfo {
+	used := ResourceInfo{}
+	used.CPU = calculateResourceUsage(
+		getResourceValue(capacity, corev1.ResourceCPU),
+		getResourceValue(allocatable, corev1.ResourceCPU),
+	)
+	used.Memory = calculateResourceUsage(
+		getResourceValue(capacity, corev1.ResourceMemory),
+		getResourceValue(allocatable, corev1.ResourceMemory),
+	)
+	used.EphemeralStorage = calculateResourceUsage(
+		getResourceValue(capacity, corev1.ResourceEphemeralStorage),
+		getResourceValue(allocatable, corev1.ResourceEphemeralStorage),
+	)
+	used.Storage = calculateResourceUsage(
+		getResourceValue(capacity, corev1.ResourceStorage),
+		getResourceValue(allocatable, corev1.ResourceStorage),
+	)
+	return used
+}
+
+func calculateFreeResources(capacity, allocatable corev1.ResourceList) ResourceInfo {
+	free := ResourceInfo{}
+	free.CPU = calculateResourceFree(
+		getResourceValue(capacity, corev1.ResourceCPU),
+		getResourceValue(allocatable, corev1.ResourceCPU),
+	)
+	free.Memory = calculateResourceFree(
+		getResourceValue(capacity, corev1.ResourceMemory),
+		getResourceValue(allocatable, corev1.ResourceMemory),
+	)
+	free.EphemeralStorage = calculateResourceFree(
+		getResourceValue(capacity, corev1.ResourceEphemeralStorage),
+		getResourceValue(allocatable, corev1.ResourceEphemeralStorage),
+	)
+	free.Storage = calculateResourceFree(
+		getResourceValue(capacity, corev1.ResourceStorage),
+		getResourceValue(allocatable, corev1.ResourceStorage),
+	)
+	return free
+}
+
+func calculateResourceUsage(capacity, allocatable string) string {
+	capQty := parseQuantity(capacity)
+	allocQty := parseQuantity(allocatable)
+	used := capQty.DeepCopy()
+	used.Sub(allocQty)
+	return used.String()
+}
+
+func calculateResourceFree(capacity, allocatable string) string {
+	quantity := parseQuantity(allocatable)
+	return (&quantity).String()
+}
+
+func parseQuantity(value string) resource.Quantity {
+	if value == "N/A" {
+		return resource.MustParse("0")
+	}
+	return resource.MustParse(value)
+}
+
+func calculateStorageMetrics(capacity resource.Quantity, used string) StorageMetrics {
+	usedQty := parseQuantity(used)
+	free := capacity.DeepCopy()
+	free.Sub(usedQty)
+	usagePercent := float64(usedQty.Value()) / float64(capacity.Value()) * 100
+
+	return StorageMetrics{
+		TotalCapacity:   capacity,
+		UsedCapacity:    usedQty,
+		FreeCapacity:    free,
+		UsagePercentage: usagePercent,
+	}
 }
