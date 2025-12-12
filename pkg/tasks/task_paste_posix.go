@@ -62,10 +62,6 @@ func (t *Task) Rsync() error {
 		return fmt.Errorf("get dst space size error: %v", err)
 	}
 
-	if dstUsedPercent > common.FreeLimit {
-		return fmt.Errorf("target disk usage has reached %.2f%%. Please clean up disk space first.", common.FreeLimit)
-	}
-
 	if pathMeta.Size > int64(dstFree) {
 		return fmt.Errorf("not enough free space on target disk, required: %s, available: %s", common.FormatBytes(pathMeta.Size), common.FormatBytes(int64(dstFree)))
 	}

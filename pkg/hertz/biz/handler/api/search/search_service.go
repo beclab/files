@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"files/pkg/common"
-	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
@@ -112,9 +111,6 @@ func CheckDirectory(ctx context.Context, c *app.RequestContext) {
 
 	fileParam.Extend = common.TrimShareId(fileParam.Extend)
 
-	var uri string
-	var realPath string
-	var realOwner string
 	var permission int32
 
 	if fileParam.FileType == common.Share {
@@ -144,48 +140,13 @@ func CheckDirectory(ctx context.Context, c *app.RequestContext) {
 
 		if member == nil {
 			permission = 0
+		} else if member.Permission == 1 {
+			permission = 1
 		} else {
-			permission = member.Permission
+			permission = 3
 		}
-
-		realPath = fmt.Sprintf("/%s/%s/%s/", shared.FileType, shared.Extend, strings.Trim(shared.Path, "/"))
-		realOwner = shared.Owner
-
-		realParam, err := models.CreateFileParam(realOwner, realPath)
-		if err != nil {
-			klog.Errorf("[search] CheckDirectory, get param failed, owner: %s, error: %v, path: %s", realOwner, err, realPath)
-			handler.RespError(c, fmt.Sprintf("Check Directory Error: %v", err))
-			return
-		}
-		uri, err = realParam.GetResourceUri()
-		if err != nil {
-			klog.Errorf("[search] CheckDirectory, get uri error: %v", err)
-			handler.RespError(c, fmt.Sprintf("Check Directory Error: %v", err))
-			return
-		}
-
-		uri = strings.TrimSuffix(uri, "/") + realParam.Path
 	} else {
-		uri, err = fileParam.GetResourceUri()
-		if err != nil {
-			klog.Errorf("[search] CheckDirectory, get uri error: %v", err)
-			handler.RespError(c, fmt.Sprintf("Check Directory Error: %v", err))
-			return
-		}
-		uri = strings.TrimSuffix(uri, "/") + fileParam.Path
-	}
-
-	klog.Infof("[search] CheckDirectory, owner: %s, uri: %s", owner, uri)
-
-	permit, exists := files.CanWriteDir(uri)
-	if !exists {
-		handler.RespError(c, common.ErrorMessageDirNotExists)
-		return
-	}
-	if permit {
 		permission = 3
-	} else {
-		permission = 1
 	}
 
 	if !strings.HasPrefix(sharePath, "/") {
