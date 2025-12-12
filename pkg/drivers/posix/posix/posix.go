@@ -660,7 +660,11 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	//	}
 	//}
 
-	diskPressure := global.GlobalNode.CheckDiskPressure()
+	diskPressure, err := global.GlobalNode.CheckDiskPressure()
+	if err != nil {
+		klog.Errorf("global.GlobalNode.CheckDiskPressure() error: %v", err)
+		return nil, err
+	}
 	if diskPressure {
 		klog.Infof("global.GlobalNode.CheckDiskPressure() = %v", diskPressure)
 		return nil, errors.New(common.ErrorMessageNoSpace)
