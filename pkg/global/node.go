@@ -2,8 +2,11 @@ package global
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -206,12 +209,98 @@ type StorageMetrics struct {
 	UsagePercentage float64
 }
 
+type NodeDiskUsage struct {
+	NodeName        string  `json:"nodeName"`
+	Capacity        uint64  `json:"capacity"`
+	Used            uint64  `json:"used"`
+	Available       uint64  `json:"available"`
+	UsagePercentage float64 `json:"usagePercentage"`
+}
+
 func (g *Node) CheckDiskPressure() (bool, error) {
 	node, exists := g.Nodes[CurrentNodeName]
 	if !exists {
 		klog.Infof("Get node info failed")
 		return false, fmt.Errorf("get node info failed") // TODO
 	}
+
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		Timeout: 10 * time.Second,
+	}
+
+	// 构造kubelet API URL
+	url := fmt.Sprintf("https://%s:10250/api/v1/nodes/%s/proxy/stats/summary", node.Name, node.Name)
+
+	// 创建HTTP请求
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fmt.Printf("创建请求失败: %v\n", err)
+		return false, err
+	}
+
+	// 设置认证头
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("KUBECONFIG_TOKEN"))
+
+	// 调用API
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		fmt.Printf("调用API失败: %v\n", err)
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("读取响应失败: %v\n", err)
+		return false, err
+	}
+
+	// 解析响应
+	var summary struct {
+		Node struct {
+			Runtime struct {
+				ImageFs struct {
+					AvailableBytes uint64
+					CapacityBytes  uint64
+					UsedBytes      uint64
+				}
+			}
+		}
+	}
+
+	err = json.Unmarshal(body, &summary)
+	if err != nil {
+		fmt.Printf("JSON解析失败: %v\n", err)
+		return false, err
+	}
+
+	// 计算使用率
+	imageFs := summary.Node.Runtime.ImageFs
+	usagePercent := float64(0)
+	if imageFs.CapacityBytes > 0 {
+		usagePercent = float64(imageFs.UsedBytes) / float64(imageFs.CapacityBytes) * 100
+	}
+
+	// 保存结果
+	result := &NodeDiskUsage{
+		NodeName:        node.Name,
+		Capacity:        imageFs.CapacityBytes,
+		Used:            imageFs.UsedBytes,
+		Available:       imageFs.AvailableBytes,
+		UsagePercentage: usagePercent,
+	}
+
+	jsonOutput, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return false, fmt.Errorf("JSON序列化失败: %v", err)
+	}
+
+	klog.Infof("节点磁盘使用详情:\n%s\n", jsonOutput)
+	klog.Infof("====================================")
 
 	info := NodeDetailedInfo{
 		Name:   node.Name,
@@ -236,12 +325,12 @@ func (g *Node) CheckDiskPressure() (bool, error) {
 	info.FreeStorage = calculateFreeResources(node.Status.Capacity, node.Status.Allocatable)
 
 	// 计算存储指标
-	if cap, exists := node.Status.Capacity[corev1.ResourceEphemeralStorage]; exists {
-		info.StorageMetrics = calculateStorageMetrics(cap, info.UsedStorage.EphemeralStorage)
+	if capa, exists := node.Status.Capacity[corev1.ResourceEphemeralStorage]; exists {
+		info.StorageMetrics = calculateStorageMetrics(capa, info.UsedStorage.EphemeralStorage)
 	}
 
 	// 格式化输出
-	jsonOutput, err := json.MarshalIndent(info, "", "  ")
+	jsonOutput, err = json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		panic(fmt.Sprintf("JSON序列化失败: %v", err))
 	}
