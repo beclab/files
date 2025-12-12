@@ -218,6 +218,18 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 
 	klog.Infof("[upload] uploadId: %s, fullPath: %s", uploadId, fullPath)
 
+	// check disk pressure
+	diskPressure, err := global.GlobalNode.CheckDiskPressure()
+	if err != nil {
+		klog.Errorf("global.GlobalNode.CheckDiskPressure() error: %v", err)
+		return false, nil, err
+	}
+	if diskPressure {
+		klog.Infof("global.GlobalNode.CheckDiskPressure() = %v", diskPressure)
+		RemoveTempFileAndInfoFile(tmpName, uploadTempPath)
+		return false, nil, errors.New(common.ErrorMessageNoSpace)
+	}
+
 	exist, info := FileInfoManager.ExistFileInfo(innerIdentifier)
 	if !exist {
 		klog.Warningf("[upload] uploadId: %s, innerIdentifier %s not exist", uploadId, innerIdentifier)

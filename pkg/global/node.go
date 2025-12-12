@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
@@ -177,6 +178,21 @@ func (g *Node) CheckDiskPressure() (bool, error) {
 		klog.Infof("Get node info failed")
 		return false, fmt.Errorf("get node info failed") // TODO
 	}
+
+	var capacity resource.Quantity
+	if capacity, exists = node.Status.Capacity[corev1.ResourceEphemeralStorage]; exists {
+		fmt.Printf("  All storage space: %s bytes\n", capacity.String())
+	}
+
+	if allocatable, exists := node.Status.Allocatable[corev1.ResourceEphemeralStorage]; exists {
+		fmt.Printf("  Available storage space: %s bytes\n", allocatable.String())
+
+		used := capacity.DeepCopy()
+		used.Sub(allocatable)
+		usedPercent := float64(used.Value()) / float64(capacity.Value()) * 100
+		fmt.Printf("  Storage use percentage: %.2f%%\n", usedPercent)
+	}
+	fmt.Println("====================================")
 
 	for _, cond := range node.Status.Conditions {
 		klog.Infof("Node %s condition: %+v\n", CurrentNodeName, cond)
