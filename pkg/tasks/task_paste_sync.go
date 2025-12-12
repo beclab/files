@@ -710,7 +710,7 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 	}
 
 	if created {
-		res, err := seahub.HandleDirOperation(src.Owner, dst.Extend, fdstBase, "", "mkdir")
+		res, err := seahub.HandleDirOperation(src.Owner, dst.Extend, fdstBase, "", "mkdir", true)
 		if err != nil {
 			klog.Errorf("Sync create error: %v, path: %s", err, dst.Path)
 			return err

@@ -7,14 +7,7 @@ import (
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
 	"fmt"
-	"github.com/saintfish/chardet"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/encoding/unicode"
-	"golang.org/x/text/transform"
 	"io"
-	"k8s.io/klog/v2"
 	"net/http"
 	"net/url"
 	"path"
@@ -22,6 +15,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/saintfish/chardet"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
+	"k8s.io/klog/v2"
 )
 
 var MAX_UPLOAD_FILE_NAME_LEN = 255
@@ -60,7 +61,7 @@ func HandleFileOperation(owner, repoId, pathParam, destName, operation string) (
 	// we only use rename now
 	switch operation {
 	case "create":
-		return nil, errors.New("operation not supported yet")
+		return handleCreate(repoId, pathParam, owner)
 	case "rename":
 		return handleRename(repoId, pathParam, owner, destName)
 	case "move":
@@ -72,6 +73,46 @@ func HandleFileOperation(owner, repoId, pathParam, destName, operation string) (
 	default:
 		return nil, errors.New("unknown operation")
 	}
+}
+
+func handleCreate(repoId, pathParam, owner string) ([]byte, error) {
+	username := owner + "@auth.local"
+
+	pathParam = strings.TrimRight(pathParam, "/")
+	parentDir := path.Dir(pathParam)
+	filename := path.Base(pathParam)
+
+	// resource check
+	parentDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+
+	if parentDirId == "" {
+		return nil, fmt.Errorf("Folder %s not found.", parentDir)
+	}
+
+	// permission check
+	permission, err := CheckFolderPermission(username, repoId, parentDir)
+	if err != nil || permission != "rw" {
+		return nil, errors.New("permission denied")
+	}
+
+	if !isValidDirentName(filename) {
+		return nil, errors.New("name invalid")
+	}
+
+	filename = CheckFilenameWithRename(repoId, parentDir, filename)
+
+	_, err = seaserv.GlobalSeafileAPI.PostEmptyFile(repoId, parentDir, filename, username)
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+
+	fileInfo := GetFileInfo(repoId, path.Join(parentDir, filename))
+	return common.ToBytes(fileInfo), nil
 }
 
 func handleRename(repoId, pathParam, owner, newName string) ([]byte, error) {

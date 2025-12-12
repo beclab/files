@@ -7,9 +7,14 @@ import (
 	"files/pkg/drivers/clouds/rclone/job"
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/files"
+	"files/pkg/global"
 	"files/pkg/models"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -55,20 +60,32 @@ func (s *service) Stat(param *models.FileParam) (*operations.OperationsStat, err
 
 }
 
-func (s *service) CopyFile(fileParam *models.FileParam, prefixPath, dstR string) ([]byte, error) {
-	var keepFilePath = common.DefaultLocalRootPath + common.DefaultKeepFileName
-	if err := files.CheckKeepFile(keepFilePath); err != nil {
+func GenerateCloudCachePath(fileParam *models.FileParam) string {
+	timeStamp := time.Now().UnixNano()
+	fileName := filepath.Base(fileParam.Path)
+
+	var fileNamePathMapping string = fmt.Sprintf("%d_%s", timeStamp, fileName)
+
+	cachePath := filepath.Join(common.CACHE_PREFIX, global.GlobalData.GetPvcCache(fileParam.Owner), common.DefaultLocalFileCachePath, common.CloudCache, fileNamePathMapping)
+
+	return cachePath
+}
+
+func (s *service) CreateFile(fileParam *models.FileParam, dstR string, body io.ReadCloser) ([]byte, error) {
+	var createCacheFilePath = GenerateCloudCachePath(fileParam)
+	if err := files.CheckCloudCreateCacheFile(createCacheFilePath, body); err != nil {
 		return nil, err
 	}
+	defer os.Remove(createCacheFilePath)
 
 	fsPrefix, err := s.command.GetFsPrefix(fileParam)
 	if err != nil {
 		return nil, err
 	}
 
-	var srcFs = fmt.Sprintf("local:%s", common.DefaultLocalRootPath)
-	var srcR = common.DefaultKeepFileName
-	var dstFs = fsPrefix
+	var srcFs = fmt.Sprintf("local:%s", filepath.Dir(createCacheFilePath))
+	var srcR = filepath.Base(createCacheFilePath)
+	var dstFs = filepath.Join(fsPrefix, filepath.Dir(fileParam.Path)) + "/"
 
 	s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR)
 	return nil, nil

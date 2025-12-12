@@ -486,10 +486,55 @@ func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error
 
 	klog.Infof("Sync create, owner: %s, args: %s", owner, common.ToJson(contextArgs))
 
-	res, err := seahub.HandleDirOperation(owner, fileParam.Extend, fileParam.Path, "", "mkdir")
-	if err != nil {
-		klog.Errorf("Sync create error: %v, path: %s", err, fileParam.Path)
-		return nil, err
+	isFile := !strings.HasSuffix(fileParam.Path, "/")
+	var res []byte
+	var err error
+
+	// both OK for dir and file
+	parentDir := filepath.Dir(strings.TrimSuffix(fileParam.Path, "/"))
+	if parentDir != "/" {
+		parentDirSplit := strings.Split(strings.Trim(parentDir, "/"), "/")
+		tempDir := "/"
+		for _, dir := range parentDirSplit {
+			if dir == "" || dir == "." {
+				continue
+			}
+			tempDir = filepath.Join(tempDir, dir)
+			_, err = seahub.HandleDirOperation(owner, fileParam.Extend, tempDir, "", "mkdir", false)
+			if err != nil {
+				klog.Errorf("Sync create error: %v, path: %s", err, fileParam.Path)
+				return nil, err
+			}
+		}
+	}
+
+	if isFile {
+		res, err = seahub.HandleFileOperation(owner, fileParam.Extend, fileParam.Path, "", "create")
+		if err != nil {
+			klog.Errorf("Sync create error: %v, path: %s", err, fileParam.Path)
+			return nil, err
+		}
+		if contextArgs.QueryParam.Body != nil {
+			var resJson map[string]interface{}
+			err = json.Unmarshal(res, &resJson)
+			if err != nil {
+				klog.Error(err)
+				return nil, err
+			}
+			contextArgs.FileParam.Path = filepath.Join(filepath.Dir(fileParam.Path), resJson["obj_name"].(string))
+			klog.Infof("contextArgs.FileParam.Path: %s", contextArgs.FileParam.Path)
+			_, err = s.Edit(contextArgs)
+			if err != nil {
+				klog.Errorf("Sync create error: %v, path: %s", err, fileParam.Path)
+				return nil, err
+			}
+		}
+	} else {
+		res, err = seahub.HandleDirOperation(owner, fileParam.Extend, fileParam.Path, "", "mkdir", true)
+		if err != nil {
+			klog.Errorf("Sync create error: %v, path: %s", err, fileParam.Path)
+			return nil, err
+		}
 	}
 
 	klog.Infof("Sync create success, result: %s, path: %s", string(res), fileParam.Path)
@@ -544,7 +589,7 @@ func (s *SyncStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error
 	}
 	action := "rename"
 	if strings.HasSuffix(fileParam.Path, "/") {
-		respBody, err = seahub.HandleDirOperation(owner, repoID, fileParam.Path, newFilename, action)
+		respBody, err = seahub.HandleDirOperation(owner, repoID, fileParam.Path, newFilename, action, false)
 	} else {
 		respBody, err = seahub.HandleFileOperation(owner, repoID, fileParam.Path, newFilename, action)
 	}

@@ -89,6 +89,7 @@ var (
 
 	CacheBuffer = "buffer"
 	CacheThumb  = "thumb"
+	CloudCache  = "cloud_cache"
 )
 
 var (

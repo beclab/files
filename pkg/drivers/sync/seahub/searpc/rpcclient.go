@@ -129,6 +129,11 @@ func (c *SeafServerThreadedRpcClient) SeafilePostDir(repoId, parentDir, newDirNa
 		repoId, parentDir, newDirName, user)
 }
 
+func (c *SeafServerThreadedRpcClient) SeafilePostEmptyFile(repoId, parentDir, filename, user string) (interface{}, error) {
+	return CreateRPCMethod(c, "seafile_post_empty_file", "int", []string{"string", "string", "string", "string"})(
+		repoId, parentDir, filename, user)
+}
+
 func (c *SeafServerThreadedRpcClient) SeafileDelFile(repoId, parentDir, filename, user string) (interface{}, error) {
 	return CreateRPCMethod(c, "seafile_del_file", "int", []string{"string", "string", "string", "string"})(
 		repoId, parentDir, filename, user)
