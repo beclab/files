@@ -333,7 +333,7 @@ func (g *Node) CheckDiskPressure() (bool, error) {
 	}
 
 	// 格式化输出
-	jsonOutput, err = json.MarshalIndent(info, "", "  ")
+	jsonOutput, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		panic(fmt.Sprintf("JSON序列化失败: %v", err))
 	}
