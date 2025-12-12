@@ -16,7 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shirou/gopsutil/v4/disk"
 	"k8s.io/klog/v2"
 )
 
@@ -80,22 +79,22 @@ const (
 	maxReasonableSpace = 1000 * 1e12 // 1000T
 )
 
-func CheckDiskUsage() (float64, uint64, error) {
-	rootUsage, err := disk.Usage("/")
-	if err != nil {
-		return 0, 0, err
-	}
-
-	dataUsage, err := disk.Usage("/data")
-	if err != nil {
-		return 0, 0, err
-	}
-
-	if dataUsage.Total >= maxReasonableSpace {
-		return rootUsage.UsedPercent, rootUsage.Free, nil
-	}
-	return dataUsage.UsedPercent, dataUsage.Free, nil
-}
+//func CheckDiskUsage() (float64, uint64, error) {
+//	rootUsage, err := disk.Usage("/")
+//	if err != nil {
+//		return 0, 0, err
+//	}
+//
+//	dataUsage, err := disk.Usage("/data")
+//	if err != nil {
+//		return 0, 0, err
+//	}
+//
+//	if dataUsage.Total >= maxReasonableSpace {
+//		return rootUsage.UsedPercent, rootUsage.Free, nil
+//	}
+//	return dataUsage.UsedPercent, dataUsage.Free, nil
+//}
 
 func CheckDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
 	reservedSpaceStr := os.Getenv("RESERVED_SPACE") // env is MB, default is 10000MB

@@ -628,36 +628,36 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 
 	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s, disk usage: %f", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby, global.GlobalMounted.Usage)
 
-	if chunkInfo.ResumableChunkNumber == 1 {
-		klog.Infof("Posix uploadChunks, global.GlobalMounted: %+v", global.GlobalMounted)
-		for _, mounted := range global.GlobalMounted.Mounted {
-			klog.Infof("Posix uploadChunks, mounted: %+v", mounted)
-		}
-	}
+	//if chunkInfo.ResumableChunkNumber == 1 {
+	//	klog.Infof("Posix uploadChunks, global.GlobalMounted: %+v", global.GlobalMounted)
+	//	for _, mounted := range global.GlobalMounted.Mounted {
+	//		klog.Infof("Posix uploadChunks, mounted: %+v", mounted)
+	//	}
+	//}
 
-	found := false
-	if fileUploadArg.FileParam.FileType == common.External {
-		externalPath := strings.Split(strings.Trim(fileUploadArg.FileParam.Path, "/"), "/")[0]
-		for _, mounted := range global.GlobalMounted.Mounted {
-			if externalPath == mounted.Path {
-				found = true
-				if mounted.UsedPercent >= common.ExternalFreeLimit {
-					return nil, errors.New(common.ErrorMessageNoSpace)
-				} else {
-					klog.Infof("externalPath: %s, mounted.UsedPercent = %f", externalPath, mounted.UsedPercent)
-					break
-				}
-			}
-		}
-	}
-
-	if !found {
-		if global.GlobalMounted.Usage >= common.FreeLimit {
-			return nil, errors.New(common.ErrorMessageNoSpace)
-		} else {
-			klog.Infof("global.GlobalMounted.Usage = %f", global.GlobalMounted.Usage)
-		}
-	}
+	//found := false
+	//if fileUploadArg.FileParam.FileType == common.External {
+	//	externalPath := strings.Split(strings.Trim(fileUploadArg.FileParam.Path, "/"), "/")[0]
+	//	for _, mounted := range global.GlobalMounted.Mounted {
+	//		if externalPath == mounted.Path {
+	//			found = true
+	//			if mounted.UsedPercent >= common.ExternalFreeLimit {
+	//				return nil, errors.New(common.ErrorMessageNoSpace)
+	//			} else {
+	//				klog.Infof("externalPath: %s, mounted.UsedPercent = %f", externalPath, mounted.UsedPercent)
+	//				break
+	//			}
+	//		}
+	//	}
+	//}
+	//
+	//if !found {
+	//	if global.GlobalMounted.Usage >= common.FreeLimit {
+	//		return nil, errors.New(common.ErrorMessageNoSpace)
+	//	} else {
+	//		klog.Infof("global.GlobalMounted.Usage = %f", global.GlobalMounted.Usage)
+	//	}
+	//}
 
 	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
 
