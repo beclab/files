@@ -29,6 +29,10 @@ func Register(r *server.Hertz) {
 				_get_directory := _search.Group("/get_directory", _get_directoryMw()...)
 				_get_directory.GET("/", append(_getdirectoriesMw(), search.GetDirectories)...)
 			}
+			{
+				_sync_search := _search.Group("/sync_search", _sync_searchMw()...)
+				_sync_search.POST("/", append(_syncsearchMw(), search.SyncSearch)...)
+			}
 		}
 	}
 }

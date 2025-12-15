@@ -253,6 +253,10 @@ func (c *SeafServerThreadedRpcClient) PublishEvent(channel, content string) (int
 	return CreateRPCMethod(c, "publish_event", "int", []string{"string", "string"})(channel, content)
 }
 
+func (c *SeafServerThreadedRpcClient) SearchFiles(repoId, searchStr string) (interface{}, error) {
+	return CreateRPCMethod(c, "search_files", "objlist", []string{"string", "string"})(repoId, searchStr)
+}
+
 func (c *SeafServerThreadedRpcClient) AddEmailuser(email string, passwd string, isStaff int, isActive int) (interface{}, error) {
 	return CreateRPCMethod(c, "add_emailuser", "int", []string{"string", "string", "int", "int"})(
 		email, passwd, isStaff, isActive)

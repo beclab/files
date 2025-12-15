@@ -40,3 +40,13 @@ func _getdirectoriesMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _sync_searchMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _syncsearchMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

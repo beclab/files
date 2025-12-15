@@ -4,6 +4,8 @@ package search
 
 import (
 	"context"
+	"encoding/json"
+	"files/pkg/drivers/sync/seahub"
 	"fmt"
 	"strings"
 
@@ -15,6 +17,8 @@ import (
 	"files/pkg/models"
 
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
 )
 
@@ -159,4 +163,33 @@ func CheckDirectory(ctx context.Context, c *app.RequestContext) {
 	}
 
 	handler.RespSuccess(c, result)
+}
+
+// SyncSearch .
+// @router /api/search/sync_search/ [POST]
+func SyncSearch(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req search.SyncSearchReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
+	if owner == "" {
+		handler.RespError(c, common.ErrorMessageOwnerNotFound)
+		return
+	}
+
+	res, err := seahub.HandleSearch(owner, req.Q)
+	klog.Infof("[sync search] res=%s", string(res))
+
+	resp := new(search.SyncSearchResp)
+	if err := json.Unmarshal(res, &resp); err != nil {
+		klog.Errorf("Failed to unmarshal response body: %v", err)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+		return
+	}
+	c.JSON(consts.StatusOK, resp)
 }
