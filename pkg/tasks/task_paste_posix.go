@@ -130,6 +130,8 @@ func (t *Task) rsync() error {
 
 	var args = []string{
 		"-av",
+		"--no-o",
+		"--no-g",
 		// "--bwlimit=15000", // from env
 		"--info=PROGRESS2",
 		srcPath,
