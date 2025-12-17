@@ -26,8 +26,27 @@ struct DirectoryInfo {
     4: i32 permission (go.tag='json:"permission"');
 }
 
+struct SyncSearchReq {
+     1: required string q (api.body="q");
+}
+
+struct SyncSearchResult {
+    1: string file_extend;
+    2: string file_type;
+    3: string path;
+    4: string size;
+    5: string mtime;
+    6: string type;
+    7: string repo_name;
+    8: string title;
+}
+
+struct SyncSearchResp {
+    1: list<SyncSearchResult> data
+}
 
 service SearchService {
     GetDirectoriesResp GetDirectories() (api.get="/api/search/get_directory/")
     CheckDirectoryResp CheckDirectory() (api.get="/api/search/check_directory/*path")
+    SyncSearchResp SyncSearch(SyncSearchReq req) (api.post="/api/search/sync_search/")
 }

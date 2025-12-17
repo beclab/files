@@ -49,6 +49,19 @@ func QuerySharePath(params *QueryParams, page, pageSize int64, orderBy, order st
 	return res, total, nil
 }
 
+func QuerySharePathByExtendAndMember(extend, member string) ([]*share.SharePath, error) {
+	var res []*share.SharePath
+	if err := DB.Table(
+		"share_paths").Joins(
+		"LEFT JOIN share_members ON share_paths.id = share_members.path_id").Where(
+		"share_paths.owner != ? AND share_paths.extend = ? AND share_paths.share_type = ? AND share_members.share_member = ?", member, extend, common.ShareTypeInternal, member).Find(
+		&res).Error; err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+	return res, nil
+}
+
 func QuerySharePathByType(shareType string) ([]*share.SharePath, error) {
 	var res []*share.SharePath
 	if err := DB.Where("share_type = ?", shareType).Find(&res).Error; err != nil {

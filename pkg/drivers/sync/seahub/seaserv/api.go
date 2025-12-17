@@ -574,6 +574,14 @@ func (s *SeafileAPI) PublishEvent(channel, content string) (int, error) {
 	return ReturnInt(ret)
 }
 
+func (s *SeafileAPI) SearchFiles(repoId, searchStr string) ([]map[string]string, error) {
+	ret, err := s.rpcClient.SearchFiles(repoId, searchStr)
+	if err != nil {
+		return nil, err
+	}
+	return ReturnObjList(ret)
+}
+
 var GlobalSeafileAPI *SeafileAPI
 
 type CcnetAPI struct {
