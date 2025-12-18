@@ -1,10 +1,11 @@
 package seahub
 
 import (
-	"k8s.io/klog/v2"
 	"os"
 	"path"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 type FileType int
@@ -53,7 +54,7 @@ var PREVIEW_FILE_EXT = map[FileType][]string{
 	SVG:         {"svg"},
 	PDF:         {"pdf", "ai"},
 	MARKDOWN:    {"markdown", "md"},
-	VIDEO:       {"mp4", "ogv", "webm", "mov", "avi", "wmv", "mkv", "flv", "rmvb", "rm"},
+	VIDEO:       {"mp4", "ogv", "webm", "mov", "avi", "wmv", "mkv", "flv", "rmvb", "rm", "3gp", "mpg", "vob"},
 	AUDIO:       {"mp3", "oga", "ogg", "wav", "flac", "opus"},
 	XMIND:       {"xmind"},
 	SEADOC:      {"sdoc"},
