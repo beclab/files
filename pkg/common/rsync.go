@@ -19,6 +19,7 @@ import (
 
 var (
 	completeMsgs = []string{"sent", "received", "total size is", "speedup is"}
+	excludeMsgs  = []string{"rsync error: some files/attrs were not transferred"}
 )
 
 func GetCommand(c string) (string, error) {
@@ -51,8 +52,10 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 				}
 
 				if strings.Contains(result, "error") || strings.Contains(result, "failed:") {
-					errChan <- errors.New(formatFailed(result))
-					return
+					if !excludeMsg(result) {
+						errChan <- errors.New(formatFailed(result))
+						return
+					}
 				}
 
 				if progress, trans, err := formatProgress(result); err == nil {
@@ -69,10 +72,14 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 
 	if err := c.Run(); err != nil {
 		errMsg = err.Error()
+		if excludeMsg(errMsg) {
+			return "", nil
+		}
 		if strings.Contains(errMsg, "error") || strings.Contains(errMsg, "failed:") {
 			errMsg = formatFailed(errMsg)
 			return "", errors.New(errMsg)
 		}
+
 		return "", err
 	}
 
@@ -289,4 +296,13 @@ func (c *Command) Run() error {
 	}
 
 	return nil
+}
+
+func excludeMsg(msg string) bool {
+	for _, m := range excludeMsgs {
+		if strings.Contains(msg, m) {
+			return true
+		}
+	}
+	return false
 }
