@@ -12,7 +12,6 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"mime"
-	"path"
 	"strings"
 	"sync"
 	"time"
@@ -75,18 +74,14 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 		rawMeta = *req.Meta
 	}
 	var fileType = contextArg.FileParam.FileType
-	var fileName, isFile = files.GetFileNameFromPath(contextArg.FileParam.Path)
+	var _, isFile = files.GetFileNameFromPath(contextArg.FileParam.Path)
 	if !isFile {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("not a file, path: %s", contextArg.FileParam.Path)})
 		return
 	}
 
-	var fileExt = path.Ext(fileName)
-	var noCache bool
-	_, ok := noCacheFilesMap.Load(fileExt)
-	if ok {
-		noCache = true
-	}
+	// todo: browser cache settings
+	var noCache = true
 
 	var handler = drivers.Adaptor.NewFileHandler(fileType, handlerParam)
 	if handler == nil {

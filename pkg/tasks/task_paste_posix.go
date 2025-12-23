@@ -132,6 +132,7 @@ func (t *Task) rsync() error {
 		"-av",
 		"--no-o",
 		"--no-g",
+		"--copy-links",
 		// "--bwlimit=15000", // from env
 		"--info=PROGRESS2",
 		srcPath,
