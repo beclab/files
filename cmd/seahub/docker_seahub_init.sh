@@ -9,6 +9,7 @@ echo "DB_PASSWORD= $DB_PASSWORD"
 
 SQL_FILE1="init_pgdata/ccnet.sql"
 SQL_FILE2="init_pgdata/seafile.sql"
+SQL_FILE3="init_pgdata/patch.sql"
 
 export PGPASSWORD="$DB_PASSWORD"
 
@@ -65,6 +66,9 @@ if [ "$table_exists" = "f" ]; then
 else
     echo "No initialization needed for $DB_NAME2"
 fi
+
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME1" -f "$SQL_FILE3"
+    echo "sql patch finished"
 
 unset PGPASSWORD
 

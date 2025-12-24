@@ -644,7 +644,7 @@ func (s *CcnetAPI) GetEmailusers(source string, start, limit int, isActive *bool
 func (s *CcnetAPI) CountEmailusers(source string) (int, error) {
 	ret, err := s.rpcClient.CountEmailusers(source)
 	if err != nil {
-		return 0, fmt.Errorf("count email users failed: %v", err)
+		return -1, fmt.Errorf("count email users failed: %v", err)
 	}
 	return ReturnInt(ret)
 }

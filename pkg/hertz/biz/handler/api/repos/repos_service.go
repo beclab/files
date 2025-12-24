@@ -12,6 +12,7 @@ import (
 	repos "files/pkg/hertz/biz/model/api/repos"
 	"files/pkg/models"
 	"fmt"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -33,6 +34,14 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 	if owner == "" {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
 		return
+	}
+
+	if seahub.NeedPatchCreateUser(owner) {
+		err = seahub.HandleCallbackCreate(owner)
+		if err != nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "sync user not found and create failed"})
+			return
+		}
 	}
 
 	var res []byte

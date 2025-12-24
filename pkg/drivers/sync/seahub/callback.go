@@ -4,8 +4,11 @@ import (
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
+
 	"k8s.io/klog/v2"
 )
+
+var GlobalSyncUsers = make(map[string]bool)
 
 func CreateDefaultLibrary(newUsername string) (string, error) {
 	username := newUsername
@@ -99,4 +102,46 @@ func RemoveUser(username string) error {
 	}
 	klog.Infof("Successfully deleted user %s", username)
 	return nil
+}
+
+func HandleCallbackCreate(bflName string) error {
+	if bflName != "" {
+		newUsername := bflName + "@auth.local"
+		klog.Infof("Try to create user for %s", newUsername)
+
+		isNew, err := CreateUser(newUsername)
+		if err != nil {
+			klog.Infof("Error creating user: %v", err)
+			GlobalSyncUsers[bflName] = false
+			return err
+		}
+
+		if isNew {
+			repoId, err := CreateDefaultLibrary(newUsername)
+			if err != nil {
+				klog.Infof("Create default library for %s failed: %v", newUsername, err)
+			} else {
+				klog.Infof("Create default library %s for %s successfully!", repoId, newUsername)
+			}
+		}
+		GlobalSyncUsers[bflName] = true
+	}
+	return nil
+}
+
+func HandleCallbackDelete(bflName string) error {
+	username := bflName + "@auth.local"
+	err := RemoveUser(username)
+	if err != nil {
+		return err
+	}
+	GlobalSyncUsers[bflName] = false
+	return nil
+}
+
+func NeedPatchCreateUser(bflName string) bool {
+	if value, exists := GlobalSyncUsers[bflName]; exists && value {
+		return false
+	}
+	return true
 }
