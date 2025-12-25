@@ -2,9 +2,12 @@ package seaserv
 
 import (
 	"files/pkg/drivers/sync/seahub/searpc"
+	"path/filepath"
+	"sync"
+	"time"
+
 	v "github.com/spf13/viper"
 	"k8s.io/klog/v2"
-	"path/filepath"
 )
 
 type SearpcError = searpc.SearpcError
@@ -17,6 +20,30 @@ func InitSeaRPC() {
 	initRpcConfig()
 	GlobalSeafileAPI = NewSeafileAPI(SeafservThreadedRpc)
 	GlobalCcnetAPI = NewCcnetAPI(SeafservThreadedRpc)
+
+	go startPeriodicCheckSeaRPC()
+}
+
+func startPeriodicCheckSeaRPC() {
+	var initLock sync.Mutex
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		res, err := GlobalCcnetAPI.CountEmailusers("DB")
+		if err != nil {
+			klog.Errorf("check seafile rpc error: %v", err)
+		}
+
+		if res < 0 || err != nil {
+			initLock.Lock()
+			initRpcConfig()
+			GlobalSeafileAPI = NewSeafileAPI(SeafservThreadedRpc)
+			GlobalCcnetAPI = NewCcnetAPI(SeafservThreadedRpc)
+			initLock.Unlock()
+		}
+	}
 }
 
 func initRpcConfig() {
