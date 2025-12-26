@@ -25,3 +25,8 @@ func _callbackdeletemethodMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _callbackconnectmethodMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"k8s.io/klog/v2"
+	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -277,6 +279,31 @@ func executeUpdates(db1, db2 *gorm.DB, previewData []PreviewData) error {
 	return nil
 }
 
+func callbackConnection() {
+	url := "http://files-service.os-framework/callback/reconnect"
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		klog.Errorf("request create failed: %v\n", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		klog.Errorf("request send failed: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	klog.Infof("status code: %d\n", resp.StatusCode)
+	return
+}
+
 func main() {
 	klog.SetOutput(os.Stdout)
 	defer klog.Flush()
@@ -345,5 +372,7 @@ func main() {
 
 	klog.Info("\n=== Verification After Update ===")
 	_ = generateDetailedPreviewReport(db1, db2, profiles)
+
+	callbackConnection()
 	return
 }
