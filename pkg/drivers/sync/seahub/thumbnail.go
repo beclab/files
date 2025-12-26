@@ -5,10 +5,9 @@ import (
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
+	"files/pkg/files"
 	"files/pkg/models"
 	"fmt"
-	"github.com/gen2brain/heic"
-	"github.com/srwiley/rasterx"
 	"image"
 	"io"
 	"net/http"
@@ -18,6 +17,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gen2brain/heic"
+	"github.com/srwiley/rasterx"
 
 	_ "github.com/chai2010/tiff" // Register TIFF decoder
 	"github.com/disintegration/imaging"
@@ -127,7 +129,7 @@ func generateThumbnail(username, repoId string, sizeStr string, path string) (bo
 	}
 
 	thumbnailDir := filepath.Join(THUMBNAIL_ROOT, strconv.Itoa(size))
-	if err := os.MkdirAll(thumbnailDir, 0755); err != nil {
+	if err = files.MkdirAllWithChown(nil, thumbnailDir, 0755, true, 1000, 1000); err != nil {
 		klog.Errorf("Failed to create directory: %v", err)
 		return false, http.StatusInternalServerError
 	}
@@ -329,7 +331,7 @@ func createThumbnailCommon(srcFile, thumbnailFile string, size int) (bool, int) 
 	}
 
 	thumbDir := filepath.Dir(thumbnailFile)
-	if err := os.MkdirAll(thumbDir, 0755); err != nil {
+	if err = files.MkdirAllWithChown(nil, thumbDir, 0755, true, 1000, 1000); err != nil {
 		klog.Errorf("Failed to create thumbnail directory: %v", err)
 		return false, http.StatusInternalServerError
 	}

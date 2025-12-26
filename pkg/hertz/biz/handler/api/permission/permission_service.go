@@ -10,12 +10,13 @@ import (
 	permission "files/pkg/hertz/biz/model/api/permission"
 	"files/pkg/models"
 	"fmt"
+	"strings"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
-	"strings"
 )
 
 // GetPermissionMethod .
@@ -59,7 +60,7 @@ func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	res := make(map[string]interface{})
-	res["uid"], err = files.GetUID(files.DefaultFs, dealUrlPath)
+	res["uid"], _, err = files.GetUidGid(files.DefaultFs, dealUrlPath)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return

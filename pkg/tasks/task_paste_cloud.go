@@ -127,10 +127,11 @@ func (t *Task) DownloadFromCloud() error {
 		}
 	}
 
-	var dstPath = filepath.Dir(filepath.Join(dstUri, dst.Path))
-	if !common.PathExists(dstPath) {
-		if err = files.MkdirAllWithChown(nil, dstPath, 0755); err != nil {
-			klog.Errorf("[Task] Id: %s, mkdir %s error: %v", t.id, dstPath, err)
+	var dstPath = filepath.Join(dstUri, dst.Path)
+	var dstParentDir = filepath.Dir(dstPath)
+	if !common.PathExists(dstParentDir) {
+		if err = files.MkdirAllWithChown(nil, dstParentDir, 0755, true, 1000, 1000); err != nil {
+			klog.Errorf("[Task] Id: %s, mkdir %s error: %v", t.id, dstParentDir, err)
 			return fmt.Errorf("failed to create parent directories: %v", err)
 		}
 	}
@@ -196,6 +197,10 @@ func (t *Task) DownloadFromCloud() error {
 			if e := cmd.Clear(t.param.Src); e != nil {
 				klog.Errorf("[Task] Id: %s, clear src error: %v", t.id, e)
 			}
+		}
+
+		if err = files.Chown(nil, dstPath, 1000, 1000); err != nil {
+			klog.Errorf("[Task] Id: %s, chown %s error: %v", t.id, dstPath, err)
 		}
 
 	} else { // > sync

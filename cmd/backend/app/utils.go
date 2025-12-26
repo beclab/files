@@ -3,10 +3,11 @@ package app
 import (
 	"files/pkg/files"
 	"fmt"
-	"github.com/spf13/cobra"
-	"k8s.io/klog/v2"
 	"os"
 	"path/filepath"
+
+	"github.com/spf13/cobra"
+	"k8s.io/klog/v2"
 )
 
 func checkErr(err error) {
@@ -34,11 +35,7 @@ func dbExists(path string) (bool, error) {
 		_, err = os.Stat(d)
 		if os.IsNotExist(err) {
 			// forced 1000
-			if err = os.MkdirAll(d, 0700); err != nil {
-				return false, err
-			}
-			if err = files.Chown(nil, d, 1000, 1000); err != nil {
-				klog.Errorf("can't chown directory %s to user %d: %s", d, 1000, err)
+			if err = files.MkdirAllWithChown(nil, d, 0700, true, 1000, 1000); err != nil {
 				return false, err
 			}
 			return false, nil

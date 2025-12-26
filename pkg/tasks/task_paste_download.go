@@ -162,7 +162,7 @@ func (t *Task) DownloadFromFiles() error {
 		var filePath = path.Join(dstUri+dst.Path, cutSrcPath)
 		var fileDir = path.Dir(filePath)
 		if !files.FilePathExists(fileDir) {
-			if err = os.MkdirAll(fileDir, 0755); err != nil {
+			if err = files.MkdirAllWithChown(nil, fileDir, 0755, true, 1000, 1000); err != nil {
 				klog.Errorf("[Task] Id: %s, mkdir %s error: %v", t.id, fileDir, err)
 				break
 			}
