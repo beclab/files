@@ -280,6 +280,7 @@ func executeUpdates(db1, db2 *gorm.DB, previewData []PreviewData) error {
 }
 
 func callbackConnection() {
+	klog.Infof("send callback connection request to files-service.os-framework")
 	url := "http://files-service.os-framework/callback/reconnect"
 	client := &http.Client{
 		Timeout: 15 * time.Second,
