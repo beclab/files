@@ -19,6 +19,7 @@ func Register(r *server.Hertz) {
 	root := r.Group("/", rootMw()...)
 	{
 		_callback := root.Group("/callback", _callbackMw()...)
+		_callback.POST("/connect", append(_callbackconnectmethodMw(), callback.CallbackConnectMethod)...)
 		_callback.POST("/create", append(_callbackcreatemethodMw(), callback.CallbackCreateMethod)...)
 		_callback.POST("/delete", append(_callbackdeletemethodMw(), callback.CallbackDeleteMethod)...)
 	}

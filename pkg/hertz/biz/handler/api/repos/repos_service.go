@@ -36,14 +36,6 @@ func GetReposMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if seahub.NeedPatchCreateUser(owner) {
-		err = seahub.HandleCallbackCreate(owner)
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "sync user not found and create failed"})
-			return
-		}
-	}
-
 	var res []byte
 	if req.Type != nil {
 		if *req.Type == "shared" || *req.Type == "shared_by_me" {
