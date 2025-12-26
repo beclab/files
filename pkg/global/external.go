@@ -5,6 +5,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -100,6 +101,7 @@ func (m *Mount) watchMounted() {
 	klog.Infof("watcher initialized at: %s", path)
 
 	go func() {
+		maxRetries := 3
 		for {
 			select {
 			case err, ok := <-externalWatcher.Errors:
@@ -119,9 +121,35 @@ func (m *Mount) watchMounted() {
 					continue
 				}
 
-				time.Sleep(1000 * time.Millisecond)
 				klog.Infof("mount watcher event: %s, op: %s", e.Name, e.Op.String())
-				m.getMounted()
+				if e.Op == fsnotify.Create {
+					found := false
+					m.getMounted()
+					if _, exists := m.Mounted[filepath.Base(e.Name)]; exists {
+						found = true
+						klog.Infof("Found %s in mounted disks (immediate), mounted: %+v", e.Name, m.Mounted)
+					} else {
+						retryDelay := 1 * time.Second
+						for i := 0; i < maxRetries; i++ {
+							time.Sleep(retryDelay)
+							klog.Infof("Retry %d for %s (wait %v)", i+1, e.Name, retryDelay)
+
+							m.getMounted()
+							if _, exists = m.Mounted[filepath.Base(e.Name)]; exists {
+								found = true
+								klog.Infof("Found %s in mounted disks after %d retries, mounted: %+v", e.Name, i+1, m.Mounted)
+								break
+							}
+							retryDelay *= 2
+						}
+					}
+
+					if !found {
+						klog.Warningf("Failed to find %s in mounted disks after %d attempts, mounted: %+v", e.Name, maxRetries, m.Mounted)
+					}
+				} else {
+					m.getMounted()
+				}
 			}
 		}
 	}()
