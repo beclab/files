@@ -307,7 +307,10 @@ func callbackConnection() {
 
 func main() {
 	klog.SetOutput(os.Stdout)
-	defer klog.Flush()
+	defer func() {
+		callbackConnection()
+		klog.Flush()
+	}()
 
 	dsn1 := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
 		DB_HOST, DB_USER, DB_PASSWORD, DB_NAME1, DB_PORT)
@@ -373,7 +376,5 @@ func main() {
 
 	klog.Info("\n=== Verification After Update ===")
 	_ = generateDetailedPreviewReport(db1, db2, profiles)
-
-	callbackConnection()
 	return
 }
