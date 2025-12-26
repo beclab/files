@@ -415,7 +415,7 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam, root bool) error 
 
 	if !common.PathExists(downloadPath) {
 		mode := seahub.SyncPermToMode(dirInfo["user_perm"].(string))
-		if err = files.MkdirAllWithChown(nil, downloadPath, mode); err != nil {
+		if err = files.MkdirAllWithChown(nil, downloadPath, mode, true, 1000, 1000); err != nil {
 			klog.Errorf("[Task] Id: %s, mkdir %s failed, error: %v", t.id, downloadPath, err)
 			return err
 		}
@@ -543,7 +543,7 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 	}
 
 	if !common.PathExists(downloadPath) {
-		if err = files.MkdirAllWithChown(nil, filepath.Dir(downloadFilePath), 0755); err != nil {
+		if err = files.MkdirAllWithChown(nil, filepath.Dir(downloadFilePath), 0755, true, 1000, 1000); err != nil {
 			klog.Errorf("[Task] Id: %s, mkdir %s error: %v", t.id, downloadPath, err)
 			return fmt.Errorf("failed to create parent directories: %v", err)
 		}
@@ -567,6 +567,11 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 		return err
 	}
 	defer dstFile.Close()
+
+	if err = files.Chown(nil, downloadFilePath, 1000, 1000); err != nil {
+		klog.Errorf("[Task] Id: %s, chown file error: %v", t.id, err)
+		return err
+	}
 
 	if root {
 

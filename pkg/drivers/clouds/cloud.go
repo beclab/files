@@ -128,7 +128,7 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	previewCachedPath := diskcache.GenerateCacheBufferPath(owner, fileMeta.Item.Path)
 
 	if !files.FilePathExists(previewCachedPath) {
-		if err := files.MkdirAllWithChown(nil, previewCachedPath, 0755); err != nil {
+		if err := files.MkdirAllWithChown(nil, previewCachedPath, 0755, true, 1000, 1000); err != nil {
 			klog.Errorln(err)
 			return nil, err
 		}

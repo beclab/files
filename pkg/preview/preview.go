@@ -108,6 +108,10 @@ func CreatePreview(owner string, key string,
 		klog.Errorf("preview store failed, user: %s, error: %v", owner, err)
 	}
 
+	if err = files.Chown(bufferFile.Fs, bufferFile.Path, 1000, 1000); err != nil {
+		klog.Errorf("can't chown file %s to user %d: %s", bufferFile.Path, 1000, err)
+	}
+
 	return buf.Bytes(), nil
 
 }

@@ -120,7 +120,7 @@ func (d *Download) generateBufferFolder() (string, error) {
 	}
 
 	if !exists {
-		if err := files.MkdirAllWithChown(nil, bufferFolder, 0755); err != nil {
+		if err := files.MkdirAllWithChown(nil, bufferFolder, 0755, true, 1000, 1000); err != nil {
 			return "", err
 		}
 	}
