@@ -5,8 +5,10 @@ package callback
 import (
 	"context"
 	"files/pkg/drivers/sync/seahub"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/hertz/biz/handler/api/share"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"k8s.io/klog/v2"
@@ -66,5 +68,44 @@ func CallbackDeleteMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(callback.CallbackDeleteResp)
+	c.JSON(consts.StatusOK, resp)
+}
+
+// CallbackConnectMethod .
+// @router /callback/connect [POST]
+func CallbackConnectMethod(ctx context.Context, c *app.RequestContext) {
+	klog.Infof("Try to connect to seafile-server")
+	go func() {
+		seaserv.InitSeaRPC()
+
+		res, err := seaserv.GlobalCcnetAPI.CountEmailusers("DB")
+		if res < 0 || err != nil {
+			klog.Errorf("check seafile rpc get res: %d and error: %v", res, err)
+
+			success := false
+			maxRetries := 3
+			retryDelay := 1 * time.Second
+			for i := 0; i < maxRetries; i++ {
+				time.Sleep(retryDelay)
+				klog.Infof("Retry %d for connection (wait %v)", i+1, retryDelay)
+
+				seaserv.InitSeaRPC()
+				res, err = seaserv.GlobalCcnetAPI.CountEmailusers("DB")
+				if res >= 0 && err == nil {
+					success = true
+					klog.Infof("Connection success after %d retries", i+1)
+					break
+				}
+				retryDelay *= 2
+			}
+			if !success {
+				klog.Warningf("Connection failed after %d attempts", maxRetries)
+			}
+		} else {
+			klog.Infof("Connection success immediately")
+		}
+	}()
+
+	resp := new(callback.CallbackConnectResp)
 	c.JSON(consts.StatusOK, resp)
 }

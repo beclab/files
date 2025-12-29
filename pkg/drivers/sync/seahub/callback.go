@@ -8,8 +8,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var GlobalSyncUsers = make(map[string]bool)
-
 func CreateDefaultLibrary(newUsername string) (string, error) {
 	username := newUsername
 	if username == "" {
@@ -112,7 +110,6 @@ func HandleCallbackCreate(bflName string) error {
 		isNew, err := CreateUser(newUsername)
 		if err != nil {
 			klog.Infof("Error creating user: %v", err)
-			GlobalSyncUsers[bflName] = false
 			return err
 		}
 
@@ -124,7 +121,6 @@ func HandleCallbackCreate(bflName string) error {
 				klog.Infof("Create default library %s for %s successfully!", repoId, newUsername)
 			}
 		}
-		GlobalSyncUsers[bflName] = true
 	}
 	return nil
 }
@@ -135,13 +131,5 @@ func HandleCallbackDelete(bflName string) error {
 	if err != nil {
 		return err
 	}
-	GlobalSyncUsers[bflName] = false
 	return nil
-}
-
-func NeedPatchCreateUser(bflName string) bool {
-	if value, exists := GlobalSyncUsers[bflName]; exists && value {
-		return false
-	}
-	return true
 }

@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"k8s.io/klog/v2"
 	"os"
 	"strings"
 	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 var (
