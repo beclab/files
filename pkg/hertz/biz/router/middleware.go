@@ -121,12 +121,16 @@ func CookieMiddleware() app.HandlerFunc {
 		newCookie := string(c.GetHeader("Cookie"))
 
 		if bflName != "" {
-			oldCookie := common.BflCookieCache[bflName]
-			if newCookie != oldCookie {
+			common.BflCookieMutex.Lock()
+			defer common.BflCookieMutex.Unlock()
+
+			if oldCookie, exists := common.BflCookieCache[bflName]; !exists || newCookie != oldCookie {
 				common.BflCookieCache[bflName] = newCookie
 			}
 		}
 
+		common.BflCookieMutex.RLock()
+		defer common.BflCookieMutex.RUnlock()
 		klog.Infof("BflCookieCache= %v", common.BflCookieCache)
 		c.Next(ctx)
 	}

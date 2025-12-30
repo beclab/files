@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,6 +33,7 @@ var (
 
 var RootPrefix = os.Getenv("ROOT_PREFIX")
 
+var BflCookieMutex sync.RWMutex
 var BflCookieCache = make(map[string]string)
 
 func init() {
