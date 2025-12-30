@@ -3,6 +3,7 @@ package upload
 import (
 	"errors"
 	"files/pkg/common"
+	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
 	"fmt"
@@ -39,7 +40,7 @@ func HandleUploadLink(fileParam *models.FileParam, from string) ([]byte, error) 
 
 	// if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
 	// 	if !CheckDirExist(uploadPath) {
-	// 		if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm); err != nil {
+	// 		if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm, false, -1, -1); err != nil {
 	// 			klog.Error("err:", err)
 	// 			return nil, err
 	// 		}
@@ -79,7 +80,7 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string, fileIdent
 
 	// if fileParam.FileType == common.Drive || fileParam.FileType == common.Cache || fileParam.FileType == common.External {
 	// 	if !common.PathExists(uploadPath) {
-	// 		if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm); err != nil {
+	// 		if err = files.MkdirAllWithChown(nil, uploadPath, os.ModePerm, false, -1, -1); err != nil {
 	// 			klog.Error("err:", err)
 	// 			return nil, err
 	// 		}
@@ -185,7 +186,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 	}
 
 	if !common.PathExists(uploadTempPath) {
-		if err = os.MkdirAll(uploadTempPath, os.ModePerm); err != nil {
+		if err = files.MkdirAllWithChown(nil, uploadTempPath, os.ModePerm, false, -1, -1); err != nil {
 			klog.Errorf("[upload] uploadId: %s, mkdir uploadTempPath %s err: %v", uploadId, uploadTempPath, err)
 			return false, nil, err
 		}
@@ -241,7 +242,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 			}
 
 			// if !CheckDirExist(dirPath) { // + todo comment
-			// 	if err = files.MkdirAllWithChown(nil, dirPath, os.ModePerm); err != nil {
+			// 	if err = files.MkdirAllWithChown(nil, dirPath, os.ModePerm, false, -1, -1); err != nil {
 			// 		klog.Error("err:", err)
 			// 		return false, nil, err
 			// 	}

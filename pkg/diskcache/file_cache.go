@@ -50,15 +50,15 @@ func (f *FileCache) Store(ctx context.Context, owner string, key string, tag str
 	fileName := prefixPath + key
 	klog.Infof("discache store, fileName: %s", fileName)
 	// forced 1000
-	if err := f.fs.MkdirAll(filepath.Dir(fileName), 0700); err != nil {
-		return err
-	}
-	if err := files.Chown(f.fs, filepath.Dir(fileName), 1000, 1000); err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", filepath.Dir(fileName), 1000, err)
+	if err := files.MkdirAllWithChown(f.fs, filepath.Dir(fileName), 0700, true, 1000, 1000); err != nil {
 		return err
 	}
 
 	if err := afero.WriteFile(f.fs, fileName, value, 0700); err != nil {
+		return err
+	}
+
+	if err := files.Chown(f.fs, fileName, 1000, 1000); err != nil {
 		return err
 	}
 

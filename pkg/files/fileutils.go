@@ -85,7 +85,7 @@ func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error
 	klog.Infoln("***tempFilePath:", tempFilePath)
 	klog.Infoln("***tempFileName:", tempFileName)
 
-	if err = MkdirAllWithChown(nil, dir, 0755); err != nil {
+	if err = MkdirAllWithChown(nil, dir, 0755, false, -1, -1); err != nil {
 		klog.Errorln(err)
 		return err
 	}
@@ -114,11 +114,11 @@ func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error
 		return err
 	}
 
-	uid, err := GetUID(nil, dir)
+	uid, gid, err := GetUidGid(nil, dir)
 	if err != nil {
 		return err
 	}
-	if err = Chown(nil, tempFilePath, uid, uid); err != nil {
+	if err = Chown(nil, tempFilePath, uid, gid); err != nil {
 		return err
 	}
 	return os.Rename(tempFilePath, targetPath)
@@ -143,7 +143,7 @@ func IoCopyFileWithBufferFs(fs afero.Fs, sourcePath, targetPath string, bufferSi
 	klog.Infoln("***tempFilePath:", tempFilePath)
 	klog.Infoln("***tempFileName:", tempFileName)
 
-	if err = MkdirAllWithChown(fs, filepath.Dir(tempFilePath), 0755); err != nil {
+	if err = MkdirAllWithChown(fs, filepath.Dir(tempFilePath), 0755, false, -1, -1); err != nil {
 		klog.Errorln(err)
 		return err
 	}
@@ -172,11 +172,11 @@ func IoCopyFileWithBufferFs(fs afero.Fs, sourcePath, targetPath string, bufferSi
 		return err
 	}
 
-	uid, err := GetUID(fs, dir)
+	uid, gid, err := GetUidGid(fs, dir)
 	if err != nil {
 		return err
 	}
-	if err = Chown(fs, tempFilePath, uid, uid); err != nil {
+	if err = Chown(fs, tempFilePath, uid, gid); err != nil {
 		return err
 	}
 	return fs.Rename(tempFilePath, targetPath)
@@ -329,7 +329,7 @@ func createAndChownDir(fs afero.Fs, path string, mode os.FileMode, uid, gid int)
 	return Chown(fs, path, uid, gid)
 }
 
-func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
+func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode, forced bool, forceUid, forceGid int) error {
 	if path == "" {
 		return nil
 	}
@@ -337,11 +337,17 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 	var info os.FileInfo
 	var err error
 	var uid int
+	var gid int
 	var subErr error
 
 	parts := strings.Split(path, "/")
 	vol := ""
 	found := false
+	if forced {
+		uid = forceUid
+		gid = forceGid
+		found = true
+	}
 	for _, part := range parts {
 		if part == "" {
 			continue
@@ -364,8 +370,9 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 			if !found {
 				if filepath.Dir(vol) == "/" {
 					uid = 1000
+					gid = 1000
 				} else {
-					uid, subErr = GetUID(fs, filepath.Dir(vol))
+					uid, gid, subErr = GetUidGid(fs, filepath.Dir(vol))
 					if subErr != nil {
 						return subErr
 					}
@@ -373,7 +380,7 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 				found = true
 			}
 
-			if subErr = createAndChownDir(fs, vol, mode, uid, uid); subErr != nil {
+			if subErr = createAndChownDir(fs, vol, mode, uid, gid); subErr != nil {
 				return subErr
 			}
 		} else {
@@ -383,42 +390,42 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode) error {
 	return nil
 }
 
-func GetUID(fs afero.Fs, path string) (int, error) {
+func GetUidGid(fs afero.Fs, path string) (int, int, error) {
 	if path == "/" {
-		return 1000, nil
+		return 1000, 1000, nil
 	}
 
 	start := time.Now()
-	klog.Infoln("Function GetUID starts at", start)
+	klog.Infoln("Function GetUidGid starts at", start)
 	defer func() {
 		elapsed := time.Since(start)
-		klog.Infof("Function GetUID execution time: %v\n", elapsed)
+		klog.Infof("Function GetUidGid execution time: %v\n", elapsed)
 	}()
 
 	var fileInfo os.FileInfo
 	var err error
 	if fs == nil {
 		if fileInfo, err = os.Stat(path); err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 	} else {
 		if fileInfo, err = fs.Stat(path); err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 	}
 
 	statT, ok := fileInfo.Sys().(*syscall.Stat_t)
 	if !ok {
-		return 0, fmt.Errorf("unable to convert Sys() type to *syscall.Stat_t")
+		return 0, 0, fmt.Errorf("unable to convert Sys() type to *syscall.Stat_t")
 	}
 
-	return int(statT.Uid), nil
+	return int(statT.Uid), int(statT.Gid), nil
 }
 
 func WriteFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
 	klog.Infoln("Before open ", dst)
 	dir, _ := path.Split(dst)
-	if err := MkdirAllWithChown(fs, dir, 0755); err != nil {
+	if err := MkdirAllWithChown(fs, dir, 0755, false, -1, -1); err != nil {
 		klog.Errorln(err)
 		return nil, err
 	}
@@ -762,7 +769,7 @@ func CheckKeepFile(p string) error {
 func CheckCloudCreateCacheFile(p string, body io.ReadCloser) error {
 	var err error
 	if f := FilePathExists(filepath.Dir(p)); !f {
-		err = os.MkdirAll(filepath.Dir(p), 0755)
+		err = MkdirAllWithChown(nil, filepath.Dir(p), 0755, true, 1000, 1000)
 		if err != nil {
 			return err
 		}

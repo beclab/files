@@ -296,7 +296,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 
 	if isFile {
 		parentDir := filepath.Dir(createPath)
-		if err = afs.MkdirAll(parentDir, fileMode); err != nil {
+		if err = files.MkdirAllWithChown(afs, parentDir, fileMode, false, -1, -1); err != nil {
 			klog.Errorf("Parent dir create error: %v", err)
 			return nil, err
 		}
@@ -316,11 +316,21 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 				return nil, err
 			}
 		}
+
+		uid, gid, err := files.GetUidGid(afs, parentDir)
+		if err != nil {
+			klog.Errorf("Get uid gid error: %v", err)
+			return nil, err
+		}
+		if err = files.Chown(afs, createPath, uid, gid); err != nil {
+			klog.Errorf("Chown file error: %v", err)
+			return nil, err
+		}
 	} else {
 		if !strings.HasSuffix(createPath, "/") {
 			createPath += "/"
 		}
-		if err = afs.MkdirAll(createPath, fileMode); err != nil {
+		if err = files.MkdirAllWithChown(afs, createPath, fileMode, false, -1, -1); err != nil {
 			klog.Errorf("Directory create error: %v", err)
 			return nil, err
 		}

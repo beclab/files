@@ -282,7 +282,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	previewCachedPath := diskcache.GenerateCacheBufferPath(owner, filepath.Dir(fileInfo.Path))
 
 	if !files.FilePathExists(previewCachedPath) {
-		if err := files.MkdirAllWithChown(nil, previewCachedPath, 0755); err != nil {
+		if err := files.MkdirAllWithChown(nil, previewCachedPath, 0755, true, 1000, 1000); err != nil {
 			klog.Errorln(err)
 			return nil, err
 		}
