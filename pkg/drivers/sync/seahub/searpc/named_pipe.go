@@ -3,8 +3,13 @@ package searpc
 import (
 	"encoding/binary"
 	"files/pkg/common"
+	"fmt"
 	"net"
+	"strings"
 	"sync"
+	"time"
+
+	"k8s.io/klog/v2"
 )
 
 type NamedPipeException struct {
@@ -19,6 +24,7 @@ type NamedPipeTransport struct {
 	SearpcTransport
 	socketPath string
 	conn       net.Conn
+	client     *NamedPipeClient
 }
 
 func (c *NamedPipeClient) validateTransport(t *NamedPipeTransport) bool {
@@ -42,40 +48,82 @@ func (t *NamedPipeTransport) Stop() {
 }
 
 func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
-	// klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
+	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
+	var respStr string
+	var err error
 
+	backoff := time.Duration(1) * time.Second
+	maxRetries := t.client.maxRetries
+	for i := 0; i <= maxRetries; i++ {
+		respStr, err = t.trySend(service, fcallStr)
+		if err == nil {
+			return respStr, nil
+		}
+
+		if isNonRetryableError(err) {
+			return "", err
+		}
+
+		time.Sleep(backoff)
+		backoff *= 2
+	}
+	return "", fmt.Errorf("max retries exceeded")
+}
+
+func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
+	if t.conn == nil {
+		if err := t.Connect(); err != nil {
+			return "", err
+		}
+	}
 	reqBody := map[string]string{
 		"service": service,
 		"request": fcallStr,
 	}
-
 	jsonData := common.ToBytes(reqBody)
-
 	header := make([]byte, 4)
 	binary.LittleEndian.PutUint32(header, uint32(len(jsonData)))
-
 	sendData := append(header, jsonData...)
 
 	if _, err := t.conn.Write(sendData); err != nil {
+		t.handleConnectionError(err)
 		return "", err
 	}
 
 	respHeader := make([]byte, 4)
-	_, err := t.conn.Read(respHeader)
-	if err != nil {
+	if _, err := t.conn.Read(respHeader); err != nil {
+		t.handleConnectionError(err)
 		return "", err
 	}
 	respSize := binary.LittleEndian.Uint32(respHeader)
-
 	respBody := make([]byte, respSize)
-	_, err = t.conn.Read(respBody)
-	if err != nil {
+	if _, err := t.conn.Read(respBody); err != nil {
+		t.handleConnectionError(err)
 		return "", err
 	}
+	return string(respBody), nil
+}
 
-	respStr := string(respBody)
+func (t *NamedPipeTransport) handleConnectionError(err error) {
+	t.conn = nil
 
-	return respStr, nil
+	t.client.refreshTransport(t)
+}
+
+func isNonRetryableError(err error) bool {
+	nonRetryable := []string{
+		"syscall.EINVAL",
+		"syscall.ENOTCONN",
+		"syscall.EADDRINUSE",
+	}
+
+	errMsg := err.Error()
+	for _, e := range nonRetryable {
+		if strings.Contains(errMsg, e) {
+			return true
+		}
+	}
+	return false
 }
 
 type NamedPipeClient struct {
@@ -83,6 +131,7 @@ type NamedPipeClient struct {
 	socketPath  string
 	serviceName string
 	poolSize    int
+	maxRetries  int
 	pool        chan *NamedPipeTransport
 	mu          sync.Mutex
 }
@@ -92,28 +141,68 @@ func NewNamedPipeClient(socketPath, serviceName string, poolSize int) *NamedPipe
 		socketPath:  socketPath,
 		serviceName: serviceName,
 		poolSize:    poolSize,
+		maxRetries:  3,
 		pool:        make(chan *NamedPipeTransport, poolSize),
 	}
+}
+
+func (c *NamedPipeClient) SetMaxRetries(retries int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.maxRetries = retries
 }
 
 func (c *NamedPipeClient) getTransport() (*NamedPipeTransport, error) {
 	select {
 	case t := <-c.pool:
-		return t, nil
-	default:
-		transport := &NamedPipeTransport{socketPath: c.socketPath}
-		if err := transport.Connect(); err != nil {
-			return nil, err
+		if t.conn != nil {
+			return t, nil
 		}
-		return transport, nil
+		return c.createNewTransport()
+	default:
+		return c.createNewTransport()
 	}
 }
 
+func (c *NamedPipeClient) createNewTransport() (*NamedPipeTransport, error) {
+	transport := &NamedPipeTransport{
+		socketPath: c.socketPath,
+		client:     c,
+	}
+	if err := transport.Connect(); err != nil {
+		return nil, err
+	}
+	return transport, nil
+}
+
+func (c *NamedPipeClient) refreshTransport(t *NamedPipeTransport) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	newTransport := &NamedPipeTransport{
+		socketPath: c.socketPath,
+		client:     c,
+	}
+	if err := newTransport.Connect(); err == nil {
+		select {
+		case c.pool <- newTransport:
+		default:
+			newTransport.Stop()
+		}
+	}
+	t.Stop()
+}
+
 func (c *NamedPipeClient) returnTransport(t *NamedPipeTransport) {
-	select {
-	case c.pool <- t:
-	default:
-		t.Stop()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if t.conn != nil {
+		select {
+		case c.pool <- t:
+		default:
+			t.Stop()
+		}
 	}
 }
 
@@ -123,6 +212,5 @@ func (c *NamedPipeClient) CallRemoteFuncSync(fcallStr string) (string, error) {
 		return "", err
 	}
 	defer c.returnTransport(transport)
-
 	return transport.Send(c.serviceName, fcallStr)
 }
