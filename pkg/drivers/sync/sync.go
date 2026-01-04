@@ -295,7 +295,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Error(err)
+		klog.Errorf("Error getting repo: %v", err)
 		return nil, err
 	}
 	if repo == nil {

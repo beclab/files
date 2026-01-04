@@ -50,7 +50,7 @@ func HandleFileOperation(owner, repoId, pathParam, destName, operation string) (
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Error(err)
+		klog.Errorf("Error getting repo: %v", err)
 		return nil, err
 	}
 	if repo == nil {
@@ -298,7 +298,7 @@ func ViewLibFile(fileParam *models.FileParam, op string) ([]byte, error) {
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Error(err)
+		klog.Errorf("Error getting repo: %v", err)
 		return nil, err
 	}
 	if repo == nil {

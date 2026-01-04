@@ -41,7 +41,7 @@ func GetThumbnail(fileParam *models.FileParam, previewSize string) ([]byte, erro
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Error(err)
+		klog.Errorf("Error getting repo: %v", err)
 		return nil, err
 	}
 	if repo == nil {

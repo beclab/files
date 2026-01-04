@@ -70,7 +70,7 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 		time.Sleep(backoff)
 		backoff *= 2
 	}
-	return "", fmt.Errorf("max retries exceeded")
+	return "", fmt.Errorf("sync server connection broken")
 }
 
 func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
