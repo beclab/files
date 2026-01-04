@@ -32,11 +32,13 @@ func (c *NamedPipeClient) validateTransport(t *NamedPipeTransport) bool {
 }
 
 func (t *NamedPipeTransport) Connect() error {
-	conn, err := net.Dial("unix", t.socketPath)
-	if err != nil {
-		return err
+	if t.conn == nil {
+		conn, err := net.Dial("unix", t.socketPath)
+		if err != nil {
+			return err
+		}
+		t.conn = conn
 	}
-	t.conn = conn
 	return nil
 }
 
@@ -71,11 +73,10 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 }
 
 func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
-	if t.conn == nil {
-		if err := t.Connect(); err != nil {
-			return "", err
-		}
+	if err := t.Connect(); err != nil {
+		return "", err
 	}
+
 	reqBody := map[string]string{
 		"service": service,
 		"request": fcallStr,
@@ -105,8 +106,7 @@ func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
 }
 
 func (t *NamedPipeTransport) handleConnectionError(err error) {
-	t.conn = nil
-
+	t.Stop()
 	t.client.refreshTransport(t)
 }
 
@@ -144,12 +144,6 @@ func NewNamedPipeClient(socketPath, serviceName string, poolSize int) *NamedPipe
 		maxRetries:  3,
 		pool:        make(chan *NamedPipeTransport, poolSize),
 	}
-}
-
-func (c *NamedPipeClient) SetMaxRetries(retries int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.maxRetries = retries
 }
 
 func (c *NamedPipeClient) getTransport() (*NamedPipeTransport, error) {
