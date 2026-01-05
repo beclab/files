@@ -32,12 +32,12 @@ func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool) (s
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
+		klog.Error(err)
 		return "", err
 	}
 	if repo == nil {
-		klog.Errorf("fail to get repo id %s", repoId)
-		return "", errors.New("library not found")
+		klog.Errorf("repo %s not found", repoId)
+		return "", errors.New("repo not found")
 	}
 
 	dirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
@@ -111,12 +111,12 @@ func GetUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, err
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
+		klog.Error(err)
 		return nil, err
 	}
 	if repo == nil {
-		klog.Errorf("fail to get repo id %s", repoId)
-		return nil, errors.New("library not found")
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
 	}
 
 	parentDir := fileParam.Path
@@ -149,12 +149,12 @@ func GetUploadFile(fileParam *models.FileParam) (string, error) {
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
+		klog.Error(err)
 		return "", err
 	}
 	if repo == nil {
-		klog.Errorf("fail to get repo id %s", repoId)
-		return "", errors.New("library not found")
+		klog.Errorf("repo %s not found", repoId)
+		return "", errors.New("repo not found")
 	}
 
 	fileId, err := seaserv.GlobalSeafileAPI.GetFileIdByPath(repoId, fileParam.Path)
@@ -171,12 +171,12 @@ func GetUploadDir(fileParam *models.FileParam) (string, error) {
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Errorf("fail to get repo id %s, err=%s", repoId, err)
+		klog.Error(err)
 		return "", err
 	}
 	if repo == nil {
-		klog.Errorf("fail to get repo id %s", repoId)
-		return "", errors.New("library not found")
+		klog.Errorf("repo %s not found", repoId)
+		return "", errors.New("repo not found")
 	}
 
 	parentDir := fileParam.Path

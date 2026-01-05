@@ -147,10 +147,11 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Errorf("Error getting repo: %v", err)
+		klog.Error(err)
 		return nil, err
 	}
 	if repo == nil {
+		klog.Errorf("repo %s not found", repoId)
 		return nil, errors.New("repo not found")
 	}
 
@@ -454,7 +455,7 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Errorf("Error getting repo: %v", err)
+		klog.Error(err)
 		return nil, err
 	}
 	if repo == nil {

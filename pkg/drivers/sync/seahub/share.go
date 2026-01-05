@@ -1,6 +1,7 @@
 package seahub
 
 import (
+	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/hertz/biz/dal/database"
@@ -112,7 +113,8 @@ func HandleGetDirSharedItems(sharePath *share.SharePath, shareType string) ([]by
 		return nil, err
 	}
 	if repo == nil {
-		return nil, fmt.Errorf("library %s not found", repoId)
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
 	}
 
 	sharedToUser, _ := handleSharedToArgs(shareType)
@@ -208,7 +210,8 @@ func HandlePostDirSharedItems(sharePath *share.SharePath, shareMember *share.Sha
 		return nil, err
 	}
 	if repo == nil {
-		return nil, fmt.Errorf("library %s not found", repoId)
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
 	}
 
 	path := sharePath.Path
@@ -306,7 +309,8 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 		return nil, err
 	}
 	if repo == nil {
-		return nil, fmt.Errorf("library %s not found", repoId)
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
 	}
 
 	path := sharePath.Path
@@ -492,7 +496,8 @@ func HandleDeleteDirSharedItems(sharePath *share.SharePath, shareMember *share.S
 		return nil, err
 	}
 	if repo == nil {
-		return nil, fmt.Errorf("library %s not found", repoId)
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
 	}
 
 	path := sharePath.Path

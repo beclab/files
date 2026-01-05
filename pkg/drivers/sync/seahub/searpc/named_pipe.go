@@ -53,9 +53,6 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 	var respStr string
 	var err error
 
-	//backoff := time.Duration(1) * time.Second
-	//maxRetries := t.client.maxRetries
-	//for i := 0; i <= maxRetries; i++ {
 	if respStr, err = t.trySend(service, fcallStr); err == nil {
 		return respStr, nil
 	}
@@ -67,9 +64,6 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 		}
 	}
 	klog.Errorf("[RPC] send error, err: %v", err)
-	//time.Sleep(backoff)
-	//backoff *= 2
-	//}
 	return "", fmt.Errorf("sync server connection failed")
 }
 
@@ -87,8 +81,6 @@ func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
 	header := make([]byte, 4)
 	binary.LittleEndian.PutUint32(header, uint32(len(jsonData)))
 	sendData := append(header, jsonData...)
-
-	//retErr := fmt.Errorf("sync server connection failed")
 
 	if _, err := t.conn.Write(sendData); err != nil {
 		t.handleConnectionError(err)
@@ -112,7 +104,6 @@ func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
 func (t *NamedPipeTransport) handleConnectionError(connErr error) {
 	klog.Errorf("[RPC] Connection Error: %v", connErr)
 	t.Stop()
-	//t.client.refreshTransport(t)
 	_, err := t.client.syncTransport(t)
 	if err != nil {
 		klog.Errorf("Failed to refresh transport: %v", err)
@@ -121,7 +112,6 @@ func (t *NamedPipeTransport) handleConnectionError(connErr error) {
 
 func isRetryableError(err error) bool {
 	retryable := []string{
-		"connection refused",
 		"broken pipe",
 	}
 
@@ -159,10 +149,8 @@ func (c *NamedPipeClient) getTransport() (*NamedPipeTransport, error) {
 			return t, nil
 		}
 		return c.syncTransport(nil)
-		//return c.createNewTransport()
 	default:
 		return c.syncTransport(nil)
-		//return c.createNewTransport()
 	}
 }
 
@@ -173,7 +161,8 @@ func (c *NamedPipeClient) syncTransport(old *NamedPipeTransport) (*NamedPipeTran
 		client:     c,
 	}
 	if err := newT.Connect(); err != nil {
-		return nil, err
+		klog.Errorf("[RPC] Failed to connect: %v", err)
+		return nil, fmt.Errorf("sync server connection failed")
 	}
 
 	c.mu.Lock()
@@ -194,35 +183,6 @@ func (c *NamedPipeClient) syncTransport(old *NamedPipeTransport) (*NamedPipeTran
 		return nil, fmt.Errorf("connection pool full")
 	}
 }
-
-//func (c *NamedPipeClient) createNewTransport() (*NamedPipeTransport, error) {
-//	transport := &NamedPipeTransport{
-//		socketPath: c.socketPath,
-//		client:     c,
-//	}
-//	if err := transport.Connect(); err != nil {
-//		return nil, err
-//	}
-//	return transport, nil
-//}
-//
-//func (c *NamedPipeClient) refreshTransport(t *NamedPipeTransport) {
-//	c.mu.Lock()
-//	defer c.mu.Unlock()
-//
-//	newTransport := &NamedPipeTransport{
-//		socketPath: c.socketPath,
-//		client:     c,
-//	}
-//	if err := newTransport.Connect(); err == nil {
-//		select {
-//		case c.pool <- newTransport:
-//		default:
-//			newTransport.Stop()
-//		}
-//	}
-//	t.Stop()
-//}
 
 func (c *NamedPipeClient) returnTransport(t *NamedPipeTransport) {
 	c.mu.Lock()
