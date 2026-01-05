@@ -6,9 +6,10 @@ import (
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/models"
 	"fmt"
-	"k8s.io/klog/v2"
 	"path/filepath"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 func HandleDelete(fileParam *models.FileParam) error {
@@ -46,10 +47,12 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
+		klog.Error(err)
 		return nil, err
 	}
 	if repo == nil {
-		return nil, errors.New("repo is nil")
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
 	}
 
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)

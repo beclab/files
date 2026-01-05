@@ -8,13 +8,14 @@ import (
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"fmt"
 	"html/template"
-	"k8s.io/klog/v2"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -437,12 +438,12 @@ func CalculateReposLastModify(repos []map[string]string) {
 func repoDownloadInfo(repoId, username string, genSyncToken bool) (map[string]interface{}, error) {
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Errorf("Error getting repo: %v", err)
+		klog.Error(err)
 		return nil, err
 	}
 	if repo == nil {
-		klog.Errorf("Error getting repo: %v", repoId)
-		return nil, errors.New("Repo not found")
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
 	}
 
 	var token string
@@ -566,12 +567,12 @@ func isValidDirentName(name string) bool {
 func HandleRepoPatch(owner, repoId, repoName, repoDesc, op string) ([]byte, error) {
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
 	if err != nil {
-		klog.Errorf("Error getting repo: %v", err)
+		klog.Error(err)
 		return nil, err
 	}
 	if repo == nil {
-		klog.Errorf("Error getting repo: %v", repoId)
-		return nil, errors.New("Repo not found")
+		klog.Errorf("repo %s not found", repoId)
+		return nil, errors.New("repo not found")
 	}
 
 	// we only use op == "rename" now

@@ -146,7 +146,12 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	thumbnailSize := 48
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
-	if err != nil || repo == nil {
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+	if repo == nil {
+		klog.Errorf("repo %s not found", repoId)
 		return nil, errors.New("repo not found")
 	}
 
