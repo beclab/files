@@ -107,12 +107,12 @@ func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
 }
 
 func (t *NamedPipeTransport) handleConnectionError(connErr error) {
-	//t.Stop()
-	//t.client.refreshTransport(t)
-	_, err := t.client.syncTransport(t)
-	if err != nil {
-		klog.Errorf("Failed to refresh transport: %v", err)
-	}
+	t.Stop()
+	t.client.refreshTransport(t)
+	//_, err := t.client.syncTransport(t)
+	//if err != nil {
+	//	klog.Errorf("Failed to refresh transport: %v", err)
+	//}
 }
 
 func isNonRetryableError(err error) bool {
@@ -120,7 +120,7 @@ func isNonRetryableError(err error) bool {
 		"syscall.EINVAL",
 		"syscall.ENOTCONN",
 		"syscall.EADDRINUSE",
-		"connect: connection refused",
+		//"connect: connection refused",
 	}
 
 	errMsg := err.Error()
@@ -158,9 +158,11 @@ func (c *NamedPipeClient) getTransport() (*NamedPipeTransport, error) {
 		if t.conn != nil {
 			return t, nil
 		}
-		return c.syncTransport(nil) //c.createNewTransport()
+		//return c.syncTransport(nil)
+		return c.createNewTransport()
 	default:
-		return c.syncTransport(nil) //c.createNewTransport()
+		//return c.syncTransport(nil)
+		return c.createNewTransport()
 	}
 }
 
@@ -193,34 +195,34 @@ func (c *NamedPipeClient) syncTransport(old *NamedPipeTransport) (*NamedPipeTran
 	}
 }
 
-//func (c *NamedPipeClient) createNewTransport() (*NamedPipeTransport, error) {
-//	transport := &NamedPipeTransport{
-//		socketPath: c.socketPath,
-//		client:     c,
-//	}
-//	if err := transport.Connect(); err != nil {
-//		return nil, err
-//	}
-//	return transport, nil
-//}
-//
-//func (c *NamedPipeClient) refreshTransport(t *NamedPipeTransport) {
-//	c.mu.Lock()
-//	defer c.mu.Unlock()
-//
-//	newTransport := &NamedPipeTransport{
-//		socketPath: c.socketPath,
-//		client:     c,
-//	}
-//	if err := newTransport.Connect(); err == nil {
-//		select {
-//		case c.pool <- newTransport:
-//		default:
-//			newTransport.Stop()
-//		}
-//	}
-//	t.Stop()
-//}
+func (c *NamedPipeClient) createNewTransport() (*NamedPipeTransport, error) {
+	transport := &NamedPipeTransport{
+		socketPath: c.socketPath,
+		client:     c,
+	}
+	if err := transport.Connect(); err != nil {
+		return nil, err
+	}
+	return transport, nil
+}
+
+func (c *NamedPipeClient) refreshTransport(t *NamedPipeTransport) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	newTransport := &NamedPipeTransport{
+		socketPath: c.socketPath,
+		client:     c,
+	}
+	if err := newTransport.Connect(); err == nil {
+		select {
+		case c.pool <- newTransport:
+		default:
+			newTransport.Stop()
+		}
+	}
+	t.Stop()
+}
 
 func (c *NamedPipeClient) returnTransport(t *NamedPipeTransport) {
 	c.mu.Lock()
