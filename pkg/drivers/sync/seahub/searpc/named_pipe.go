@@ -5,9 +5,7 @@ import (
 	"files/pkg/common"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
-	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -49,31 +47,32 @@ func (t *NamedPipeTransport) Stop() {
 	}
 }
 
+//func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
+//	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
+//	var respStr string
+//	var err error
+//
+//	backoff := time.Duration(1) * time.Second
+//	maxRetries := t.client.maxRetries
+//	for i := 0; i <= maxRetries; i++ {
+//		respStr, err = t.trySend(service, fcallStr)
+//		if err == nil {
+//			return respStr, nil
+//		}
+//
+//		if isNonRetryableError(err) {
+//			klog.Errorf("[RPC] non-retryable error: %v", err)
+//			return "", err
+//		}
+//
+//		time.Sleep(backoff)
+//		backoff *= 2
+//	}
+//	return "", fmt.Errorf("sync server connection broken")
+//}
+
 func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
-	var respStr string
-	var err error
-
-	backoff := time.Duration(1) * time.Second
-	maxRetries := t.client.maxRetries
-	for i := 0; i <= maxRetries; i++ {
-		respStr, err = t.trySend(service, fcallStr)
-		if err == nil {
-			return respStr, nil
-		}
-
-		if isNonRetryableError(err) {
-			klog.Errorf("[RPC] non-retryable error: %v", err)
-			return "", err
-		}
-
-		time.Sleep(backoff)
-		backoff *= 2
-	}
-	return "", fmt.Errorf("sync server connection broken")
-}
-
-func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
 	if err := t.Connect(); err != nil {
 		return "", err
 	}
@@ -89,57 +88,58 @@ func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
 
 	if _, err := t.conn.Write(sendData); err != nil {
 		t.handleConnectionError(err)
-		return "", err
+		return "", fmt.Errorf("sync server connection broken") // err
 	}
 
 	respHeader := make([]byte, 4)
 	if _, err := t.conn.Read(respHeader); err != nil {
 		t.handleConnectionError(err)
-		return "", err
+		return "", fmt.Errorf("sync server connection broken") // err
 	}
 	respSize := binary.LittleEndian.Uint32(respHeader)
 	respBody := make([]byte, respSize)
 	if _, err := t.conn.Read(respBody); err != nil {
 		t.handleConnectionError(err)
-		return "", err
+		return "", fmt.Errorf("sync server connection broken") // err
 	}
 	return string(respBody), nil
 }
 
 func (t *NamedPipeTransport) handleConnectionError(connErr error) {
+	klog.Errorf("[RPC] Connection Error: %v", connErr)
 	t.Stop()
-	t.client.refreshTransport(t)
-	//_, err := t.client.syncTransport(t)
-	//if err != nil {
-	//	klog.Errorf("Failed to refresh transport: %v", err)
-	//}
+	//t.client.refreshTransport(t)
+	_, err := t.client.syncTransport(t)
+	if err != nil {
+		klog.Errorf("Failed to refresh transport: %v", err)
+	}
 }
 
-func isNonRetryableError(err error) bool {
-	nonRetryable := []string{
-		"syscall.EINVAL",
-		"syscall.ENOTCONN",
-		"syscall.EADDRINUSE",
-		//"connect: connection refused",
-	}
-
-	errMsg := err.Error()
-	for _, e := range nonRetryable {
-		if strings.Contains(errMsg, e) {
-			return true
-		}
-	}
-	return false
-}
+//func isNonRetryableError(err error) bool {
+//	nonRetryable := []string{
+//		"syscall.EINVAL",
+//		"syscall.ENOTCONN",
+//		"syscall.EADDRINUSE",
+//		//"connect: connection refused",
+//	}
+//
+//	errMsg := err.Error()
+//	for _, e := range nonRetryable {
+//		if strings.Contains(errMsg, e) {
+//			return true
+//		}
+//	}
+//	return false
+//}
 
 type NamedPipeClient struct {
 	SearpcClient
 	socketPath  string
 	serviceName string
 	poolSize    int
-	maxRetries  int
-	pool        chan *NamedPipeTransport
-	mu          sync.Mutex
+	//maxRetries  int
+	pool chan *NamedPipeTransport
+	mu   sync.Mutex
 }
 
 func NewNamedPipeClient(socketPath, serviceName string, poolSize int) *NamedPipeClient {
@@ -147,8 +147,8 @@ func NewNamedPipeClient(socketPath, serviceName string, poolSize int) *NamedPipe
 		socketPath:  socketPath,
 		serviceName: serviceName,
 		poolSize:    poolSize,
-		maxRetries:  3,
-		pool:        make(chan *NamedPipeTransport, poolSize),
+		//maxRetries:  3,
+		pool: make(chan *NamedPipeTransport, poolSize),
 	}
 }
 
@@ -158,11 +158,11 @@ func (c *NamedPipeClient) getTransport() (*NamedPipeTransport, error) {
 		if t.conn != nil {
 			return t, nil
 		}
-		//return c.syncTransport(nil)
-		return c.createNewTransport()
+		return c.syncTransport(nil)
+		//return c.createNewTransport()
 	default:
-		//return c.syncTransport(nil)
-		return c.createNewTransport()
+		return c.syncTransport(nil)
+		//return c.createNewTransport()
 	}
 }
 
@@ -195,34 +195,34 @@ func (c *NamedPipeClient) syncTransport(old *NamedPipeTransport) (*NamedPipeTran
 	}
 }
 
-func (c *NamedPipeClient) createNewTransport() (*NamedPipeTransport, error) {
-	transport := &NamedPipeTransport{
-		socketPath: c.socketPath,
-		client:     c,
-	}
-	if err := transport.Connect(); err != nil {
-		return nil, err
-	}
-	return transport, nil
-}
-
-func (c *NamedPipeClient) refreshTransport(t *NamedPipeTransport) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	newTransport := &NamedPipeTransport{
-		socketPath: c.socketPath,
-		client:     c,
-	}
-	if err := newTransport.Connect(); err == nil {
-		select {
-		case c.pool <- newTransport:
-		default:
-			newTransport.Stop()
-		}
-	}
-	t.Stop()
-}
+//func (c *NamedPipeClient) createNewTransport() (*NamedPipeTransport, error) {
+//	transport := &NamedPipeTransport{
+//		socketPath: c.socketPath,
+//		client:     c,
+//	}
+//	if err := transport.Connect(); err != nil {
+//		return nil, err
+//	}
+//	return transport, nil
+//}
+//
+//func (c *NamedPipeClient) refreshTransport(t *NamedPipeTransport) {
+//	c.mu.Lock()
+//	defer c.mu.Unlock()
+//
+//	newTransport := &NamedPipeTransport{
+//		socketPath: c.socketPath,
+//		client:     c,
+//	}
+//	if err := newTransport.Connect(); err == nil {
+//		select {
+//		case c.pool <- newTransport:
+//		default:
+//			newTransport.Stop()
+//		}
+//	}
+//	t.Stop()
+//}
 
 func (c *NamedPipeClient) returnTransport(t *NamedPipeTransport) {
 	c.mu.Lock()
