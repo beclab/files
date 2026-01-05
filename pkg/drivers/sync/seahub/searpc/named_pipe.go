@@ -56,24 +56,18 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 	//backoff := time.Duration(1) * time.Second
 	//maxRetries := t.client.maxRetries
 	//for i := 0; i <= maxRetries; i++ {
-	respStr, err = t.trySend(service, fcallStr)
-	if err == nil {
+	if respStr, err = t.trySend(service, fcallStr); err == nil {
 		return respStr, nil
 	}
 
 	//if isNonRetryableError(err) {
 	if strings.Contains(err.Error(), "connect: connection refused") {
 		klog.Errorf("[RPC] connection refused, retry once immediately, err: %v", err)
-		respStr, err = t.trySend(service, fcallStr)
-		if err == nil {
+		if respStr, err = t.trySend(service, fcallStr); err == nil {
 			return respStr, nil
-		} else {
-			klog.Errorf("[RPC] connection refused and retry once failed, err: %v", err)
 		}
-	} else {
-		klog.Errorf("[RPC] send error, err: %v", err)
 	}
-
+	klog.Errorf("[RPC] send error, err: %v", err)
 	//time.Sleep(backoff)
 	//backoff *= 2
 	//}
