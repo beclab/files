@@ -120,6 +120,7 @@ func isNonRetryableError(err error) bool {
 		"syscall.EINVAL",
 		"syscall.ENOTCONN",
 		"syscall.EADDRINUSE",
+		"connect: connection refused",
 	}
 
 	errMsg := err.Error()
