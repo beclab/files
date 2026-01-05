@@ -5,6 +5,7 @@ import (
 	"files/pkg/common"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"k8s.io/klog/v2"
@@ -47,37 +48,42 @@ func (t *NamedPipeTransport) Stop() {
 	}
 }
 
-//func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
-//	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
-//	var respStr string
-//	var err error
-//
-//	backoff := time.Duration(1) * time.Second
-//	maxRetries := t.client.maxRetries
-//	for i := 0; i <= maxRetries; i++ {
-//		respStr, err = t.trySend(service, fcallStr)
-//		if err == nil {
-//			return respStr, nil
-//		}
-//
-//		if isNonRetryableError(err) {
-//			klog.Errorf("[RPC] non-retryable error: %v", err)
-//			return "", err
-//		}
-//
-//		time.Sleep(backoff)
-//		backoff *= 2
-//	}
-//	return "", fmt.Errorf("sync server connection broken")
-//}
-
 func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
-	if connErr := t.Connect(); connErr != nil {
-		err := t.handleConnectionError(connErr)
-		if err != nil {
-			return "", err
+	var respStr string
+	var err error
+
+	//backoff := time.Duration(1) * time.Second
+	//maxRetries := t.client.maxRetries
+	//for i := 0; i <= maxRetries; i++ {
+	respStr, err = t.trySend(service, fcallStr)
+	if err == nil {
+		return respStr, nil
+	}
+
+	//if isNonRetryableError(err) {
+	if strings.Contains(err.Error(), "connect: connection refused") {
+		klog.Errorf("[RPC] connection refused, retry once immediately, err: %v", err)
+		respStr, err = t.trySend(service, fcallStr)
+		if err == nil {
+			return respStr, nil
+		} else {
+			klog.Errorf("[RPC] connection refused and retry once failed, err: %v", err)
 		}
+	} else {
+		klog.Errorf("[RPC] send error, err: %v", err)
+	}
+
+	//time.Sleep(backoff)
+	//backoff *= 2
+	//}
+	return "", fmt.Errorf("sync server connection failed")
+}
+
+func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
+	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
+	if err := t.Connect(); err != nil {
+		return "", err
 	}
 
 	reqBody := map[string]string{
@@ -89,37 +95,35 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 	binary.LittleEndian.PutUint32(header, uint32(len(jsonData)))
 	sendData := append(header, jsonData...)
 
-	retErr := fmt.Errorf("sync server connection failed")
+	//retErr := fmt.Errorf("sync server connection failed")
 
 	if _, err := t.conn.Write(sendData); err != nil {
 		t.handleConnectionError(err)
-		return "", retErr // err
+		return "", err
 	}
 
 	respHeader := make([]byte, 4)
 	if _, err := t.conn.Read(respHeader); err != nil {
 		t.handleConnectionError(err)
-		return "", retErr // err
+		return "", err
 	}
 	respSize := binary.LittleEndian.Uint32(respHeader)
 	respBody := make([]byte, respSize)
 	if _, err := t.conn.Read(respBody); err != nil {
 		t.handleConnectionError(err)
-		return "", retErr // err
+		return "", err
 	}
 	return string(respBody), nil
 }
 
-func (t *NamedPipeTransport) handleConnectionError(connErr error) error {
+func (t *NamedPipeTransport) handleConnectionError(connErr error) {
 	klog.Errorf("[RPC] Connection Error: %v", connErr)
 	t.Stop()
 	//t.client.refreshTransport(t)
 	_, err := t.client.syncTransport(t)
 	if err != nil {
 		klog.Errorf("Failed to refresh transport: %v", err)
-		return err
 	}
-	return nil
 }
 
 //func isNonRetryableError(err error) bool {
