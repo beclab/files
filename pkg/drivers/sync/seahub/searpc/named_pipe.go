@@ -60,9 +60,8 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 		return respStr, nil
 	}
 
-	//if isNonRetryableError(err) {
-	if strings.Contains(err.Error(), "connect: connection refused") {
-		klog.Errorf("[RPC] connection refused, retry once immediately, err: %v", err)
+	if isRetryableError(err) {
+		klog.Errorf("[RPC] sending has met retryable err: %v, retry once immediately", err)
 		if respStr, err = t.trySend(service, fcallStr); err == nil {
 			return respStr, nil
 		}
@@ -120,31 +119,28 @@ func (t *NamedPipeTransport) handleConnectionError(connErr error) {
 	}
 }
 
-//func isNonRetryableError(err error) bool {
-//	nonRetryable := []string{
-//		"syscall.EINVAL",
-//		"syscall.ENOTCONN",
-//		"syscall.EADDRINUSE",
-//		//"connect: connection refused",
-//	}
-//
-//	errMsg := err.Error()
-//	for _, e := range nonRetryable {
-//		if strings.Contains(errMsg, e) {
-//			return true
-//		}
-//	}
-//	return false
-//}
+func isRetryableError(err error) bool {
+	retryable := []string{
+		"connection refused",
+		"broken pipe",
+	}
+
+	errMsg := err.Error()
+	for _, e := range retryable {
+		if strings.Contains(errMsg, e) {
+			return true
+		}
+	}
+	return false
+}
 
 type NamedPipeClient struct {
 	SearpcClient
 	socketPath  string
 	serviceName string
 	poolSize    int
-	//maxRetries  int
-	pool chan *NamedPipeTransport
-	mu   sync.Mutex
+	pool        chan *NamedPipeTransport
+	mu          sync.Mutex
 }
 
 func NewNamedPipeClient(socketPath, serviceName string, poolSize int) *NamedPipeClient {
@@ -152,8 +148,7 @@ func NewNamedPipeClient(socketPath, serviceName string, poolSize int) *NamedPipe
 		socketPath:  socketPath,
 		serviceName: serviceName,
 		poolSize:    poolSize,
-		//maxRetries:  3,
-		pool: make(chan *NamedPipeTransport, poolSize),
+		pool:        make(chan *NamedPipeTransport, poolSize),
 	}
 }
 
