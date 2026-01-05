@@ -73,8 +73,11 @@ func (t *NamedPipeTransport) Stop() {
 
 func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
-	if err := t.Connect(); err != nil {
-		return "", err
+	if connErr := t.Connect(); connErr != nil {
+		err := t.handleConnectionError(connErr)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	reqBody := map[string]string{
@@ -86,33 +89,37 @@ func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
 	binary.LittleEndian.PutUint32(header, uint32(len(jsonData)))
 	sendData := append(header, jsonData...)
 
+	retErr := fmt.Errorf("sync server connection failed")
+
 	if _, err := t.conn.Write(sendData); err != nil {
 		t.handleConnectionError(err)
-		return "", fmt.Errorf("sync server connection broken") // err
+		return "", retErr // err
 	}
 
 	respHeader := make([]byte, 4)
 	if _, err := t.conn.Read(respHeader); err != nil {
 		t.handleConnectionError(err)
-		return "", fmt.Errorf("sync server connection broken") // err
+		return "", retErr // err
 	}
 	respSize := binary.LittleEndian.Uint32(respHeader)
 	respBody := make([]byte, respSize)
 	if _, err := t.conn.Read(respBody); err != nil {
 		t.handleConnectionError(err)
-		return "", fmt.Errorf("sync server connection broken") // err
+		return "", retErr // err
 	}
 	return string(respBody), nil
 }
 
-func (t *NamedPipeTransport) handleConnectionError(connErr error) {
+func (t *NamedPipeTransport) handleConnectionError(connErr error) error {
 	klog.Errorf("[RPC] Connection Error: %v", connErr)
 	t.Stop()
 	//t.client.refreshTransport(t)
 	_, err := t.client.syncTransport(t)
 	if err != nil {
 		klog.Errorf("Failed to refresh transport: %v", err)
+		return err
 	}
+	return nil
 }
 
 //func isNonRetryableError(err error) bool {
