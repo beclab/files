@@ -42,6 +42,7 @@ type FileUploadArgs struct {
 	Ranges         string         `json:"ranges,omitempty"`
 	UserAgentHash  string         `json:"userAgentHash"`
 	ChunkInfo      *ResumableInfo `json:"chunkInfo,omitempty"`
+	TotalSize      int64          `json:"totalSize,omitempty"`
 	RequestContext *app.RequestContext
 }
 

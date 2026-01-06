@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"files/pkg/common"
-	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/files"
 	"files/pkg/integration"
 	"files/pkg/models"
@@ -102,20 +101,6 @@ func (t *Task) DownloadFromFiles() error {
 		return nil
 	}
 
-	var cmd = rclone.Command
-	localSpace, err := cmd.GetSpaceSize(dst)
-	if err != nil {
-		klog.Errorf("get posix free space size error: %v", err)
-		return err
-	}
-
-	klog.Infof("[Task] Id: %s, check local free space, downloadSize: %s, downloadFiles: %d, localSpace: %s", t.id, common.FormatBytes(totalSize), totalFiles, common.FormatBytes(localSpace))
-
-	requiredSpace, ok := common.IsDiskSpaceEnough(localSpace, totalSize)
-	if ok {
-		return fmt.Errorf("not enough free space on disk, required: %s, available: %s", common.FormatBytes(requiredSpace), common.FormatBytes(totalSize))
-	}
-
 	t.updateTotalSize(totalSize)
 
 	dstUri, err := dst.GetResourceUri()
@@ -123,6 +108,11 @@ func (t *Task) DownloadFromFiles() error {
 		klog.Errorf("[Task] Id: %s, dst uri found error: %v", t.id, err)
 		return err
 	}
+	localSpace, err := common.CheckDiskSpace(dstUri, totalSize, dst.IsSystem()) // no sync dst but external here, IsSystem() is enough and precise
+	if err != nil {
+		return err
+	}
+	klog.Infof("[Task] Id: %s, check local free space, downloadSize: %s, downloadFiles: %d, localSpace: %s", t.id, common.FormatBytes(totalSize), totalFiles, common.FormatBytes(localSpace))
 
 	dstPathPrefix := files.GetPrefixPath(dst.Path)
 

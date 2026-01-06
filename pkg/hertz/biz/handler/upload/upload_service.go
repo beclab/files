@@ -48,6 +48,9 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 		ShareType: req.Sharetype,
 		ShareBy:   req.Shareby,
 	}
+	if req.TotalSize != nil {
+		uploadArg.TotalSize = *req.TotalSize
+	}
 
 	p := req.FilePath
 	if !strings.HasSuffix(p, "/") {

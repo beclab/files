@@ -16,7 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 )
@@ -466,16 +465,6 @@ func FilePathExists(name string) bool {
 		return false
 	}
 	return true
-}
-
-func GetSpaceSize(filePath string) (uint64, float64, error) {
-	usage, err := disk.Usage(filePath)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return usage.Free, usage.UsedPercent, nil
-
 }
 
 func GetFileInfo(filePath string) (*PathMeta, error) {

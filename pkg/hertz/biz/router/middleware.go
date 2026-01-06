@@ -359,6 +359,9 @@ func ShareMiddleware() app.HandlerFunc {
 
 			if uploadLink {
 				url = fmt.Sprintf("%s%s?file_path=%s&from=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, c.Query("from"), shareType, shareBy)
+				if c.Query("total_size") != "" {
+					url += "&total_size=" + c.Query("total_size")
+				}
 			} else if uploadBytes {
 				url = fmt.Sprintf("%s%s?parent_dir=%s&file_name=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, uploadFileName, shareType, shareBy)
 			}

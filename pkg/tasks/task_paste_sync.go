@@ -34,7 +34,6 @@ import (
 func (t *Task) DownloadFromSync() error {
 	// sync > posix; sync > cloud
 
-	var cmd = rclone.Command
 	var user = t.param.Owner
 	var action = t.param.Action
 	var src = t.param.Src
@@ -99,18 +98,17 @@ func (t *Task) DownloadFromSync() error {
 		return err
 	}
 
-	dstSize, err := cmd.GetSpaceSize(dst)
+	dstUri, err := dst.GetResourceUri()
+	if err != nil {
+		return err
+	}
+	dstSize, err := common.CheckDiskSpace(dstUri, srcTotalSize, true)
 	if err != nil {
 		klog.Errorf("get posix free space size error: %v", err)
 		return err
 	}
 
 	klog.Infof("[Task] Id: %s, check posix space, syncSize: %d, posixSize: %d", t.id, srcTotalSize, dstSize)
-
-	requiredSpace, ok := common.IsDiskSpaceEnough(dstSize, srcTotalSize)
-	if ok {
-		return fmt.Errorf("not enough free space on disk, required: %s, available: %s", common.FormatBytes(requiredSpace), common.FormatBytes(dstSize))
-	}
 
 	t.resetProgressZero()
 	t.updateTotalSize(srcTotalSize)
@@ -201,6 +199,11 @@ func (t *Task) UploadToSync() error {
 		return err
 	}
 
+	_, err = common.CheckDiskSpace("/data", posixSize, true)
+	if err != nil {
+		return err
+	}
+
 	t.updateTotalSize(posixSize)
 
 	_, isFile := src.IsFile()
@@ -275,6 +278,11 @@ func (t *Task) SyncCopy() error {
 	totalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
 	if err != nil {
 		klog.Errorf("DownloadFromSync - GetFromSyncFileCount - %v", err)
+		return err
+	}
+
+	_, err = common.CheckDiskSpace("/data", totalSize, true)
+	if err != nil {
 		return err
 	}
 

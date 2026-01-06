@@ -97,18 +97,13 @@ func (t *Task) DownloadFromCloud() error {
 		return err
 	}
 
-	posixSize, err := cmd.GetSpaceSize(dst)
+	posixSize, err := common.CheckDiskSpace(dstUri, cloudSize, true)
 	if err != nil {
 		klog.Errorf("get posix free space size error: %v", err)
 		return err
 	}
 
 	klog.Infof("[Task] Id: %s, check posix space, cloudSize: %d, posixSize: %d", t.id, cloudSize, posixSize)
-
-	requiredSpace, ok := common.IsDiskSpaceEnough(posixSize, cloudSize)
-	if ok {
-		return fmt.Errorf("not enough free space on disk, required: %s, available: %s", common.FormatBytes(requiredSpace), common.FormatBytes(posixSize))
-	}
 
 	t.updateTotalSize(cloudSize)
 
