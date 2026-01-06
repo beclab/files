@@ -97,10 +97,46 @@ func CheckDiskUsage() (float64, uint64, error) {
 	return dataUsage.UsedPercent, dataUsage.Free, nil
 }
 
-func CheckDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
-	reservedSpaceStr := os.Getenv("RESERVED_SPACE") // env is MB, default is 10000MB
+func CheckUploadDiskSpace(needSize int64) (bool, error) {
+	reservedSpace := os.Getenv("RESERVED_SPACE") // env is MB, default is 20000MB
+	if reservedSpace == "" {
+		reservedSpace = "20000"
+	}
+	reserved, err := strconv.ParseInt(reservedSpace, 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse reserved space: %w", err)
+	}
+	reserved *= 1024 * 1024
+
+	usedPercent, freeSize, err := CheckDiskUsage()
+	if err != nil {
+		return false, err
+	}
+	needToFree := needSize - (int64(freeSize) - reserved)
+	if needToFree < 0 {
+		needToFree = 0
+	}
+
+	usedPercentStr := strconv.FormatFloat(usedPercent, 'f', 2, 64)
+	needStr := FormatBytes(needSize)
+	freeStr := FormatBytes(int64(freeSize))
+	reservedStr := FormatBytes(reserved)
+	needToFreeStr := FormatBytes(needToFree)
+
+	spaceOk := (int64(freeSize) - needSize) > reserved
+	klog.Infof("[Upload] Disk usage: %s%% (%s free, %s reserved), Disk need: %s, need to free: %s", usedPercentStr, freeStr, reservedStr, needStr, needToFreeStr)
+	if !spaceOk {
+		errorMessage := fmt.Sprintf("Insufficient disk space. %s required, but only %s available (including %s reserved for the system). Need to free %s for uploading.",
+			needStr, freeStr, reservedStr, needToFreeStr)
+		return false, fmt.Errorf(errorMessage)
+	}
+	return true, nil
+}
+
+func CheckDownloadDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
+	reservedSpaceStr := os.Getenv("RESERVED_SPACE") // env is MB, default is 20000MB
 	if reservedSpaceStr == "" {
-		reservedSpaceStr = "10000"
+		reservedSpaceStr = "20000"
 	}
 	reservedSpace, err := strconv.ParseInt(reservedSpaceStr, 10, 64)
 	if err != nil {

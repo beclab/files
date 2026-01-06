@@ -606,8 +606,17 @@ func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
 	var node = fileUploadArg.Node
 	var from = fileUploadArg.From
 
-	klog.Infof("Posix uploadLink, user: %s, node: %s, from: %s, share: %s %s %s, param: %s", user, node, from,
-		fileUploadArg.Share, fileUploadArg.ShareType, fileUploadArg.ShareBy, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Posix uploadLink, user: %s, node: %s, from: %s, share: %s %s %s, param: %s, totalSize: %dB",
+		user, node, from,
+		fileUploadArg.Share, fileUploadArg.ShareType, fileUploadArg.ShareBy,
+		common.ToJson(fileUploadArg.FileParam), fileUploadArg.TotalSize)
+
+	if fileUploadArg.TotalSize != 0 && fileUploadArg.FileParam.IsSystem() {
+		canUpload, err := common.CheckUploadDiskSpace(fileUploadArg.TotalSize)
+		if !canUpload || err != nil {
+			return nil, err
+		}
+	}
 
 	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
 

@@ -6,6 +6,7 @@ struct UploadLinkReq {
     3: string share (api.query="share");
     4: string sharetype (api.query="sharetype");
     5: string shareby (api.query="shareby");
+    6: optional i64 totalSize (api.query="total_size");
 }
 
 struct UploadedBytesReq {

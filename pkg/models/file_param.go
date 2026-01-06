@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 type FileParam struct {
@@ -227,6 +229,29 @@ func (r *FileParam) IsSync() bool {
 
 func (r *FileParam) IsCache() bool {
 	return r.FileType == common.Cache
+}
+
+func (r *FileParam) IsSystem() bool {
+	klog.Infof("judging if %s is system", r.FileType)
+
+	// system storage includes drive, data, cache and non-mounted external
+	if r.FileType == common.External {
+		pathSplit := strings.Split(r.Path, "/")
+		if len(pathSplit) < 2 {
+			return false
+		}
+		system := true
+		externalRootPath := pathSplit[1]
+		for _, externalInfo := range global.GlobalMounted.Mounted {
+			if externalRootPath == externalInfo.Path {
+				klog.Infof("externalRootPath %s found in system mounted: %s", externalRootPath, externalInfo.Path)
+				system = false
+				break
+			}
+		}
+		return system
+	}
+	return r.FileType == common.Drive || r.FileType == common.Cache || r.FileType == common.Data
 }
 
 func (r *FileParam) IsFile() (string, bool) {

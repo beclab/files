@@ -133,16 +133,16 @@ func (d *Download) generateBufferFolder() (string, error) {
 }
 
 func (d *Download) checkFreeDiskSpace() (bool, error) {
-	spaceOk, needs, avails, reserved, err := common.CheckDiskSpace("/data", d.fileSize)
+	spaceOk, needs, avails, reserved, err := common.CheckDownloadDiskSpace("/data", d.fileSize)
 	if err != nil {
 		return false, err
 	}
 	needsStr := common.FormatBytes(needs)
-	availsStr := common.FormatBytes(avails)
+	freeStr := common.FormatBytes(avails + reserved)
 	reservedStr := common.FormatBytes(reserved)
 	if !spaceOk {
-		errorMessage := fmt.Sprintf("Insufficient disk space available. This file still requires: %s, but only %s is available (with an additional %s reserved for the system).",
-			needsStr, availsStr, reservedStr)
+		errorMessage := fmt.Sprintf("Insufficient disk space. %s required, but only %s available (including %s reserved for the system).",
+			needsStr, freeStr, reservedStr)
 		return false, errors.New(errorMessage)
 	}
 	return true, nil
