@@ -7,12 +7,13 @@ import (
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/model/api/share"
 	"fmt"
-	"github.com/bytedance/gopkg/util/logger"
-	"k8s.io/klog/v2"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/bytedance/gopkg/util/logger"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -123,7 +124,10 @@ func HandleGetDirSharedItems(sharePath *share.SharePath, shareType string) ([]by
 		path = "/"
 	}
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path)
-	if dirId == "" || err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if dirId == "" {
 		return nil, fmt.Errorf("folder %s not found", path)
 	}
 
@@ -219,7 +223,10 @@ func HandlePostDirSharedItems(sharePath *share.SharePath, shareMember *share.Sha
 		path = "/"
 	}
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path)
-	if dirId == "" || err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if dirId == "" {
 		return nil, fmt.Errorf("folder %s not found", path)
 	}
 
@@ -230,7 +237,7 @@ func HandlePostDirSharedItems(sharePath *share.SharePath, shareMember *share.Sha
 		return nil, err
 	}
 	if repoOwner != username && !isRepoAdmin(sharePath.ID, username, repoId) {
-		return nil, fmt.Errorf("permission denied")
+		return nil, errors.New("permission denied")
 	}
 
 	sharedToUser, _ := handleSharedToArgs(shareType)
@@ -318,7 +325,10 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 		path = "/"
 	}
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path)
-	if dirId == "" || err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if dirId == "" {
 		return nil, fmt.Errorf("folder %s not found", path)
 	}
 
@@ -340,7 +350,7 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 		return nil, err
 	}
 	if repoOwner != username && !isRepoAdmin(sharePath.ID, username, repoId) {
-		return nil, fmt.Errorf("permission denied")
+		return nil, errors.New("permission denied")
 	}
 
 	result := struct {
@@ -362,7 +372,7 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 			permission := int(shareMember.Permission)
 			if permission != INT_PERMISSION_VIEW && permission != INT_PERMISSION_EDIT && permission != INT_PERMISSION_ADMIN {
 				klog.Errorf("Invalid permission: %d", permission)
-				return nil, fmt.Errorf("permission denied")
+				return nil, errors.New("permission denied")
 			}
 
 			toUser := shareMember.ShareMember + "@auth.local"
@@ -453,15 +463,18 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 	return common.ToBytes(result), nil
 }
 
-func CheckUserShareOutPermission(sharePathId, repoID, path, shareTo string) string {
+func CheckUserShareOutPermission(sharePathId, repoID, path, shareTo string) (string, error) {
 	if path == "/" {
 		path = ""
 	}
 
 	repo, err := seaserv.GlobalSeafileAPI.GetSharedRepoByPath(repoID, path, shareTo, false)
-	if repo == nil || err != nil {
+	if err != nil {
+		return "", err
+	}
+	if repo == nil {
 		klog.Errorf("CheckUserShareOutPermission: Error getting repo info: %v", err)
-		return ""
+		return "", errors.New("repo not found")
 	}
 
 	permission := repo["permission"]
@@ -477,14 +490,14 @@ func CheckUserShareOutPermission(sharePathId, repoID, path, shareTo string) stri
 		adminUsers, _, err := database.QueryShareMember(queryParams, 0, 0, "share_members.id", "ASC", nil)
 		if err != nil {
 			klog.Errorf("QueryShareMember error: %v", err)
-			return ""
+			return "", err
 		}
 		if len(adminUsers) > 0 {
 			permission = PERMISSION_ADMIN
 		}
 	}
 
-	return permission
+	return permission, nil
 }
 
 func HandleDeleteDirSharedItems(sharePath *share.SharePath, shareMember *share.ShareMember, shareType string) ([]byte, error) {
@@ -505,7 +518,10 @@ func HandleDeleteDirSharedItems(sharePath *share.SharePath, shareMember *share.S
 		path = "/"
 	}
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path)
-	if dirId == "" || err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if dirId == "" {
 		return nil, fmt.Errorf("folder %s not found", path)
 	}
 
@@ -514,7 +530,7 @@ func HandleDeleteDirSharedItems(sharePath *share.SharePath, shareMember *share.S
 		return nil, err
 	}
 	if repoOwner != username && !isRepoAdmin(sharePath.ID, username, repoId) {
-		return nil, fmt.Errorf("permission denied")
+		return nil, errors.New("permission denied")
 	}
 
 	sharedToUser, _ := handleSharedToArgs(shareType)
@@ -524,7 +540,10 @@ func HandleDeleteDirSharedItems(sharePath *share.SharePath, shareMember *share.S
 			return nil, fmt.Errorf("email %s invalid", sharedTo)
 		}
 
-		permissionStr := CheckUserShareOutPermission(sharePath.ID, repoId, path, sharedTo) // no need to real use because share not managed by seahub any more
+		permissionStr, err := CheckUserShareOutPermission(sharePath.ID, repoId, path, sharedTo) // no need to real use because share not managed by seahub any more
+		if err != nil {
+			klog.Error(err) // no need to return error here, because no real use, just for log view
+		}
 		klog.Infof("permission str: %v", permissionStr)
 
 		if path == "/" {

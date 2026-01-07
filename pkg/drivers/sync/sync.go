@@ -325,7 +325,10 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	username := fileParam.Owner + "@auth.local"
 
 	permission, err := seahub.CheckFolderPermission(username, repoId, path)
-	if err != nil || permission != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if permission != "rw" {
 		return nil, errors.New("permission denied")
 	}
 
@@ -780,7 +783,7 @@ func (s *SyncStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, 
 
 	klog.Infof("Sync uploadLink, user: %s, from: %s, share: %s %s %s, param: %s", user, from, share, shareType, shareBy, common.ToJson(fileUploadArg.FileParam))
 
-	uploadLink, err := seahub.GetUploadLink(fileUploadArg.FileParam, fileUploadArg.From, false)
+	uploadLink, err := seahub.GetUploadLink(fileUploadArg.FileParam, fileUploadArg.From, false, false)
 	if err != nil {
 		return nil, err
 	}

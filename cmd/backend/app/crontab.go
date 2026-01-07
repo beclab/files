@@ -2,6 +2,7 @@ package app
 
 import (
 	"files/pkg/drivers/posix/upload"
+	"files/pkg/drivers/sync/seahub"
 	"files/pkg/global"
 	"files/pkg/redisutils"
 	"files/pkg/tasks"
@@ -20,6 +21,7 @@ func InitCrontabs() {
 	_, err := c.AddFunc("5 0 * * *", func() {
 		cleanupMux.Lock()
 		defer cleanupMux.Unlock()
+		seahub.AccessTokenMap = make(map[string]string)
 		redisutils.CleanupOldFilesAndRedisEntries(7 * 24 * time.Hour)
 
 		tasks.TaskManager.ClearTasks()
