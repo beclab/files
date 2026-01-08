@@ -96,16 +96,20 @@ func CheckDiskUsage(filePath string) (float64, uint64, error) {
 	return dataUsage.UsedPercent, dataUsage.Free, nil
 }
 
-func CheckDiskSpace(filePath string, needSize int64) (bool, error) {
-	reservedSpace := os.Getenv("RESERVED_SPACE") // env is MB, default is 20000MB
-	if reservedSpace == "" {
-		reservedSpace = "20000"
+func CheckDiskSpace(filePath string, needSize int64, considerReserve bool) (bool, error) {
+	reserved := int64(0)
+	var err error
+	if considerReserve {
+		reservedSpace := os.Getenv("RESERVED_SPACE") // env is MB, default is 20000MB
+		if reservedSpace == "" {
+			reservedSpace = "20000"
+		}
+		reserved, err = strconv.ParseInt(reservedSpace, 10, 64)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse reserved space: %w", err)
+		}
+		reserved *= 1024 * 1024
 	}
-	reserved, err := strconv.ParseInt(reservedSpace, 10, 64)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse reserved space: %w", err)
-	}
-	reserved *= 1024 * 1024
 
 	usedPercent, freeSize, err := CheckDiskUsage(filePath)
 	if err != nil {
@@ -125,8 +129,13 @@ func CheckDiskSpace(filePath string, needSize int64) (bool, error) {
 	spaceOk := (int64(freeSize) - needSize) > reserved
 	klog.Infof("[Upload] Disk usage: %s%% (%s free, %s reserved), Disk need: %s, need to free: %s", usedPercentStr, freeStr, reservedStr, needStr, needToFreeStr)
 	if !spaceOk {
-		errorMessage := fmt.Sprintf("Insufficient disk space. %s required, but only %s available (including %s reserved for the system). Need to free %s for uploading.",
-			needStr, freeStr, reservedStr, needToFreeStr)
+		var errorMessage string
+		if considerReserve {
+			errorMessage = fmt.Sprintf("Insufficient disk space. %s required, but only %s available (including %s reserved for the system). Need to free %s for uploading.",
+				needStr, freeStr, reservedStr, needToFreeStr)
+		} else {
+			errorMessage = fmt.Sprintf("Insufficient disk space. %s required, but only %s available. Need to free %s for uploading.", needStr, freeStr, needToFreeStr)
+		}
 		return false, fmt.Errorf(errorMessage)
 	}
 	return true, nil

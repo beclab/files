@@ -42,7 +42,7 @@ func (d *Download) download() error {
 		return err
 	}
 
-	_, err := common.CheckDiskSpace("/data", d.fileSize) // d.checkFreeDiskSpace()
+	_, err := common.CheckDiskSpace("/data", d.fileSize, true) // d.checkFreeDiskSpace()
 	if err != nil {
 		return err
 	}

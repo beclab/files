@@ -611,10 +611,21 @@ func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
 		fileUploadArg.Share, fileUploadArg.ShareType, fileUploadArg.ShareBy,
 		common.ToJson(fileUploadArg.FileParam), fileUploadArg.TotalSize)
 
-	if fileUploadArg.TotalSize != 0 && fileUploadArg.FileParam.IsSystem() {
-		canUpload, err := common.CheckDiskSpace("/data", fileUploadArg.TotalSize)
-		if !canUpload || err != nil {
-			return nil, err
+	if fileUploadArg.TotalSize != 0 {
+		if fileUploadArg.FileParam.IsSystem() {
+			canUpload, err := common.CheckDiskSpace("/data", fileUploadArg.TotalSize, true)
+			if !canUpload || err != nil {
+				return nil, err
+			}
+		} else if fileUploadArg.FileParam.FileType == common.External {
+			uri, err := fileUploadArg.FileParam.GetResourceUri()
+			if err != nil {
+				return nil, err
+			}
+			canUpload, err := common.CheckDiskSpace(uri, fileUploadArg.TotalSize, false)
+			if !canUpload || err != nil {
+				return nil, err
+			}
 		}
 	}
 

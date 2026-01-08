@@ -784,7 +784,7 @@ func (s *SyncStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, 
 
 	// sync also use system storage space
 	if fileUploadArg.TotalSize != 0 {
-		canUpload, err := common.CheckDiskSpace("/data", fileUploadArg.TotalSize)
+		canUpload, err := common.CheckDiskSpace("/data", fileUploadArg.TotalSize, true)
 		if !canUpload || err != nil {
 			return nil, err
 		}
