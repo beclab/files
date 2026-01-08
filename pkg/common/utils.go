@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/disk"
@@ -80,13 +79,13 @@ const (
 	maxReasonableSpace = 1000 * 1e12 // 1000T
 )
 
-func CheckDiskUsage() (float64, uint64, error) {
+func CheckDiskUsage(filePath string) (float64, uint64, error) {
 	rootUsage, err := disk.Usage("/")
 	if err != nil {
 		return 0, 0, err
 	}
 
-	dataUsage, err := disk.Usage("/data")
+	dataUsage, err := disk.Usage(filePath)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -97,7 +96,7 @@ func CheckDiskUsage() (float64, uint64, error) {
 	return dataUsage.UsedPercent, dataUsage.Free, nil
 }
 
-func CheckUploadDiskSpace(needSize int64) (bool, error) {
+func CheckDiskSpace(filePath string, needSize int64) (bool, error) {
 	reservedSpace := os.Getenv("RESERVED_SPACE") // env is MB, default is 20000MB
 	if reservedSpace == "" {
 		reservedSpace = "20000"
@@ -108,7 +107,7 @@ func CheckUploadDiskSpace(needSize int64) (bool, error) {
 	}
 	reserved *= 1024 * 1024
 
-	usedPercent, freeSize, err := CheckDiskUsage()
+	usedPercent, freeSize, err := CheckDiskUsage(filePath)
 	if err != nil {
 		return false, err
 	}
@@ -133,47 +132,47 @@ func CheckUploadDiskSpace(needSize int64) (bool, error) {
 	return true, nil
 }
 
-func CheckDownloadDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
-	reservedSpaceStr := os.Getenv("RESERVED_SPACE") // env is MB, default is 20000MB
-	if reservedSpaceStr == "" {
-		reservedSpaceStr = "20000"
-	}
-	reservedSpace, err := strconv.ParseInt(reservedSpaceStr, 10, 64)
-	if err != nil {
-		return false, 0, 0, 0, fmt.Errorf("failed to parse reserved space: %w", err)
-	}
-	reservedSpace *= 1024 * 1024
-
-	var rootStat, dataStat syscall.Statfs_t
-
-	err = syscall.Statfs("/", &rootStat)
-	if err != nil {
-		return false, 0, 0, 0, fmt.Errorf("failed to get root file system stats: %w", err)
-	}
-	rootAvailableSpace := int64(rootStat.Bavail * uint64(rootStat.Bsize))
-
-	err = syscall.Statfs(filePath, &dataStat)
-	if err != nil {
-		klog.Error(err)
-		return false, 0, 0, 0, fmt.Errorf("failed to get /data file system stats: %w", err)
-	}
-	dataAvailableSpace := int64(dataStat.Bavail * uint64(dataStat.Bsize))
-
-	availableSpace := int64(0)
-	if dataAvailableSpace >= maxReasonableSpace {
-		availableSpace = rootAvailableSpace - reservedSpace
-	} else {
-		availableSpace = dataAvailableSpace - reservedSpace
-	}
-
-	requiredSpace := newContentSize
-
-	if availableSpace >= requiredSpace {
-		return true, requiredSpace, availableSpace, reservedSpace, nil
-	}
-
-	return false, requiredSpace, availableSpace, reservedSpace, nil
-}
+//func CheckDownloadDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
+//	reservedSpaceStr := os.Getenv("RESERVED_SPACE") // env is MB, default is 20000MB
+//	if reservedSpaceStr == "" {
+//		reservedSpaceStr = "20000"
+//	}
+//	reservedSpace, err := strconv.ParseInt(reservedSpaceStr, 10, 64)
+//	if err != nil {
+//		return false, 0, 0, 0, fmt.Errorf("failed to parse reserved space: %w", err)
+//	}
+//	reservedSpace *= 1024 * 1024
+//
+//	var rootStat, dataStat syscall.Statfs_t
+//
+//	err = syscall.Statfs("/", &rootStat)
+//	if err != nil {
+//		return false, 0, 0, 0, fmt.Errorf("failed to get root file system stats: %w", err)
+//	}
+//	rootAvailableSpace := int64(rootStat.Bavail * uint64(rootStat.Bsize))
+//
+//	err = syscall.Statfs(filePath, &dataStat)
+//	if err != nil {
+//		klog.Error(err)
+//		return false, 0, 0, 0, fmt.Errorf("failed to get /data file system stats: %w", err)
+//	}
+//	dataAvailableSpace := int64(dataStat.Bavail * uint64(dataStat.Bsize))
+//
+//	availableSpace := int64(0)
+//	if dataAvailableSpace >= maxReasonableSpace {
+//		availableSpace = rootAvailableSpace - reservedSpace
+//	} else {
+//		availableSpace = dataAvailableSpace - reservedSpace
+//	}
+//
+//	requiredSpace := newContentSize
+//
+//	if availableSpace >= requiredSpace {
+//		return true, requiredSpace, availableSpace, reservedSpace, nil
+//	}
+//
+//	return false, requiredSpace, availableSpace, reservedSpace, nil
+//}
 
 func FormatBytes(bytes int64) string {
 	const (
