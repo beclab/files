@@ -82,7 +82,10 @@ func GetThumbnail(fileParam *models.FileParam, previewSize string) ([]byte, erro
 	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, path)
-	if err != nil || permission != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if permission != "rw" {
 		return nil, errors.New("permission denied")
 	}
 

@@ -17,13 +17,15 @@ import (
 
 var FILE_SERVER_ROOT = "/seafhttp"
 
+var AccessTokenMap = make(map[string]string)
+
 func GenerateUniqueIdentifier(relativePath string) string {
 	h := md5.New()
 	io.WriteString(h, relativePath+time.Now().String())
 	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
 }
 
-func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool) (string, error) {
+func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool, onlyToken bool) (string, error) {
 	repoId := fileParam.Extend
 	parentDir := fileParam.Path
 	if parentDir == "" {
@@ -53,7 +55,10 @@ func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool) (s
 	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission != "rw" {
+	if err != nil {
+		return "", err
+	}
+	if permission != "rw" {
 		return "", errors.New("permission denied")
 	}
 
@@ -74,6 +79,10 @@ func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool) (s
 	}
 	if token == "" {
 		return "", errors.New("internal server error")
+	}
+
+	if onlyToken {
+		return token, nil
 	}
 
 	var url string
@@ -125,7 +134,10 @@ func GetUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, err
 	}
 
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
-	if dirId == "" || err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if dirId == "" {
 		klog.Errorf("fail to check dir exists %s, err=%s", parentDir, err)
 		return nil, errors.New("folder not found")
 	}
@@ -158,7 +170,11 @@ func GetUploadFile(fileParam *models.FileParam) (string, error) {
 	}
 
 	fileId, err := seaserv.GlobalSeafileAPI.GetFileIdByPath(repoId, fileParam.Path)
-	if fileId == "" || err != nil {
+	if err != nil {
+		klog.Error(err)
+		return "", err
+	}
+	if fileId == "" {
 		klog.Errorf("fail to check file exists %s, err=%s", fileParam.Path, err)
 		return "", errors.New("file not found")
 	}
@@ -185,7 +201,10 @@ func GetUploadDir(fileParam *models.FileParam) (string, error) {
 	}
 
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
-	if dirId == "" || err != nil {
+	if err != nil {
+		return "", err
+	}
+	if dirId == "" {
 		klog.Errorf("fail to check dir exists %s, err=%s", parentDir, err)
 		return "", errors.New("folder not found")
 	}

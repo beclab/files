@@ -78,7 +78,10 @@ func RepoGetHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	}
 
 	permission, err := CheckFolderPermission(username, repoId, "/")
-	if err != nil || permission == "" {
+	if err != nil {
+		return http.StatusForbidden, err
+	}
+	if permission == "" {
 		return http.StatusForbidden, errors.New("permission denied")
 	}
 
@@ -157,14 +160,20 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 
 	parentDir := normalizeDirPath(fileParam.Path)
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
-	if dirId == "" || err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if dirId == "" {
 		return nil, errors.New("folder not found")
 	}
 
 	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission == "" {
+	if err != nil {
+		return nil, err
+	}
+	if permission == "" {
 		return nil, errors.New("permission denied")
 	}
 
@@ -491,12 +500,19 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 		}
 
 		permission, err := CheckFolderPermission(username, repoId, parentDir)
-		if err != nil || permission != "rw" {
+		if err != nil {
+			return nil, err
+		}
+		if permission != "rw" {
 			return nil, errors.New("permission denied")
 		}
 
 		newDirName := path.Base(pathParam)
-		if !isValidDirentName(newDirName) {
+		validName, err := isValidDirentName(newDirName)
+		if err != nil {
+			return nil, err
+		}
+		if !validName {
 			return nil, errors.New("name invalid")
 		}
 
@@ -531,7 +547,10 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 		}
 
 		permission, err := CheckFolderPermission(username, repoId, parentDir)
-		if err != nil || permission != "rw" {
+		if err != nil {
+			return nil, err
+		}
+		if permission != "rw" {
 			return nil, errors.New("permission denied")
 		}
 
@@ -542,8 +561,11 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 			return nil, errors.New("empty new dirname")
 		}
 
-		if !isValidDirentName(newDirName) {
-			klog.Errorf("name invalid.")
+		validName, err := isValidDirentName(newDirName)
+		if err != nil {
+			return nil, err
+		}
+		if !validName {
 			return nil, errors.New("name invalid")
 		}
 
@@ -553,7 +575,11 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 		}
 
 		newDirName = CheckFilenameWithRename(repoId, parentDir, newDirName)
-		if resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldDirName, newDirName, username); err != nil || resultCode != 0 {
+		resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldDirName, newDirName, username)
+		if err != nil {
+			return nil, err
+		}
+		if resultCode != 0 {
 			klog.Errorf("Failed to rename: result_code: %d, err: %v", resultCode, err)
 			return nil, errors.New("failed to rename")
 		}

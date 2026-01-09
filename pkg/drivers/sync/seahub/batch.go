@@ -56,7 +56,11 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 	}
 
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
-	if dirId == "" || err != nil {
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+	if dirId == "" {
 		klog.Errorf("fail to check dir exists %s, err=%s", parentDir, err)
 		return nil, errors.New("folder not found")
 	}
@@ -64,20 +68,31 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if permission != "rw" {
 		return nil, errors.New("permission denied")
 	}
 
 	folderPerms, err := GetSubFolderPermissionByDir(username, repoId, parentDir)
+	if err != nil {
+		return nil, err
+	}
 	for _, dirent := range dirents {
 		if perm, exists := folderPerms[dirent]; exists && perm != "rw" {
 			return nil, errors.New(fmt.Sprintf("Can't delete folder %s, please check its permission", dirent))
 		}
 	}
 
-	if resultCode, err := seaserv.GlobalSeafileAPI.DelFile(repoId, parentDir, string(common.ToBytes(dirents)), username); resultCode != 0 || err != nil {
-		klog.Errorf("Failed to delete: result_code: %d, err: %v", resultCode, err)
-		return nil, errors.New("failed to delete")
+	resultCode, err := seaserv.GlobalSeafileAPI.DelFile(repoId, parentDir, string(common.ToBytes(dirents)), username)
+	if err != nil {
+		klog.Errorf("Failed to delete: %v", err)
+		return nil, err
+	}
+	if resultCode != 0 {
+		klog.Errorf("Failed to delete: result_code: %d", resultCode)
+		return nil, fmt.Errorf("failed to delete: result_code: %d", resultCode)
 	}
 
 	response := map[string]interface{}{
@@ -90,10 +105,10 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 func GetSubFolderPermissionByDir(username, repoID, parentDir string) (map[string]string, error) {
 	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoID, parentDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get dir id: %v", err)
+		return nil, err
 	}
 	if dirId == "" {
-		return nil, fmt.Errorf("failed to get dir id")
+		return nil, errors.New("folder not found")
 	}
 
 	dirents, err := seaserv.GlobalSeafileAPI.ListDirWithPerm(repoID, parentDir, dirId, username, -1, -1)
@@ -122,25 +137,37 @@ type CopyMoveReq struct {
 
 func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string) ([]byte, error) {
 	srcRepo, err := seaserv.GlobalSeafileAPI.GetRepo(srcRepoId)
-	if err != nil || srcRepo == nil {
+	if err != nil {
+		return nil, err
+	}
+	if srcRepo == nil {
 		klog.Error(fmt.Sprintf("Library %s not found, err: %v", srcRepoId, err))
 		return nil, errors.New("library not found")
 	}
 
 	srcDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(srcRepoId, srcParentDir)
-	if err != nil || srcDirId == "" {
+	if err != nil {
+		return nil, err
+	}
+	if srcDirId == "" {
 		klog.Error(fmt.Sprintf("Folder %s not found, err: %v", srcParentDir, err))
 		return nil, errors.New("folder not found")
 	}
 
 	dstRepo, err := seaserv.GlobalSeafileAPI.GetRepo(dstRepoId)
-	if err != nil || dstRepo == nil {
+	if err != nil {
+		return nil, err
+	}
+	if dstRepo == nil {
 		klog.Error(fmt.Sprintf("Library %s not found, err: %v", dstRepoId, err))
 		return nil, errors.New("library not found")
 	}
 
 	dstDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(dstRepoId, dstParentDir)
-	if err != nil || dstDirId == "" {
+	if err != nil {
+		return nil, err
+	}
+	if dstDirId == "" {
 		klog.Error(fmt.Sprintf("Folder %s not found, err: %v", dstParentDir, err))
 		return nil, errors.New("folder not found")
 	}
@@ -148,7 +175,10 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 	username := owner + "@auth.local"
 
 	srcPerm, err := CheckFolderPermission(username, srcRepoId, srcParentDir)
-	if err != nil || !strings.Contains(srcPerm, "r") {
+	if err != nil {
+		return nil, err
+	}
+	if !strings.Contains(srcPerm, "r") {
 		klog.Error("Permission denied.")
 		return nil, errors.New("permission denied")
 	}
@@ -156,7 +186,7 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 	dstPerm, err := CheckFolderPermission(username, dstRepoId, dstParentDir)
 	if err != nil {
 		klog.Errorf("Permission denied. err: %s, dstPerm: %s", err, dstPerm)
-		return nil, errors.New("permission denied")
+		return nil, fmt.Errorf("permission denied. err: %s, dstPerm: %s", err, dstPerm)
 	} else {
 		klog.Infof("dstPerm: %s", dstPerm)
 	}
@@ -180,25 +210,37 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 
 func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string) ([]byte, error) {
 	srcRepo, err := seaserv.GlobalSeafileAPI.GetRepo(srcRepoId)
-	if err != nil || srcRepo == nil {
+	if err != nil {
+		return nil, err
+	}
+	if srcRepo == nil {
 		klog.Error(fmt.Sprintf("Library %s not found, err: %v", srcRepoId, err))
 		return nil, errors.New("library not found")
 	}
 
 	srcDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(srcRepoId, srcParentDir)
-	if err != nil || srcDirId == "" {
+	if err != nil {
+		return nil, err
+	}
+	if srcDirId == "" {
 		klog.Error(fmt.Sprintf("Folder %s not found, err: %v", srcParentDir, err))
 		return nil, errors.New("folder not found")
 	}
 
 	dstRepo, err := seaserv.GlobalSeafileAPI.GetRepo(dstRepoId)
-	if err != nil || dstRepo == nil {
+	if err != nil {
+		return nil, err
+	}
+	if dstRepo == nil {
 		klog.Error(fmt.Sprintf("Library %s not found, err: %v", dstRepoId, err))
 		return nil, errors.New("library not found")
 	}
 
 	dstDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(dstRepoId, dstParentDir)
-	if err != nil || dstDirId == "" {
+	if err != nil {
+		return nil, err
+	}
+	if dstDirId == "" {
 		klog.Error(fmt.Sprintf("Folder %s not found, err: %v", dstParentDir, err))
 		return nil, errors.New("folder not found")
 	}
@@ -206,13 +248,19 @@ func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string,
 	username := owner + "@auth.local"
 
 	srcPerm, err := CheckFolderPermission(username, srcRepoId, srcParentDir)
-	if err != nil || srcPerm != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if srcPerm != "rw" {
 		klog.Error("Permission denied.")
 		return nil, errors.New("permission denied")
 	}
 
 	dstPerm, err := CheckFolderPermission(username, dstRepoId, dstParentDir)
-	if err != nil || dstPerm != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if dstPerm != "rw" {
 		klog.Error("Permission denied.")
 		return nil, errors.New("permission denied")
 	}

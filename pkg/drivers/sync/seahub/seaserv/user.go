@@ -4,9 +4,10 @@ import (
 	"errors"
 	"files/pkg/redisutils"
 	"fmt"
-	"k8s.io/klog/v2"
 	"strconv"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 var UNUSABLE_PASSWORD = "!" // This will never be a valid hash
@@ -84,7 +85,10 @@ func DeleteUser(username string) error {
 
 	for _, repo := range ownedRepos {
 		resultCode, err = GlobalSeafileAPI.RemoveRepo(repo["id"])
-		if err != nil || resultCode != 0 {
+		if err != nil {
+			return err
+		}
+		if resultCode != 0 {
 			return errors.New(fmt.Sprintf("Error removing repo owned by user %s", username))
 		}
 	}
@@ -95,23 +99,35 @@ func DeleteUser(username string) error {
 	}
 	for _, repo := range repos {
 		resultCode, err = GlobalSeafileAPI.RemoveShare(repo["repo_id"], repo["user"], username)
-		if err != nil || resultCode != 0 {
+		if err != nil {
+			return err
+		}
+		if resultCode != 0 {
 			return errors.New(fmt.Sprintf("Error removing share in repo for user %s", username))
 		}
 	}
 
 	resultCode, err = GlobalSeafileAPI.DeleteRepoTokensByEmail(username)
-	if err != nil || resultCode != 0 {
+	if err != nil {
+		return err
+	}
+	if resultCode != 0 {
 		return errors.New(fmt.Sprintf("Error clearing token for user %s", username))
 	}
 
 	resultCode, err = GlobalCcnetAPI.RemoveGroupUser(username)
-	if err != nil || resultCode != 0 {
+	if err != nil {
+		return err
+	}
+	if resultCode != 0 {
 		return errors.New(fmt.Sprintf("Error clearing group user for user %s", username))
 	}
 
 	resultCode, err = GlobalCcnetAPI.RemoveEmailuser(actualSource, username)
-	if err != nil || resultCode != 0 {
+	if err != nil {
+		return err
+	}
+	if resultCode != 0 {
 		return errors.New(fmt.Sprintf("Error clearing email user for user %s", username))
 	}
 

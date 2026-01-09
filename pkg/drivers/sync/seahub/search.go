@@ -1,10 +1,10 @@
 package seahub
 
 import (
+	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/hertz/biz/dal/database"
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -49,13 +49,19 @@ func HandleSearch(owner, q string) ([]byte, error) {
 
 func HandleSearchFile(username, repoId, q string, shared bool) ([]map[string]string, error) {
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
-	if repo == nil || err != nil {
-		return nil, fmt.Errorf("library %s not found", repoId)
+	if err != nil {
+		return nil, err
+	}
+	if repo == nil {
+		return nil, errors.New("repo not found")
 	}
 
 	perm, err := CheckFolderPermission(username, repoId, "/")
-	if perm == "" || err != nil {
-		return nil, fmt.Errorf("permission denied")
+	if err != nil {
+		return nil, err
+	}
+	if perm == "" {
+		return nil, errors.New("permission denied")
 	}
 
 	shareId := ""

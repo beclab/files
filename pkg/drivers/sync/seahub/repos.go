@@ -99,7 +99,11 @@ func HandleReposGet(owner string, types []string) ([]byte, error) {
 
 	timestamp := time.Now().UTC().Format("2006-01-02 15:04:05")
 	eventMsg := fmt.Sprintf("user-login\t%s\t%s\t%d", username, timestamp, -1)
-	if resultCode, err := seaserv.GlobalSeafileAPI.PublishEvent("seahub.stats", eventMsg); err != nil || resultCode != 0 {
+	resultCode, err := seaserv.GlobalSeafileAPI.PublishEvent("seahub.stats", eventMsg)
+	if err != nil {
+		klog.Error(err)
+	}
+	if resultCode != 0 {
 		klog.Errorf("Publish event failed, code: %d, err: %v", resultCode, err)
 	}
 
@@ -285,7 +289,11 @@ func HandleRepoDelete(owner, repoId string) ([]byte, error) {
 	}
 
 	if repo == nil {
-		if resultCode, err := seaserv.GlobalSeafileAPI.RemoveRepo(repoId); err != nil || resultCode != 0 {
+		resultCode, err := seaserv.GlobalSeafileAPI.RemoveRepo(repoId)
+		if err != nil {
+			return nil, err
+		}
+		if resultCode != 0 {
 			klog.Errorf("Failed to remove repo: result_code: %d, err: %v", resultCode, err)
 			return nil, errors.New("failed to remove repo")
 		}
@@ -519,14 +527,17 @@ func HandleRepoPost(owner, repoName, passwd string) ([]byte, error) {
 	if repoName == "" {
 		return nil, errors.New("repository name is required")
 	}
-	if !isValidDirentName(repoName) {
-		return nil, errors.New("invalid repository name")
+	validName, err := isValidDirentName(repoName)
+	if err != nil {
+		return nil, err
+	}
+	if !validName {
+		return nil, errors.New("name invalid")
 	}
 
 	username := owner + "@auth.local"
 
 	var repoId string
-	var err error
 	repoId, err = createRepo(repoName, "", username, nil)
 
 	if err != nil {
@@ -551,17 +562,17 @@ func createRepo(name, desc, username string, passwd *string) (string, error) {
 	return seaserv.GlobalSeafileAPI.CreateRepo(name, desc, username, passwd, 2)
 }
 
-func isValidDirentName(name string) bool {
+func isValidDirentName(name string) (bool, error) {
 	// `repo_id` parameter is not used in seafile api
 	ret, err := seaserv.GlobalSeafileAPI.IsValidFilename("fake_repo_id", name)
 	if err != nil {
 		klog.Errorf("Error validating dirent name: %v", err)
-		return false
+		return false, err
 	}
 	if ret == 0 {
-		return false
+		return false, errors.New("invalid dirent name")
 	}
-	return true
+	return true, nil
 }
 
 func HandleRepoPatch(owner, repoId, repoName, repoDesc, op string) ([]byte, error) {
@@ -588,8 +599,12 @@ func HandleRepoPatch(owner, repoId, repoName, repoDesc, op string) ([]byte, erro
 		return nil, errors.New("not supported now")
 
 	case "rename":
-		if !isValidDirentName(repoName) {
-			return nil, errors.New("invalid repo name")
+		validName, err := isValidDirentName(repoName)
+		if err != nil {
+			return nil, err
+		}
+		if !validName {
+			return nil, errors.New("name invalid")
 		}
 
 		username := owner + "@auth.local"
@@ -613,7 +628,11 @@ func HandleRepoPatch(owner, repoId, repoName, repoDesc, op string) ([]byte, erro
 			return nil, errors.New("Permission denied.")
 		}
 
-		if resultCode, err := seaserv.GlobalSeafileAPI.EditRepo(repoId, repoName, repoDesc, username); err != nil || resultCode != 0 {
+		resultCode, err := seaserv.GlobalSeafileAPI.EditRepo(repoId, repoName, repoDesc, username)
+		if err != nil {
+			return nil, err
+		}
+		if resultCode != 0 {
 			klog.Errorf("Failed to edit repo: result_code: %d, err: %v", resultCode, err)
 			return nil, errors.New("Failed to edit repo")
 		}
@@ -676,11 +695,17 @@ func HandleGetReposDownloadInfo(owner, repoId string) ([]byte, error) {
 	username := owner + "@auth.local"
 
 	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
-	if err != nil || repo == nil {
+	if err != nil {
+		return nil, err
+	}
+	if repo == nil {
 		return nil, fmt.Errorf("library %s not found", repoId)
 	}
 
 	perm, err := CheckFolderPermission(username, repoId, "/")
+	if err != nil {
+		return nil, err
+	}
 	if perm == "" {
 		return nil, fmt.Errorf("you do not have permission to access this library")
 	}

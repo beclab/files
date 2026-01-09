@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub"
+	"files/pkg/drivers/sync/seahub/searpc"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
@@ -135,7 +136,7 @@ func (t *Task) DownloadFromSync() error {
 	if err != nil {
 		t.pausedParam = dst
 		t.pausedPhase = t.currentPhase
-		return err
+		return searpc.SyncConnectionFailedError(err)
 	}
 
 	if !t.param.Dst.IsCloud() && t.param.Action == common.ActionMove {
@@ -314,7 +315,10 @@ func (t *Task) GetFromSyncFileCount(countType string) (int64, error) {
 		queue = queue[1:]
 
 		curDirInfoRes, err := seahub.HandleGetRepoDir(curFileParam)
-		if err != nil || curDirInfoRes == nil {
+		if err != nil {
+			return 0, err
+		}
+		if curDirInfoRes == nil {
 			return 0, errors.New("folder not found")
 		}
 
@@ -396,7 +400,10 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam, root bool) error 
 	downloadPath = dstUri + dst.Path
 
 	dirInfoRes, err := seahub.HandleGetRepoDir(src)
-	if err != nil || dirInfoRes == nil {
+	if err != nil {
+		return err
+	}
+	if dirInfoRes == nil {
 		return errors.New("folder not found")
 	}
 	var dirInfo map[string]interface{}
@@ -830,7 +837,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		Extend:   dst.Extend,
 		Path:     filepath.Dir(dst.Path),
 	}
-	uploadLink, err := seahub.GetUploadLink(uploadParam, "api", false)
+	uploadLink, err := seahub.GetUploadLink(uploadParam, "api", false, false)
 	if err != nil {
 		return err
 	}
@@ -1073,7 +1080,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 				}
 
 				klog.Warningf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries)
-				return fmt.Errorf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries)
+				return searpc.SyncConnectionFailedError(fmt.Errorf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries))
 			}
 			defer response.Body.Close()
 
@@ -1224,7 +1231,11 @@ func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool, up
 		if fileParam.FileType == "sync" {
 			if isDir {
 				dirInfoRes, err := seahub.HandleGetRepoDir(fileParam)
-				if err != nil || dirInfoRes == nil {
+				if err != nil {
+					klog.Error(err)
+					break
+				}
+				if dirInfoRes == nil {
 					break
 				}
 			} else {

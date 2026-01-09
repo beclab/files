@@ -123,6 +123,25 @@ func isRetryableError(err error) bool {
 	return false
 }
 
+func SyncConnectionFailedError(err error) error {
+	// only call this func for judging at given special scenes
+	syncConnectionFails := []string{
+		"broken pipe",        // for common rpc calling
+		"connection refused", // for syncing transport
+		"connection reset",   // for uploading to sync
+		"Bad Gateway",        // for copying to sync
+		"unexpected EOF",     // for copying from sync
+	}
+
+	errMsg := err.Error()
+	for _, e := range syncConnectionFails {
+		if strings.Contains(errMsg, e) {
+			return fmt.Errorf("sync server connection failed")
+		}
+	}
+	return err
+}
+
 type NamedPipeClient struct {
 	SearpcClient
 	socketPath  string

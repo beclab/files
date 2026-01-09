@@ -95,11 +95,18 @@ func handleCreate(repoId, pathParam, owner string) ([]byte, error) {
 
 	// permission check
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if permission != "rw" {
 		return nil, errors.New("permission denied")
 	}
 
-	if !isValidDirentName(filename) {
+	validName, err := isValidDirentName(filename)
+	if err != nil {
+		return nil, err
+	}
+	if !validName {
 		return nil, errors.New("name invalid")
 	}
 
@@ -120,8 +127,11 @@ func handleRename(repoId, pathParam, owner, newName string) ([]byte, error) {
 	if newName == "" {
 		return nil, errors.New("newname invalid")
 	}
-	if !isValidDirentName(newName) {
-		klog.Errorf("name invalid.")
+	validName, err := isValidDirentName(newName)
+	if err != nil {
+		return nil, err
+	}
+	if !validName {
 		return nil, errors.New("name invalid")
 	}
 
@@ -151,12 +161,19 @@ func handleRename(repoId, pathParam, owner, newName string) ([]byte, error) {
 	}
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if permission != "rw" {
 		return nil, errors.New("permission denied")
 	}
 
 	newName = CheckFilenameWithRename(repoId, parentDir, newName)
-	if resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldName, newName, username); err != nil || resultCode != 0 {
+	resultCode, err := seaserv.GlobalSeafileAPI.RenameFile(repoId, parentDir, oldName, newName, username)
+	if err != nil {
+		return nil, err
+	}
+	if resultCode != 0 {
 		klog.Errorf("Failed to rename: result_code: %d, err: %v", resultCode, err)
 		return nil, errors.New("failed to rename")
 	}
@@ -246,7 +263,10 @@ func HandleUpdateLink(fileParam *models.FileParam, from string) ([]byte, error) 
 	username := fileParam.Owner + "@auth.local"
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if permission != "rw" {
 		return nil, errors.New("permission denied")
 	}
 
@@ -321,7 +341,10 @@ func ViewLibFile(fileParam *models.FileParam, op string) ([]byte, error) {
 	parentDir := filepath.Dir(filePath)
 
 	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil || permission != "rw" {
+	if err != nil {
+		return nil, err
+	}
+	if permission != "rw" {
 		return nil, errors.New("permission denied")
 	}
 

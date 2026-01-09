@@ -9,14 +9,19 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	"files/pkg/drivers/sync/seahub"
+	"files/pkg/drivers/sync/seahub/searpc"
 	upload "files/pkg/hertz/biz/model/upload"
 	"files/pkg/models"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -273,6 +278,22 @@ func isNil(val reflect.Value) bool {
 	}
 }
 
+func isConnectionResetError(err error) bool {
+	if opErr, ok := err.(*net.OpError); ok {
+		return opErr.Err == syscall.ECONNRESET
+	}
+
+	if err == syscall.ECONNRESET {
+		return true
+	}
+
+	if err != nil {
+		return strings.Contains(err.Error(), "connection reset")
+	}
+
+	return false
+}
+
 // SyncUploadChunksMethod .
 // @router /seafhttp/:upload/:uid [POST]
 func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
@@ -300,35 +321,86 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 
 	var uploadType = c.Param("upload")
 	var uid = c.Param("uid")
-	var reqUrl = fmt.Sprintf("http://seafile:8082/%s/%s?ret-json=1", uploadType, uid)
+	var originalUid = uid
+	if seahub.AccessTokenMap[uid] != "" {
+		uid = seahub.AccessTokenMap[uid]
+		klog.Infof("[upload] Sync uploadChunks, uid: %s, originalUid: %s", uid, originalUid)
+	}
 
-	klog.Infof("Sync uploadChunks, path: %s, owner: %s, uploadPath: %s, url: %s", requestPath, owner, uploadPath, reqUrl)
+	var executeRequest = func(uid string) (*http.Response, error) {
+		reqUrl := fmt.Sprintf("http://seafile:8082/%s/%s?ret-json=1", uploadType, uid)
+		klog.Infof("Sync uploadChunks, path: %s, owner: %s, uploadPath: %s, url: %s", requestPath, owner, uploadPath, reqUrl)
 
-	var br io.Reader
-	var req, _ = http.NewRequest(http.MethodPost, reqUrl, br)
+		req, _ := http.NewRequest(http.MethodPost, reqUrl, bytes.NewReader(c.Request.Body()))
 
-	c.Request.Header.VisitAll(func(key, value []byte) {
-		req.Header.Set(string(key), string(value))
-	})
-
-	contentDisposition := req.Header.Get("Content-Disposition")
-	if contentDisposition == "" {
+		c.Request.Header.VisitAll(func(key, value []byte) {
+			req.Header.Set(string(key), string(value))
+		})
 		req.Header.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", url.QueryEscape(uploadReq.ResumableFilename)))
+		req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
+		req.ContentLength = int64(len(c.Request.Body()))
+
+		return http.DefaultClient.Do(req)
 	}
 
-	req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
-
-	body := c.Request.Body()
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		klog.Errorf("Sync uploadChunks, redirect error: %v", err)
-		c.String(http.StatusBadRequest, err.Error())
-		return
+	resp, err := executeRequest(uid)
+	if resp != nil {
+		defer resp.Body.Close()
 	}
-	defer resp.Body.Close()
+
+	if err != nil || (resp != nil && resp.StatusCode != http.StatusOK) {
+		retryNeeded := false
+		var errMsg *models.SyncUploadError
+		if err != nil {
+			retryNeeded = isConnectionResetError(err)
+		} else {
+			bodyRes, _ := io.ReadAll(resp.Body)
+			_ = json.Unmarshal(bodyRes, &errMsg)
+			retryNeeded = (errMsg != nil && errMsg.Error == "Access token not found.")
+		}
+
+		if retryNeeded {
+			p := "/" + filepath.Join(uploadReq.DriveType, uploadReq.RepoId, strings.Trim(uploadReq.ParentDir, "/")) + "/"
+			fileParam, err := models.CreateFileParam(owner, p)
+			if err != nil {
+				klog.Errorf("file param error: %v, owner: %s", err, owner)
+				c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+				return
+			}
+			newUid, refreshErr := seahub.GetUploadLink(fileParam, "web", false, true)
+			if refreshErr == nil {
+				seahub.AccessTokenMap[originalUid] = newUid
+				klog.Infof("[upload] Sync uploadChunks, update AccessTokenMap: %s -> %s", originalUid, newUid)
+
+				resp, err = executeRequest(newUid)
+				if resp != nil {
+					defer resp.Body.Close()
+				}
+				if err == nil && resp.StatusCode == http.StatusOK {
+					klog.Infof("Retry success with new UID: %s", newUid)
+				}
+				if err != nil {
+					delete(seahub.AccessTokenMap, originalUid)
+					klog.Errorf("Sync uploadChunks, redirect error: %v", err)
+					c.String(http.StatusBadRequest, searpc.SyncConnectionFailedError(err).Error())
+					return
+				}
+			} else {
+				delete(seahub.AccessTokenMap, originalUid)
+				klog.Errorf("Token refresh failed: %v", refreshErr)
+				c.AbortWithStatusJSON(http.StatusForbidden, utils.H{"error": "Access token refresh failed"})
+				return
+			}
+		} else {
+			delete(seahub.AccessTokenMap, originalUid)
+			klog.Errorf("Sync uploadChunks, redirect error: %v", err)
+			if err == nil {
+				err = fmt.Errorf(errMsg.Error)
+			}
+			c.String(http.StatusBadRequest, searpc.SyncConnectionFailedError(err).Error())
+			return
+		}
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		bodyRes, err := io.ReadAll(resp.Body)
@@ -370,6 +442,7 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 			return
 		}
+		delete(seahub.AccessTokenMap, originalUid)
 	} else {
 		result.Items = nil
 		result.Success = new(upload.UploadChunksSuccess)
