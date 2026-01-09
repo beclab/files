@@ -351,7 +351,7 @@ func ShareMiddleware() app.HandlerFunc {
 		var url string
 		var accessOwner string
 		if shareAccess.Upload { // upload
-			if shareType == common.ShareTypeExternal {
+			if shareType == common.ShareTypeExternal || (shareType == common.ShareTypeInternal && shared.FileType == common.Sync) {
 				accessOwner = shareBy
 			} else {
 				accessOwner = bflName
