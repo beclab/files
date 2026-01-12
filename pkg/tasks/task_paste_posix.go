@@ -133,7 +133,8 @@ func (t *Task) rsync() error {
 		//"--no-o",
 		//"--no-g",
 		"--copy-as=1000:1000",
-		"--copy-links",
+		"--safe-links",
+		"--no-inc-recursive",
 		// "--bwlimit=15000", // from env
 		"--info=PROGRESS2",
 		srcPath,
@@ -143,7 +144,7 @@ func (t *Task) rsync() error {
 	_, err = common.ExecRsync(t.ctx, rsync, args, t.updateProgressRsync)
 	if err != nil {
 		klog.Errorf("exec rsync error: %v", err)
-		return err
+		return nil
 	}
 
 	return nil

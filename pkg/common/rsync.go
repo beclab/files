@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	completeMsgs = []string{"sent", "received", "total size is", "speedup is"}
-	excludeMsgs  = []string{"rsync error: some files/attrs were not transferred"}
+	excludeMsgs = []string{
+		"rsync error: some files/attrs were not transferred", "symlink has no referent", "rsync: [sender]", "rsync: [generator]"}
 )
 
 func GetCommand(c string) (string, error) {
@@ -36,11 +36,7 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 
 	c := NewCommand(ctx, opts)
 
-	var errMsg string
-	var errChan = make(chan error, 1)
-
 	go func() {
-		defer close(errChan)
 		for {
 			select {
 			case result, ok := <-c.Ch:
@@ -51,67 +47,42 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 					continue
 				}
 
-				if strings.Contains(result, "error") || strings.Contains(result, "failed:") {
-					if !excludeMsg(result) {
-						errChan <- errors.New(formatFailed(result))
-						return
-					}
-				}
-
 				if progress, trans, err := formatProgress(result); err == nil {
 					callbackup(progress, trans)
 					continue
 				}
 
-				if formatFinished(result) {
+				if trans, ok := formatFinished(result); ok {
+					callbackup(100, trans)
 					return
 				}
 			}
 		}
 	}()
 
-	if err := c.Run(); err != nil {
-		errMsg = err.Error()
-		if excludeMsg(errMsg) {
-			return "", nil
-		}
-		if strings.Contains(errMsg, "error") || strings.Contains(errMsg, "failed:") {
-			errMsg = formatFailed(errMsg)
-			return "", errors.New(errMsg)
-		}
-
-		return "", err
-	}
-
-	if e, ok := <-errChan; ok && e != nil {
-		return "", e
-	}
-
-	return "", nil
+	return "", c.Run()
 }
 
-func formatFailed(l string) string {
-	var msgs = strings.Split(l, "\n")
-	var msg = msgs[len(msgs)-1]
-	var result string
-	if strings.Contains(msg, " failed: ") {
-		// rsync: [receiver] mkstemp "/{path}/.{filename}.tar.gz.FHtToQ" failed: No such file or directory (2)
-		result = msg[strings.LastIndex(msg, "failed:")+7:]
-		result = strings.TrimSpace(result)
-	} else {
-		result = l // msg
-	}
-
-	return result
-}
-
-func formatFinished(l string) bool {
-	for _, m := range completeMsgs {
-		if !strings.Contains(l, m) {
-			return false
+func formatFinished(l string) (int64, bool) {
+	if strings.Contains(l, "sent") && strings.Contains(l, "received") && strings.Contains(l, "total size is") {
+		var lines = strings.Split(l, "\n")
+		var trans int64
+		for _, line := range lines {
+			if !strings.Contains(line, "total size is") {
+				continue
+			}
+			var p = strings.Index(line, "speedup")
+			var tmp = line[:p-1]
+			tmp = strings.ReplaceAll(tmp, "total size is", "")
+			tmp = strings.ReplaceAll(tmp, ",", "")
+			tmp = strings.TrimSpace(tmp)
+			trans, _ = strconv.ParseInt(tmp, 10, 64)
 		}
+
+		return trans, true
+
 	}
-	return true
+	return 0, false
 }
 
 func formatProgress(l string) (int, int64, error) {
@@ -119,6 +90,10 @@ func formatProgress(l string) (int, int64, error) {
 	// sent 479,087,779 bytes  received 184 bytes  8,189,537.83 bytes/sec
 	var lines = strings.Split(l, "\n")
 	for _, line := range lines {
+		if len(line) == 0 || excludeMsg(line) {
+			continue
+		}
+
 		if !strings.Contains(line, "% ") || strings.Contains(line, "sending incremental file list") {
 			continue
 		}
@@ -265,12 +240,7 @@ func (c *Command) Run() error {
 
 			if n > 0 {
 				content := string(buffer[:n])
-				if strings.Contains(content, "error") || strings.Contains(content, "failed:") {
-					gErr = errors.Errorf(content)
-					return
-				} else {
-					c.Ch <- content
-				}
+				c.Ch <- content
 			}
 
 		}
