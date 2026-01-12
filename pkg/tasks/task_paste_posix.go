@@ -133,7 +133,8 @@ func (t *Task) rsync() error {
 		//"--no-o",
 		//"--no-g",
 		"--copy-as=1000:1000",
-		"--copy-links",
+		"--safe-links",
+		"--no-inc-recursive",
 		// "--bwlimit=15000", // from env
 		"--info=PROGRESS2",
 		srcPath,

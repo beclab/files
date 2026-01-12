@@ -19,7 +19,8 @@ import (
 
 var (
 	completeMsgs = []string{"sent", "received", "total size is", "speedup is"}
-	excludeMsgs  = []string{"rsync error: some files/attrs were not transferred"}
+	excludeMsgs  = []string{
+		"rsync error: some files/attrs were not transferred", "symlink has no referent", "rsync: [sender]", "rsync: [generator]"}
 )
 
 func GetCommand(c string) (string, error) {
@@ -51,7 +52,7 @@ func ExecRsync(ctx context.Context, name string, args []string, callbackup func(
 					continue
 				}
 
-				if strings.Contains(result, "error") || strings.Contains(result, "failed:") {
+				if strings.Contains(result, "failed:") {
 					if !excludeMsg(result) {
 						errChan <- errors.New(formatFailed(result))
 						return
@@ -119,6 +120,10 @@ func formatProgress(l string) (int, int64, error) {
 	// sent 479,087,779 bytes  received 184 bytes  8,189,537.83 bytes/sec
 	var lines = strings.Split(l, "\n")
 	for _, line := range lines {
+		if len(line) == 0 || excludeMsg(line) {
+			continue
+		}
+
 		if !strings.Contains(line, "% ") || strings.Contains(line, "sending incremental file list") {
 			continue
 		}
@@ -265,12 +270,7 @@ func (c *Command) Run() error {
 
 			if n > 0 {
 				content := string(buffer[:n])
-				if strings.Contains(content, "error") || strings.Contains(content, "failed:") {
-					gErr = errors.Errorf(content)
-					return
-				} else {
-					c.Ch <- content
-				}
+				c.Ch <- content
 			}
 
 		}
