@@ -6,7 +6,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/models"
-	"fmt"
 	"path"
 	"strings"
 	"time"
@@ -43,7 +42,7 @@ func (d *Download) download() error {
 		return err
 	}
 
-	_, err := d.checkFreeDiskSpace()
+	_, err := common.CheckDiskSpace("/data", d.fileSize, true) // d.checkFreeDiskSpace()
 	if err != nil {
 		return err
 	}
@@ -130,22 +129,6 @@ func (d *Download) generateBufferFolder() (string, error) {
 	}
 
 	return bufferFolder, nil
-}
-
-func (d *Download) checkFreeDiskSpace() (bool, error) {
-	spaceOk, needs, avails, reserved, err := common.CheckDiskSpace("/data", d.fileSize)
-	if err != nil {
-		return false, err
-	}
-	needsStr := common.FormatBytes(needs)
-	availsStr := common.FormatBytes(avails)
-	reservedStr := common.FormatBytes(reserved)
-	if !spaceOk {
-		errorMessage := fmt.Sprintf("Insufficient disk space available. This file still requires: %s, but only %s is available (with an additional %s reserved for the system).",
-			needsStr, availsStr, reservedStr)
-		return false, errors.New(errorMessage)
-	}
-	return true, nil
 }
 
 func (d *Download) checkCtx() error {

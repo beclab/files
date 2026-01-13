@@ -781,7 +781,17 @@ func (s *SyncStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, 
 	var shareType = fileUploadArg.ShareType
 	var shareBy = fileUploadArg.ShareBy
 
-	klog.Infof("Sync uploadLink, user: %s, from: %s, share: %s %s %s, param: %s", user, from, share, shareType, shareBy, common.ToJson(fileUploadArg.FileParam))
+	klog.Infof("Sync uploadLink, user: %s, from: %s, share: %s %s %s, param: %s, totalSize: %dB",
+		user, from, share, shareType, shareBy,
+		common.ToJson(fileUploadArg.FileParam), fileUploadArg.TotalSize)
+
+	// sync also use system storage space
+	if fileUploadArg.TotalSize != 0 {
+		_, err := common.CheckDiskSpace("/data", fileUploadArg.TotalSize, true)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	uploadLink, err := seahub.GetUploadLink(fileUploadArg.FileParam, fileUploadArg.From, false, false)
 	if err != nil {

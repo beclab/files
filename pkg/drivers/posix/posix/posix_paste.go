@@ -18,10 +18,6 @@ func (s *PosixStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 
 	klog.Infof("Posix - Paste, dst: %s, param: %s", dstType, common.ToJson(pasteParam))
 
-	if dstType == common.Drive || dstType == common.External || dstType == common.Cache {
-		// todo check disk space
-	}
-
 	if dstType == common.Drive {
 		return s.copyToDrive()
 

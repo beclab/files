@@ -57,16 +57,11 @@ func (t *Task) Rsync() error {
 	klog.Infof("[Task] Id: %s, srcPath: %s, dstUri: %s, srcMeta: %s", t.id, srcPath, dstUri, common.ToJson(pathMeta))
 
 	// check free space
-	dstFree, dstUsedPercent, err := files.GetSpaceSize(dstUri)
+	dstFree, err := common.CheckDiskSpace(dstUri, pathMeta.Size, dst.IsSystem()) // no sync dst but external here, IsSystem() is enough and precise
 	if err != nil {
-		return fmt.Errorf("get dst space size error: %v", err)
+		return err
 	}
-
-	if pathMeta.Size > int64(dstFree) {
-		return fmt.Errorf("not enough free space on target disk, required: %s, available: %s", common.FormatBytes(pathMeta.Size), common.FormatBytes(int64(dstFree)))
-	}
-
-	klog.Infof("[Task] Id: %s, dstFree: %d, dstUsed: %.2f%%", t.id, dstFree, dstUsedPercent)
+	klog.Infof("[Task] Id: %s, dstFree: %d", t.id, dstFree)
 
 	if !t.wasPaused {
 		generatedDstNewName, generatedDstNewPath, err := t.generateNewName(pathMeta)

@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/disk"
@@ -80,63 +80,73 @@ const (
 	maxReasonableSpace = 1000 * 1e12 // 1000T
 )
 
-func CheckDiskUsage() (float64, uint64, error) {
-	rootUsage, err := disk.Usage("/")
+func CheckDiskUsage(filePath string, system bool) (uint64, float64, uint64, error) {
+	dataUsage, err := disk.Usage(filePath)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 
-	dataUsage, err := disk.Usage("/data")
-	if err != nil {
-		return 0, 0, err
+	if system && dataUsage.Total >= maxReasonableSpace {
+		// if not system, ">= maxReasonableSpace" may not mean that space is on the system of the bfl own
+		// only system and ">= maxReasonableSpace" leads to space on the system of the bfl own
+		rootUsage, err := disk.Usage("/")
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		return rootUsage.Total, rootUsage.UsedPercent, rootUsage.Free, nil
 	}
-
-	if dataUsage.Total >= maxReasonableSpace {
-		return rootUsage.UsedPercent, rootUsage.Free, nil
-	}
-	return dataUsage.UsedPercent, dataUsage.Free, nil
+	return dataUsage.Total, dataUsage.UsedPercent, dataUsage.Free, nil
 }
 
-func CheckDiskSpace(filePath string, newContentSize int64) (bool, int64, int64, int64, error) {
-	reservedSpaceStr := os.Getenv("RESERVED_SPACE") // env is MB, default is 10000MB
-	if reservedSpaceStr == "" {
-		reservedSpaceStr = "10000"
+func CheckDiskSpace(filePath string, needSize int64, considerReserve bool) (int64, error) {
+	reservedPercent := 0.0
+	var err error
+	if considerReserve {
+		reservedSpacePercent := os.Getenv("RESERVED_SPACE_PERCENT") // default is 1%
+		if reservedSpacePercent == "" {
+			reservedSpacePercent = "1.00"
+		}
+		reservedPercent, err = strconv.ParseFloat(reservedSpacePercent, 64)
+		if err != nil {
+			return int64(0), fmt.Errorf("failed to parse reserved space percent: %w", err)
+		}
+		if reservedPercent < 0.0 || reservedPercent > 100.0 {
+			return int64(0), fmt.Errorf("reserved space percent must be between 0.0 and 100.0")
+		}
 	}
-	reservedSpace, err := strconv.ParseInt(reservedSpaceStr, 10, 64)
+
+	totalSize, usedPercent, freeSize, err := CheckDiskUsage(filePath, considerReserve)
+	// only system considers reserve now, system includes fileParam.IsSystem() == true and fileParam.fileType == sync
 	if err != nil {
-		return false, 0, 0, 0, fmt.Errorf("failed to parse reserved space: %w", err)
+		return int64(0), err
 	}
-	reservedSpace *= 1024 * 1024
-
-	var rootStat, dataStat syscall.Statfs_t
-
-	err = syscall.Statfs("/", &rootStat)
-	if err != nil {
-		return false, 0, 0, 0, fmt.Errorf("failed to get root file system stats: %w", err)
-	}
-	rootAvailableSpace := int64(rootStat.Bavail * uint64(rootStat.Bsize))
-
-	err = syscall.Statfs(filePath, &dataStat)
-	if err != nil {
-		klog.Error(err)
-		return false, 0, 0, 0, fmt.Errorf("failed to get /data file system stats: %w", err)
-	}
-	dataAvailableSpace := int64(dataStat.Bavail * uint64(dataStat.Bsize))
-
-	availableSpace := int64(0)
-	if dataAvailableSpace >= maxReasonableSpace {
-		availableSpace = rootAvailableSpace - reservedSpace
-	} else {
-		availableSpace = dataAvailableSpace - reservedSpace
+	reserved := int64(math.Round(float64(totalSize) * float64(reservedPercent) / 100.0))
+	needToFree := needSize - (int64(freeSize) - reserved)
+	if needToFree < 0 {
+		needToFree = 0
 	}
 
-	requiredSpace := newContentSize
+	usedPercentStr := strconv.FormatFloat(usedPercent, 'f', 2, 64)
+	totalStr := FormatBytes(int64(totalSize))
+	needStr := FormatBytes(needSize)
+	freeStr := FormatBytes(int64(freeSize))
+	reservedStr := FormatBytes(reserved)
+	needToFreeStr := FormatBytes(needToFree)
 
-	if availableSpace >= requiredSpace {
-		return true, requiredSpace, availableSpace, reservedSpace, nil
+	availableSpace := int64(freeSize) - reserved
+	spaceOk := (int64(freeSize) - needSize) > reserved
+	klog.Infof("[Common] Disk usage: %s%% (%s total, %s free, %s reserved), Disk need: %s, need to free: %s", usedPercentStr, totalStr, freeStr, reservedStr, needStr, needToFreeStr)
+	if !spaceOk {
+		var errorMessage string
+		if considerReserve {
+			errorMessage = fmt.Sprintf("Insufficient disk space. %s required, but only %s available (including %s reserved for the system). Need to free %s for uploading.",
+				needStr, freeStr, reservedStr, needToFreeStr)
+		} else {
+			errorMessage = fmt.Sprintf("Insufficient disk space. %s required, but only %s available. Need to free %s for uploading.", needStr, freeStr, needToFreeStr)
+		}
+		return availableSpace, fmt.Errorf(errorMessage)
 	}
-
-	return false, requiredSpace, availableSpace, reservedSpace, nil
+	return availableSpace, nil
 }
 
 func FormatBytes(bytes int64) string {
