@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"files/pkg/common"
 	"fmt"
-	"k8s.io/klog/v2"
 	"strconv"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 type SearpcClientInterface interface {
@@ -26,8 +27,23 @@ func _fret_int(retStr string) (int, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
-		return 0, &SearpcError{dicts["err_msg"].(string)}
+		var errMsg string
+		switch v := errCode.(type) {
+		case float64:
+			errMsg = fmt.Sprintf("Server error code: %d", int(v))
+		case string:
+			errMsg = fmt.Sprintf("Server error: %s", v)
+		default:
+			errMsg = "Unknown error code type"
+		}
+
+		klog.Infof("RPC Error - Code: %v(%T), Message: %q",
+			errCode, errCode, dicts["err_msg"])
+
+		if msg, ok := dicts["err_msg"].(string); ok {
+			return 0, &SearpcError{msg}
+		}
+		return 0, &SearpcError{errMsg}
 	}
 
 	if ret, ok := dicts["ret"]; ok {
@@ -56,7 +72,7 @@ func _fret_string(retStr string) (string, error) {
 			errMsg = "Unknown error code type"
 		}
 
-		klog.V(2).Infof("RPC Error - Code: %v(%T), Message: %q",
+		klog.Infof("RPC Error - Code: %v(%T), Message: %q",
 			errCode, errCode, dicts["err_msg"])
 
 		if msg, ok := dicts["err_msg"].(string); ok {
@@ -75,7 +91,7 @@ func _fret_string(retStr string) (string, error) {
 		case float64:
 			return strconv.FormatFloat(v, 'f', -1, 64), nil
 		default:
-			klog.V(2).Infof("Unexpected return type: %T, value: %v", v, v)
+			klog.Infof("Unexpected return type: %T, value: %v", v, v)
 			return "", &SearpcError{
 				fmt.Sprintf("Invalid return type: %T, need string", v)}
 		}
@@ -166,8 +182,23 @@ func _fret_obj(retStr string) (*SearpcObj, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
-		return nil, &SearpcError{dicts["err_msg"].(string)}
+		var errMsg string
+		switch v := errCode.(type) {
+		case float64:
+			errMsg = fmt.Sprintf("Server error code: %d", int(v))
+		case string:
+			errMsg = fmt.Sprintf("Server error: %s", v)
+		default:
+			errMsg = "Unknown error code type"
+		}
+
+		klog.Infof("RPC Error - Code: %v(%T), Message: %q",
+			errCode, errCode, dicts["err_msg"])
+
+		if msg, ok := dicts["err_msg"].(string); ok {
+			return nil, &SearpcError{msg}
+		}
+		return nil, &SearpcError{errMsg}
 	}
 
 	if ret, ok := dicts["ret"].(map[string]interface{}); ok {
@@ -183,8 +214,23 @@ func _fret_objlist(retStr string) ([]*SearpcObj, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
-		return nil, &SearpcError{dicts["err_msg"].(string)}
+		var errMsg string
+		switch v := errCode.(type) {
+		case float64:
+			errMsg = fmt.Sprintf("Server error code: %d", int(v))
+		case string:
+			errMsg = fmt.Sprintf("Server error: %s", v)
+		default:
+			errMsg = "Unknown error code type"
+		}
+
+		klog.Infof("RPC Error - Code: %v(%T), Message: %q",
+			errCode, errCode, dicts["err_msg"])
+
+		if msg, ok := dicts["err_msg"].(string); ok {
+			return nil, &SearpcError{msg}
+		}
+		return nil, &SearpcError{errMsg}
 	}
 
 	var list []*SearpcObj
@@ -206,8 +252,23 @@ func _fret_json(retStr string) (interface{}, error) {
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
-		klog.Errorf("errCode: %s, errMsg: %s", errCode.(string), dicts["err_msg"].(string))
-		return nil, &SearpcError{dicts["err_msg"].(string)}
+		var errMsg string
+		switch v := errCode.(type) {
+		case float64:
+			errMsg = fmt.Sprintf("Server error code: %d", int(v))
+		case string:
+			errMsg = fmt.Sprintf("Server error: %s", v)
+		default:
+			errMsg = "Unknown error code type"
+		}
+
+		klog.Infof("RPC Error - Code: %v(%T), Message: %q",
+			errCode, errCode, dicts["err_msg"])
+
+		if msg, ok := dicts["err_msg"].(string); ok {
+			return nil, &SearpcError{msg}
+		}
+		return nil, &SearpcError{errMsg}
 	}
 
 	return dicts["ret"], nil
