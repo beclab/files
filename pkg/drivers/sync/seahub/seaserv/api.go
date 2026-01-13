@@ -552,6 +552,7 @@ func (s *SeafileAPI) RepoHasBeenShared(repoId string, includingGroups bool) (boo
 
 func (s *SeafileAPI) GetRepoStatus(repoId string) (int, error) {
 	ret, err := s.rpcClient.GetRepoStatus(repoId)
+	klog.Infof("[Searpc] GetRepoStatus: %v, err: %v", ret, err)
 	if err != nil {
 		return -1, err
 	}

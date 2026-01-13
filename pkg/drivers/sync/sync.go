@@ -236,7 +236,9 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	klog.Infof("Sync preview, user: %s, args: %s", owner, common.ToJson(contextArgs))
 
 	filesData, err := seahub.ViewLibFile(fileParam, "dict")
+	klog.Infof("[Preview] filesData: %s", string(filesData))
 	if err != nil {
+		klog.Errorf("[Preview] get filesData err: %v", err)
 		return nil, err
 	}
 
