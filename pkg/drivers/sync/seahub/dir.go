@@ -35,9 +35,9 @@ func CheckFolderPermission(username, repoId, path string) (string, error) {
 	klog.Infof("[sync] username: %s, repoId: %s, path: %s", username, repoId, path)
 	repoStatus, err := seaserv.GlobalSeafileAPI.GetRepoStatus(repoId)
 	klog.Infof("[sync] repoStatus: %d, err: %v", repoStatus, err)
-	if err != nil {
-		return "", err
-	}
+	//if err != nil {
+	//	return "", err
+	//}
 	if repoStatus == 1 {
 		return PERMISSION_READ, nil
 	}
