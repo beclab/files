@@ -125,9 +125,9 @@ func (t *Task) rsync() error {
 
 	var args = []string{
 		"-av",
-		//"--no-o",
-		//"--no-g",
-		"--copy-as=1000:1000",
+		"--no-o",
+		"--no-g",
+		//"--copy-as=1000:1000",
 		"--safe-links",
 		"--no-inc-recursive",
 		// "--bwlimit=15000", // from env
@@ -140,6 +140,15 @@ func (t *Task) rsync() error {
 	if err != nil {
 		klog.Errorf("exec rsync error: %v", err)
 		return nil
+	}
+	if strings.HasSuffix(dstPath, "/") {
+		err = files.ChownRecursive(dstPath, 1000, 1000)
+	} else {
+		err = files.Chown(nil, dstPath, 1000, 1000)
+	}
+	if err != nil {
+		klog.Errorf("chown error for %s: %v", dstPath, err)
+		return fmt.Errorf("chown error for %s: %v", dstPath, err)
 	}
 
 	return nil
