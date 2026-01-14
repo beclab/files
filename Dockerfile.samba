@@ -58,6 +58,7 @@ RUN set -eu && \
 WORKDIR /
 COPY --from=builder --chmod=755 /workspace/config/samba/samba.sh /usr/bin/samba.sh
 COPY --from=builder --chmod=664 /workspace/config/samba/smb.conf /etc/samba/smb.conf
+COPY --from=builder --chmod=755 /workspace/cmd/samba/reserved_space.sh /usr/bin/reserved_space.sh
 COPY --from=builder /workspace/samba_share .
 
 EXPOSE 139 445

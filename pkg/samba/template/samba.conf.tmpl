@@ -11,6 +11,7 @@
   printing = bsd
   printcap name = /dev/null
   disable spoolss = yes
+  dfree command = /usr/bin/reserved_space.sh
 
 {{ range $data := $.Paths }}
 [{{ $data.Name }}]
