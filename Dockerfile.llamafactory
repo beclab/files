@@ -1,0 +1,21 @@
+FROM nvcr.io/nvidia/pytorch:25.11-py3
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+USER root
+
+# RUN apt update && apt install -y nvidia-container-toolkit
+
+# 合并所有需要在LLaMA-Factory目录执行的命令
+RUN git clone --depth 1 https://github.com/hiyouga/LLaMA-Factory.git && \
+    cd LLaMA-Factory && \
+    sed -i 's/"torchaudio[^"]*",?//' pyproject.toml && \
+    pip install -e ".[metrics]" && \
+    pip install --no-deps torchaudio
+
+# 验证PyTorch和CUDA安装
+RUN python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
+
+EXPOSE 7860 8000
+
+ENTRYPOINT ["bash", "-c", "unset LD_PRELOAD; llamafactory-cli webui"]
