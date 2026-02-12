@@ -50,7 +50,8 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           push: true
-          tags: beclab/llamafactory:${{ github.event.inputs.tags }}
+          tags: beclab/llamafactory:v0.0.1
+          #tags: beclab/llamafactory:${{ github.event.inputs.tags }}
           #          tags: beclab/seahub-init:${{ steps.get-latest-tag.outputs.tag }}
           file: Dockerfile.llamafactory
           platforms: linux/amd64,linux/arm64
