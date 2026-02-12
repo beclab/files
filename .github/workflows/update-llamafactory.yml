@@ -5,10 +5,10 @@ on:
     inputs:
       tags:
         description: 'Release Tags'
-#  push:
-#    branches:
+  push:
+    branches:
 #      - "main"
-#      - "go_seahub_db"
+      - "temp_ci"
 
 jobs:
   update_dockerhub:
