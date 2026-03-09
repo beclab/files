@@ -272,6 +272,7 @@ func GetReposDonwloadInfoMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	repoId := c.Param("repo_id")
+	klog.Infof("repoId: %s, len(repoId): %d", repoId, len(repoId))
 
 	var res []byte
 

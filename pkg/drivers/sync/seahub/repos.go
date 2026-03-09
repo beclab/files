@@ -111,6 +111,10 @@ func HandleReposGet(owner string, types []string) ([]byte, error) {
 		"repos": repoInfoList,
 	}
 
+	for _, repoInfo := range repoInfoList {
+		klog.Infof("repoInfo[repo_id]: %s, len(repoInfo[repo_id]): %d", repoInfo["repo_id"], len(repoInfo["repo_id"].(string)))
+	}
+
 	return common.ToBytes(wrappedData), nil
 }
 
