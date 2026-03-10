@@ -255,4 +255,4 @@ ALTER TABLE public.OrgUploadRateLimit OWNER TO seafile_os_framework;
 ALTER SEQUENCE public.orguploadratelimit_id_seq OWNER TO seafile_os_framework;
 ALTER INDEX public.orguploadratelimit_org_id_unique OWNER TO seafile_os_framework;
 
-ALTER TABLE public.repoinfo ADD COLUMN IF NOT EXISTS type character varying(10);
+ALTER TABLE public.repoinfo ADD COLUMN IF NOT EXISTS "type" character varying(10);
