@@ -931,7 +931,9 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		request.Header.Set("Content-Type", writer.FormDataContentType())
 		request.Header.Set("Content-Disposition", "attachment; filename=\""+common.EscapeAndJoin(filename, "/")+"\"")
 		request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(diskSize, 10))
+		curChunkStart := chunkStart
 		chunkStart += int64(bytesRead)
+		curChunkEnd := chunkStart - 1
 
 		client := &http.Client{
 			Timeout: 30 * time.Second,
@@ -1107,7 +1109,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 			}
 		}
 
-		klog.Infof("Chunk %d/%d from of bytes %d-%d/%d successfully transferred.", chunkNumber, totalChunks, chunkStart, chunkStart+int64(bytesRead)-1, diskSize)
+		klog.Infof("Chunk %d/%d from of bytes %d-%d/%d successfully transferred.", chunkNumber, totalChunks, curChunkStart, curChunkEnd, diskSize)
 		t.updateProgress(finalProgress, int64(bytesRead))
 
 		if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
