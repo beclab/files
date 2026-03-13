@@ -29,6 +29,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+var previewSemaphore = make(chan struct{}, 10)
+
 type SyncStorage struct {
 	handler *base.HandlerParam
 	paste   *models.PasteParam
@@ -234,6 +236,9 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	var owner = fileParam.Owner
 
 	klog.Infof("Sync preview, user: %s, args: %s", owner, common.ToJson(contextArgs))
+
+	previewSemaphore <- struct{}{}
+	defer func() { <-previewSemaphore }()
 
 	filesData, err := seahub.ViewLibFile(fileParam, "dict")
 	if err != nil {
