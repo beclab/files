@@ -9,6 +9,7 @@ import (
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/drivers/sync/seahub/searpc"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
@@ -736,6 +737,19 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 			return err
 		}
 		klog.Infof("Sync create success, result: %s, path: %s", string(res), dst.Path)
+
+		repoId := dst.Extend
+		verifyInterval := 200 * time.Millisecond
+		for i := 0; i < 5; i++ {
+			verifyDirId, _ := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, fdstBase, false)
+			if verifyDirId != "" {
+				klog.Infof("[UploadDirToSync] dir indexed after %d checks, path: %s", i+1, fdstBase)
+				break
+			}
+			klog.Warningf("[UploadDirToSync] dir not yet indexed, attempt %d/5, path: %s", i+1, fdstBase)
+			time.Sleep(verifyInterval)
+			verifyInterval *= 2
+		}
 	}
 
 	dir, _ := os.Open(srcFullPath)
@@ -768,17 +782,30 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 		}
 
 		if obj.IsDir() {
-			// Create sub-directories, recursively.
 			err = t.UploadDirToSync(fsrcFileParam, fdstFileParam, false)
-			if err != nil {
-				errs = append(errs, err)
-			}
 		} else {
-			// Perform the file copy.
 			err = t.UploadFileToSync(fsrcFileParam, fdstFileParam)
-			if err != nil {
-				errs = append(errs, err)
+		}
+
+		if err != nil && strings.Contains(err.Error(), "folder not found") {
+			klog.Warningf("[UploadDirToSync] child got 'folder not found', re-ensuring dir %s and retrying child %s", fdstBase, obj.Name())
+			username := src.Owner + "@auth.local"
+			seaserv.GlobalSeafileAPI.PostDir(dst.Extend, filepath.Dir(fdstBase), filepath.Base(fdstBase), username)
+			time.Sleep(2 * time.Second)
+			if obj.IsDir() {
+				err = t.UploadDirToSync(fsrcFileParam, fdstFileParam, false)
+			} else {
+				err = t.UploadFileToSync(fsrcFileParam, fdstFileParam)
 			}
+		}
+
+		if err != nil {
+			if obj.IsDir() {
+				klog.Errorf("[Task] Sync upload dir error: %v, path: %s", err, dst.Path)
+			} else {
+				klog.Errorf("[Task] Sync upload file error: %v, path: %s", err, dst.Path)
+			}
+			errs = append(errs, err)
 		}
 	}
 	var errString string
@@ -997,11 +1024,6 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 					klog.Errorln("Write Close error: ", err)
 					return err
 				}
-
-				if err != nil {
-					klog.Warningf("generate body error: %v", err)
-					continue
-				}
 				// newBody end
 
 				req, err = http.NewRequest(request.Method, request.URL.String(), newBody)
@@ -1013,6 +1035,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 				for k, s := range request.Header {
 					req.Header[k] = s
 				}
+				req.Header.Set("Content-Type", writer.FormDataContentType())
 			}
 
 			response, err = client.Do(req)

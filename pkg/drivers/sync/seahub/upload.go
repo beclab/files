@@ -42,13 +42,25 @@ func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool, on
 		return "", errors.New("repo not found")
 	}
 
-	dirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
-	if err != nil {
-		klog.Errorf("fail to get dir id %s, err=%s", parentDir, err)
-		return "", err
+	var dirID string
+	dirRetryInterval := 200 * time.Millisecond
+	for i := 0; i <= 3; i++ {
+		if i > 0 {
+			klog.Infof("[GetUploadLink] dir %s empty, retry %d/3", parentDir, i)
+			time.Sleep(dirRetryInterval)
+			dirRetryInterval *= 2
+		}
+		dirID, err = seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
+		if err != nil {
+			klog.Errorf("fail to get dir id %s, err=%s", parentDir, err)
+			return "", err
+		}
+		if dirID != "" {
+			break
+		}
 	}
 	if dirID == "" {
-		klog.Errorf("fail to get dir id %s", parentDir)
+		klog.Errorf("fail to get dir id %s after retries", parentDir)
 		return "", errors.New("folder not found")
 	}
 
@@ -133,12 +145,24 @@ func GetUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, err
 		parentDir = "/"
 	}
 
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
-	if err != nil {
-		return nil, err
+	var dirId string
+	dirRetryInterval := 200 * time.Millisecond
+	for i := 0; i <= 3; i++ {
+		if i > 0 {
+			klog.Infof("[GetUploadedBytes] dir %s empty, retry %d/3", parentDir, i)
+			time.Sleep(dirRetryInterval)
+			dirRetryInterval *= 2
+		}
+		dirId, err = seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
+		if err != nil {
+			return nil, err
+		}
+		if dirId != "" {
+			break
+		}
 	}
 	if dirId == "" {
-		klog.Errorf("fail to check dir exists %s, err=%s", parentDir, err)
+		klog.Errorf("fail to check dir exists %s after retries", parentDir)
 		return nil, errors.New("folder not found")
 	}
 

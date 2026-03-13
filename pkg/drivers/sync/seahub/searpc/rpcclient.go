@@ -11,7 +11,7 @@ type SeafServerThreadedRpcClient struct {
 
 func NewSeafServerClient(pipePath string) *SeafServerThreadedRpcClient {
 	return &SeafServerThreadedRpcClient{
-		NamedPipeClient: NewNamedPipeClient(pipePath, "seafserv-threaded-rpcserver", 5),
+		NamedPipeClient: NewNamedPipeClient(pipePath, "seafserv-threaded-rpcserver", 45),
 	}
 }
 
