@@ -123,7 +123,7 @@ func HandleGetDirSharedItems(sharePath *share.SharePath, shareType string) ([]by
 	if path == "" {
 		path = "/"
 	}
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path, true)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func HandlePostDirSharedItems(sharePath *share.SharePath, shareMember *share.Sha
 	if path == "" {
 		path = "/"
 	}
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path, true)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func HandlePutDirSharedItems(sharePath *share.SharePath, shareMembers []*share.S
 	if path == "" {
 		path = "/"
 	}
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path, true)
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +517,7 @@ func HandleDeleteDirSharedItems(sharePath *share.SharePath, shareMember *share.S
 	if path == "" {
 		path = "/"
 	}
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path, true)
 	if err != nil {
 		return nil, err
 	}

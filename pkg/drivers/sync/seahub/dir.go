@@ -159,7 +159,7 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	}
 
 	parentDir := normalizeDirPath(fileParam.Path)
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func getDirFileInfoList(username string, repoObj map[string]string, parentDir st
 	var dirInfoList []map[string]interface{}
 	var fileInfoList []map[string]interface{}
 
-	parentDirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	parentDirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -479,7 +479,7 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 
 	switch operation {
 	case "mkdir":
-		dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, pathParam)
+		dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, pathParam, false)
 		if err != nil {
 			klog.Error(err)
 			return nil, err
@@ -489,7 +489,7 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 			return nil, nil
 		}
 
-		parentDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+		parentDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 		if err != nil {
 			klog.Error(err)
 			return nil, err
@@ -536,7 +536,7 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 		return common.ToBytes(dirInfo), nil
 
 	case "rename":
-		dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, pathParam)
+		dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, pathParam, true)
 		if err != nil {
 			klog.Error(err)
 			return nil, err

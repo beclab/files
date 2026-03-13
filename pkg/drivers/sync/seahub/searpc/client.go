@@ -6,8 +6,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/klog/v2"
+)
+
+var (
+	RpcRetryMaxAttempts     = 3
+	RpcRetryInitialInterval = 200 * time.Millisecond
 )
 
 type SearpcClientInterface interface {
@@ -58,7 +64,7 @@ func _fret_int(retStr string) (int, error) {
 func _fret_string(retStr string) (string, error) {
 	var dicts map[string]interface{}
 	if err := json.Unmarshal([]byte(retStr), &dicts); err != nil {
-		return "", &SearpcError{fmt.Sprintf("Invalid JSON format: %v, raw: %s", err, retStr)}
+		return "", &SearpcError{fmt.Sprintf("Invalid response format: %v, raw: %s", err, retStr)}
 	}
 
 	if errCode, ok := dicts["err_code"]; ok {
@@ -93,7 +99,7 @@ func _fret_string(retStr string) (string, error) {
 		default:
 			klog.Infof("Unexpected return type: %T, value: %v", v, v)
 			return "", &SearpcError{
-				fmt.Sprintf("Invalid return type: %T, need string", v)}
+				fmt.Sprintf("Invalid response format: %T, need string", v)}
 		}
 	}
 
@@ -288,7 +294,13 @@ func CreateRPCMethod(
 		case "void":
 			fret = nil
 		case "object":
-			fret = func(s string) (interface{}, error) { return _fret_obj(s) }
+			fret = func(s string) (interface{}, error) {
+				obj, err := _fret_obj(s)
+				if obj == nil {
+					return nil, err
+				}
+				return obj, err
+			}
 		case "objlist":
 			fret = func(s string) (interface{}, error) { return _fret_objlist(s) }
 		case "int", "int64":
@@ -339,16 +351,26 @@ func CreateRPCMethod(
 			return nil, &SearpcError{"Invalid client type"}
 		}
 
-		resp, err := client.CallRemoteFuncSync(string(data))
-		if err != nil {
-			return nil, fmt.Errorf("RPC call failed: %v", err)
+		var result interface{}
+		var retErr error
+		interval := RpcRetryInitialInterval
+		for attempt := 0; attempt <= RpcRetryMaxAttempts; attempt++ {
+			if attempt > 0 {
+				time.Sleep(interval)
+				interval *= 2
+			}
+			resp, err := client.CallRemoteFuncSync(string(data))
+			if err != nil {
+				return nil, fmt.Errorf("RPC call failed: %v", err)
+			}
+			result, retErr = fret(resp)
+			if retErr == nil {
+				return result, nil
+			}
+			if !strings.Contains(retErr.Error(), "Invalid response format") {
+				return nil, fmt.Errorf("result parsing failed: %v", retErr)
+			}
 		}
-
-		result, err := fret(resp)
-		if err != nil {
-			return nil, fmt.Errorf("result parsing failed: %v", err)
-		}
-
-		return result, nil
+		return nil, fmt.Errorf("result parsing failed: %v", retErr)
 	}
 }

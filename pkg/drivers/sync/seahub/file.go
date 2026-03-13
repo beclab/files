@@ -83,7 +83,7 @@ func handleCreate(repoId, pathParam, owner string) ([]byte, error) {
 	filename := path.Base(pathParam)
 
 	// resource check
-	parentDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	parentDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		klog.Error(err)
 		return nil, err
@@ -250,7 +250,7 @@ func HandleUpdateLink(fileParam *models.FileParam, from string) ([]byte, error) 
 		return nil, errors.New("repo not found")
 	}
 
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		klog.Error(err)
 		return nil, err

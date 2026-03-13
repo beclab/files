@@ -55,7 +55,7 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 		return nil, errors.New("repo not found")
 	}
 
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		klog.Error(err)
 		return nil, err
@@ -103,7 +103,7 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 }
 
 func GetSubFolderPermissionByDir(username, repoID, parentDir string) (map[string]string, error) {
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoID, parentDir)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoID, parentDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 		return nil, errors.New("library not found")
 	}
 
-	srcDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(srcRepoId, srcParentDir)
+	srcDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(srcRepoId, srcParentDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 		return nil, errors.New("library not found")
 	}
 
-	dstDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(dstRepoId, dstParentDir)
+	dstDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(dstRepoId, dstParentDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string,
 		return nil, errors.New("library not found")
 	}
 
-	srcDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(srcRepoId, srcParentDir)
+	srcDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(srcRepoId, srcParentDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string,
 		return nil, errors.New("library not found")
 	}
 
-	dstDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(dstRepoId, dstParentDir)
+	dstDirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(dstRepoId, dstParentDir, true)
 	if err != nil {
 		return nil, err
 	}
