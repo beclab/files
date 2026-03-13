@@ -42,7 +42,7 @@ func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool, on
 		return "", errors.New("repo not found")
 	}
 
-	dirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	dirID, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		klog.Errorf("fail to get dir id %s, err=%s", parentDir, err)
 		return "", err
@@ -133,7 +133,7 @@ func GetUploadedBytes(fileParam *models.FileParam, fileName string) ([]byte, err
 		parentDir = "/"
 	}
 
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func GetUploadDir(fileParam *models.FileParam) (string, error) {
 		parentDir = "/"
 	}
 
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		return "", err
 	}

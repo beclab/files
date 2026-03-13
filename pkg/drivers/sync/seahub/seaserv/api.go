@@ -3,6 +3,7 @@ package seaserv
 import (
 	"files/pkg/drivers/sync/seahub/searpc"
 	"fmt"
+	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -79,6 +80,32 @@ func ReturnObjList(ret interface{}) ([]map[string]string, error) {
 	return retObjList, nil
 }
 
+func rpcWithRetry(fn func() (interface{}, error), retryOnEmpty bool, maxRetries int, initialInterval time.Duration) (interface{}, error) {
+	var ret interface{}
+	var err error
+	interval := initialInterval
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(interval)
+			interval *= 2
+		}
+		ret, err = fn()
+		if err != nil {
+			continue
+		}
+		if retryOnEmpty {
+			if ret == nil {
+				continue
+			}
+			if s, ok := ret.(string); ok && s == "" {
+				continue
+			}
+		}
+		return ret, nil
+	}
+	return ret, err
+}
+
 type SeafileAPI struct {
 	rpcClient *SeafileRpcClient
 }
@@ -122,7 +149,9 @@ func (s *SeafileAPI) CreateRepo(name, desc, username string, password *string, e
 }
 
 func (s *SeafileAPI) GetRepo(repoId string) (map[string]string, error) {
-	ret, err := s.rpcClient.SeafileGetRepo(repoId)
+	ret, err := rpcWithRetry(func() (interface{}, error) {
+		return s.rpcClient.SeafileGetRepo(repoId)
+	}, true, 3, 200*time.Millisecond)
 	if err != nil {
 		return nil, fmt.Errorf("get repo failed: %v", err)
 	}
@@ -207,8 +236,10 @@ func (s *SeafileAPI) GetSystemDefaultRepoId() (string, error) {
 	return ReturnString(ret)
 }
 
-func (s *SeafileAPI) GetDirIdByPath(repoId, path string) (string, error) {
-	ret, err := s.rpcClient.SeafileGetDirIdByPath(repoId, path)
+func (s *SeafileAPI) GetDirIdByPath(repoId, path string, retryOnEmpty bool) (string, error) {
+	ret, err := rpcWithRetry(func() (interface{}, error) {
+		return s.rpcClient.SeafileGetDirIdByPath(repoId, path)
+	}, retryOnEmpty, 3, 200*time.Millisecond)
 	if err != nil {
 		return "", err
 	}
@@ -294,7 +325,9 @@ func (s *SeafileAPI) GetFileSize(storeId string, version int, fileId string) (in
 }
 
 func (s *SeafileAPI) GetFileIdByPath(repoId, path string) (string, error) {
-	ret, err := s.rpcClient.SeafileGetFileIdByPath(repoId, path)
+	ret, err := rpcWithRetry(func() (interface{}, error) {
+		return s.rpcClient.SeafileGetFileIdByPath(repoId, path)
+	}, false, 3, 200*time.Millisecond)
 	if err != nil {
 		return "", err
 	}
