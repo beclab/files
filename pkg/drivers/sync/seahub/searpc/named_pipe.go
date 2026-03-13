@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"files/pkg/common"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -87,13 +88,13 @@ func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
 	}
 
 	respHeader := make([]byte, 4)
-	if _, err := t.conn.Read(respHeader); err != nil {
+	if _, err := io.ReadFull(t.conn, respHeader); err != nil {
 		t.handleConnectionError(err)
 		return "", err
 	}
 	respSize := binary.LittleEndian.Uint32(respHeader)
 	respBody := make([]byte, respSize)
-	if _, err := t.conn.Read(respBody); err != nil {
+	if _, err := io.ReadFull(t.conn, respBody); err != nil {
 		t.handleConnectionError(err)
 		return "", err
 	}
@@ -103,10 +104,6 @@ func (t *NamedPipeTransport) trySend(service, fcallStr string) (string, error) {
 func (t *NamedPipeTransport) handleConnectionError(connErr error) {
 	klog.Errorf("[RPC] Connection Error: %v", connErr)
 	t.Stop()
-	_, err := t.client.syncTransport(t)
-	if err != nil {
-		klog.Errorf("Failed to refresh transport: %v", err)
-	}
 }
 
 func isRetryableError(err error) bool {
@@ -166,13 +163,13 @@ func (c *NamedPipeClient) getTransport() (*NamedPipeTransport, error) {
 		if t.conn != nil {
 			return t, nil
 		}
-		return c.syncTransport(nil)
+		return c.newTransport()
 	default:
-		return c.syncTransport(nil)
+		return c.newTransport()
 	}
 }
 
-func (c *NamedPipeClient) syncTransport(old *NamedPipeTransport) (*NamedPipeTransport, error) {
+func (c *NamedPipeClient) newTransport() (*NamedPipeTransport, error) {
 	klog.Infof("[RPC] Creating New Transport")
 	newT := &NamedPipeTransport{
 		socketPath: c.socketPath,
@@ -182,24 +179,7 @@ func (c *NamedPipeClient) syncTransport(old *NamedPipeTransport) (*NamedPipeTran
 		klog.Errorf("[RPC] Failed to connect: %v", err)
 		return nil, fmt.Errorf("sync server connection failed")
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if old != nil {
-		klog.Infof("[RPC] Stop Old Transport")
-		old.Stop()
-	}
-
-	select {
-	case c.pool <- newT:
-		klog.Infof("[RPC] Transport Added to Pool")
-		return newT, nil
-	default:
-		newT.Stop()
-		klog.Infof("[RPC] Transport Rejected from Pool")
-		return nil, fmt.Errorf("connection pool full")
-	}
+	return newT, nil
 }
 
 func (c *NamedPipeClient) returnTransport(t *NamedPipeTransport) {
