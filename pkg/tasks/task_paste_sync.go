@@ -327,7 +327,7 @@ func (t *Task) GetFromSyncFileCount(countType string) (int64, error) {
 			return 0, err
 		}
 		if curDirInfoRes == nil {
-			return 0, errors.New("folder not found")
+			return 0, errors.New("folder info get failed")
 		}
 
 		var curDirInfo map[string]interface{}
@@ -412,7 +412,7 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam, root bool) error 
 		return err
 	}
 	if dirInfoRes == nil {
-		return errors.New("folder not found")
+		return errors.New("folder info get failed")
 	}
 	var dirInfo map[string]interface{}
 	if err = json.Unmarshal(dirInfoRes, &dirInfo); err != nil {
