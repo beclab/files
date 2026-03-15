@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"strings"
-	"sync"
 
 	"k8s.io/klog/v2"
 )
@@ -145,7 +144,7 @@ type NamedPipeClient struct {
 	serviceName string
 	poolSize    int
 	pool        chan *NamedPipeTransport
-	mu          sync.Mutex
+	sem         chan struct{}
 }
 
 func NewNamedPipeClient(socketPath, serviceName string, poolSize int) *NamedPipeClient {
@@ -154,6 +153,7 @@ func NewNamedPipeClient(socketPath, serviceName string, poolSize int) *NamedPipe
 		serviceName: serviceName,
 		poolSize:    poolSize,
 		pool:        make(chan *NamedPipeTransport, poolSize),
+		sem:         make(chan struct{}, poolSize),
 	}
 }
 
@@ -183,9 +183,6 @@ func (c *NamedPipeClient) newTransport() (*NamedPipeTransport, error) {
 }
 
 func (c *NamedPipeClient) returnTransport(t *NamedPipeTransport) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if t.conn != nil {
 		select {
 		case c.pool <- t:
@@ -196,6 +193,9 @@ func (c *NamedPipeClient) returnTransport(t *NamedPipeTransport) {
 }
 
 func (c *NamedPipeClient) CallRemoteFuncSync(fcallStr string) (string, error) {
+	c.sem <- struct{}{}
+	defer func() { <-c.sem }()
+
 	transport, err := c.getTransport()
 	if err != nil {
 		return "", err
