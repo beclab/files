@@ -999,11 +999,6 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 					klog.Errorln("Write Close error: ", err)
 					return err
 				}
-
-				if err != nil {
-					klog.Warningf("generate body error: %v", err)
-					continue
-				}
 				// newBody end
 
 				req, err = http.NewRequest(request.Method, request.URL.String(), newBody)
@@ -1015,6 +1010,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 				for k, s := range request.Header {
 					req.Header[k] = s
 				}
+				req.Header.Set("Content-Type", writer.FormDataContentType())
 			}
 
 			response, err = client.Do(req)
