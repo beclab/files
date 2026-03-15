@@ -741,13 +741,13 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 		repoId := dst.Extend
 		verifyInterval := 500 * time.Millisecond
 		for i := 0; i < 5; i++ {
-			time.Sleep(verifyInterval)
 			verifyDirId, _ := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, fdstBase, false)
 			if verifyDirId != "" {
 				klog.Infof("[UploadDirToSync] dir indexed after %d checks, path: %s", i+1, fdstBase)
 				break
 			}
 			klog.Warningf("[UploadDirToSync] dir not yet indexed, attempt %d/5, path: %s", i+1, fdstBase)
+			time.Sleep(verifyInterval)
 			verifyInterval *= 2
 		}
 	}
@@ -782,19 +782,30 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 		}
 
 		if obj.IsDir() {
-			// Create sub-directories, recursively.
 			err = t.UploadDirToSync(fsrcFileParam, fdstFileParam, false)
-			if err != nil {
-				klog.Errorf("[Task] Sync upload dir error: %v, path: %s", err, dst.Path)
-				errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %s, path: %s", err.Error(), dst.Path))
-			}
 		} else {
-			// Perform the file copy.
 			err = t.UploadFileToSync(fsrcFileParam, fdstFileParam)
-			if err != nil {
-				klog.Errorf("[Task] Sync upload file error: %v, path: %s", err, dst.Path)
-				errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %s, path: %s", err.Error(), dst.Path))
+		}
+
+		if err != nil && strings.Contains(err.Error(), "folder not found") {
+			klog.Warningf("[UploadDirToSync] child got 'folder not found', re-ensuring dir %s and retrying child %s", fdstBase, obj.Name())
+			username := src.Owner + "@auth.local"
+			seaserv.GlobalSeafileAPI.PostDir(dst.Extend, filepath.Dir(fdstBase), filepath.Base(fdstBase), username)
+			time.Sleep(2 * time.Second)
+			if obj.IsDir() {
+				err = t.UploadDirToSync(fsrcFileParam, fdstFileParam, false)
+			} else {
+				err = t.UploadFileToSync(fsrcFileParam, fdstFileParam)
 			}
+		}
+
+		if err != nil {
+			if obj.IsDir() {
+				klog.Errorf("[Task] Sync upload dir error: %v, path: %s", err, dst.Path)
+			} else {
+				klog.Errorf("[Task] Sync upload file error: %v, path: %s", err, dst.Path)
+			}
+			errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %s, path: %s", err.Error(), dst.Path))
 		}
 	}
 	var errString string
