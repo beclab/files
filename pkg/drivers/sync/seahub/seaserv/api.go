@@ -151,7 +151,7 @@ func (s *SeafileAPI) CreateRepo(name, desc, username string, password *string, e
 func (s *SeafileAPI) GetRepo(repoId string) (map[string]string, error) {
 	ret, err := rpcWithRetry(func() (interface{}, error) {
 		return s.rpcClient.SeafileGetRepo(repoId)
-	}, true, 3, 200*time.Millisecond)
+	}, true, 3, 500*time.Millisecond)
 	if err != nil {
 		return nil, fmt.Errorf("get repo failed: %v", err)
 	}
@@ -239,7 +239,7 @@ func (s *SeafileAPI) GetSystemDefaultRepoId() (string, error) {
 func (s *SeafileAPI) GetDirIdByPath(repoId, path string, retryOnEmpty bool) (string, error) {
 	ret, err := rpcWithRetry(func() (interface{}, error) {
 		return s.rpcClient.SeafileGetDirIdByPath(repoId, path)
-	}, retryOnEmpty, 3, 200*time.Millisecond)
+	}, retryOnEmpty, 3, 500*time.Millisecond)
 	if err != nil {
 		return "", err
 	}
@@ -327,7 +327,7 @@ func (s *SeafileAPI) GetFileSize(storeId string, version int, fileId string) (in
 func (s *SeafileAPI) GetFileIdByPath(repoId, path string) (string, error) {
 	ret, err := rpcWithRetry(func() (interface{}, error) {
 		return s.rpcClient.SeafileGetFileIdByPath(repoId, path)
-	}, false, 3, 200*time.Millisecond)
+	}, false, 3, 500*time.Millisecond)
 	if err != nil {
 		return "", err
 	}
