@@ -772,14 +772,14 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 			err = t.UploadDirToSync(fsrcFileParam, fdstFileParam, false)
 			if err != nil {
 				klog.Errorf("[Task] Sync upload dir error: %v, path: %s", err, dst.Path)
-				errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %v, path: %s", err, dst.Path))
+				errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %s, path: %s", err.Error(), dst.Path))
 			}
 		} else {
 			// Perform the file copy.
 			err = t.UploadFileToSync(fsrcFileParam, fdstFileParam)
 			if err != nil {
 				klog.Errorf("[Task] Sync upload file error: %v, path: %s", err, dst.Path)
-				errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %v, path: %s", err, dst.Path))
+				errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %s, path: %s", err.Error(), dst.Path))
 			}
 		}
 	}
