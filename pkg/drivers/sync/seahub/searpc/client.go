@@ -13,7 +13,7 @@ import (
 
 var (
 	RpcRetryMaxAttempts     = 3
-	RpcRetryInitialInterval = 500 * time.Millisecond
+	RpcRetryInitialInterval = 200 * time.Millisecond
 )
 
 type SearpcClientInterface interface {
