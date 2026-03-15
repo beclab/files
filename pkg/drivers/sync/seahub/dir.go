@@ -163,9 +163,9 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if dirId == "" {
-		return nil, errors.New("folder not found")
-	}
+	//if dirId == "" {
+	//	return nil, errors.New("folder not found")
+	//}
 
 	username := fileParam.Owner + "@auth.local"
 
