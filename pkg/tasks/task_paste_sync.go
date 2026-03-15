@@ -9,6 +9,7 @@ import (
 	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/drivers/sync/seahub/searpc"
+	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/files"
 	"files/pkg/global"
 	"files/pkg/models"
@@ -736,6 +737,19 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 			return err
 		}
 		klog.Infof("Sync create success, result: %s, path: %s", string(res), dst.Path)
+
+		repoId := dst.Extend
+		verifyInterval := 500 * time.Millisecond
+		for i := 0; i < 5; i++ {
+			time.Sleep(verifyInterval)
+			verifyDirId, _ := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, fdstBase, false)
+			if verifyDirId != "" {
+				klog.Infof("[UploadDirToSync] dir indexed after %d checks, path: %s", i+1, fdstBase)
+				break
+			}
+			klog.Warningf("[UploadDirToSync] dir not yet indexed, attempt %d/5, path: %s", i+1, fdstBase)
+			verifyInterval *= 2
+		}
 	}
 
 	dir, _ := os.Open(srcFullPath)
@@ -772,14 +786,14 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 			err = t.UploadDirToSync(fsrcFileParam, fdstFileParam, false)
 			if err != nil {
 				klog.Errorf("[Task] Sync upload dir error: %v, path: %s", err, dst.Path)
-				errs = append(errs, err)
+				errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %s, path: %s", err.Error(), dst.Path))
 			}
 		} else {
 			// Perform the file copy.
 			err = t.UploadFileToSync(fsrcFileParam, fdstFileParam)
 			if err != nil {
 				klog.Errorf("[Task] Sync upload file error: %v, path: %s", err, dst.Path)
-				errs = append(errs, err)
+				errs = append(errs, fmt.Errorf("[Task] Sync upload dir error: %s, path: %s", err.Error(), dst.Path))
 			}
 		}
 	}
