@@ -200,14 +200,13 @@ func GetUploadDir(fileParam *models.FileParam) (string, error) {
 		parentDir = "/"
 	}
 
-	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, false)
+	dirId, err := seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, parentDir, true)
 	if err != nil {
 		return "", err
 	}
 	if dirId == "" {
-		klog.Warningf("fail to check dir exists %s, err=%s", parentDir, err)
-		// NOTE: here is to check if to create, "" can't lead to return err
-		return "", nil
+		klog.Errorf("fail to check dir exists %s, err=%s", parentDir, err)
+		return "", errors.New("folder not found")
 	}
 
 	return dirId, nil
