@@ -47,13 +47,12 @@ func ReturnString(ret interface{}) (string, error) {
 }
 
 func ReturnObject(ret interface{}) (map[string]string, error) {
+	if ret == nil {
+		return nil, nil
+	}
 	obj, ok := ret.(*searpc.SearpcObj)
 	if !ok {
 		return nil, fmt.Errorf("type assertion failed - expected: *searpc.SearpcObj, actual:%T", ret)
-	}
-
-	if obj == nil {
-		return nil, nil
 	}
 	retObject, err := obj.MapString()
 	if err != nil {

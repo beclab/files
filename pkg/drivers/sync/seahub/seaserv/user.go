@@ -17,6 +17,7 @@ func SaveUser(username, password string, isStaff, isActive bool) int {
 
 	emailuser, err := GlobalCcnetAPI.GetEmailuser(username)
 	if err != nil {
+		klog.Errorf("Get email user %s error: %v", username, err)
 		return -1
 	}
 

@@ -496,7 +496,7 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 		}
 		if parentDirId == "" {
 			klog.Errorf("parent dir %s not found", parentDir)
-			return nil, errors.New("parent dir not found")
+			return nil, errors.New("folder not found")
 		}
 
 		permission, err := CheckFolderPermission(username, repoId, parentDir)
