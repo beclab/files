@@ -11,7 +11,10 @@ import (
 	raw "files/pkg/hertz/biz/model/api/raw"
 	"files/pkg/models"
 	"fmt"
+	"io"
 	"mime"
+	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -148,7 +151,31 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 			c.Header("Expires", "0")
 		}
 
-		c.SetBodyStream(file.Reader, int(file.FileLength))
+		c.Header("Accept-Ranges", "bytes")
+
+		rangeHeader := string(c.GetHeader("Range"))
+		if rangeHeader != "" && file.Reader != nil {
+			rangeStart, rangeEnd, ok := parseRangeHeader(rangeHeader, file.FileLength)
+			if !ok {
+				c.SetStatusCode(http.StatusRequestedRangeNotSatisfiable)
+				c.Header("Content-Range", fmt.Sprintf("bytes */%d", file.FileLength))
+				return
+			}
+
+			contentLength := rangeEnd - rangeStart + 1
+			if _, err := file.Reader.Seek(rangeStart, io.SeekStart); err != nil {
+				klog.Errorf("raw range seek error: %v", err)
+				c.SetBodyStream(file.Reader, int(file.FileLength))
+				return
+			}
+
+			c.SetStatusCode(http.StatusPartialContent)
+			c.Header("Content-Range", fmt.Sprintf("bytes %d-%d/%d", rangeStart, rangeEnd, file.FileLength))
+			c.Header("Content-Length", strconv.FormatInt(contentLength, 10))
+			c.SetBodyStream(io.LimitReader(file.Reader, contentLength), int(contentLength))
+		} else {
+			c.SetBodyStream(file.Reader, int(file.FileLength))
+		}
 	} else {
 		for k, vs := range file.RespHeader {
 			for _, v := range vs {
@@ -165,6 +192,72 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 		}
 
 		c.SetStatusCode(file.StatusCode)
-		c.SetBodyStream(file.ReadCloser, int(file.FileLength))
+
+		bodyLength := int(file.FileLength)
+		if file.StatusCode == http.StatusPartialContent {
+			if cl := file.RespHeader.Get("Content-Length"); cl != "" {
+				if n, err := strconv.Atoi(cl); err == nil {
+					bodyLength = n
+				}
+			}
+		}
+		c.SetBodyStream(file.ReadCloser, bodyLength)
 	}
+}
+
+// parseRangeHeader parses "Range: bytes=start-end" header.
+// Supports: "bytes=N-M", "bytes=N-", "bytes=-N" (suffix).
+func parseRangeHeader(rangeHeader string, totalSize int64) (start, end int64, ok bool) {
+	if !strings.HasPrefix(rangeHeader, "bytes=") {
+		return 0, 0, false
+	}
+
+	spec := strings.TrimPrefix(rangeHeader, "bytes=")
+	// only handle the first range in a multi-range request
+	if idx := strings.Index(spec, ","); idx != -1 {
+		spec = spec[:idx]
+	}
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return 0, 0, false
+	}
+
+	parts := strings.SplitN(spec, "-", 2)
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+
+	startStr, endStr := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+
+	if startStr == "" {
+		// suffix range: "bytes=-500" means last 500 bytes
+		suffix, err := strconv.ParseInt(endStr, 10, 64)
+		if err != nil || suffix <= 0 {
+			return 0, 0, false
+		}
+		if suffix > totalSize {
+			suffix = totalSize
+		}
+		return totalSize - suffix, totalSize - 1, true
+	}
+
+	start, err := strconv.ParseInt(startStr, 10, 64)
+	if err != nil || start < 0 || start >= totalSize {
+		return 0, 0, false
+	}
+
+	if endStr == "" {
+		// open-ended: "bytes=500-"
+		return start, totalSize - 1, true
+	}
+
+	end, err = strconv.ParseInt(endStr, 10, 64)
+	if err != nil || end < start {
+		return 0, 0, false
+	}
+	if end >= totalSize {
+		end = totalSize - 1
+	}
+
+	return start, end, true
 }
