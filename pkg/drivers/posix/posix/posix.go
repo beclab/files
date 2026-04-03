@@ -618,11 +618,11 @@ func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
 				return nil, err
 			}
 		} else if fileUploadArg.FileParam.FileType == common.External {
-			uri, err := fileUploadArg.FileParam.GetResourceUri()
+			diskCheckPath, err := fileUploadArg.FileParam.GetDiskCheckPath()
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("get disk check path error: %v", err)
 			}
-			_, err = common.CheckDiskSpace(uri, fileUploadArg.TotalSize, false)
+			_, err = common.CheckDiskSpace(diskCheckPath, fileUploadArg.TotalSize, false)
 			if err != nil {
 				return nil, err
 			}

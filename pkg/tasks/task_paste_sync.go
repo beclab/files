@@ -99,11 +99,11 @@ func (t *Task) DownloadFromSync() error {
 		return err
 	}
 
-	dstUri, err := dst.GetResourceUri()
+	diskCheckPath, err := dst.GetDiskCheckPath()
 	if err != nil {
-		return err
+		return fmt.Errorf("get disk check path error: %v", err)
 	}
-	dstSize, err := common.CheckDiskSpace(dstUri, srcTotalSize, true)
+	dstSize, err := common.CheckDiskSpace(diskCheckPath, srcTotalSize, dst.IsSystem())
 	if err != nil {
 		klog.Errorf("get posix free space size error: %v", err)
 		return err
