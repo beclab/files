@@ -108,7 +108,11 @@ func (t *Task) DownloadFromFiles() error {
 		klog.Errorf("[Task] Id: %s, dst uri found error: %v", t.id, err)
 		return err
 	}
-	localSpace, err := common.CheckDiskSpace(dstUri, totalSize, dst.IsSystem()) // no sync dst but external here, IsSystem() is enough and precise
+	diskCheckPath, err := dst.GetDiskCheckPath()
+	if err != nil {
+		return fmt.Errorf("get disk check path error: %v", err)
+	}
+	localSpace, err := common.CheckDiskSpace(diskCheckPath, totalSize, dst.IsSystem()) // no sync dst but external here, IsSystem() is enough and precise
 	if err != nil {
 		return err
 	}

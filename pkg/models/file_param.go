@@ -254,6 +254,23 @@ func (r *FileParam) IsSystem() bool {
 	return r.FileType == common.Drive || r.FileType == common.Cache || r.FileType == common.Data
 }
 
+// GetDiskCheckPath returns the filesystem path for disk usage checking.
+// For external mounted disks, it appends the disk name (first component of Path)
+// to the base URI so that statfs can identify the correct mount point.
+func (r *FileParam) GetDiskCheckPath() (string, error) {
+	uri, err := r.GetResourceUri()
+	if err != nil {
+		return "", err
+	}
+	if r.FileType == common.External && r.Path != "" {
+		parts := strings.SplitN(strings.TrimPrefix(r.Path, "/"), "/", 2)
+		if parts[0] != "" {
+			return filepath.Join(uri, parts[0]), nil
+		}
+	}
+	return uri, nil
+}
+
 func (r *FileParam) IsFile() (string, bool) {
 	if r.Path == "" || r.Path == "/" || strings.HasSuffix(r.Path, "/") {
 		return "", false

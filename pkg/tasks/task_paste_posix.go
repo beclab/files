@@ -57,7 +57,11 @@ func (t *Task) Rsync() error {
 	klog.Infof("[Task] Id: %s, srcPath: %s, dstUri: %s, srcMeta: %s", t.id, srcPath, dstUri, common.ToJson(pathMeta))
 
 	// check free space
-	dstFree, err := common.CheckDiskSpace(dstUri, pathMeta.Size, dst.IsSystem()) // no sync dst but external here, IsSystem() is enough and precise
+	diskCheckPath, err := dst.GetDiskCheckPath()
+	if err != nil {
+		return fmt.Errorf("get disk check path error: %v", err)
+	}
+	dstFree, err := common.CheckDiskSpace(diskCheckPath, pathMeta.Size, dst.IsSystem()) // no sync dst but external here, IsSystem() is enough and precise
 	if err != nil {
 		return err
 	}

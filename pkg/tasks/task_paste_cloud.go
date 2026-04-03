@@ -97,7 +97,11 @@ func (t *Task) DownloadFromCloud() error {
 		return err
 	}
 
-	posixSize, err := common.CheckDiskSpace(dstUri, cloudSize, true)
+	diskCheckPath, err := dst.GetDiskCheckPath()
+	if err != nil {
+		return fmt.Errorf("get disk check path error: %v", err)
+	}
+	posixSize, err := common.CheckDiskSpace(diskCheckPath, cloudSize, dst.IsSystem())
 	if err != nil {
 		klog.Errorf("get posix free space size error: %v", err)
 		return err
