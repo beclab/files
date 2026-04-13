@@ -67,6 +67,13 @@ var (
 	ShareApiUploadedPath   = "/upload/file-uploaded-bytes"
 )
 
+var shareProxyClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConnsPerHost: 64,
+		DisableCompression:  true,
+	},
+}
+
 func Cors() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		c.Response.Header.Set("Access-Control-Allow-Origin", string(c.Request.Header.Get("Origin")))
@@ -398,7 +405,7 @@ func ShareMiddleware() app.HandlerFunc {
 		req.Body = io.NopCloser(bytes.NewReader(body))
 		req.ContentLength = int64(len(body))
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := shareProxyClient.Do(req)
 		if err != nil {
 			handler.RespError(c, fmt.Sprintf("proxy error: %v", err))
 			return
@@ -412,10 +419,6 @@ func ShareMiddleware() app.HandlerFunc {
 		c.Status(resp.StatusCode)
 
 		if shareAccess.Raw || shareAccess.Download || shareAccess.Preview {
-			// Stream the response body directly to avoid loading the entire
-			// file into memory, which would cause OOM for large files.
-			// Do NOT defer resp.Body.Close() here — Hertz reads from the body
-			// stream after the handler returns when flushing to the connection.
 			contentLength := int(resp.ContentLength)
 			if contentLength < 0 {
 				contentLength = -1
@@ -712,7 +715,7 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 	})
 	req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := shareProxyClient.Do(req)
 	if err != nil {
 		handler.RespError(c, fmt.Sprintf("proxy error: %v", err))
 		return
