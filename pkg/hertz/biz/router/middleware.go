@@ -403,7 +403,6 @@ func ShareMiddleware() app.HandlerFunc {
 			handler.RespError(c, fmt.Sprintf("proxy error: %v", err))
 			return
 		}
-		defer resp.Body.Close()
 
 		for k, vv := range resp.Header {
 			for _, v := range vv {
@@ -411,8 +410,22 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 		}
 		c.Status(resp.StatusCode)
-		bodyRes, _ := io.ReadAll(resp.Body)
-		c.Write(bodyRes)
+
+		if shareAccess.Raw || shareAccess.Download || shareAccess.Preview {
+			// Stream the response body directly to avoid loading the entire
+			// file into memory, which would cause OOM for large files.
+			// Do NOT defer resp.Body.Close() here — Hertz reads from the body
+			// stream after the handler returns when flushing to the connection.
+			contentLength := int(resp.ContentLength)
+			if contentLength < 0 {
+				contentLength = -1
+			}
+			c.SetBodyStream(resp.Body, contentLength)
+		} else {
+			bodyRes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			c.Write(bodyRes)
+		}
 		c.Abort()
 	}
 }
