@@ -100,7 +100,11 @@ func (r *rclone) StartHttp(configs []*config.Config) error {
 	_ = changedConfigsJson
 
 	if changedConfigsJson != "{}" {
-		klog.Infof("[startHttp] changed configs: %s", base64.StdEncoding.EncodeToString([]byte(common.ToJson(changedConfigs))))
+		if common.ParseBool(common.DebugIntegration) {
+			klog.Infof("[startHttp] changed configs: %s", base64.StdEncoding.EncodeToString([]byte(common.ToJson(changedConfigs))))
+		} else {
+			klog.Info("[startHttp] changed configs")
+		}
 	}
 
 	if len(changedConfigs.Delete) > 0 {
