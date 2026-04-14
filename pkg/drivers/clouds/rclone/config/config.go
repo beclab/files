@@ -59,7 +59,12 @@ func (c *config) Create(param *Config) error {
 		Parameters: c.parseCreateConfigParameters(param),
 	}
 
-	klog.Infof("[rclone] create config: %s, param: %s", param.Type, base64.StdEncoding.EncodeToString([]byte(common2.ToJson(data))))
+	if common2.ParseBool(common2.DebugIntegration) {
+		klog.Infof("[rclone] create config: %s, param: %s", param.Type, base64.StdEncoding.EncodeToString([]byte(common2.ToJson(data))))
+	} else {
+		klog.Infof("[rclone] create config: %s", param.Type)
+	}
+
 	_, err := utils.Request(ctx, url, http.MethodPost, nil, []byte(common2.ToJson(data)))
 	if err != nil {
 		klog.Warningf("[rclone] create config, result: %s", err.Error())
