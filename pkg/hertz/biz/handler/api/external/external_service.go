@@ -3,7 +3,6 @@
 package external
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"files/pkg/common"
@@ -14,7 +13,6 @@ import (
 	"files/pkg/models"
 	"files/pkg/redisutils"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -59,95 +57,55 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	externalType := req.ExternalType
 	var urls []string
 	if externalType == "smb" {
-		urls = []string{"http://" + files.TerminusdHost + "/command/v2/mount-samba", "http://" + files.TerminusdHost + "/command/mount-samba"}
+		urls = []string{"http://" + files.OlaresdHost + "/command/v2/mount-samba", "http://" + files.OlaresdHost + "/command/mount-samba"}
 	} else {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("Unsupported external type: %s", externalType)})
 		return
 	}
 
-	var res map[string]interface{}
-	mounted := false
-	for _, url := range urls {
-		bodyStruct := struct {
-			SmbPath  string `json:"smbPath"`
-			User     string `json:"user"`
-			Password string `json:"password"`
-		}{
-			SmbPath:  req.SmbPath,
-			User:     req.User,
-			Password: req.Password,
-		}
-
-		bodyBytes, err := json.Marshal(bodyStruct)
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
-			return
-		}
-
-		client := &http.Client{}
-		request, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
-			return
-		}
-		c.Request.Header.VisitAll(func(key []byte, value []byte) {
-			request.Header.Set(string(key), string(value))
-		})
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("X-Signature", "temp_signature")
-
-		resp, err := client.Do(request)
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-			return
-		}
-
-		if resp == nil {
-			klog.Errorf("not get response from %s", url)
-			continue
-		}
-
-		respBody, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-			return
-		}
-
-		err = json.Unmarshal(respBody, &res)
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-			return
-		}
-
-		err = resp.Body.Close()
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-			return
-		}
-
-		if resp.StatusCode >= 400 {
-			klog.Errorf("Failed to mount by %s to %s", url, files.TerminusdHost)
-			klog.Infof("response status: %s, response body: %v", resp.Status, res)
-			continue
-		}
-
-		mounted = true
-		break
-	}
-	if !mounted {
-		// c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "failed to mount samba"})
-		klog.Errorf("failed to mount samba")
+	bodyStruct := struct {
+		SmbPath  string `json:"smbPath"`
+		User     string `json:"user"`
+		Password string `json:"password"`
+	}{
+		SmbPath:  req.SmbPath,
+		User:     req.User,
+		Password: req.Password,
 	}
 
-	if int(res["code"].(float64)) != consts.StatusOK {
-		klog.Warningf(res["message"].(string))
-		if strings.Contains(res["message"].(string), "mount error(13)") {
+	bodyBytes, err := json.Marshal(bodyStruct)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	header := make(http.Header)
+	c.Request.Header.VisitAll(func(key []byte, value []byte) {
+		header.Set(string(key), string(value))
+	})
+
+	res, callErr := files.CallOlaresdFallback(urls, bodyBytes, header, files.DefaultOlaresdTimeout)
+	if callErr != nil {
+		klog.Errorf("failed to mount samba: %v", callErr)
+		if res == nil {
+			c.JSON(consts.StatusOK, utils.H{
+				"code":    consts.StatusInternalServerError,
+				"message": fmt.Sprintf("failed to mount samba: %v", callErr),
+			})
+			return
+		}
+	}
+
+	code, _ := res["code"].(float64)
+	msg, _ := res["message"].(string)
+	if int(code) != consts.StatusOK && msg != "" {
+		klog.Warningf("mount-samba upstream error: %s", msg)
+		switch {
+		case strings.Contains(msg, "mount error(13)"):
 			res["message"] = "Incorrect username or password"
-		}
-		if strings.Contains(res["message"].(string), "mount error(113)") {
+		case strings.Contains(msg, "mount error(113)"):
 			res["message"] = "Unable to find suitable address"
-		}
-		if strings.Contains(res["message"].(string), "mount error(115)") {
+		case strings.Contains(msg, "mount error(115)"):
 			res["message"] = "Cannot connect to samba server"
 		}
 	}
@@ -216,9 +174,9 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 	externalType := req.ExternalType
 	var url = ""
 	if externalType == "usb" {
-		url = "http://" + files.TerminusdHost + "/command/umount-usb-incluster"
+		url = "http://" + files.OlaresdHost + "/command/umount-usb-incluster"
 	} else if externalType == "smb" {
-		url = "http://" + files.TerminusdHost + "/command/umount-samba-incluster"
+		url = "http://" + files.OlaresdHost + "/command/umount-samba-incluster"
 	} else {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("Unsupported external type: %s", externalType)})
 		return
@@ -243,34 +201,22 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	klog.Infoln("body (byte slice):", body)
-	klog.Infoln("body (string):", string(body))
 
-	client := &http.Client{}
-	request, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	header := make(http.Header)
 	c.Request.Header.VisitAll(func(key []byte, value []byte) {
-		request.Header.Set(string(key), string(value))
+		header.Set(string(key), string(value))
 	})
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Signature", "temp_signature")
-	response, err := client.Do(request)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
-	}
-	defer response.Body.Close()
 
-	respBody, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
-	}
-
-	var res map[string]interface{}
-	err = json.Unmarshal(respBody, &res)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
+	res, callErr := files.CallOlaresdFallback([]string{url}, body, header, files.DefaultOlaresdTimeout)
+	if callErr != nil {
+		klog.Errorf("failed to umount: %v", callErr)
+		if res == nil {
+			c.JSON(consts.StatusOK, utils.H{
+				"code":    consts.StatusInternalServerError,
+				"message": fmt.Sprintf("failed to umount: %v", callErr),
+			})
+			return
+		}
 	}
 	klog.Infoln("res:", res)
 	global.GlobalMounted.Updated()
