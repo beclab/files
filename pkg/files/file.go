@@ -83,7 +83,7 @@ type FileOptions struct {
 	Content    bool
 }
 
-var TerminusdHost = os.Getenv("TERMINUSD_HOST")
+var OlaresdHost = os.Getenv("TERMINUSD_HOST")
 var ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
 
 type Response struct {
@@ -115,83 +115,33 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 	externalType := r.URL.Query().Get("external_type")
 	var urls []string
 	if externalType == "smb" {
-		urls = []string{"http://" + TerminusdHost + "/command/v2/mount-samba", "http://" + TerminusdHost + "/command/mount-samba"}
+		urls = []string{"http://" + OlaresdHost + "/command/v2/mount-samba", "http://" + OlaresdHost + "/command/mount-samba"}
 	} else {
 		return nil, fmt.Errorf("Unsupported external type: %s", externalType)
 	}
 
-	for _, url := range urls {
-		bodyBytes, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return nil, err
-		}
-		r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-
-		headers := r.Header.Clone()
-		headers.Set("Content-Type", "application/json")
-		headers.Set("X-Signature", "temp_signature")
-
-		client := &http.Client{}
-		req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
-		if err != nil {
-			return nil, err
-		}
-		req.Header = headers
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		if resp == nil {
-			klog.Errorf("not get response from %s", url)
-			continue
-		}
-
-		respBody, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		var responseMap map[string]interface{}
-		err = json.Unmarshal(respBody, &responseMap)
-		if err != nil {
-			return nil, err
-		}
-
-		err = resp.Body.Close()
-		if err != nil {
-			return responseMap, err
-		}
-
-		if resp.StatusCode >= 400 {
-			klog.Errorf("Failed to mount by %s to %s", url, TerminusdHost)
-			klog.Infof("response status: %s, response body: %v", resp.Status, responseMap)
-			continue
-		}
-
-		return responseMap, nil
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("failed to mount samba")
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	return CallOlaresdFallback(urls, bodyBytes, r.Header, DefaultOlaresdTimeout)
 }
 
 func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{}, error) {
 	externalType := r.URL.Query().Get("external_type")
 	var url = ""
 	if externalType == "usb" {
-		url = "http://" + TerminusdHost + "/command/umount-usb-incluster"
+		url = "http://" + OlaresdHost + "/command/umount-usb-incluster"
 	} else if externalType == "smb" {
-		url = "http://" + TerminusdHost + "/command/umount-samba-incluster"
+		url = "http://" + OlaresdHost + "/command/umount-samba-incluster"
 	} else {
 		return nil, fmt.Errorf("Unsupported external type: %s", externalType)
 	}
 	klog.Infoln("path:", path)
 	klog.Infoln("externalTYpe:", externalType)
 	klog.Infoln("url:", url)
-
-	headers := r.Header.Clone()
-	headers.Set("Content-Type", "application/json")
-	headers.Set("X-Signature", "temp_signature")
 
 	mountPath := strings.TrimPrefix(strings.TrimSuffix(path, "/"), "/")
 	lastSlashIndex := strings.LastIndex(mountPath, "/")
@@ -203,36 +153,12 @@ func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{},
 	bodyData := map[string]string{
 		"path": mountPath,
 	}
-	klog.Infoln("bodyData:", bodyData)
 	body, err := json.Marshal(bodyData)
 	if err != nil {
 		return nil, err
 	}
-	klog.Infoln("body (byte slice):", body)
-	klog.Infoln("body (string):", string(body))
 
-	client := &http.Client{}
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
-	req.Header = headers
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var responseMap map[string]interface{}
-	err = json.Unmarshal(respBody, &responseMap)
-	if err != nil {
-		return nil, err
-	}
-	klog.Infoln("responseMap:", responseMap)
-
-	return responseMap, nil
+	return CallOlaresdFallback([]string{url}, body, r.Header, DefaultOlaresdTimeout)
 }
 
 // NewFileInfo creates a File object from a path and a given user. This File

@@ -5,6 +5,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -41,7 +42,9 @@ func init() {
 
 func InitGlobalMounted() {
 	GlobalMounted.getMounted()
-	GlobalMounted.watchMounted()
+	if err := GlobalMounted.watchMounted(); err != nil {
+		klog.Errorf("init external watcher failed, falling back to polling only: %v", err)
+	}
 	//GlobalMounted.watchDiskUsage()
 }
 
@@ -82,25 +85,37 @@ func (m *Mount) GetMountedData() []files.DiskInfo {
 //	}()
 //}
 
-func (m *Mount) watchMounted() {
+func (m *Mount) watchMounted() error {
 	var err error
 	if externalWatcher == nil {
 		externalWatcher, err = fsnotify.NewWatcher()
 		if err != nil {
-			klog.Fatalf("Failed to initialize watcher: %v", err)
-			panic(err)
+			klog.Errorf("Failed to initialize watcher: %v", err)
+			return err
 		}
 	}
 
 	path := "/data/External"
-	err = externalWatcher.Add(path)
-	if err != nil {
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		if mkErr := os.MkdirAll(path, 0755); mkErr != nil {
+			klog.Errorf("external watcher mkdir %s failed: %v", path, mkErr)
+			return mkErr
+		}
+	}
+
+	if err = externalWatcher.Add(path); err != nil {
 		klog.Errorln("watcher add error:", err)
-		panic(err)
+		return err
 	}
 	klog.Infof("watcher initialized at: %s", path)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				klog.Errorf("external watcher goroutine panic recovered: %v", r)
+			}
+		}()
+
 		maxRetries := 3
 		for {
 			select {
@@ -122,7 +137,7 @@ func (m *Mount) watchMounted() {
 				}
 
 				klog.Infof("mount watcher event: %s, op: %s", e.Name, e.Op.String())
-				if e.Op == fsnotify.Create {
+				if e.Has(fsnotify.Create) {
 					found := false
 					m.getMounted()
 					if _, exists := m.Mounted[filepath.Base(e.Name)]; exists {
@@ -153,6 +168,7 @@ func (m *Mount) watchMounted() {
 			}
 		}
 	}()
+	return nil
 }
 
 func (m *Mount) getMounted() {
