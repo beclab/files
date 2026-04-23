@@ -5,6 +5,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/global"
+	"files/pkg/integration/terminusd"
 	"files/pkg/models"
 	"fmt"
 	"os"
@@ -442,6 +443,14 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		}
 
 		FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath) // handlerfunc
+
+		terminusd.Enqueue(terminusd.NewItem{
+			Path:        terminusd.BuildFrontendPath(fileParam, &resumableInfo),
+			StoragePath: info.FullPath,
+			Mime:        terminusd.GuessMime(info.FullPath),
+			UploadedAt:  terminusd.NowMillis(),
+			Owner:       fileParam.Owner,
+		})
 
 		return true, data, nil
 	}
