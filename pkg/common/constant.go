@@ -30,7 +30,7 @@ const (
 
 var (
 	TerminusdHost             = os.Getenv("TERMINUSD_HOST")
-	TerminusdMountServicePort = os.Getenv("TERMINUSD_SERVICE_PORT")
+	TerminusdMountServicePort = 18088
 	ExternalPrefix            = os.Getenv("EXTERNAL_PREFIX")
 	NodeName                  = os.Getenv("NODE_NAME")
 	DebugIntegration          = os.Getenv("DEBUG_INTEGRATION")

@@ -160,7 +160,7 @@ func (m *Mount) getMounted() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var host = fmt.Sprintf("%s:%s", common.TerminusdHost, common.TerminusdMountServicePort)
+	var host = fmt.Sprintf("%s:%d", common.TerminusdHost, common.TerminusdMountServicePort)
 
 	if host == "" {
 		klog.Errorf("olaresd host invalid, host: %s", host)
