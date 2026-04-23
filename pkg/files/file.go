@@ -115,9 +115,7 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 	externalType := r.URL.Query().Get("external_type")
 	var urls []string
 	if externalType == "smb" {
-		urls = []string{
-			"http://" + fmt.Sprintf("%s:%d", common.TerminusdHost, common.TerminusdMountServicePort) + "/command/v2/mount-samba",
-			"http://" + fmt.Sprintf("%s:%d", common.TerminusdHost, common.TerminusdMountServicePort) + "/command/mount-samba"}
+		urls = []string{"http://" + TerminusdHost + "/command/v2/mount-samba", "http://" + TerminusdHost + "/command/mount-samba"}
 	} else {
 		return nil, fmt.Errorf("Unsupported external type: %s", externalType)
 	}
