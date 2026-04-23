@@ -365,12 +365,12 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 
 			if uploadLink {
-				url = fmt.Sprintf("%s%s?file_path=%s&from=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, c.Query("from"), shareType, shareBy)
+				url = fmt.Sprintf("%s%s?file_path=%s&from=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, common.EscapeURLWithSpace(c.Query("from")), shareType, shareBy)
 				if c.Query("total_size") != "" {
 					url += "&total_size=" + c.Query("total_size")
 				}
 			} else if uploadBytes {
-				url = fmt.Sprintf("%s%s?parent_dir=%s&file_name=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, uploadFileName, shareType, shareBy)
+				url = fmt.Sprintf("%s%s?parent_dir=%s&file_name=%s&share=1&sharetype=%s&shareby=%s", redirect, rewritePrefix, pathRewrite, common.EscapeURLWithSpace(uploadFileName), shareType, shareBy)
 			}
 		} else {
 			accessOwner = shareBy
@@ -390,7 +390,12 @@ func ShareMiddleware() app.HandlerFunc {
 		klog.Infof("[share] share rewrite url: %s, access: %s, shareby: %s, method: %s", url, bflName, shareBy, method)
 
 		var br io.Reader
-		var req, _ = http.NewRequest(string(c.Request.Method()), url, br)
+		req, err := http.NewRequest(string(c.Request.Method()), url, br)
+		if err != nil {
+			klog.Errorf("[share] build proxy request error: %v, url: %s", err, url)
+			handler.RespError(c, fmt.Sprintf("build proxy request error: %v", err))
+			return
+		}
 
 		c.Request.Header.VisitAll(func(key, value []byte) {
 			req.Header.Set(string(key), string(value))
