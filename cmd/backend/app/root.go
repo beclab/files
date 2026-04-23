@@ -14,8 +14,8 @@ import (
 	"files/pkg/hertz/biz/dal"
 	"files/pkg/img"
 	"files/pkg/integration"
-	"files/pkg/integration/terminusd"
 	"files/pkg/models"
+	"files/pkg/webhook/upload"
 	"files/pkg/redisutils"
 	"files/pkg/samba"
 	"files/pkg/tasks"
@@ -176,7 +176,7 @@ user created with the credentials from options "username" and "password".`,
 
 		// step8: integration
 		integration.NewIntegrationManager()
-		terminusd.Start()
+		upload.Start()
 
 		// step9: watcher
 		var w = watchers.NewWatchers(context.Background(), config)

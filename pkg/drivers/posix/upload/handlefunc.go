@@ -5,8 +5,8 @@ import (
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/global"
-	"files/pkg/integration/terminusd"
 	"files/pkg/models"
+	uploadwh "files/pkg/webhook/upload"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -444,11 +444,11 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 
 		FileInfoManager.DelFileInfo(innerIdentifier, tmpName, uploadTempPath) // handlerfunc
 
-		terminusd.Enqueue(terminusd.NewItem{
-			Path:        terminusd.BuildFrontendPath(fileParam, &resumableInfo),
+		uploadwh.Enqueue(uploadwh.NewItem{
+			Path:        uploadwh.BuildFrontendPath(fileParam, &resumableInfo),
 			StoragePath: info.FullPath,
-			Mime:        terminusd.GuessMime(info.FullPath),
-			UploadedAt:  terminusd.NowMillis(),
+			Mime:        uploadwh.GuessMime(info.FullPath),
+			UploadedAt:  uploadwh.NowMillis(),
 			Owner:       fileParam.Owner,
 		})
 
