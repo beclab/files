@@ -1,16 +1,23 @@
-// Package terminusd notifies terminusd asynchronously when new files are
-// produced by this service (e.g. after a successful upload).
+// Package upload notifies an upload-completion webhook whenever a file
+// finishes uploading via the local (posix) backend.
+//
+// Note: the webhook target is a separate service that happens to be
+// co-located on the same node as terminusd. We reuse the TERMINUSD_HOST
+// env var only to discover that node's IP; the port (18832) and path
+// (/v1/new_items) are owned by the webhook service, not terminusd.
 //
 // Design summary:
-//   - Disabled by default; gated by env var TERMINUSD_NOTIFY_ENABLED.
+//   - Disabled by default; gated by env var UPLOAD_WEBHOOK_ENABLED.
 //   - Producers call Enqueue(item), which is a non-blocking select send onto
 //     a bounded channel. The upload request path is never blocked.
 //   - A single background worker drains the channel, opportunistically batches
 //     up to maxBatchSize items per outgoing request, and POSTs them to
-//     http://<terminusd_ip>:18832/v1/new_items.
+//     http://<host_ip>:18832/v1/new_items.
 //   - No per-request timeout (intentional). Bounded memory and exactly one
-//     in-flight request guarantee resource bounds even when terminusd is slow.
-package terminusd
+//     in-flight request guarantee resource bounds even when the webhook is
+//     slow. On any failure (network error, non-2xx, marshal error) the batch
+//     is dropped with a warning; there is no retry.
+package upload
 
 import (
 	"bytes"
@@ -32,12 +39,13 @@ import (
 )
 
 const (
-	envEnabled  = "TERMINUSD_NOTIFY_ENABLED"
-	envHost     = "TERMINUSD_HOST"
+	envEnabled  = "UPLOAD_WEBHOOK_ENABLED"
+	envHost     = "TERMINUSD_HOST" // borrowed only for the co-located node IP
 	notifyPort  = "18832"
 	notifyPath  = "/v1/new_items"
 	queueCap    = 4096
 	maxBatchSiz = 100
+	logPrefix   = "[upload-webhook]"
 )
 
 // NewItem is the metadata for a single newly created file.
@@ -72,14 +80,14 @@ func enabled() bool {
 // feature flag is not set to a truthy value.
 func Start() {
 	if !enabled() {
-		klog.Infof("[terminusd] notify disabled (set %s=true to enable)", envEnabled)
+		klog.Infof("%s notify disabled (set %s=true to enable)", logPrefix, envEnabled)
 		return
 	}
 	startOnce.Do(func() {
 		queue = make(chan NewItem, queueCap)
 		go runWorker()
-		klog.Infof("[terminusd] notify enabled, queueCap=%d, maxBatchSize=%d, url=%s",
-			queueCap, maxBatchSiz, notifyURL())
+		klog.Infof("%s notify enabled, queueCap=%d, maxBatchSize=%d, url=%s",
+			logPrefix, queueCap, maxBatchSiz, notifyURL())
 	})
 }
 
@@ -96,8 +104,8 @@ func Enqueue(item NewItem) {
 		n := atomic.AddUint64(&dropped, 1)
 		// Throttle the warning so a sustained outage doesn't flood logs.
 		if n == 1 || n%100 == 0 {
-			klog.Warningf("[terminusd] queue full (cap=%d), dropped item path=%s total_dropped=%d",
-				queueCap, item.Path, n)
+			klog.Warningf("%s queue full (cap=%d), dropped item path=%s total_dropped=%d",
+				logPrefix, queueCap, item.Path, n)
 		}
 	}
 }
@@ -105,7 +113,7 @@ func Enqueue(item NewItem) {
 func runWorker() {
 	defer func() {
 		if r := recover(); r != nil {
-			klog.Errorf("[terminusd] worker panic: %v; restarting", r)
+			klog.Errorf("%s worker panic: %v; restarting", logPrefix, r)
 			go runWorker()
 		}
 	}()
@@ -129,42 +137,43 @@ func runWorker() {
 
 func post(items []NewItem) {
 	if os.Getenv(envHost) == "" {
-		klog.Warningf("[terminusd] %s empty, skip %d item(s)", envHost, len(items))
+		klog.Warningf("%s %s empty, skip %d item(s)", logPrefix, envHost, len(items))
 		return
 	}
 
 	body, err := json.Marshal(newItemsBody{Items: items})
 	if err != nil {
-		klog.Warningf("[terminusd] marshal failed: %v (skip %d item(s))", err, len(items))
+		klog.Warningf("%s marshal failed: %v (skip %d item(s))", logPrefix, err, len(items))
 		return
 	}
 
 	url := notifyURL()
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		klog.Warningf("[terminusd] build request failed: %v", err)
+		klog.Warningf("%s build request failed: %v", logPrefix, err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		klog.Warningf("[terminusd] POST %s failed: %v (dropped %d item(s))", url, err, len(items))
+		klog.Warningf("%s POST %s failed: %v (dropped %d item(s))", logPrefix, url, err, len(items))
 		return
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode >= 300 {
-		klog.Warningf("[terminusd] POST %s status=%d (dropped %d item(s))", url, resp.StatusCode, len(items))
+		klog.Warningf("%s POST %s status=%d (dropped %d item(s))", logPrefix, url, resp.StatusCode, len(items))
 		return
 	}
-	klog.Infof("[terminusd] POST %s ok, items=%d", url, len(items))
+	klog.Infof("%s POST %s ok, items=%d", logPrefix, url, len(items))
 }
 
 // notifyURL builds http://<ip>:18832/v1/new_items by extracting the host
 // portion of TERMINUSD_HOST (which is normally "host:port" with no scheme)
-// and forcing port 18832.
+// and forcing port 18832. The webhook service is a separate process from
+// terminusd; we only borrow terminusd's host for the IP.
 func notifyURL() string {
 	host := os.Getenv(envHost)
 	if h, _, err := net.SplitHostPort(host); err == nil && h != "" {
