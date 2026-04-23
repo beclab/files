@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/files"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -159,7 +160,7 @@ func (m *Mount) getMounted() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var host = common.OlaresdHost
+	var host = fmt.Sprintf("%s:%d", common.TerminusdHost, common.TerminusdMountServicePort)
 
 	if host == "" {
 		klog.Errorf("olaresd host invalid, host: %s", host)
