@@ -24,6 +24,33 @@ var (
 	ErrRootUserDeletion     = errors.New("user with id 1 can't be deleted")
 )
 
+// SanitizeFsError returns an error whose message no longer contains the
+// possibly very long source/destination paths that os.Rename / os.Open and
+// other filesystem syscalls embed in *os.LinkError, *os.PathError and
+// *os.SyscallError. The underlying syscall message (e.g. "file name too long")
+// is preserved, so callers can still understand what went wrong.
+//
+// If err is nil or none of the wrappers above apply, the original error is
+// returned unchanged.
+func SanitizeFsError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var linkErr *os.LinkError
+	if errors.As(err, &linkErr) && linkErr.Err != nil {
+		return errors.New(linkErr.Err.Error())
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) && pathErr.Err != nil {
+		return errors.New(pathErr.Err.Error())
+	}
+	var syscallErr *os.SyscallError
+	if errors.As(err, &syscallErr) && syscallErr.Err != nil {
+		return errors.New(syscallErr.Err.Error())
+	}
+	return err
+}
+
 func ErrToStatus(err error) int {
 	switch {
 	case err == nil:

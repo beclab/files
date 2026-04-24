@@ -475,7 +475,7 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	klog.Infof("Posix rename, src: %s, dst: %s", rSrcPath, rDstPath)
 
 	if err = afs.Rename(rSrcPath, rDstPath); err != nil {
-		return nil, err
+		return nil, common.SanitizeFsError(err)
 	}
 
 	return nil, nil
