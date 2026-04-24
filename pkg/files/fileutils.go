@@ -352,6 +352,9 @@ func MkdirAllWithChown(fs afero.Fs, path string, mode os.FileMode, forced bool, 
 			continue
 		}
 		vol = filepath.Join(vol, part)
+		if !strings.HasPrefix(vol, "/") {
+			vol = "/" + vol
+		}
 
 		if fs == nil {
 			info, err = os.Stat(vol)

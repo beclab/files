@@ -27,6 +27,11 @@ func RespBadRequest(c *app.RequestContext, msg string) {
 	c.Abort()
 }
 
+func RespForbidden(c *app.RequestContext, msg string) {
+	c.JSON(http.StatusForbidden, utils.H{"code": 1, "message": msg})
+	c.Abort()
+}
+
 func RespStatusInternalServerError(c *app.RequestContext, msg string) {
 	c.JSON(http.StatusInternalServerError, utils.H{"code": 1, "message": msg})
 	c.Abort()

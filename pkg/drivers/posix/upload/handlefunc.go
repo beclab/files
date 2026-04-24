@@ -109,7 +109,7 @@ func HandleUploadedBytes(fileParam *models.FileParam, fileName string, fileIdent
 	// todo add identy
 	innerIdentifier := MakeUid(fullPath) // real upload file temp name
 	tmpName := innerIdentifier
-	UploadsFiles.Store(innerIdentifier, filepath.Join(uploadTempPath, tmpName))
+	UploadsFiles[innerIdentifier] = filepath.Join(uploadTempPath, tmpName)
 
 	exist, info := FileInfoManager.ExistFileInfo(innerIdentifier)
 
@@ -216,7 +216,7 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 	fullPath := filepath.Join(uploadPath, resumableInfo.ResumableRelativePath)
 	innerIdentifier := MakeUid(fullPath) // todo add resumableInfo.ResumableIdenty
 	tmpName := innerIdentifier
-	UploadsFiles.Store(innerIdentifier, filepath.Join(uploadTempPath, tmpName))
+	UploadsFiles[innerIdentifier] = filepath.Join(uploadTempPath, tmpName)
 
 	klog.Infof("[upload] uploadId: %s, fullPath: %s", uploadId, fullPath)
 

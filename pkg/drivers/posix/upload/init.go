@@ -24,10 +24,9 @@ func Init(c *cron.Cron) {
 	FileInfoManager = NewFileInfoMgr()
 	FileInfoManager.Init(c)
 
-	UploadsFiles.Range(func(_, value any) bool {
-		cronDeleteOldFile(value.(string), c)
-		return true
-	})
+	for _, uploadsFile := range UploadsFiles {
+		cronDeleteOldFile(uploadsFile, c)
+	}
 
 	getEnvInfo()
 

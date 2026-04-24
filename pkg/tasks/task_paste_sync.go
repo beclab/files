@@ -858,6 +858,22 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 	prefix, filename := filepath.Split(dst.Path)
 	prefix = strings.TrimPrefix(prefix, "/")
 
+	// Empty files cannot be created via seafhttp's chunked upload protocol
+	// (the resumable.js handler on the server side never gets invoked for a
+	// 0-byte payload, so the upload silently no-ops). Use the seafile RPC
+	// directly so the file ends up on the sync side under its raw name.
+	if diskSize == 0 {
+		parentDir := "/" + strings.TrimSuffix(prefix, "/")
+		username := dst.Owner + "@auth.local"
+		if _, err := seaserv.GlobalSeafileAPI.PostEmptyFile(dst.Extend, parentDir, filename, username); err != nil {
+			klog.Errorf("[Task] Id: %s, post empty file %s failed: %v", t.id, dst.Path, err)
+			return err
+		}
+		t.updateProgress(left, 0)
+		t.updateProgress(right, 0)
+		return nil
+	}
+
 	extension := path.Ext(filename)
 	mimeType := "application/octet-stream"
 	if extension != "" {

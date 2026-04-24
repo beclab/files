@@ -598,9 +598,18 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 
 	memberInfoMap := make(map[string]*share.AddOrUpdateShareMemberInfo)
 	for _, memberInfo := range req.ShareMembers {
-		if memberInfo.ShareMember != owner {
-			memberInfoMap[memberInfo.ShareMember] = memberInfo
+		// The share's owner can never be a member of their own share,
+		// and the caller (e.g. a sub-account admin) shouldn't add
+		// themselves either. The FE often re-submits the rendered
+		// member list which may include the owner for display; if we
+		// accept that blindly we end up inserting a phantom
+		// (path_id, owner) row into share_members, which then makes
+		// the share appear twice in the owner's ListSharePath
+		// (once via sharedByMe, once via the sharedToMe join).
+		if memberInfo.ShareMember == owner || memberInfo.ShareMember == sharePath.Owner {
+			continue
 		}
+		memberInfoMap[memberInfo.ShareMember] = memberInfo
 	}
 
 	memberQueryParams := &database.QueryParams{}
@@ -627,9 +636,16 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 
 	for _, member := range shareMembers {
 		if _, exists := memberInfoMap[member.ShareMember]; exists {
-		} else {
-			deleteShareMembers = append(deleteShareMembers, member)
+			continue
 		}
+		// Protect the caller themselves: when a non-owner admin (e.g. a sub-account
+		// granted admin) edits members, the FE-submitted ShareMembers usually does
+		// not include the caller, so we must not remove the caller from members.
+		if member.ShareMember == owner {
+			existedShareMembers = append(existedShareMembers, member)
+			continue
+		}
+		deleteShareMembers = append(deleteShareMembers, member)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
