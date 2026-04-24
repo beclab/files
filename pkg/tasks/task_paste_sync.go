@@ -889,6 +889,12 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 
 	chunkSize := int64(8 * 1024 * 1024) // 8MB
 	totalChunks := (diskSize + chunkSize - 1) / chunkSize
+	if totalChunks == 0 {
+		// Empty file still needs to be created on the sync side via a single
+		// (zero-length) chunk upload; otherwise the loop below never runs and
+		// the task silently "succeeds" without ever talking to seafhttp.
+		totalChunks = 1
+	}
 	identifier := seahub.GenerateUniqueIdentifier(common.EscapeAndJoin(filename, "/"))
 
 	var chunkStart int64 = 0
@@ -957,7 +963,11 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		request.Header = make(http.Header)
 		request.Header.Set("Content-Type", writer.FormDataContentType())
 		request.Header.Set("Content-Disposition", "attachment; filename=\""+common.EscapeAndJoin(filename, "/")+"\"")
-		request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(diskSize, 10))
+		if bytesRead > 0 {
+			// For zero-byte chunks (i.e. uploading an empty file), emitting
+			// Content-Range would produce the invalid header "bytes 0--1/0".
+			request.Header.Set("Content-Range", "bytes "+strconv.FormatInt(chunkStart, 10)+"-"+strconv.FormatInt(chunkStart+int64(bytesRead)-1, 10)+"/"+strconv.FormatInt(diskSize, 10))
+		}
 		curChunkStart := chunkStart
 		chunkStart += int64(bytesRead)
 		curChunkEnd := chunkStart - 1
