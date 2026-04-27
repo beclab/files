@@ -609,7 +609,7 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 
 			// check permission
 			if member.Permission < 1 {
-				handler.RespError(c, common.ErrorMessagePermissionDenied)
+				handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
 				return
 			}
 		}
@@ -664,7 +664,7 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 
 			// check permission, view, edit, admin
 			if owner != shared.Owner && member.Permission < 2 {
-				handler.RespError(c, common.ErrorMessagePermissionDenied)
+				handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
 				return
 			}
 		}
