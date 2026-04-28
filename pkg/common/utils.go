@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/disk"
@@ -33,7 +34,20 @@ var (
 
 var RootPrefix = os.Getenv("ROOT_PREFIX")
 
-var BflCookieCache = make(map[string]string)
+var bflCookieCache sync.Map
+
+func BflCookieGet(name string) (string, bool) {
+	v, ok := bflCookieCache.Load(name)
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(string)
+	return s, ok
+}
+
+func BflCookieSet(name, cookie string) {
+	bflCookieCache.Store(name, cookie)
+}
 
 func init() {
 	if RootPrefix == "" {
