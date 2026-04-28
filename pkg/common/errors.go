@@ -22,6 +22,7 @@ var (
 	ErrInvalidRequestParams = errors.New("invalid request params")
 	ErrSourceIsParent       = errors.New("source is parent")
 	ErrRootUserDeletion     = errors.New("user with id 1 can't be deleted")
+	ErrFileSizeExceeds4GB   = errors.New("file size exceeds 4GB")
 )
 
 func ErrToStatus(err error) int {
@@ -40,7 +41,7 @@ func ErrToStatus(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, ErrRootUserDeletion):
 		return http.StatusForbidden
-	case err.Error() == "file size exceeds 4GB":
+	case errors.Is(err, ErrFileSizeExceeds4GB) || err.Error() == "file size exceeds 4GB":
 		return http.StatusRequestEntityTooLarge
 	default:
 		return http.StatusInternalServerError
