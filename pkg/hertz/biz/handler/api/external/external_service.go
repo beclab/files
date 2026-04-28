@@ -14,7 +14,7 @@ import (
 	"files/pkg/models"
 	"files/pkg/redisutils"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -107,7 +107,7 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 			continue
 		}
 
-		respBody, err := ioutil.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
@@ -260,7 +260,7 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	defer response.Body.Close()
 
-	respBody, err := ioutil.ReadAll(response.Body)
+	respBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
