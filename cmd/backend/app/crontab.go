@@ -28,7 +28,7 @@ func InitCrontabs() {
 		tasks.TaskManager.ClearCacheFiles()
 	})
 	if err != nil {
-		klog.Fatalf("AddFunc CleanupOldFilesAndRedisEntries err:%v", err)
+		klog.Errorf("AddFunc CleanupOldFilesAndRedisEntries err: %v", err)
 	} else {
 		klog.Info("Crontab task: CleanupOldFilesAndRedisEntries added successfully.")
 	}
@@ -40,7 +40,7 @@ func InitCrontabs() {
 		global.GlobalMounted.Updated()
 	})
 	if err != nil {
-		klog.Fatalf("AddFunc GetMountedData err:%v", err)
+		klog.Errorf("AddFunc GetMountedData err: %v", err)
 	} else {
 		klog.Info("Crontab task: GetMountedData added successfully.")
 	}
