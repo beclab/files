@@ -56,11 +56,11 @@ func (l *Logger) Errorf(format string, v ...interface{}) {
 }
 
 func (l *Logger) Fatal(format string, v ...interface{}) {
-        klog.Fatalf("[FATAL] "+format, v...)
+        klog.Errorf("[FATAL] "+format, v...)
 }
 
 func (l *Logger) Fatalf(format string, v ...interface{}) {
-        klog.Fatalf("[FATAL] "+format, v...)
+        klog.Errorf("[FATAL] "+format, v...)
 }
 
 func (l *Logger) LogDebug(format string, v ...interface{}) {
