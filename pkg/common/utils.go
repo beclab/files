@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -144,7 +145,7 @@ func CheckDiskSpace(filePath string, needSize int64, considerReserve bool) (int6
 		} else {
 			errorMessage = fmt.Sprintf("Insufficient disk space. %s required, but only %s available. Need to free %s for uploading.", needStr, freeStr, needToFreeStr)
 		}
-		return availableSpace, fmt.Errorf(errorMessage)
+		return availableSpace, errors.New(errorMessage)
 	}
 	return availableSpace, nil
 }
