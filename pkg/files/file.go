@@ -13,7 +13,6 @@ import (
 	"hash"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"mime"
 	"net/http"
 	"os"
@@ -86,6 +85,13 @@ type FileOptions struct {
 var TerminusdHost = os.Getenv("TERMINUSD_HOST")
 var ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
 
+// terminusdHTTPClient is reused for all calls to TERMINUSD_HOST so that
+// connections are pooled and a global timeout is enforced. Without a
+// timeout, a hung Terminusd would leak goroutines indefinitely.
+var terminusdHTTPClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
 type Response struct {
 	Code    int        `json:"code"`
 	Data    []DiskInfo `json:"data"`
@@ -121,24 +127,23 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 	}
 
 	for _, url := range urls {
-		bodyBytes, err := ioutil.ReadAll(r.Body)
+		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			return nil, err
 		}
-		r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 		headers := r.Header.Clone()
 		headers.Set("Content-Type", "application/json")
 		headers.Set("X-Signature", "temp_signature")
 
-		client := &http.Client{}
 		req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
 		if err != nil {
 			return nil, err
 		}
 		req.Header = headers
 
-		resp, err := client.Do(req)
+		resp, err := terminusdHTTPClient.Do(req)
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +153,7 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 			continue
 		}
 
-		respBody, err := ioutil.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -211,16 +216,18 @@ func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{},
 	klog.Infoln("body (byte slice):", body)
 	klog.Infoln("body (string):", string(body))
 
-	client := &http.Client{}
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
 	req.Header = headers
-	resp, err := client.Do(req)
+	resp, err := terminusdHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
