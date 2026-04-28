@@ -1,6 +1,6 @@
 module files
 
-go 1.24.0
+go 1.25.0
 
 replace bytetrade.io/web3os/fs-lib => github.com/beclab/fs-lib v0.0.2
 
@@ -42,8 +42,8 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/thoas/go-funk v0.9.3
 	go.uber.org/zap v1.27.0
-	golang.org/x/image v0.29.0
-	golang.org/x/text v0.31.0
+	golang.org/x/image v0.38.0
+	golang.org/x/text v0.35.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
@@ -140,7 +140,7 @@ require (
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.27.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
