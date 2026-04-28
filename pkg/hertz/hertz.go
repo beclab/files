@@ -3,6 +3,7 @@
 package hertz
 
 import (
+	"files/pkg/common"
 	"files/pkg/hertz/biz/router"
 
 	"time"
@@ -12,9 +13,24 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func HertzServer() {
+// HertzServer starts the Hertz HTTP server. The listen address is derived
+// from cfg (Address/Port). A nil cfg falls back to the legacy 127.0.0.1:8080.
+func HertzServer(cfg *common.Server) {
+	addr := "127.0.0.1"
+	port := "8080"
+	if cfg != nil {
+		if cfg.Address != "" {
+			addr = cfg.Address
+		}
+		if cfg.Port != "" {
+			port = cfg.Port
+		}
+	}
+	hostPort := addr + ":" + port
+	klog.Infof("hertz server listening on %s", hostPort)
+
 	h := server.Default(
-		server.WithHostPorts("127.0.0.1:8080"),
+		server.WithHostPorts(hostPort),
 		server.WithMaxRequestBodySize(20<<20),
 		server.WithTransport(standard.NewTransporter),
 		server.WithReadTimeout(5*time.Minute),
