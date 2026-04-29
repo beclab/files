@@ -25,7 +25,7 @@ func InitCrontabs() *cron.Cron {
 	_, err := c.AddFunc("5 0 * * *", func() {
 		cleanupMux.Lock()
 		defer cleanupMux.Unlock()
-		seahub.AccessTokenMap = make(map[string]string)
+		seahub.ClearAccessTokens()
 		redisutils.CleanupOldFilesAndRedisEntries(7 * 24 * time.Hour)
 
 		tasks.TaskManager.ClearTasks()

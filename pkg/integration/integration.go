@@ -30,8 +30,15 @@ type integration struct {
 	client     *dynamic.DynamicClient
 	kubeClient *kubernetes.Clientset
 	tokens     map[string]*Integrations
-	authToken  map[string]*authToken
 	users      []*models.User
+
+	// authTokenMu protects the authToken map. It is intentionally separate
+	// from the embedded RWMutex below: GetIntegrations holds the RWMutex
+	// while indirectly calling getAuthToken, so reusing the same lock would
+	// self-deadlock. Keep the critical section short — never hold this
+	// while making the K8s CreateToken network call.
+	authTokenMu sync.Mutex
+	authToken   map[string]*authToken
 
 	sync.RWMutex
 }
@@ -172,7 +179,7 @@ func (i *integration) GetIntegrations() error {
 			if acc.Type == common.Space || acc.Type == common.TencentCos {
 				continue
 			}
-			flag, existsToken, err := i.checkTokenExpired(user.Name, acc.Name)
+			flag, existsToken, err := i.checkTokenExpiredLocked(user.Name, acc.Name)
 
 			if flag {
 				klog.Infof("integration, check expired, name: %s, accName: %s, expired: %v, err: %v", user.Name, acc.Name, flag, err)
@@ -357,7 +364,12 @@ func (i *integration) parseToRcloneProvider(s string) string {
 	return ""
 }
 
-func (i *integration) checkTokenExpired(user string, tokenName string) (bool, *IntegrationToken, error) {
+// checkTokenExpiredLocked reads i.tokens directly with no internal
+// synchronization. The caller must hold i.RWMutex (read or write); today
+// the only caller is GetIntegrations which already holds Lock(). The
+// "Locked" suffix mirrors the convention from the Go standard library so
+// future contributors see the precondition without reading a doc comment.
+func (i *integration) checkTokenExpiredLocked(user string, tokenName string) (bool, *IntegrationToken, error) {
 	v, ok := i.tokens[user]
 	if !ok {
 		return false, nil, fmt.Errorf("user not found")

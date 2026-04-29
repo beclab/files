@@ -325,8 +325,8 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	var uploadType = c.Param("upload")
 	var uid = c.Param("uid")
 	var originalUid = uid
-	if seahub.AccessTokenMap[uid] != "" {
-		uid = seahub.AccessTokenMap[uid]
+	if v, ok := seahub.GetAccessToken(uid); ok && v != "" {
+		uid = v
 		klog.Infof("[upload] Sync uploadChunks, uid: %s, originalUid: %s", uid, originalUid)
 	}
 
@@ -372,8 +372,8 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 			}
 			newUid, refreshErr := seahub.GetUploadLink(fileParam, "web", false, true)
 			if refreshErr == nil {
-				seahub.AccessTokenMap[originalUid] = newUid
-				klog.Infof("[upload] Sync uploadChunks, update AccessTokenMap: %s -> %s", originalUid, newUid)
+				seahub.SetAccessToken(originalUid, newUid)
+				klog.Infof("[upload] Sync uploadChunks, update access token: %s -> %s", originalUid, newUid)
 
 				resp, err = executeRequest(newUid)
 				if resp != nil {
@@ -383,19 +383,19 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 					klog.Infof("Retry success with new UID: %s", newUid)
 				}
 				if err != nil {
-					delete(seahub.AccessTokenMap, originalUid)
+					seahub.DeleteAccessToken(originalUid)
 					klog.Errorf("Sync uploadChunks, redirect error: %v", err)
 					c.String(http.StatusBadRequest, searpc.SyncConnectionFailedError(err).Error())
 					return
 				}
 			} else {
-				delete(seahub.AccessTokenMap, originalUid)
+				seahub.DeleteAccessToken(originalUid)
 				klog.Errorf("Token refresh failed: %v", refreshErr)
 				c.AbortWithStatusJSON(http.StatusForbidden, utils.H{"error": "Access token refresh failed"})
 				return
 			}
 		} else {
-			delete(seahub.AccessTokenMap, originalUid)
+			seahub.DeleteAccessToken(originalUid)
 			klog.Errorf("Sync uploadChunks, redirect error: %v", err)
 			if err == nil {
 				err = fmt.Errorf(errMsg.Error)
@@ -445,7 +445,7 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
 			return
 		}
-		delete(seahub.AccessTokenMap, originalUid)
+		seahub.DeleteAccessToken(originalUid)
 	} else {
 		result.Items = nil
 		result.Success = new(upload.UploadChunksSuccess)
