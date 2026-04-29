@@ -10,6 +10,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -17,7 +18,55 @@ import (
 
 var FILE_SERVER_ROOT = "/seafhttp"
 
+// AccessTokenMap is the legacy unsynchronized cache that this package used
+// to share Seafile upload tokens between the upload-proxy handlers and the
+// daily-cleanup cron. It is racy by construction (handler goroutines read
+// and mutate without locks while the cron replaces the whole map) and is
+// being replaced by the Get/Set/Delete/ClearAccessTokens helpers below.
+//
+// Deprecated: use the accessor helpers; this variable will be removed once
+// every call site has been migrated.
 var AccessTokenMap = make(map[string]string)
+
+// accessTokenMap holds the per-uid Seafile upload tokens that the upload
+// proxy refreshes on demand. Concurrent reads/writes happen on every chunk
+// of every sync upload, so it is intentionally a sync.Map; do not access
+// it directly outside the helpers below.
+var accessTokenMap sync.Map
+
+// GetAccessToken returns the cached upload token for uid. The bool is true
+// only when an entry exists.
+func GetAccessToken(uid string) (string, bool) {
+	v, ok := accessTokenMap.Load(uid)
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(string)
+	return s, ok
+}
+
+// SetAccessToken stores token under uid, replacing any existing entry.
+func SetAccessToken(uid, token string) {
+	accessTokenMap.Store(uid, token)
+}
+
+// DeleteAccessToken removes uid's entry. No-op when the key is absent.
+func DeleteAccessToken(uid string) {
+	accessTokenMap.Delete(uid)
+}
+
+// ClearAccessTokens removes every entry currently in the map. Unlike the
+// previous "replace the whole map" implementation this is not atomic: any
+// entries written concurrently with the Range may survive. That is the
+// safer behavior (a freshly-issued token must not be silently dropped) and
+// is acceptable because the cron caller runs at 5:00 daily, far from the
+// upload hot path.
+func ClearAccessTokens() {
+	accessTokenMap.Range(func(k, _ any) bool {
+		accessTokenMap.Delete(k)
+		return true
+	})
+}
 
 func GenerateUniqueIdentifier(relativePath string) string {
 	h := md5.New()
