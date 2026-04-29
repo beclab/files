@@ -28,7 +28,7 @@ func Init() {
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
 		PrepareStmt:            true,
-		Logger:                 logger.Default.LogMode(logger.Info),
+		Logger:                 logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
 		panic(err)
