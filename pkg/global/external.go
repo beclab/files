@@ -45,6 +45,17 @@ func InitGlobalMounted() {
 	//GlobalMounted.watchDiskUsage()
 }
 
+// ExternalWatcherClose stops the package-level fsnotify watcher used by
+// watchMounted. Closing the watcher terminates its Errors/Events channels;
+// the watcher goroutine selects on those and returns once they close.
+// Safe to call when the watcher was never initialized.
+func ExternalWatcherClose() error {
+	if externalWatcher == nil {
+		return nil
+	}
+	return externalWatcher.Close()
+}
+
 func (m *Mount) Updated() {
 	GlobalMounted.getMounted()
 }
