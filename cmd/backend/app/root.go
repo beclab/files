@@ -5,6 +5,7 @@ import (
 	"errors"
 	"files/pkg/client"
 	"files/pkg/common"
+	"files/pkg/common/redact"
 	"files/pkg/diskcache"
 	"files/pkg/drivers"
 	"files/pkg/drivers/clouds/rclone"
@@ -15,16 +16,15 @@ import (
 	"files/pkg/img"
 	"files/pkg/integration"
 	"files/pkg/models"
-	"files/pkg/webhook/upload"
 	"files/pkg/redisutils"
 	"files/pkg/samba"
 	"files/pkg/tasks"
 	"files/pkg/watchers"
+	"files/pkg/webhook/upload"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -368,25 +368,11 @@ func initConfig() {
 			klog.Infof("[ENV] %s", e)
 			continue
 		}
-		klog.Infof("[ENV] %s=%s", k, redactValue(k, val))
+		klog.Infof("[ENV] %s=%s", k, redact.Value(k, val))
 	}
 
 	klog.Infof("=== VIPER SETTINGS ===")
 	for _, key := range v.AllKeys() {
-		klog.Infof("[VIPER] %s = %v", key, redactValue(key, fmt.Sprintf("%v", v.Get(key))))
+		klog.Infof("[VIPER] %s = %v", key, redact.Value(key, fmt.Sprintf("%v", v.Get(key))))
 	}
-}
-
-// sensitiveKeyPattern matches config keys whose value should be redacted in logs.
-var sensitiveKeyPattern = regexp.MustCompile(`(?i)(password|passwd|secret|token|apikey|api_key|key|cookie|cred)`)
-
-// redactValue masks values whose key looks sensitive. Empty values pass through.
-func redactValue(key, value string) string {
-	if value == "" {
-		return value
-	}
-	if sensitiveKeyPattern.MatchString(key) {
-		return "***"
-	}
-	return value
 }
