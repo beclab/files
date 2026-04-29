@@ -30,8 +30,15 @@ type integration struct {
 	client     *dynamic.DynamicClient
 	kubeClient *kubernetes.Clientset
 	tokens     map[string]*Integrations
-	authToken  map[string]*authToken
 	users      []*models.User
+
+	// authTokenMu protects the authToken map. It is intentionally separate
+	// from the embedded RWMutex below: GetIntegrations holds the RWMutex
+	// while indirectly calling getAuthToken, so reusing the same lock would
+	// self-deadlock. Keep the critical section short — never hold this
+	// while making the K8s CreateToken network call.
+	authTokenMu sync.Mutex
+	authToken   map[string]*authToken
 
 	sync.RWMutex
 }

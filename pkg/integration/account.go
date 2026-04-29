@@ -87,12 +87,15 @@ func (i *integration) checkExpired(expiredAt int64) bool {
 }
 
 func (i *integration) getAuthToken(owner string) (string, error) {
-	at, ok := i.authToken[owner]
-	if ok {
-		if time.Now().Before(at.expire) {
-			return at.token, nil
-		}
+	// Fast path: cache hit under the dedicated mutex. Release before any
+	// network IO so a slow K8s call cannot block other owners.
+	i.authTokenMu.Lock()
+	if at, ok := i.authToken[owner]; ok && time.Now().Before(at.expire) {
+		token := at.token
+		i.authTokenMu.Unlock()
+		return token, nil
 	}
+	i.authTokenMu.Unlock()
 
 	tr := &authv1.TokenRequest{
 		Spec: authv1.TokenRequestSpec{
@@ -108,13 +111,15 @@ func (i *integration) getAuthToken(owner string) (string, error) {
 		return "", fmt.Errorf("failed to create token for user %s in namespace %s: %v", owner, common.DefaultNamespace, err)
 	}
 
-	if !ok {
-		at = &authToken{}
+	// Two goroutines may have raced into CreateToken; whoever runs second
+	// just overwrites with its own freshly-issued token. The duplicated
+	// signing call is acceptable (every owner only goes through this every
+	// ~11h) and keeps the implementation free of singleflight.
+	i.authTokenMu.Lock()
+	defer i.authTokenMu.Unlock()
+	i.authToken[owner] = &authToken{
+		token:  token.Status.Token,
+		expire: time.Now().Add(40000 * time.Second),
 	}
-	at.token = token.Status.Token
-	at.expire = time.Now().Add(40000 * time.Second)
-
-	i.authToken[owner] = at
-
-	return at.token, nil
+	return token.Status.Token, nil
 }
