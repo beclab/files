@@ -373,7 +373,7 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 			newUid, refreshErr := seahub.GetUploadLink(fileParam, "web", false, true)
 			if refreshErr == nil {
 				seahub.SetAccessToken(originalUid, newUid)
-				klog.Infof("[upload] Sync uploadChunks, update AccessTokenMap: %s -> %s", originalUid, newUid)
+				klog.Infof("[upload] Sync uploadChunks, update access token: %s -> %s", originalUid, newUid)
 
 				resp, err = executeRequest(newUid)
 				if resp != nil {

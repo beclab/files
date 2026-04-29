@@ -18,16 +18,6 @@ import (
 
 var FILE_SERVER_ROOT = "/seafhttp"
 
-// AccessTokenMap is the legacy unsynchronized cache that this package used
-// to share Seafile upload tokens between the upload-proxy handlers and the
-// daily-cleanup cron. It is racy by construction (handler goroutines read
-// and mutate without locks while the cron replaces the whole map) and is
-// being replaced by the Get/Set/Delete/ClearAccessTokens helpers below.
-//
-// Deprecated: use the accessor helpers; this variable will be removed once
-// every call site has been migrated.
-var AccessTokenMap = make(map[string]string)
-
 // accessTokenMap holds the per-uid Seafile upload tokens that the upload
 // proxy refreshes on demand. Concurrent reads/writes happen on every chunk
 // of every sync upload, so it is intentionally a sync.Map; do not access
