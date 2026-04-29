@@ -33,3 +33,13 @@ func InitRedis() {
 		DB:       redisDB,                     //0,
 	})
 }
+
+// Close releases the shared Redis client. Safe to call on a nil client; the
+// graceful-shutdown coordinator invokes this last so any earlier hook can
+// still publish "I am stopping" messages or read a final snapshot.
+func Close() error {
+	if RedisClient == nil {
+		return nil
+	}
+	return RedisClient.Close()
+}
