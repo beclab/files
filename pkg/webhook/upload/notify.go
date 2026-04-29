@@ -13,10 +13,11 @@
 //   - A single background worker drains the channel, opportunistically batches
 //     up to maxBatchSize items per outgoing request, and POSTs them to
 //     http://<host_ip>:18832/v1/new_items.
-//   - No per-request timeout (intentional). Bounded memory and exactly one
-//     in-flight request guarantee resource bounds even when the webhook is
-//     slow. On any failure (network error, non-2xx, marshal error) the batch
-//     is dropped with a warning; there is no retry.
+//   - Per-request timeout of 30s. The batches are tiny (~KB JSON), so a stuck
+//     TCP connection that never errors must not be allowed to block the worker
+//     forever; without a timeout the queue would silently fill until items
+//     start dropping. On any failure (timeout, network error, non-2xx, marshal
+//     error) the batch is dropped with a warning; there is no retry.
 package upload
 
 import (

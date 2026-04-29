@@ -16,6 +16,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// rcloneHTTPClient is shared across all rclone control-API requests so a
+// single retry burst doesn't allocate one client per attempt. The 5-minute
+// Timeout is a safety net; the per-call context.Context passed via
+// http.NewRequestWithContext is the primary deadline.
+var rcloneHTTPClient = &http.Client{
+	Timeout: 5 * time.Minute,
+}
+
 func Request(ctx context.Context, u string, method string, header *http.Header, requestParams []byte) ([]byte, error) {
 	var backoff = wait.Backoff{
 		Duration: 1 * time.Second,
@@ -55,9 +63,8 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 
 		// newRequest.Header.Add("Content-Type", "application/octet-stream")
 
-		client := &http.Client{}
 		start := time.Now()
-		resp, err := client.Do(newRequest)
+		resp, err := rcloneHTTPClient.Do(newRequest)
 		if err != nil {
 			klog.Errorf("[request] do error: %v", err)
 			return err
