@@ -168,7 +168,7 @@ func (t *Task) DownloadFromFiles() error {
 
 		var downloadResp *http.Response
 
-		downloadResp, err = client.Do(downloadReq)
+		downloadResp, err = streamHTTPClient.Do(downloadReq)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, download failed, url: %s, error: %v", t.id, downloadUrl, err)
 			downloadResp.Body.Close()
