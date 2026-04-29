@@ -18,11 +18,10 @@
   comment = "{{ $data.Comment }}"
   {{ if $data.Anonymous  -}}
   browseable = no
-  writable = no
-  read only = yes
+  writable = yes
+  read only = no
   guest ok = yes
   force user = nobody
-  force group = {{ $data.ForceGroup }}
   create mask = 0664
   directory mask = 0775
   {{ else -}}

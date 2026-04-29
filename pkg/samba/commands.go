@@ -193,18 +193,9 @@ func (c *commands) DeleteGroup(groupName string) error {
 }
 
 func (c *commands) SetAnonymousPermission(owner string, smbPath string) error {
-	var args = []string{fmt.Sprintf("nobody:%s", owner), smbPath}
-	cmd := exec.Command("chown", args...)
+	args := []string{"-R", "3777", smbPath}
+	cmd := exec.Command("chmod", args...)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		klog.Errorf("samba chown anonymous error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
-	} else {
-		klog.Infof("samba chown anonymous: %s done.", cmd.String())
-	}
-
-	args = []string{"-R", "3777", smbPath}
-	cmd = exec.Command("chmod", args...)
-	out, err = cmd.CombinedOutput()
 	if err != nil {
 		klog.Errorf("samba chmod anonymous error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
 	} else {
