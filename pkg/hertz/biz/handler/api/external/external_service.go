@@ -84,7 +84,6 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 
-		client := &http.Client{}
 		request, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
 		if err != nil {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
@@ -96,7 +95,7 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("X-Signature", "temp_signature")
 
-		resp, err := client.Do(request)
+		resp, err := files.TerminusdHTTPClient.Do(request)
 		if err != nil {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
@@ -246,14 +245,13 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 	klog.Infoln("body (byte slice):", body)
 	klog.Infoln("body (string):", string(body))
 
-	client := &http.Client{}
 	request, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	c.Request.Header.VisitAll(func(key []byte, value []byte) {
 		request.Header.Set(string(key), string(value))
 	})
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Signature", "temp_signature")
-	response, err := client.Do(request)
+	response, err := files.TerminusdHTTPClient.Do(request)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
