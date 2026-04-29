@@ -14,7 +14,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -39,14 +38,6 @@ func (t *Task) DownloadFromFiles() error {
 		return err
 	}
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			MaxIdleConns:        10,
-			MaxIdleConnsPerHost: 5,
-			IdleConnTimeout:     60 * time.Second,
-		},
-	}
-
 	var srcFileName, isSrcFile = files.GetFileNameFromPath(src.Path)
 	var srcFilePrefix, srcFileExt = common.SplitNameExt(srcFileName)
 	var filesServerIp = filesServer.Status.PodIP
@@ -59,7 +50,7 @@ func (t *Task) DownloadFromFiles() error {
 	filesListsReq.Header.Set(common.REQUEST_HEADER_OWNER, src.Owner)
 	filesListsReq.Header.Set("Cache-Control", "no-cache")
 
-	filesListsResp, err := client.Do(filesListsReq)
+	filesListsResp, err := streamHTTPClient.Do(filesListsReq)
 	if err != nil {
 		return err
 	}
