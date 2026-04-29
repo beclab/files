@@ -22,7 +22,6 @@ import (
 	"files/pkg/watchers"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"regexp"
 	"strings"
@@ -203,13 +202,6 @@ user created with the credentials from options "username" and "password".`,
 		hertz.HertzServer(getRunParams(cmd.Flags()))
 
 	}, pythonConfig{allowNoDB: true}),
-}
-
-func cleanupHandler(listener net.Listener, c chan os.Signal) {
-	sig := <-c
-	klog.Infof("Caught signal %s: shutting down.", sig)
-	listener.Close()
-	os.Exit(0)
 }
 
 func getRunParams(flags *pflag.FlagSet) *common.Server {
