@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/spf13/afero"
@@ -31,7 +30,7 @@ const (
 	ExternalPathPrefix = common.EXTERNAL_PREFIX
 )
 
-var UploadsFiles sync.Map
+var UploadsFiles map[string]string = map[string]string{}
 
 func CheckType(filetype string) bool {
 	if allowAllFileType {

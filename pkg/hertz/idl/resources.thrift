@@ -19,7 +19,7 @@ struct PatchResourcesResp {
 }
 
 struct PutResourcesReq {
-    1: required binary Body (api.raw_body="raw_body");
+    1: binary Body (api.raw_body="raw_body");
 }
 
 struct PutResourcesResp {
