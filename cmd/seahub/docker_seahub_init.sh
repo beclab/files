@@ -5,7 +5,7 @@ echo "DB_PORT= $DB_PORT"
 echo "DB_NAME1= $DB_NAME1"
 echo "DB_NAME2= $DB_NAME2"
 echo "DB_USER= $DB_USER"
-echo "DB_PASSWORD= $DB_PASSWORD"
+echo "DB_PASSWORD= ******"
 
 SQL_FILE1="init_pgdata/ccnet.sql"
 SQL_FILE2="init_pgdata/seafile.sql"

@@ -72,62 +72,6 @@ func logTableStructure(db *gorm.DB, tableName, dbName string) {
 	}
 }
 
-func logTableData(db *gorm.DB, tableName, dbName string, limit int) {
-	if dbName == "" {
-		klog.Error("Database name cannot be empty")
-		return
-	}
-
-	var tables []string
-	if tableName == "" {
-		err := db.Raw(`
-			SELECT table_name 
-			FROM information_schema.tables 
-			WHERE table_catalog = ? 
-			  AND table_schema = 'public'`, dbName).
-			Pluck("table_name", &tables).Error
-
-		klog.Infof("Found %d tables in database %s", len(tables), dbName)
-
-		if err != nil {
-			klog.Errorf("Failed to fetch table list: %v", err)
-			return
-		}
-	} else {
-		tables = []string{tableName}
-	}
-
-	for _, table := range tables {
-		klog.Infof("=== Table Data [%s.%s] ===", dbName, table)
-
-		var results []map[string]interface{}
-		query := db.Table(table)
-		if limit > 0 {
-			query = query.Limit(limit)
-		}
-		if err := query.Find(&results).Error; err != nil {
-			klog.Errorf("Failed to fetch data from table %s: %v", table, err)
-			continue
-		}
-
-		if len(results) == 0 {
-			klog.Info("  (no records found)")
-			continue
-		}
-
-		for i, row := range results {
-			klog.Infof("Record %d:", i+1)
-			for k, v := range row {
-				if v == nil {
-					klog.Infof("  %s: NULL", k)
-				} else {
-					klog.Infof("  %s: %v", k, v)
-				}
-			}
-		}
-	}
-}
-
 func connectDBWithRetry(dsn string, dbName string, maxRetries int) (*gorm.DB, error) {
 	var db *gorm.DB
 	var err error
@@ -154,6 +98,18 @@ type PreviewData struct {
 	Column     string
 	OldValue   string
 	NewValue   string
+}
+
+func maskEmail(email string) string {
+	parts := strings.SplitN(email, "@", 2)
+	if len(parts) != 2 {
+		return "***"
+	}
+	name := parts[0]
+	if len(name) > 2 {
+		name = name[:2] + "***"
+	}
+	return name + "@" + parts[1]
 }
 
 func generateDetailedPreviewReport(db1, db2 *gorm.DB, profiles []Profile) []PreviewData {
@@ -189,8 +145,8 @@ func generateDetailedPreviewReport(db1, db2 *gorm.DB, profiles []Profile) []Prev
 			data.Table,
 			data.PrimaryKey,
 			data.Column,
-			data.OldValue,
-			data.NewValue,
+			maskEmail(data.OldValue),
+			maskEmail(data.NewValue),
 		)
 	}
 	klog.Info("------------------------------------------------------------------")
@@ -288,21 +244,21 @@ func main() {
 		DB_HOST, DB_USER, DB_PASSWORD, DB_NAME2, DB_PORT)
 	dsn3 := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
 		DB_HOST, DB_USER, DB_PASSWORD, DB_NAME3, DB_PORT)
-	klog.Infof("dsn1: %s", dsn1)
-	klog.Infof("dsn2: %s", dsn2)
-	klog.Infof("dsn3: %s", dsn3)
+	klog.Infof("Connecting to db1: host=%s port=%s dbname=%s", DB_HOST, DB_PORT, DB_NAME1)
+	klog.Infof("Connecting to db2: host=%s port=%s dbname=%s", DB_HOST, DB_PORT, DB_NAME2)
+	klog.Infof("Connecting to db3: host=%s port=%s dbname=%s", DB_HOST, DB_PORT, DB_NAME3)
 
 	db1, err := connectDBWithRetry(dsn1, DB_NAME1, 5)
 	if err != nil {
 		klog.Fatal(err.Error())
 	}
-	klog.Infof("db1: %v", db1)
+	klog.Infof("db1 connected successfully")
 
 	db2, err := connectDBWithRetry(dsn2, DB_NAME2, 5)
 	if err != nil {
 		klog.Fatal(err.Error())
 	}
-	klog.Infof("db2: %v", db2)
+	klog.Infof("db2 connected successfully")
 
 	db3, err := connectDBWithRetry(dsn3, DB_NAME3, 5)
 	if err != nil {
@@ -311,14 +267,11 @@ func main() {
 
 	if db3 != nil {
 		logTableStructure(db3, "profile_profile", DB_NAME3)
-		logTableData(db3, "profile_profile", DB_NAME3, 0)
 	}
 
 	logTableStructure(db1, "", DB_NAME1)
-	logTableData(db1, "", DB_NAME1, 0)
 
 	logTableStructure(db2, "", DB_NAME2)
-	logTableData(db2, "", DB_NAME2, 0)
 
 	if db3 == nil {
 		klog.Info("No need to update")
@@ -334,7 +287,7 @@ func main() {
 		return
 	}
 
-	klog.Infof("Found %d profiles: %v", len(profiles), profiles)
+	klog.Infof("Found %d profiles to update", len(profiles))
 
 	previewData := generateDetailedPreviewReport(db1, db2, profiles)
 
