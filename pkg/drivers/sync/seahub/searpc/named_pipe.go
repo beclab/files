@@ -49,7 +49,7 @@ func (t *NamedPipeTransport) Stop() {
 }
 
 func (t *NamedPipeTransport) Send(service, fcallStr string) (string, error) {
-	klog.Infof("Send called - service: %s, fcallStr: %s", service, fcallStr)
+	klog.V(4).Infof("searpc send: service=%s len=%d", service, len(fcallStr))
 	var respStr string
 	var err error
 

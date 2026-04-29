@@ -44,7 +44,7 @@ func GetAuthToken(owner string) (string, error) {
 		// fmt.Errorf("Failed to create token for user %s in namespace %s: %v", owner, namespace, err)
 		return "", fmt.Errorf("failed to create token for user %s in namespace %s: %v", owner, namespace, err)
 	}
-	klog.Infof("%+v\n", token)
+	klog.V(2).Infof("auth token issued for %s, expiresAt=%s", owner, token.Status.ExpirationTimestamp)
 
 	if !ok {
 		at = authv1.TokenRequestStatus{}
@@ -84,8 +84,7 @@ func GetToken(owner string, accountName string, accountType string, authToken st
 	if accountResp.Data == nil || accountResp.Data.RawData == nil {
 		return nil, errors.New("account response data or raw data is nil")
 	}
-	klog.Infof("accountResp.Data: %+v\n", accountResp.Data)
-	klog.Infof("accountResp.Data.RawData: %+v\n", accountResp.Data.RawData)
+	klog.V(2).Infof("account fetched: name=%s type=%s", accountResp.Data.Name, accountResp.Data.Type)
 	return accountResp.Data, nil
 }
 
