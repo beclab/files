@@ -33,11 +33,14 @@ func Init(c *cron.Cron) {
 
 }
 
+// cronDeleteOldFile registers an hourly job that removes the upload-buffer
+// file once it has aged past expireTime. The caller MUST pass a non-nil
+// cron instance whose lifecycle is owned by InitCrontabs; otherwise the job
+// would run on a private scheduler that no shutdown hook can stop.
 func cronDeleteOldFile(filePath string, c *cron.Cron) {
-	needStart := false
 	if c == nil {
-		c = cron.New()
-		needStart = true
+		klog.Errorf("cronDeleteOldFile: nil cron passed for %s; refusing to spawn an orphan scheduler", filePath)
+		return
 	}
 
 	_, err := c.AddFunc("30 * * * *", func() {
@@ -48,10 +51,6 @@ func cronDeleteOldFile(filePath string, c *cron.Cron) {
 	})
 	if err != nil {
 		klog.Warningf("AddFunc DeleteOldSubfolders err:%v", err)
-	}
-
-	if needStart {
-		c.Start()
 	}
 }
 

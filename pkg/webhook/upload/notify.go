@@ -22,6 +22,7 @@ package upload
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"files/pkg/models"
 	"io"
@@ -65,7 +66,9 @@ type newItemsBody struct {
 var (
 	queue      chan NewItem
 	startOnce  sync.Once
-	httpClient = &http.Client{Timeout: 30 * time.Second} // ~KB JSON POST: prevent a TCP-stuck connection from deadlocking the single worker
+	stopOnce   sync.Once
+	workerWG   sync.WaitGroup
+	httpClient = &http.Client{} // intentionally no Timeout; keep-alive enabled by default transport
 	dropped    uint64           // atomic counter; updated when the queue is full
 )
 
@@ -86,10 +89,36 @@ func Start() {
 	}
 	startOnce.Do(func() {
 		queue = make(chan NewItem, queueCap)
+		workerWG.Add(1)
 		go runWorker()
 		klog.Infof("%s notify enabled, queueCap=%d, maxBatchSize=%d, url=%s",
 			logPrefix, queueCap, maxBatchSiz, notifyURL())
 	})
+}
+
+// Stop drains the worker. It closes the in-memory queue (no further
+// Enqueue will be accepted), waits for the worker to flush whatever it has
+// already pulled out of the queue, and returns. ctx bounds the wait; if it
+// fires first, Stop returns ctx.Err but the worker keeps running until its
+// in-flight POST completes (single in-flight by design). Idempotent.
+func Stop(ctx context.Context) error {
+	if queue == nil {
+		return nil
+	}
+	stopOnce.Do(func() {
+		close(queue)
+	})
+	done := make(chan struct{})
+	go func() {
+		workerWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Enqueue is non-blocking. Drops the item (with a throttled warning) when
@@ -112,9 +141,11 @@ func Enqueue(item NewItem) {
 }
 
 func runWorker() {
+	defer workerWG.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			klog.Errorf("%s worker panic: %v; restarting", logPrefix, r)
+			workerWG.Add(1)
 			go runWorker()
 		}
 	}()

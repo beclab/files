@@ -34,3 +34,21 @@ func Init() {
 		panic(err)
 	}
 }
+
+// Close releases the underlying *sql.DB connection pool. Safe to call when
+// Init was skipped (DB == nil) or when the GORM-managed pool is missing.
+// Only invoked from the graceful-shutdown coordinator after all request
+// handlers, cron jobs, and watchers have stopped using the pool.
+func Close() error {
+	if DB == nil {
+		return nil
+	}
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return err
+	}
+	if sqlDB == nil {
+		return nil
+	}
+	return sqlDB.Close()
+}
