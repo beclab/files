@@ -504,7 +504,7 @@ func checkExternal(currentUser string, token string, sharePaths *share.SharePath
 		return defaultExpired, false, errors.New("shareToken not found")
 	}
 
-	klog.Infof("share token: %s", common.ToJson(shareToken))
+	klog.V(2).Infof("share token validated, shareId: %s, expireAt: %s", sharePaths.ID, shareToken.ExpireAt)
 
 	expired, _ := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
 	if time.Now().After(expired) {

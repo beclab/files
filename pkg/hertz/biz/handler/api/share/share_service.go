@@ -2248,7 +2248,7 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 	result["code"] = 0
 	result["data"] = defaultToken.Token
 
-	klog.Infof("GetToken, get external shared, shareId: %s, token: %s", req.PathId, defaultToken.Token)
+	klog.V(2).Infof("GetToken, get external shared, shareId: %s", req.PathId)
 
 	c.JSON(consts.StatusOK, result)
 }
