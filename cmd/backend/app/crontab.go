@@ -15,7 +15,11 @@ import (
 
 var cleanupMux sync.Mutex
 
-func InitCrontabs() {
+// InitCrontabs registers all scheduled jobs and starts the scheduler. It
+// returns the running *cron.Cron so callers can wire its Stop()/ctx into
+// the graceful-shutdown coordinator. The returned value is non-nil even
+// when AddFunc registrations fail — a nil here would defeat shutdown.
+func InitCrontabs() *cron.Cron {
 	c := cron.New()
 
 	_, err := c.AddFunc("5 0 * * *", func() {
@@ -48,4 +52,5 @@ func InitCrontabs() {
 	upload.Init(c)
 
 	c.Start()
+	return c
 }

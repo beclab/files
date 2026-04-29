@@ -193,7 +193,7 @@ user created with the credentials from options "username" and "password".`,
 
 		// step11: Crontab
 		// .	- CleanupOldFilesAndRedisEntries
-		InitCrontabs()
+		_ = InitCrontabs()
 
 		// step12: samba
 		samba.NewSambaManager(f)
