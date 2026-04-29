@@ -85,10 +85,11 @@ type FileOptions struct {
 var TerminusdHost = os.Getenv("TERMINUSD_HOST")
 var ExternalPrefix = os.Getenv("EXTERNAL_PREFIX")
 
-// terminusdHTTPClient is reused for all calls to TERMINUSD_HOST so that
+// TerminusdHTTPClient is reused for all calls to TERMINUSD_HOST so that
 // connections are pooled and a global timeout is enforced. Without a
-// timeout, a hung Terminusd would leak goroutines indefinitely.
-var terminusdHTTPClient = &http.Client{
+// timeout, a hung Terminusd would leak goroutines indefinitely. Exported
+// so other packages (e.g. pkg/hertz/.../external) can share the same pool.
+var TerminusdHTTPClient = &http.Client{
 	Timeout: 30 * time.Second,
 }
 
@@ -143,7 +144,7 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 		}
 		req.Header = headers
 
-		resp, err := terminusdHTTPClient.Do(req)
+		resp, err := TerminusdHTTPClient.Do(req)
 		if err != nil {
 			return nil, err
 		}
@@ -221,7 +222,7 @@ func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{},
 		return nil, err
 	}
 	req.Header = headers
-	resp, err := terminusdHTTPClient.Do(req)
+	resp, err := TerminusdHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

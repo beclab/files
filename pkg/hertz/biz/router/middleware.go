@@ -67,10 +67,19 @@ var (
 	ShareApiUploadedPath   = "/upload/file-uploaded-bytes"
 )
 
+// shareProxyClient is used to reverse-proxy share-API requests. Bodies on
+// either side may be GB-scale (file uploads/downloads), so Client.Timeout is
+// intentionally NOT set; that would clip legitimate long transfers.
+// ResponseHeaderTimeout instead guards against an origin that never starts
+// sending headers, while idle-conn and TLS-handshake timeouts cap dead
+// connection reuse and slow handshakes.
 var shareProxyClient = &http.Client{
 	Transport: &http.Transport{
-		MaxIdleConnsPerHost: 64,
-		DisableCompression:  true,
+		MaxIdleConnsPerHost:   64,
+		DisableCompression:    true,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
 	},
 }
 
