@@ -199,7 +199,7 @@ user created with the credentials from options "username" and "password".`,
 		samba.NewSambaManager(f)
 
 		// step13: run hertz server
-		hertz.HertzServer(getRunParams(cmd.Flags()))
+		hertz.HertzServer(getRunParams(cmd.Flags()), nil)
 
 	}, pythonConfig{allowNoDB: true}),
 }

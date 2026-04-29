@@ -3,8 +3,10 @@
 package hertz
 
 import (
+	"context"
 	"files/pkg/common"
 	"files/pkg/hertz/biz/router"
+	"files/pkg/lifecycle"
 
 	"time"
 
@@ -13,9 +15,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// HertzServer starts the Hertz HTTP server. The listen address is derived
-// from cfg (Address/Port). A nil cfg falls back to the legacy 127.0.0.1:8080.
-func HertzServer(cfg *common.Server) {
+// hertzExitWait controls how long Hertz waits for in-flight requests to
+// finish during shutdown. The default 5s is too short for ongoing uploads
+// or rclone/seafile syncs; 20s is a balance between drain time and the
+// outer container SIGKILL window.
+const hertzExitWait = 20 * time.Second
+
+// HertzServer starts the Hertz HTTP server and blocks on Spin until a
+// shutdown signal arrives. The listen address is derived from cfg
+// (Address/Port). A nil cfg falls back to the legacy 127.0.0.1:8080.
+//
+// When coord is non-nil, every other registered shutdown hook is run as
+// part of Hertz' OnShutdown callback. This guarantees connection drain
+// happens first (Hertz manages that internally) and only then do downstream
+// subsystems (cron, watchers, db, redis, …) get torn down in reverse order.
+func HertzServer(cfg *common.Server, coord *lifecycle.Coordinator) {
 	addr := "127.0.0.1"
 	port := "8080"
 	if cfg != nil {
@@ -40,7 +54,17 @@ func HertzServer(cfg *common.Server) {
 		server.WithReadBufferSize(64*1024),
 		server.WithALPN(true),
 		server.WithIdleTimeout(200*time.Second),
+		server.WithExitWaitTime(hertzExitWait),
 	)
+
+	if coord != nil {
+		// Hertz' Engine.OnShutdown CtxCallback runs concurrently with the
+		// transport drain; it gets a context bounded by ExitWaitTime so the
+		// coordinator's per-hook timeouts also live within that envelope.
+		h.OnShutdown = append(h.OnShutdown, func(ctx context.Context) {
+			coord.Run(ctx)
+		})
+	}
 
 	h.Use(router.Options())
 	h.Use(router.Cors())
@@ -51,5 +75,5 @@ func HertzServer(cfg *common.Server) {
 
 	register(h)
 	h.Spin()
-	klog.Infof("hertz server started")
+	klog.Infof("hertz server stopped")
 }
