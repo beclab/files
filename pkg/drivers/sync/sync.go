@@ -30,6 +30,13 @@ import (
 
 var previewSemaphore = make(chan struct{}, 10)
 
+// syncEditHTTPClient is reused for seafile edit-upload calls. The 60s
+// Timeout matches typical small-file edit semantics; large-file uploads
+// use the chunked path elsewhere with its own timeout.
+var syncEditHTTPClient = &http.Client{
+	Timeout: 60 * time.Second,
+}
+
 type SyncStorage struct {
 	handler *base.HandlerParam
 	paste   *models.PasteParam
@@ -664,7 +671,6 @@ func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHan
 	boundary := writer.Boundary()
 	contentType := "multipart/form-data; boundary=" + boundary
 
-	client := &http.Client{}
 	req, err := http.NewRequest("POST", updateUrl, bytes.NewReader(body.Bytes()))
 	if err != nil {
 		klog.Errorf("Sync edit, create request error: %v, path: %s", err, fileParam.Path)
@@ -673,7 +679,7 @@ func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHan
 	req.Header = contextArgs.QueryParam.Header.Clone()
 	req.Header.Set("Content-Type", contentType)
 
-	resp, err := client.Do(req)
+	resp, err := syncEditHTTPClient.Do(req)
 	if err != nil {
 		klog.Errorf("Sync edit, http request error: %v, path: %s", err, fileParam.Path)
 		return nil, err
