@@ -87,16 +87,16 @@ func (m *Mount) watchMounted() {
 	if externalWatcher == nil {
 		externalWatcher, err = fsnotify.NewWatcher()
 		if err != nil {
-			klog.Fatalf("Failed to initialize watcher: %v", err)
-			panic(err)
+			klog.Errorf("failed to initialize external mount watcher: %v; external mount notifications disabled", err)
+			return
 		}
 	}
 
 	path := "/data/External"
 	err = externalWatcher.Add(path)
 	if err != nil {
-		klog.Errorln("watcher add error:", err)
-		panic(err)
+		klog.Errorf("external mount watcher add %q failed: %v; notifications disabled", path, err)
+		return
 	}
 	klog.Infof("watcher initialized at: %s", path)
 
