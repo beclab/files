@@ -14,7 +14,6 @@ import (
 	"files/pkg/preview"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -685,7 +684,7 @@ func (s *SyncStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHan
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		klog.Errorf("Sync edit, read response body error: %v, path: %s", err, fileParam.Path)
 		return nil, err

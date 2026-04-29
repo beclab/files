@@ -20,9 +20,11 @@ import (
 	"files/pkg/samba"
 	"files/pkg/tasks"
 	"files/pkg/watchers"
+	"fmt"
 	"io"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -198,7 +200,7 @@ user created with the credentials from options "username" and "password".`,
 		samba.NewSambaManager(f)
 
 		// step13: run hertz server
-		hertz.HertzServer()
+		hertz.HertzServer(getRunParams(cmd.Flags()))
 
 	}, pythonConfig{allowNoDB: true}),
 }
@@ -358,13 +360,33 @@ func initConfig() {
 
 	klog.Infof("=== ENVIRONMENT VARIABLES ===")
 	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "FB_") {
-			klog.Infof("[ENV] %s", e)
+		if !strings.HasPrefix(e, "FB_") {
+			continue
 		}
+		k, val, ok := strings.Cut(e, "=")
+		if !ok {
+			klog.Infof("[ENV] %s", e)
+			continue
+		}
+		klog.Infof("[ENV] %s=%s", k, redactValue(k, val))
 	}
 
 	klog.Infof("=== VIPER SETTINGS ===")
 	for _, key := range v.AllKeys() {
-		klog.Infof("[VIPER] %s = %v", key, v.Get(key))
+		klog.Infof("[VIPER] %s = %v", key, redactValue(key, fmt.Sprintf("%v", v.Get(key))))
 	}
+}
+
+// sensitiveKeyPattern matches config keys whose value should be redacted in logs.
+var sensitiveKeyPattern = regexp.MustCompile(`(?i)(password|passwd|secret|token|apikey|api_key|key|cookie|cred)`)
+
+// redactValue masks values whose key looks sensitive. Empty values pass through.
+func redactValue(key, value string) string {
+	if value == "" {
+		return value
+	}
+	if sensitiveKeyPattern.MatchString(key) {
+		return "***"
+	}
+	return value
 }

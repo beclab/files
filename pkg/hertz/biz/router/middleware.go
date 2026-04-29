@@ -128,13 +128,13 @@ func CookieMiddleware() app.HandlerFunc {
 		newCookie := string(c.GetHeader("Cookie"))
 
 		if bflName != "" {
-			oldCookie := common.BflCookieCache[bflName]
+			oldCookie, _ := common.BflCookieGet(bflName)
 			if newCookie != oldCookie {
-				common.BflCookieCache[bflName] = newCookie
+				common.BflCookieSet(bflName, newCookie)
 			}
 		}
 
-		klog.Infof("BflCookieCache= %v", common.BflCookieCache)
+		klog.V(4).Infof("BflCookieCache updated for user=%s", bflName)
 		c.Next(ctx)
 	}
 }

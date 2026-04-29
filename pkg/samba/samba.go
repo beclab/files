@@ -14,7 +14,6 @@ import (
 	"files/pkg/hertz/biz/model/api/share"
 	"files/pkg/models"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
@@ -386,7 +385,7 @@ func (s *samba) generateConf() {
 
 	klog.Infof("samba conf content: \n%s\n", string(content))
 
-	err = ioutil.WriteFile(common.SambaConfTemplatePath, content, 0700)
+	err = os.WriteFile(common.SambaConfTemplatePath, content, 0700)
 	if err != nil {
 		klog.Errorf("samba write conf error: %v", err)
 		return

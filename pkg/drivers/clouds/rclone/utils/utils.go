@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"files/pkg/drivers/clouds/rclone/common"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -67,7 +67,7 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 			klog.Infof("[request] url: %s, code: %d, elapsed: %s", u, resp.StatusCode, time.Since(start))
 		}
 
-		body, err = ioutil.ReadAll(resp.Body)
+		body, err = io.ReadAll(resp.Body)
 		if err != nil {
 			klog.Errorln("[request] error reading response body:", err)
 			return err

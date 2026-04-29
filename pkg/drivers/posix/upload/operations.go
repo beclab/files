@@ -10,7 +10,6 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"os"
 	"path"
@@ -241,7 +240,7 @@ func UpdateFileInfo(fileInfo FileInfo, uploadsDir string) error {
 	}
 
 	// Write file information
-	err = ioutil.WriteFile(infoPath, infoJSON, 0644)
+	err = os.WriteFile(infoPath, infoJSON, 0644)
 	if err != nil {
 		return err
 	}
