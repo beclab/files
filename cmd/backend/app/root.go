@@ -12,19 +12,23 @@ import (
 	"files/pkg/global"
 	"files/pkg/hertz"
 	"files/pkg/hertz/biz/dal"
+	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/img"
 	"files/pkg/integration"
+	"files/pkg/lifecycle"
 	"files/pkg/models"
-	"files/pkg/webhook/upload"
 	"files/pkg/redisutils"
 	"files/pkg/samba"
 	"files/pkg/tasks"
 	"files/pkg/watchers"
+	"files/pkg/webhook/upload"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/spf13/afero"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -179,27 +183,74 @@ user created with the credentials from options "username" and "password".`,
 		integration.NewIntegrationManager()
 		upload.Start()
 
+		coord := lifecycle.New()
+		// Hooks run in reverse-registration order. Register database/redis
+		// first so they survive until every higher-level subsystem is gone.
+		coord.Add("postgres", 5*time.Second, func(context.Context) error {
+			return database.Close()
+		})
+		coord.Add("redis", 5*time.Second, func(context.Context) error {
+			return redisutils.Close()
+		})
+
 		// step9: watcher
-		var w = watchers.NewWatchers(context.Background(), config)
+		watcherCtx, watcherCancel := context.WithCancel(context.Background())
+		var w = watchers.NewWatchers(watcherCtx, config)
 		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
 		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
 		watchers.AddToWatchers[models.User](w, models.UserGVR, integration.IntegrationManager().HandlerEvent())
 
-		go w.Run(1)
+		var watcherWG sync.WaitGroup
+		watcherWG.Add(1)
+		go func() {
+			defer watcherWG.Done()
+			if runErr := w.Run(1); runErr != nil {
+				klog.Errorf("k8s watcher exited with error: %v", runErr)
+			}
+		}()
+		coord.Add("k8s-watcher", 10*time.Second, func(ctx context.Context) error {
+			watcherCancel()
+			done := make(chan struct{})
+			go func() { watcherWG.Wait(); close(done) }()
+			select {
+			case <-done:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
 
 		// step10: task manager
 		tasks.NewTaskManager()
 		tasks.TaskManager.GenerateKeepFile()
 
+		// upload webhook worker
+		coord.Add("upload-webhook", 5*time.Second, upload.Stop)
+
+		// fsnotify external mount watcher
+		coord.Add("external-fsnotify", 2*time.Second, func(context.Context) error {
+			return global.ExternalWatcherClose()
+		})
+
 		// step11: Crontab
 		// .	- CleanupOldFilesAndRedisEntries
-		_ = InitCrontabs()
+		cronInst := InitCrontabs()
+		coord.Add("cron", 5*time.Second, func(ctx context.Context) error {
+			stopCtx := cronInst.Stop()
+			select {
+			case <-stopCtx.Done():
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
 
 		// step12: samba
 		samba.NewSambaManager(f)
 
-		// step13: run hertz server
-		hertz.HertzServer(getRunParams(cmd.Flags()), nil)
+		// step13: run hertz server (blocks until SIGTERM, then drains, then
+		// runs coord.Run for everything registered above)
+		hertz.HertzServer(getRunParams(cmd.Flags()), coord)
 
 	}, pythonConfig{allowNoDB: true}),
 }

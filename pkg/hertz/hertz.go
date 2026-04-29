@@ -25,10 +25,12 @@ const hertzExitWait = 20 * time.Second
 // shutdown signal arrives. The listen address is derived from cfg
 // (Address/Port). A nil cfg falls back to the legacy 127.0.0.1:8080.
 //
-// When coord is non-nil, every other registered shutdown hook is run as
-// part of Hertz' OnShutdown callback. This guarantees connection drain
-// happens first (Hertz manages that internally) and only then do downstream
-// subsystems (cron, watchers, db, redis, …) get torn down in reverse order.
+// Hertz' built-in signal waiter catches SIGTERM/SIGINT, drains in-flight
+// connections within ExitWaitTime, and only then returns from Spin. After
+// Spin returns we invoke coord.Run (when supplied) so downstream subsystems
+// (cron, watchers, redis, db, …) are torn down strictly after the HTTP
+// transport has stopped accepting new work. This sequencing matters: it
+// keeps redis/db reachable while the last in-flight requests finish.
 func HertzServer(cfg *common.Server, coord *lifecycle.Coordinator) {
 	addr := "127.0.0.1"
 	port := "8080"
@@ -57,15 +59,6 @@ func HertzServer(cfg *common.Server, coord *lifecycle.Coordinator) {
 		server.WithExitWaitTime(hertzExitWait),
 	)
 
-	if coord != nil {
-		// Hertz' Engine.OnShutdown CtxCallback runs concurrently with the
-		// transport drain; it gets a context bounded by ExitWaitTime so the
-		// coordinator's per-hook timeouts also live within that envelope.
-		h.OnShutdown = append(h.OnShutdown, func(ctx context.Context) {
-			coord.Run(ctx)
-		})
-	}
-
 	h.Use(router.Options())
 	h.Use(router.Cors())
 	h.Use(router.TimingMiddleware())
@@ -75,5 +68,16 @@ func HertzServer(cfg *common.Server, coord *lifecycle.Coordinator) {
 
 	register(h)
 	h.Spin()
-	klog.Infof("hertz server stopped")
+	klog.Infof("hertz server stopped, running shutdown coordinator")
+
+	if coord != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		coord.Run(ctx)
+	}
 }
+
+// shutdownTimeout caps the total time the coordinator may spend stopping
+// non-HTTP subsystems after Hertz has drained. It does not include the
+// 20s transport drain itself, which lives inside Hertz Spin.
+const shutdownTimeout = 30 * time.Second
