@@ -320,7 +320,7 @@ func (s *samba) generateConf() {
 				for _, user := range item.Members {
 					sharePwd, err = s.getUser(user.Password)
 					if err != nil {
-						klog.Errorf("samba get user pwd error: %v, password: %s, userId: %s, userName: %s, owner: %s", err, user.Password, user.UserId, user.UserName, item.Owner)
+						klog.Errorf("samba get user pwd error: %v, userId: %s, userName: %s, owner: %s", err, user.UserId, user.UserName, item.Owner)
 						continue
 					}
 

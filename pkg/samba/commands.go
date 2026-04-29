@@ -33,7 +33,7 @@ func (c *commands) Update() error {
 }
 
 func (c *commands) CreateUser(userName, password, groupName string) error {
-	klog.Infof("samba createUser, name: %s, group: %s, pwd: %s", userName, groupName, password)
+	klog.Infof("samba createUser, name: %s, group: %s", userName, groupName)
 	u, err := user.Lookup(userName)
 	if err != nil {
 		klog.Warning(err)
