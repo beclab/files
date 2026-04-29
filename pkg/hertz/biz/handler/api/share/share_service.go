@@ -2399,6 +2399,15 @@ func CreateSmbUser(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	if msg := common.ValidateSmbUserName(req.User, owner); msg != "" {
+		handler.RespError(c, msg)
+		return
+	}
+	if msg := common.ValidateSmbPassword(req.Password); msg != "" {
+		handler.RespError(c, msg)
+		return
+	}
+
 	var userId = uuid.New().String()
 	var userName = req.User
 	var password = common.Base64Encode(req.Password)
