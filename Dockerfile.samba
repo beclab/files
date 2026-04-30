@@ -42,9 +42,22 @@ RUN CGO_ENABLED=0 go build -ldflags "-w -s" -o samba_share cmd/samba/main.go
 # FROM gcr.io/distroless/base:nonroot
 # FROM gcr.io/distroless/base:debug
 
-FROM alpine:edge
+# Pinned to a stable Alpine release instead of `edge`.
+#
+# `alpine:edge` is a rolling branch where `samba` and `musl` can drift out of
+# sync. As of 2026-04 the edge `samba` package was linked against `renameat2`
+# (a libc wrapper added only in musl 1.2.6, released 2026-03-20), while the
+# edge image still ships `musl-1.2.5-r21`. This caused samba binaries (smbd,
+# smbclient, ...) to fail to load `libsmbd-base-private-samba.so` with
+# `Error relocating ...: renameat2: symbol not found`, breaking the SMB
+# service on container startup.
+#
+# Stable Alpine releases test `musl` and `samba` together, so this whole
+# class of "new package + old libc" symbol mismatches is avoided.
+FROM alpine:3.21
 
 RUN set -eu && \
+  apk --no-cache upgrade && \
   apk --no-cache add \
   tini \
   bash \
