@@ -48,13 +48,13 @@ func MoveFile(fs afero.Fs, src, dst string) error {
 	return nil
 }
 
-func MoveFileOs(src, dst string) error {
+func MoveFileOs(src, dst string, onProgress ...ProgressFunc) error {
 	if os.Rename(src, dst) == nil {
 		return nil
 	}
 
 	// fallback
-	err := CopyFileOs(src, dst)
+	err := CopyFileOs(src, dst, onProgress...)
 	if err != nil {
 		_ = os.Remove(dst)
 		return err
@@ -65,7 +65,11 @@ func MoveFileOs(src, dst string) error {
 	return nil
 }
 
-func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error {
+// ProgressFunc is called after each buffer write with the cumulative
+// number of bytes written so far. May be nil.
+type ProgressFunc func(written int64)
+
+func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int, onProgress ...ProgressFunc) error {
 	klog.Infoln("***IoCopyFileWithBufferOs")
 	klog.Infoln("***sourcePath:", sourcePath)
 	klog.Infoln("***targetPath:", targetPath)
@@ -95,6 +99,12 @@ func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error
 	}
 	defer targetFile.Close()
 
+	var progressFn ProgressFunc
+	if len(onProgress) > 0 {
+		progressFn = onProgress[0]
+	}
+
+	var totalWritten int64
 	buf := make([]byte, bufferSize)
 	for {
 		n, e := sourceFile.Read(buf)
@@ -106,6 +116,10 @@ func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error
 		}
 		if _, e2 := targetFile.Write(buf[:n]); e2 != nil {
 			return e2
+		}
+		if progressFn != nil {
+			totalWritten += int64(n)
+			progressFn(totalWritten)
 		}
 	}
 
@@ -202,8 +216,8 @@ func CopyFile(fs afero.Fs, source, dest string) error {
 	return nil
 }
 
-func CopyFileOs(source, dest string) error {
-	err := IoCopyFileWithBufferOs(source, dest, 8*1024*1024)
+func CopyFileOs(source, dest string, onProgress ...ProgressFunc) error {
+	err := IoCopyFileWithBufferOs(source, dest, 8*1024*1024, onProgress...)
 	if err != nil {
 		return err
 	}
@@ -562,14 +576,23 @@ func UpdatePathName(oldPath string, newName string, isDir bool) string {
 }
 
 func GetPathName(p string) string {
+	if p == "" || p == "/" {
+		return ""
+	}
 	if strings.HasSuffix(p, "/") {
 		var tmp = strings.TrimSuffix(p, "/")
 		var pos = strings.LastIndex(tmp, "/")
+		if pos < 0 {
+			return tmp
+		}
 		tmp = p[pos:]
 		tmp = strings.Trim(tmp, "/")
 		return tmp
 	} else {
 		var pos = strings.LastIndex(p, "/")
+		if pos < 0 {
+			return p
+		}
 		var tmp = p[pos:]
 		tmp = strings.Trim(tmp, "/")
 		return tmp

@@ -902,6 +902,9 @@ func ShareUpload() app.HandlerFunc {
 		if !hasShareBy && shared.FileType == common.Drive {
 			err = createPart("shareby", []string{shared.Owner}, mw)
 		}
+		if err == nil {
+			err = createPart("sharebyPath", []string{uploadReq.ParentDir}, mw)
+		}
 
 		if err != nil {
 			klog.Errorf("Sync uploadChunks, create MultipartForm error: %v", err)

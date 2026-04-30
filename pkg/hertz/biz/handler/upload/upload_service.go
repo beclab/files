@@ -13,6 +13,7 @@ import (
 	"files/pkg/drivers/sync/seahub/searpc"
 	upload "files/pkg/hertz/biz/model/upload"
 	"files/pkg/models"
+	"files/pkg/tasks"
 	"fmt"
 	"io"
 	"net"
@@ -201,6 +202,7 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 
 	uploadArg.ChunkInfo.Share = req.Share
 	uploadArg.ChunkInfo.Shareby = req.Shareby
+	uploadArg.ChunkInfo.SharebyPath = string(c.FormValue("sharebyPath"))
 	uploadArg.ChunkInfo.File = header
 
 	p := uploadArg.ChunkInfo.ParentDir
@@ -330,6 +332,77 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		klog.V(4).Infof("[upload] Sync uploadChunks, using cached access token (path=%s, owner=%s)", requestPath, owner)
 	}
 
+	// For the last chunk of a large sync file, defer the seafile proxy
+	// call to an async task so the HTTP response returns before the
+	// platform proxy timeout fires.
+	isLastChunk := uploadReq.ResumableChunkNumber == uploadReq.ResumableTotalChunks
+	if isLastChunk && uploadReq.ResumableTotalSize >= common.AsyncFinalizeThreshold {
+		bodyBytes := make([]byte, len(c.Request.Body()))
+		copy(bodyBytes, c.Request.Body())
+
+		headers := make(map[string]string)
+		c.Request.Header.VisitAll(func(key, value []byte) {
+			headers[string(key)] = string(value)
+		})
+		headers[common.REQUEST_HEADER_OWNER] = owner
+
+		p := "/" + filepath.Join(uploadReq.DriveType, uploadReq.RepoId, strings.Trim(uploadReq.ParentDir, "/"), uploadReq.ResumableRelativePath)
+		fileParam, fpErr := models.CreateFileParam(owner, p)
+		if fpErr != nil {
+			klog.Errorf("Sync uploadChunks, create file param error: %v", fpErr)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", fpErr)})
+			return
+		}
+
+		displayParam := fileParam
+		if uploadReq.Share != "" {
+			sharebyPath := string(c.FormValue("sharebyPath"))
+			if sharebyPath != "" {
+				sharePath := sharebyPath + uploadReq.ResumableRelativePath
+				if sp, spErr := models.CreateFileParam(owner, sharePath); spErr == nil {
+					displayParam = sp
+				}
+			}
+		}
+		uploadParam := &models.PasteParam{
+			Owner:  owner,
+			Action: common.ActionUploadFinalize,
+			Src:    displayParam,
+			Dst:    displayParam,
+		}
+		task := tasks.TaskManager.CreateTask(uploadParam)
+		task.SetTotalSize(uploadReq.ResumableTotalSize)
+		task.ExecuteAsync(task.UploadFinalizeSync(&tasks.SyncFinalizeParams{
+			BodyBytes:   bodyBytes,
+			Headers:     headers,
+			UploadType:  uploadType,
+			UID:         uid,
+			OriginalUID: originalUid,
+			Owner:       owner,
+			UploadReq: tasks.SyncFinalizeUploadReq{
+				DriveType:         uploadReq.DriveType,
+				RepoId:            uploadReq.RepoId,
+				ParentDir:         uploadReq.ParentDir,
+				ResumableFilename: uploadReq.ResumableFilename,
+			},
+		}))
+
+		taskId := task.Id()
+		klog.Infof("Sync uploadChunks, large file (%d bytes), async finalize task: %s", uploadReq.ResumableTotalSize, taskId)
+
+		type syncFinalizeItem struct {
+			Name   string `json:"name"`
+			Size   int64  `json:"size"`
+			TaskId string `json:"taskId"`
+		}
+		c.JSON(consts.StatusOK, []syncFinalizeItem{{
+			Name:   uploadReq.ResumableFilename,
+			Size:   uploadReq.ResumableTotalSize,
+			TaskId: taskId,
+		}})
+		return
+	}
+
 	var executeRequest = func(uid string) (*http.Response, error) {
 		reqUrl := fmt.Sprintf("http://seafile:8082/%s/%s?ret-json=1", uploadType, uid)
 		klog.Infof("Sync uploadChunks, path: %s, owner: %s, uploadPath: %s", requestPath, owner, uploadPath)
@@ -339,7 +412,9 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		c.Request.Header.VisitAll(func(key, value []byte) {
 			req.Header.Set(string(key), string(value))
 		})
-		req.Header.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", url.QueryEscape(uploadReq.ResumableFilename)))
+		if req.Header.Get("Content-Disposition") == "" {
+			req.Header.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", url.PathEscape(uploadReq.ResumableFilename)))
+		}
 		req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
 		req.ContentLength = int64(len(c.Request.Body()))
 
@@ -439,7 +514,7 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	result := new(upload.UploadChunksResp)
-	if uploadReq.ResumableChunkNumber == uploadReq.ResumableTotalChunks {
+	if isLastChunk {
 		result.Success = nil
 		result.Items = make([]*upload.UploadChunksFileItem, 0)
 		if err = json.Unmarshal(bodyRes, &result.Items); err != nil {
