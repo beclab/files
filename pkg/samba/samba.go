@@ -272,8 +272,9 @@ func (s *samba) generateConf() {
 
 	s.deleteExcludeUsers(smbUsers, smbShares)
 
-	smbShareBytes, _ := json.Marshal(smbShares)
-	klog.Infof("samba share paths: %s", string(smbShareBytes))
+	for id, p := range smbShares {
+		klog.Infof("samba share paths, id: %s, owner: %s, fileType: %s, extend: %s, path: %s, shareType: %s, name: %s, users: %d", id, p.Owner, p.FileType, p.Extend, p.Path, p.ShareType, p.Name, len(p.Members))
+	}
 
 	var shares = SambaShares{}
 	for _, item := range smbShares { // ~ map

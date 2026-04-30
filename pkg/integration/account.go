@@ -23,7 +23,7 @@ func (i *integration) getAccounts(owner string, authToken string) ([]*accountsRe
 	var header = make(map[string]string)
 	header[common.REQUEST_HEADER_AUTHORIZATION] = fmt.Sprintf("Bearer %s", authToken)
 
-	resp, err := common.Request(integrationUrl, http.MethodPost, header, data, common.ParseBool(common.DebugIntegration))
+	resp, err := common.Request(integrationUrl, http.MethodPost, header, data, false)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (i *integration) getToken(owner string, accountName string, accountType str
 	header[restful.HEADER_ContentType] = restful.MIME_JSON
 	header[common.REQUEST_HEADER_AUTHORIZATION] = fmt.Sprintf("Bearer %s", authToken)
 
-	resp, err := common.Request(integrationUrl, http.MethodPost, header, data, common.ParseBool(common.DebugIntegration))
+	resp, err := common.Request(integrationUrl, http.MethodPost, header, data, false)
 
 	if err != nil {
 		return nil, err
