@@ -1111,8 +1111,9 @@ func (d *DynamicHlsController) GetCurrentTranscodingIndex(playlistPath, segmentE
 
 func GetLastTranscodingFile(playlistPath string, segmentExtension string, fileSystem ioo.IFileSystem) *ioo.FileSystemMetadata {
 	folder := filepath.Dir(playlistPath)
-	if folder == "" {
-		panic(fmt.Errorf("path can't be a root directory: %s", playlistPath))
+	if folder == "" || folder == "." {
+		klog.Errorf("GetLastTranscodingFile: invalid playlist path (no parent dir): %q", playlistPath)
+		return nil
 	}
 
 	filePrefix := filepath.Base(playlistPath)

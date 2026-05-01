@@ -230,10 +230,12 @@ func (e *EncodingHelper) AttachMediaSourceInfo(
 	requestedUrl string,
 ) {
 	if state == nil {
-		panic("state is nil")
+		klog.Error("AttachMediaSourceInfo: state is nil, skipping")
+		return
 	}
 	if mediaSource == nil {
-		panic("mediaSource is nil")
+		klog.Error("AttachMediaSourceInfo: mediaSource is nil, skipping")
+		return
 	}
 
 	path := mediaSource.Path
