@@ -728,6 +728,10 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 		req.Header.Set(string(key), string(value))
 	})
 	req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
+	// Mark this as a server-side share-resolved forward; the paste
+	// handler trusts SrcOwner/DstOwner only when this header matches
+	// the process-local secret. See pkg/common/internal_auth.go.
+	req.Header.Set(common.HeaderInternalShareToken, common.InternalShareToken())
 
 	resp, err := shareProxyClient.Do(req)
 	if err != nil {
