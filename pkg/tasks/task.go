@@ -9,6 +9,7 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -68,6 +69,16 @@ type Task struct {
 
 	details []string
 	isShare bool
+
+	// done is closed by the worker goroutine in Execute right before
+	// it returns, no matter how it returns (success / failure /
+	// cancellation / panic via runtime). Cancel waits on it instead
+	// of busy-polling t.running, so we can never lock up forever if
+	// `running` ends up out of sync with the actual goroutine state.
+	// The channel is reset on every Resume, so a cancelled-then-
+	// resumed task gets a fresh "done" signal.
+	doneMu sync.Mutex
+	done   chan struct{}
 }
 
 func (t *Task) Id() string {
@@ -78,16 +89,63 @@ func (t *Task) SetTotalSize(size int64) {
 	t.totalSize = size
 }
 
+// ensureDone returns the current done channel, creating it lazily.
+// It is safe to call from any goroutine.
+func (t *Task) ensureDone() chan struct{} {
+	t.doneMu.Lock()
+	defer t.doneMu.Unlock()
+	if t.done == nil {
+		t.done = make(chan struct{})
+	}
+	return t.done
+}
+
+// resetDone replaces the done channel; called by Resume so the
+// "wait" semantics for the *new* worker run are independent of the
+// previous one.
+func (t *Task) resetDone() {
+	t.doneMu.Lock()
+	defer t.doneMu.Unlock()
+	t.done = make(chan struct{})
+}
+
+// closeDone signals all Cancel waiters that the worker has exited.
+// Idempotent: safe to call even if already closed.
+func (t *Task) closeDone() {
+	t.doneMu.Lock()
+	defer t.doneMu.Unlock()
+	if t.done == nil {
+		t.done = make(chan struct{})
+	}
+	select {
+	case <-t.done:
+		// already closed
+	default:
+		close(t.done)
+	}
+}
+
 // ~ Cancel
 func (t *Task) Cancel() {
+	done := t.ensureDone()
 	t.ctxCancel()
 
-	for {
-		if t.running {
-			time.Sleep(100 * time.Millisecond)
-			continue
+	// If no worker is currently running, no need to wait - skip the
+	// channel select entirely. This also covers tasks that never
+	// got to Execute() at all (Cancel right after Create), which
+	// would otherwise sit in <-done for 30s before the timeout.
+	if !t.running {
+		// fall through to state update
+	} else {
+		// Replace the previous busy-poll on t.running (which could
+		// spin forever if `running` ended up out of sync with the
+		// actual worker state). Cap the wait at 30s so a stuck
+		// worker can't pin a Cancel goroutine indefinitely either.
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			klog.Warningf("[Task] Id: %s, Cancel timed out waiting for worker to exit", t.id)
 		}
-		break
 	}
 
 	if !t.suspend {
@@ -134,6 +192,12 @@ func (t *Task) Execute(fs ...func() error) error {
 		t.funcs = append(t.funcs, fs...)
 	}
 
+	// Make sure each Execute invocation has its own done channel so
+	// any pending Cancel() on the *previous* run doesn't observe an
+	// already-closed channel and skip the wait. Resume callers also
+	// reset this; doing it here as well keeps the contract simple.
+	t.resetDone()
+
 	_, ok := userPool.pool.TrySubmit(func() { // ~ enter
 		var err error
 
@@ -143,6 +207,8 @@ func (t *Task) Execute(fs ...func() error) error {
 
 			t.endAt = time.Now()
 			t.running = false
+			// Wake any goroutine blocked in Cancel().
+			t.closeDone()
 		}()
 
 		if common.ListContains([]string{common.Canceled, common.Paused, common.Failed, common.Running, common.Completed}, t.state) {
@@ -221,6 +287,11 @@ func (t *Task) Execute(fs ...func() error) error {
 	})
 
 	if !ok {
+		// The worker won't run, so the deferred closeDone() above
+		// will not fire either. Close it now so any concurrent
+		// Cancel doesn't sit waiting for a worker that never
+		// started.
+		t.closeDone()
 		return fmt.Errorf("submit worker failed")
 	}
 
