@@ -310,7 +310,7 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 		defer file.Close()
 
 		if contextArgs.QueryParam.Body != nil {
-			_, err = files.WriteFile(files.DefaultFs, createPath, contextArgs.QueryParam.Body)
+			_, err = files.WriteFile(createPath, contextArgs.QueryParam.Body)
 			if err != nil {
 				klog.Errorf("File write error: %v", err)
 				return nil, err
@@ -507,7 +507,7 @@ func (s *PosixStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHa
 		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
 	}
 
-	info, err := files.WriteFile(files.DefaultFs, filePath, contextArgs.QueryParam.Body)
+	info, err := files.WriteFile(filePath, contextArgs.QueryParam.Body)
 	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
 
 	return &models.EditHandlerResponse{

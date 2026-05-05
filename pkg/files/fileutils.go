@@ -424,10 +424,22 @@ func GetUidGid(fs afero.Fs, path string) (int, int, error) {
 	return int(statT.Uid), int(statT.Gid), nil
 }
 
-func WriteFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
+// WriteFile writes the contents of `in` to dst on the host filesystem.
+//
+// dst must be an absolute path on the OS filesystem; it is opened
+// directly via os.OpenFile (no afero.Fs indirection). The parent
+// directory is created with MkdirAllWithChown if missing.
+//
+// The previous signature accepted an afero.Fs parameter that was
+// silently ignored - callers passed DefaultFs (a BasePathFs) but the
+// implementation always used os.OpenFile, so passing a non-OS Fs was
+// a bug attractor (writes would not have gone where the caller
+// expected). The parameter has been removed to make the contract
+// honest.
+func WriteFile(dst string, in io.Reader) (os.FileInfo, error) {
 	klog.Infoln("Before open ", dst)
 	dir, _ := path.Split(dst)
-	if err := MkdirAllWithChown(fs, dir, 0755, false, -1, -1); err != nil {
+	if err := MkdirAllWithChown(nil, dir, 0755, false, -1, -1); err != nil {
 		klog.Errorln(err)
 		return nil, err
 	}
@@ -778,7 +790,7 @@ func CheckCloudCreateCacheFile(p string, body io.ReadCloser) error {
 	if body == nil {
 		err = os.WriteFile(p, []byte{}, 0o644)
 	} else {
-		_, err = WriteFile(DefaultFs, p, body)
+		_, err = WriteFile(p, body)
 	}
 	if err != nil {
 		return err
