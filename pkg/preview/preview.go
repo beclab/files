@@ -103,13 +103,19 @@ func CreatePreview(owner string, key string,
 		return nil, err
 	}
 
-	// store
-	if err = fileCache.Store(context.TODO(), owner, key, common.CacheThumb, buf.Bytes()); err != nil {
-		klog.Errorf("preview store failed, user: %s, error: %v", owner, err)
+	// Cache the rendered preview. Failures here are intentionally
+	// non-fatal: we still have the bytes in `buf` and can serve them
+	// to the caller, the next request will just have to render again.
+	// Use a separate variable so a later call does not overwrite this
+	// error reference (the previous code shared `err` across Store /
+	// Chown / return, making it easy to lose information silently in
+	// future edits).
+	if cerr := fileCache.Store(context.TODO(), owner, key, common.CacheThumb, buf.Bytes()); cerr != nil {
+		klog.Errorf("preview store failed, user: %s, key: %s, error: %v", owner, key, cerr)
 	}
 
-	if err = files.Chown(bufferFile.Fs, bufferFile.Path, 1000, 1000); err != nil {
-		klog.Errorf("can't chown file %s to user %d: %s", bufferFile.Path, 1000, err)
+	if cerr := files.Chown(bufferFile.Fs, bufferFile.Path, 1000, 1000); cerr != nil {
+		klog.Errorf("can't chown file %s to user %d: %s", bufferFile.Path, 1000, cerr)
 	}
 
 	return buf.Bytes(), nil
