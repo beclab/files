@@ -2345,6 +2345,7 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 	if err != nil {
 		klog.Errorf("ResetPassword, querySharePath error: %v", err)
 		handler.RespError(c, fmt.Sprintf("ResetPassword Error: %v", err))
+		return
 	}
 
 	if sharePath == nil {
@@ -2356,6 +2357,7 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 
 	if err = database.ResetExternalSharePasswordTx(sharePath); err != nil {
 		klog.Errorf("ResetPassword, update error: %v", err)
+		handler.RespError(c, fmt.Sprintf("ResetPassword Error: %v", err))
 		return
 	}
 
