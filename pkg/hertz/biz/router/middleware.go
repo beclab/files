@@ -463,7 +463,12 @@ func checkSharePath(currentUser string, shareId string, fromShare bool) (*share.
 		return sharePath, 0, nil
 	}
 
-	expired, _ := time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
+	expired, ok := common.ParseRFC3339Nano(sharePath.ExpireTime)
+	if !ok {
+		// Unparseable expire string -> treat as expired and surface
+		// a sane Unix timestamp (now) rather than the year-1 default.
+		return nil, time.Now().Unix(), errors.New(common.ErrorMessageLinkExpired)
+	}
 
 	if time.Now().After(expired) {
 		klog.Errorf("sharePath expired, expireTime: %s", sharePath.ExpireTime)
@@ -515,7 +520,12 @@ func checkExternal(currentUser string, token string, sharePaths *share.SharePath
 
 	klog.V(2).Infof("share token validated, shareId: %s, expireAt: %s", sharePaths.ID, shareToken.ExpireAt)
 
-	expired, _ := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
+	expired, ok := common.ParseRFC3339Nano(shareToken.ExpireAt)
+	if !ok {
+		// Unparseable token expire -> fail closed: report current time
+		// as the expiry boundary instead of leaking a year-1 timestamp.
+		return time.Now().Unix(), false, fmt.Errorf("shareToken expireAt unparseable: %q", shareToken.ExpireAt)
+	}
 	if time.Now().After(expired) {
 		klog.Errorf("[share] shareToken expired, expireAt: %s", shareToken.ExpireAt)
 		return expired.Unix(), false, fmt.Errorf("shareToken expired, shareToken.ExpireAt: %s", shareToken.ExpireAt)
@@ -748,11 +758,13 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 }
 
 func checkExpired(expireAt string) bool {
-	expired, _ := time.Parse(time.RFC3339Nano, expireAt)
-	if time.Now().After(expired) {
+	expired, ok := common.ParseRFC3339Nano(expireAt)
+	if !ok {
+		// Unparseable -> treat as expired (fail closed). Logging
+		// already happens inside ParseRFC3339Nano.
 		return true
 	}
-	return false
+	return time.Now().After(expired)
 }
 
 func ShareUpload() app.HandlerFunc {
