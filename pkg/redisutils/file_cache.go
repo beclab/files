@@ -24,7 +24,11 @@ func DelThumbRedisKey(key string) error {
 	cleanupMux.Lock()
 	defer cleanupMux.Unlock()
 
-	err := RedisClient.ZRem(key, []string{key}).Err()
+	// The cache zset is always stored under zsetKey ("file_cache_access_times").
+	// Previously we passed `key` (the member name) as both the zset name and
+	// the member, so ZREM operated on a non-existent key and never removed
+	// anything from the real zset.
+	err := RedisClient.ZRem(zsetKey, []string{key}).Err()
 	if err != nil {
 		klog.Errorln("Error removing file from Redis:", err)
 		return err
