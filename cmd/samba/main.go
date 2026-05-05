@@ -55,6 +55,9 @@ var rootCmd = &cobra.Command{
 		coord.Add("external-fsnotify", 2*time.Second, func(context.Context) error {
 			return global.ExternalWatcherClose()
 		})
+		coord.Add("samba-cleanup", 5*time.Second, func(ctx context.Context) error {
+			return samba.SambaService.Stop(ctx)
+		})
 
 		watcherCtx, watcherCancel := context.WithCancel(context.Background())
 		var w = watchers.NewWatchers(watcherCtx, config)
