@@ -48,21 +48,26 @@ type authToken struct {
 	expire time.Time
 }
 
-func NewIntegrationManager() {
+// NewIntegrationManager builds the global IntegrationService and
+// starts its background watcher. It returns an error instead of
+// panicking, so callers (cmd/backend/app) can decide whether to
+// klog.Fatal or continue with degraded functionality. The previous
+// `panic(err)` made any transient API-server hiccup at startup
+// produce a panic stack instead of a single clear log line.
+func NewIntegrationManager() error {
 	config, err := ctrl.GetConfig()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("ctrl.GetConfig: %w", err)
 	}
 
 	client, err := dynamic.NewForConfig(config)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("dynamic.NewForConfig: %w", err)
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		klog.Errorf("Failed to create kube client: %v", err)
-		panic(err)
+		return fmt.Errorf("kubernetes.NewForConfig: %w", err)
 	}
 
 	IntegrationService = &integration{
@@ -73,6 +78,7 @@ func NewIntegrationManager() {
 	}
 
 	IntegrationService.watch()
+	return nil
 }
 
 func IntegrationManager() *integration {

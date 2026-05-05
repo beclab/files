@@ -180,7 +180,9 @@ user created with the credentials from options "username" and "password".`,
 		seaserv.InitSeaRPC()
 
 		// step8: integration
-		integration.NewIntegrationManager()
+		if err := integration.NewIntegrationManager(); err != nil {
+			klog.Fatalf("init integration manager: %v", err)
+		}
 		upload.Start()
 
 		coord := lifecycle.New()
