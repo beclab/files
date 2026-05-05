@@ -192,6 +192,9 @@ user created with the credentials from options "username" and "password".`,
 		coord.Add("redis", 5*time.Second, func(context.Context) error {
 			return redisutils.Close()
 		})
+		coord.Add("global-nodes", 3*time.Second, func(ctx context.Context) error {
+			return global.GlobalNode.Stop(ctx)
+		})
 
 		// step9: watcher
 		watcherCtx, watcherCancel := context.WithCancel(context.Background())
