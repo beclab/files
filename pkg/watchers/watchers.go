@@ -215,8 +215,12 @@ func AddToWatchers[R any](w *Watchers, gvr schema.GroupVersionResource, handler 
 		}
 		_, err := informer.Informer().AddEventHandler(newHandler)
 		if err != nil {
-			klog.Error("add to subscriber to watchers error, ", err, ", ", gvr.String())
-			panic(err)
+			// Previously this panicked, taking the whole process
+			// down at startup if a single GVR registration failed.
+			// AddToWatchers already returns an error - propagate it
+			// so the caller can decide (log+continue vs fatal).
+			klog.Errorf("add subscriber to watchers error, gvr=%s: %v", gvr.String(), err)
+			return fmt.Errorf("add event handler for %s: %w", gvr.String(), err)
 		}
 	}
 

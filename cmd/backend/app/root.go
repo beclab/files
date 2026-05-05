@@ -196,9 +196,15 @@ user created with the credentials from options "username" and "password".`,
 		// step9: watcher
 		watcherCtx, watcherCancel := context.WithCancel(context.Background())
 		var w = watchers.NewWatchers(watcherCtx, config)
-		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
-		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
-		watchers.AddToWatchers[models.User](w, models.UserGVR, integration.IntegrationManager().HandlerEvent())
+		if err := watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent()); err != nil {
+			klog.Fatalf("register Node watcher: %v", err)
+		}
+		if err := watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent()); err != nil {
+			klog.Fatalf("register StatefulSet watcher: %v", err)
+		}
+		if err := watchers.AddToWatchers[models.User](w, models.UserGVR, integration.IntegrationManager().HandlerEvent()); err != nil {
+			klog.Fatalf("register User watcher: %v", err)
+		}
 
 		var watcherWG sync.WaitGroup
 		watcherWG.Add(1)
