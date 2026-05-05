@@ -700,11 +700,19 @@ func GetFileNameFromPath(s string) (string, bool) {
 	} else if s == "" {
 		return "", true
 	}
+	// Note: the second return value is "is *not* a file" - i.e. it
+	// returns true when the input ends with "/". The historic name of
+	// this flag is preserved.
 	var isFile = strings.HasSuffix(s, "/")
 	var tmp = strings.TrimSuffix(s, "/")
 	var p = strings.LastIndex(tmp, "/")
-	var r = tmp[p:]
-	r = strings.Trim(r, "/")
+	if p < 0 {
+		// No "/" in tmp - it's already a bare basename. The previous
+		// implementation did `tmp[p:]` here, which is `tmp[-1:]` and
+		// panics on slice bounds.
+		return tmp, !isFile
+	}
+	r := strings.Trim(tmp[p:], "/")
 
 	return r, !isFile
 }
