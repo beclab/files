@@ -102,18 +102,22 @@ func (t *taskManager) ResumeTask(owner, taskId string) error {
 
 	var task = val.(*Task)
 
-	if task.state != common.Paused {
-		return fmt.Errorf("task is not paused")
-	}
-
 	var ctx, cancel = context.WithCancel(context.Background())
 
+	task.mu.Lock()
+	if task.state != common.Paused {
+		task.mu.Unlock()
+		cancel()
+		return fmt.Errorf("task is not paused")
+	}
 	task.ctx = ctx
 	task.ctxCancel = cancel
 	task.suspend = false
 	task.state = common.Pending
+	funcs := task.funcs
+	task.mu.Unlock()
 
-	return task.Execute(task.funcs...)
+	return task.Execute(funcs...)
 }
 
 // pause
@@ -128,12 +132,15 @@ func (t *taskManager) PauseTask(owner, taskId string) error {
 
 	var task = val.(*Task)
 
+	task.mu.Lock()
 	if task.state != common.Pending && task.state != common.Running {
+		task.mu.Unlock()
 		return fmt.Errorf("task is not pending or running")
 	}
-
 	task.suspend = true
 	task.wasPaused = true
+	task.mu.Unlock()
+
 	go task.Cancel()
 
 	return nil
@@ -159,7 +166,9 @@ func (t *taskManager) CancelTask(owner, taskId string, all string) {
 	}
 
 	task := val.(*Task)
+	task.mu.Lock()
 	task.suspend = false
+	task.mu.Unlock()
 	go task.Cancel()
 }
 
@@ -177,6 +186,7 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 	}
 
 	task := val.(*Task)
+	snap := task.snapshot()
 
 	var src = task.param.Src
 	var dst = task.param.Dst
@@ -207,14 +217,14 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 		Dst:           dstUri,
 		DstPath:       dstFileName,
 		Src:           srcUri,
-		CurrentPhase:  task.currentPhase,
-		TotalPhases:   task.totalPhases,
-		Progress:      task.progress,
-		Transferred:   task.transfer,
-		TotalFileSize: task.totalSize,
-		TidyDirs:      task.tidyDirs,
-		Status:        task.state,
-		ErrorMessage:  task.message,
+		CurrentPhase:  snap.CurrentPhase,
+		TotalPhases:   snap.TotalPhases,
+		Progress:      snap.Progress,
+		Transferred:   snap.Transfer,
+		TotalFileSize: snap.TotalSize,
+		TidyDirs:      snap.TidyDirs,
+		Status:        snap.State,
+		ErrorMessage:  snap.Message,
 		PauseAble:     pauseAble,
 	}
 
@@ -226,26 +236,34 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 func (t *taskManager) GetTasksByStatus(owner, status string) []*TaskInfo {
 	userPool := t.getOrCreateUserPool(owner)
 
-	var tasks []*Task
+	type taskWithSnap struct {
+		task *Task
+		snap taskSnapshot
+	}
+
+	var tasks []taskWithSnap
 	var result []*TaskInfo
 	userPool.tasks.Range(func(key, value any) bool {
 		task := value.(*Task)
-		if strings.Contains(status, task.state) {
-			tasks = append(tasks, task)
+		snap := task.snapshot()
+		if strings.Contains(status, snap.State) {
+			tasks = append(tasks, taskWithSnap{task: task, snap: snap})
 		}
 
 		return true
 	})
 
-	if tasks == nil || len(tasks) == 0 {
+	if len(tasks) == 0 {
 		return result
 	}
 
 	sort.Slice(tasks, func(i, j int) bool {
-		return tasks[i].createAt.Before(tasks[j].createAt) // asc
+		return tasks[i].task.createAt.Before(tasks[j].task.createAt) // asc
 	})
 
-	for _, task := range tasks {
+	for _, ts := range tasks {
+		task := ts.task
+		snap := ts.snap
 		var src = task.param.Src
 		var dst = task.param.Dst
 
@@ -270,14 +288,14 @@ func (t *taskManager) GetTasksByStatus(owner, status string) []*TaskInfo {
 			Dst:           dstUri,
 			DstPath:       dstFileName,
 			Src:           srcUri,
-			CurrentPhase:  task.currentPhase,
-			TotalPhases:   task.totalPhases,
-			Progress:      task.progress,
-			Transferred:   task.transfer,
-			TotalFileSize: task.totalSize,
-			TidyDirs:      task.tidyDirs,
-			Status:        task.state,
-			ErrorMessage:  task.message,
+			CurrentPhase:  snap.CurrentPhase,
+			TotalPhases:   snap.TotalPhases,
+			Progress:      snap.Progress,
+			Transferred:   snap.Transfer,
+			TotalFileSize: snap.TotalSize,
+			TidyDirs:      snap.TidyDirs,
+			Status:        snap.State,
+			ErrorMessage:  snap.Message,
 		}
 
 		result = append(result, res)
@@ -297,7 +315,7 @@ func (t *taskManager) ClearTasks() {
 
 			task := taskValue.(*Task)
 
-			if common.ListContains([]string{common.Completed, common.Failed, common.Canceled}, task.state) {
+			if common.ListContains([]string{common.Completed, common.Failed, common.Canceled}, task.getState()) {
 				if task.createAt.Before(time.Now().Add(-12 * time.Hour)) {
 					tasks = append(tasks, task)
 				}
