@@ -43,7 +43,7 @@ func (t *Task) DownloadFromFiles() error {
 	var filesServerIp = filesServer.Status.PodIP
 
 	filesServerUrl := fmt.Sprintf("http://%s/api/tree/%s/%s/%s", filesServerIp, src.FileType, src.Extend, strings.TrimPrefix(src.Path, "/"))
-	filesListsReq, err := http.NewRequest("GET", filesServerUrl, nil)
+	filesListsReq, err := http.NewRequestWithContext(t.ctx, "GET", filesServerUrl, nil)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (t *Task) DownloadFromFiles() error {
 		klog.Infof("[Task] Id: %s, download file url %s, write file: %s", t.id, downloadUrl, filePath)
 
 		var downloadReq *http.Request
-		downloadReq, err = http.NewRequest("GET", downloadUrl, nil)
+		downloadReq, err = http.NewRequestWithContext(t.ctx, "GET", downloadUrl, nil)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, download new request failed, url: %s, error: %v", t.id, downloadUrl, err)
 			break
