@@ -32,29 +32,59 @@ type Data struct {
 	UserPvcMap   map[string]string
 	CachePvcMap  map[string]string
 	mu           sync.RWMutex
+
+	// Background-refresh lifecycle.
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 func InitGlobalData(config *rest.Config) error {
+	ctx, cancel := context.WithCancel(context.Background())
 	GlobalData = &Data{
 		k8sClient:    kubernetes.NewForConfigOrDie(config),
 		k8sInterface: dynamic.NewForConfigOrDie(config),
 		UserPvcMap:   make(map[string]string),
 		CachePvcMap:  make(map[string]string),
+		cancel:       cancel,
+		done:         make(chan struct{}),
 	}
 
 	if err := GlobalData.getGlobalData(); err != nil {
+		cancel()
+		close(GlobalData.done)
 		return err
 	}
 
 	go func() {
+		defer close(GlobalData.done)
 		ticker := time.NewTicker(120 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			GlobalData.getGlobalData()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				GlobalData.getGlobalData()
+			}
 		}
 	}()
 
 	return nil
+}
+
+// Stop ends the background refresh goroutine and waits for it to
+// exit. Safe to call multiple times.
+func (g *Data) Stop(ctx context.Context) error {
+	if g == nil || g.cancel == nil {
+		return nil
+	}
+	g.cancel()
+	select {
+	case <-g.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (g *Data) GetPvcUser(user string) string {
