@@ -209,7 +209,11 @@ func (s *CloudStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHand
 
 	var serve = s.service.command.GetServe().Get(configName, path, &contextArgs.QueryParam.Header)
 
-	var modTime, _ = time.Parse(time.RFC3339Nano, fileMeta.Item.ModTime)
+	// Last-modified is informational, not an expiry check; on parse
+	// failure leave modTime as the zero value (same as before) but
+	// at least log it so a malformed cloud-provider timestamp is
+	// visible in operations.
+	modTime, _ := common.ParseRFC3339Nano(fileMeta.Item.ModTime)
 	return &models.RawHandlerResponse{
 		IsCloud:      true,
 		ReadCloser:   serve.Body,

@@ -2239,7 +2239,13 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("GetToken, sharePath expireTime: %s, shareId: %s", sharePath.ExpireTime, req.PathId)
 
-	expireTime, _ := time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
+	expireTime, ok := common.ParseRFC3339Nano(sharePath.ExpireTime)
+	if !ok {
+		// Treat unparseable expire as expired; do not return the
+		// year-1 zero-time Unix value to the client.
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+		return
+	}
 	if time.Now().After(expireTime) {
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expireTime.Unix())
 		return
