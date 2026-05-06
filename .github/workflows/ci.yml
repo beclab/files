@@ -56,6 +56,8 @@ jobs:
             echo "hz update -idl $f"
             hz update -idl "$f"
           done
+          cd ../..
+          go mod tidy
 
       - name: Compute build/test package list
         # pkg/media/mediabrowser/common/net and pkg/media/api have
@@ -74,11 +76,16 @@ jobs:
           xargs go build < .ci-pkgs.txt
 
       - name: Test (race detector)
+        # -vet=off: vet is run separately as an advisory step below;
+        # without this flag `go test` runs vet by default and would
+        # fail on pre-existing vet warnings in packages like
+        # pkg/media/ and pkg/hertz/.
+        #
         # -race catches the data races that PRs #240/#241/#242/#244/
         # #254/#266/#267 fixed; we keep -count=1 to defeat the test
         # cache and -timeout to bound flakes from leak / time tests.
         run: |
-          xargs go test -race -count=1 -timeout=180s < .ci-pkgs.txt
+          xargs go test -race -vet=off -count=1 -timeout=180s < .ci-pkgs.txt
 
       - name: Vet
         # Advisory until pre-existing "unreachable code" reports are

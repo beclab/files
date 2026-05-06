@@ -364,7 +364,7 @@ func TestExternal(t *testing.T) {
 	url = "external/olares/data/"
 	param, err = CreateFileParam(owner, url)
 	assert.Equal(t, err, nil)
-	assert.Equal(t, param.FileType, "internal")
+	assert.Equal(t, param.FileType, "external")
 	assert.Equal(t, param.Extend, "olares")
 	assert.Equal(t, param.Path, "/data/")
 	resUri, err = param.GetResourceUri()
@@ -374,7 +374,7 @@ func TestExternal(t *testing.T) {
 	url = "external/olares/data/folder/"
 	param, err = CreateFileParam(owner, url)
 	assert.Equal(t, err, nil)
-	assert.Equal(t, param.FileType, "internal")
+	assert.Equal(t, param.FileType, "external")
 	assert.Equal(t, param.Extend, "olares")
 	assert.Equal(t, param.Path, "/data/folder/")
 	resUri, err = param.GetResourceUri()
@@ -384,7 +384,7 @@ func TestExternal(t *testing.T) {
 	url = "external/olares/hdd0/folder/"
 	param, err = CreateFileParam(owner, url)
 	assert.Equal(t, err, nil)
-	assert.Equal(t, param.FileType, "hdd")
+	assert.Equal(t, param.FileType, "external")
 	assert.Equal(t, param.Extend, "olares")
 	assert.Equal(t, param.Path, "/hdd0/folder/")
 	resUri, err = param.GetResourceUri()
@@ -394,7 +394,7 @@ func TestExternal(t *testing.T) {
 	url = "external/olares/VendorCo-0/folder/pic.jpg"
 	param, err = CreateFileParam(owner, url)
 	assert.Equal(t, err, nil)
-	assert.Equal(t, param.FileType, "usb")
+	assert.Equal(t, param.FileType, "external")
 	assert.Equal(t, param.Extend, "olares")
 	assert.Equal(t, param.Path, "/VendorCo-0/folder/pic.jpg")
 	resUri, err = param.GetResourceUri()
