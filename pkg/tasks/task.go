@@ -136,6 +136,23 @@ func (t *Task) getState() string {
 	return t.state
 }
 
+// appendDetail appends one line to t.details under the lock.
+// Phase functions (rsync / move / checkJobStats / ...) call this
+// instead of `t.details = append(t.details, ...)` directly so
+// concurrent snapshot() readers do not race the slice header.
+func (t *Task) appendDetail(line string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.details = append(t.details, line)
+}
+
+// setTidyDirs flips t.tidyDirs to v under the lock.
+func (t *Task) setTidyDirs(v bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.tidyDirs = v
+}
+
 // ~ Cancel
 func (t *Task) Cancel() {
 	t.ctxCancel()
