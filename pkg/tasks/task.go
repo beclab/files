@@ -136,6 +136,70 @@ func (t *Task) getState() string {
 	return t.state
 }
 
+// pausedSnapshot is a consistent view of the worker's pause /
+// resume state. Use Task.pausedSnap() to acquire one rather than
+// touching t.wasPaused / t.pausedParam / t.pausedPhase /
+// t.pausedSyncMkdir directly: PauseTask writes those fields from
+// the HTTP goroutine and the worker reads them across phases, so
+// without a mutex on both sides the writes are not guaranteed to
+// be visible per the Go memory model.
+type pausedSnapshot struct {
+	WasPaused bool
+	Param     *models.FileParam
+	Phase     int
+	SyncMkdir bool
+}
+
+func (t *Task) pausedSnap() pausedSnapshot {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return pausedSnapshot{
+		WasPaused: t.wasPaused,
+		Param:     t.pausedParam,
+		Phase:     t.pausedPhase,
+		SyncMkdir: t.pausedSyncMkdir,
+	}
+}
+
+// markPaused records the pause checkpoint when a phase decides to
+// stop progressing (typically after isCancel + suspend).
+func (t *Task) markPaused(param *models.FileParam, phase int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.pausedParam = param
+	t.pausedPhase = phase
+}
+
+// setPausedSyncMkdir sets t.pausedSyncMkdir under the lock.
+func (t *Task) setPausedSyncMkdir(v bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.pausedSyncMkdir = v
+}
+
+// clearPausedParam sets t.pausedParam to nil under the lock.
+func (t *Task) clearPausedParam() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.pausedParam = nil
+}
+
+// takePausedParam atomically reads and clears t.pausedParam.
+func (t *Task) takePausedParam() *models.FileParam {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	p := t.pausedParam
+	t.pausedParam = nil
+	return p
+}
+
+// setPausedParam writes t.pausedParam under the lock.
+func (t *Task) setPausedParam(p *models.FileParam) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.pausedParam = p
+}
+
 // ~ Cancel
 func (t *Task) Cancel() {
 	t.ctxCancel()
