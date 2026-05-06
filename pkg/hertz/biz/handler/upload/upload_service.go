@@ -327,12 +327,12 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	var originalUid = uid
 	if v, ok := seahub.GetAccessToken(uid); ok && v != "" {
 		uid = v
-		klog.Infof("[upload] Sync uploadChunks, uid: %s, originalUid: %s", uid, originalUid)
+		klog.V(4).Infof("[upload] Sync uploadChunks, using cached access token (path=%s, owner=%s)", requestPath, owner)
 	}
 
 	var executeRequest = func(uid string) (*http.Response, error) {
 		reqUrl := fmt.Sprintf("http://seafile:8082/%s/%s?ret-json=1", uploadType, uid)
-		klog.Infof("Sync uploadChunks, path: %s, owner: %s, uploadPath: %s, url: %s", requestPath, owner, uploadPath, reqUrl)
+		klog.Infof("Sync uploadChunks, path: %s, owner: %s, uploadPath: %s", requestPath, owner, uploadPath)
 
 		req, _ := http.NewRequest(http.MethodPost, reqUrl, bytes.NewReader(c.Request.Body()))
 
@@ -373,14 +373,14 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 			newUid, refreshErr := seahub.GetUploadLink(fileParam, "web", false, true)
 			if refreshErr == nil {
 				seahub.SetAccessToken(originalUid, newUid)
-				klog.Infof("[upload] Sync uploadChunks, update access token: %s -> %s", originalUid, newUid)
+				klog.V(4).Infof("[upload] Sync uploadChunks, refreshed access token (owner=%s, path=%s)", owner, requestPath)
 
 				resp, err = executeRequest(newUid)
 				if resp != nil {
 					defer resp.Body.Close()
 				}
 				if err == nil && resp.StatusCode == http.StatusOK {
-					klog.Infof("Retry success with new UID: %s", newUid)
+					klog.Infof("Sync uploadChunks: retry succeeded after token refresh (owner=%s, path=%s)", owner, requestPath)
 				}
 				if err != nil {
 					seahub.DeleteAccessToken(originalUid)

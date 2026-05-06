@@ -376,10 +376,9 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 	} else if fileParam.FileType == common.AwsS3 {
 		authToken, err := utils.GetAuthToken(bflName)
 		if err != nil {
-			klog.Infoln(err)
+			klog.Errorf("GetAuthToken failed for user=%s: %v", bflName, err)
 			return "", err
 		}
-		klog.Infoln(authToken)
 		accountResp, err := utils.GetToken(bflName, fileParam.Extend, fileParam.FileType, authToken)
 		if err != nil {
 			return "", err
