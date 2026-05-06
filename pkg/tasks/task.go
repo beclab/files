@@ -133,6 +133,31 @@ func (t *Task) getState() string {
 	return t.state
 }
 
+// appendDetail appends one line to t.details under the lock.
+//
+// Phase functions (rsync / move / checkJobStats / ...) call this
+// instead of `t.details = append(t.details, ...)` directly so
+// concurrent snapshot() readers do not race the slice header.
+//
+// History note: an earlier version of this helper landed in
+// PR #266 but was lost when PR #267's merge resolved task.go's
+// conflict by taking the A.4b side, dropping the A.4a additions.
+// task_test.go.TestTask_HelpersUseLock pins the existence of
+// this function and setTidyDirs so a future merge that drops
+// them again fails CI rather than silently regressing.
+func (t *Task) appendDetail(line string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.details = append(t.details, line)
+}
+
+// setTidyDirs flips t.tidyDirs to v under the lock.
+func (t *Task) setTidyDirs(v bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.tidyDirs = v
+}
+
 // pausedSnapshot is a consistent view of the worker's pause /
 // resume state. Use Task.pausedSnap() to acquire one rather than
 // touching t.wasPaused / t.pausedParam / t.pausedPhase /

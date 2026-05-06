@@ -565,12 +565,12 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 
 			if !jobStatusData.Finished {
 				if transferFinished {
-					t.tidyDirs = true
+					t.setTidyDirs(true)
 				}
 				continue
 			} else {
 				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)
-				t.details = append(t.details, "finished")
+				t.appendDetail("finished")
 				done = true
 				err = nil
 			}
