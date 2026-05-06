@@ -130,7 +130,9 @@ user created with the credentials from options "username" and "password".`,
 
 		// Step1：Init postgres (including migration).
 		// For share, search and other features in the future
-		dal.Init()
+		if err := dal.Init(); err != nil {
+			klog.Fatalf("dal.Init: %v", err)
+		}
 
 		// Step2: Init redis
 		// For watcher, preview, smb and other features in the future

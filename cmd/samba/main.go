@@ -29,7 +29,9 @@ const (
 var rootCmd = &cobra.Command{
 	Use: "samba-share-server",
 	Run: func(cmd *cobra.Command, args []string) {
-		database.Init()
+		if err := database.Init(); err != nil {
+			klog.Fatalf("database.Init: %v", err)
+		}
 
 		f, err := client.NewFactory()
 		if err != nil {
