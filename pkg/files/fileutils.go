@@ -301,18 +301,29 @@ func Chown(fs afero.Fs, path string, uid, gid int) error {
 		klog.Infof("Function Chown execution time: %v\n", elapsed)
 	}()
 
-	var err error = nil
-	if fs == nil {
-		err = os.Chown(path, uid, gid)
-		err = os.Chmod(path, 0775)
-	} else {
-		err = fs.Chown(path, uid, gid)
-		err = fs.Chmod(path, 0775)
+	chown := os.Chown
+	chmod := os.Chmod
+	if fs != nil {
+		chown = fs.Chown
+		chmod = fs.Chmod
 	}
-	if err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", path, uid, err)
+
+	var errs []error
+	if err := chown(path, uid, gid); err != nil {
+		// Previously this assignment was overwritten by Chmod's result
+		// on the next line, silently dropping ownership errors.
+		errs = append(errs, fmt.Errorf("chown %s to %d:%d: %w", path, uid, gid, err))
 	}
-	return err
+	if err := chmod(path, 0775); err != nil {
+		errs = append(errs, fmt.Errorf("chmod %s to 0775: %w", path, err))
+	}
+
+	if len(errs) > 0 {
+		err := e.Join(errs...)
+		klog.Errorf("can't chown/chmod directory %s to user %d: %s", path, uid, err)
+		return err
+	}
+	return nil
 }
 
 func createAndChownDir(fs afero.Fs, path string, mode os.FileMode, uid, gid int) error {
@@ -424,10 +435,22 @@ func GetUidGid(fs afero.Fs, path string) (int, int, error) {
 	return int(statT.Uid), int(statT.Gid), nil
 }
 
-func WriteFile(fs afero.Fs, dst string, in io.Reader) (os.FileInfo, error) {
+// WriteFile writes the contents of `in` to dst on the host filesystem.
+//
+// dst must be an absolute path on the OS filesystem; it is opened
+// directly via os.OpenFile (no afero.Fs indirection). The parent
+// directory is created with MkdirAllWithChown if missing.
+//
+// The previous signature accepted an afero.Fs parameter that was
+// silently ignored - callers passed DefaultFs (a BasePathFs) but the
+// implementation always used os.OpenFile, so passing a non-OS Fs was
+// a bug attractor (writes would not have gone where the caller
+// expected). The parameter has been removed to make the contract
+// honest.
+func WriteFile(dst string, in io.Reader) (os.FileInfo, error) {
 	klog.Infoln("Before open ", dst)
 	dir, _ := path.Split(dst)
-	if err := MkdirAllWithChown(fs, dir, 0755, false, -1, -1); err != nil {
+	if err := MkdirAllWithChown(nil, dir, 0755, false, -1, -1); err != nil {
 		klog.Errorln(err)
 		return nil, err
 	}
@@ -700,11 +723,19 @@ func GetFileNameFromPath(s string) (string, bool) {
 	} else if s == "" {
 		return "", true
 	}
+	// Note: the second return value is "is *not* a file" - i.e. it
+	// returns true when the input ends with "/". The historic name of
+	// this flag is preserved.
 	var isFile = strings.HasSuffix(s, "/")
 	var tmp = strings.TrimSuffix(s, "/")
 	var p = strings.LastIndex(tmp, "/")
-	var r = tmp[p:]
-	r = strings.Trim(r, "/")
+	if p < 0 {
+		// No "/" in tmp - it's already a bare basename. The previous
+		// implementation did `tmp[p:]` here, which is `tmp[-1:]` and
+		// panics on slice bounds.
+		return tmp, !isFile
+	}
+	r := strings.Trim(tmp[p:], "/")
 
 	return r, !isFile
 }
@@ -778,7 +809,7 @@ func CheckCloudCreateCacheFile(p string, body io.ReadCloser) error {
 	if body == nil {
 		err = os.WriteFile(p, []byte{}, 0o644)
 	} else {
-		_, err = WriteFile(DefaultFs, p, body)
+		_, err = WriteFile(p, body)
 	}
 	if err != nil {
 		return err

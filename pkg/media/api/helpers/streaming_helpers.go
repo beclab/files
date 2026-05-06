@@ -164,10 +164,9 @@ func GetStreamingState(
 		bflName := httpContext.Request.Header.Get(common.REQUEST_HEADER_OWNER)
 		authToken, err := utils.GetAuthToken(bflName)
 		if err != nil {
-			klog.Error(err)
+			klog.Errorf("[media] GetAuthToken failed for user=%s: %v", bflName, err)
 			return nil, err
 		}
-		klog.Infof("[media] protocol, authToken: %s", authToken)
 		fileParam, err := models.CreateFileParam(bflName, httpContext.Query("PlayPath"))
 		if err != nil {
 			klog.Infof("[media] GetStreamingState, parse url error: %v\n", err)

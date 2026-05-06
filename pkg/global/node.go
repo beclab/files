@@ -37,29 +37,62 @@ type Node struct {
 	k8sClient *kubernetes.Clientset
 	Nodes     map[string]*v1.Node
 	mu        sync.RWMutex
+
+	// Background-refresh lifecycle. cancel ends the periodic
+	// getGlobalNodes loop; <-done blocks until the goroutine has
+	// fully exited so a graceful-shutdown coordinator can wait on
+	// it. Both are nil until InitGlobalNodes runs.
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 func InitGlobalNodes(config *rest.Config) error {
 	CurrentNodeName = os.Getenv("NODE_NAME")
 
+	ctx, cancel := context.WithCancel(context.Background())
 	GlobalNode = &Node{
 		k8sClient: kubernetes.NewForConfigOrDie(config),
 		Nodes:     make(map[string]*v1.Node),
+		cancel:    cancel,
+		done:      make(chan struct{}),
 	}
 
 	if err := GlobalNode.getGlobalNodes(); err != nil {
+		cancel()
+		close(GlobalNode.done)
 		return err
 	}
 
 	go func() {
+		defer close(GlobalNode.done)
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			GlobalNode.getGlobalNodes()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				GlobalNode.getGlobalNodes()
+			}
 		}
 	}()
 
 	return nil
+}
+
+// Stop ends the background refresh goroutine and waits for it to
+// exit. Safe to call multiple times.
+func (g *Node) Stop(ctx context.Context) error {
+	if g == nil || g.cancel == nil {
+		return nil
+	}
+	g.cancel()
+	select {
+	case <-g.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (g *Node) IsMasterNode(nodeName string) bool {

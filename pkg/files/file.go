@@ -156,12 +156,16 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
+			// Previously this early return left resp.Body unread/unclosed,
+			// leaking the connection. Close before bailing out.
+			_ = resp.Body.Close()
 			return nil, err
 		}
 
 		var responseMap map[string]interface{}
 		err = json.Unmarshal(respBody, &responseMap)
 		if err != nil {
+			_ = resp.Body.Close()
 			return nil, err
 		}
 
@@ -474,7 +478,14 @@ func (i *FileInfo) detectSubtitles() {
 	_, ext := common.SplitNameExt(i.Path)
 
 	// detect multiple languages. Base*.vtt
-	parentDir := strings.TrimRight(i.Path, i.Name)
+	//
+	// NOTE: previously this used `strings.TrimRight(i.Path, i.Name)`,
+	// which treats i.Name as a *cutset of runes* rather than a suffix
+	// to strip. For "/foo/bar/baz.mp4" with Name="baz.mp4" it stripped
+	// every trailing 'b','a','z','.','m','p','4' rune, producing
+	// "/foo/" or worse - subtitle detection silently broke for almost
+	// all real filenames. path.Dir gives us the actual parent.
+	parentDir := path.Dir(i.Path)
 	dir, err := afero.ReadDir(i.Fs, parentDir)
 	if err == nil {
 		base := strings.TrimSuffix(i.Name, ext)
