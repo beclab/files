@@ -309,7 +309,10 @@ func (t *taskManager) ClearTasks() {
 		if len(tasks) > 0 {
 			klog.Infof("Task remove %s tasks: %d", user, len(tasks))
 			for _, t := range tasks {
-				userPool.tasks.Delete(t)
+				// userPool.tasks stores entries keyed by task id (see
+				// Task.Execute -> LoadOrStore(t.id, t)); deleting by
+				// the *Task pointer would never match.
+				userPool.tasks.Delete(t.id)
 			}
 		}
 
