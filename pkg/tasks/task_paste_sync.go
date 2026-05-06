@@ -750,8 +750,20 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 		}
 	}
 
-	dir, _ := os.Open(srcFullPath)
+	// Open the source dir explicitly so we can:
+	//   1. propagate the os.Open error (previously discarded with `_`,
+	//      meaning a missing/permission-denied source caused dir to be
+	//      nil and the next dir.Readdir call to nil-deref panic the
+	//      worker goroutine);
+	//   2. close the file descriptor (previously leaked).
+	dir, err := os.Open(srcFullPath)
+	if err != nil {
+		return fmt.Errorf("UploadDirToSync open %s: %w", srcFullPath, err)
+	}
 	obs, err := dir.Readdir(-1)
+	if cerr := dir.Close(); cerr != nil && err == nil {
+		err = cerr
+	}
 	if err != nil {
 		return err
 	}
