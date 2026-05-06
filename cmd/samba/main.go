@@ -58,8 +58,12 @@ var rootCmd = &cobra.Command{
 
 		watcherCtx, watcherCancel := context.WithCancel(context.Background())
 		var w = watchers.NewWatchers(watcherCtx, config)
-		watchers.AddToWatchers[v1.ShareSamba](w, samba.SambaGVR, samba.SambaService.HandlerEvent())
-		watchers.AddToWatchers[models.User](w, models.UserGVR, samba.SambaService.UserHandlerEvent())
+		if err := watchers.AddToWatchers[v1.ShareSamba](w, samba.SambaGVR, samba.SambaService.HandlerEvent()); err != nil {
+			klog.Fatalf("register ShareSamba watcher: %v", err)
+		}
+		if err := watchers.AddToWatchers[models.User](w, models.UserGVR, samba.SambaService.UserHandlerEvent()); err != nil {
+			klog.Fatalf("register User watcher: %v", err)
+		}
 
 		var wg sync.WaitGroup
 		wg.Add(1)
