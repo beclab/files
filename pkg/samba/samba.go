@@ -73,6 +73,14 @@ type samba struct {
 	commands *commands
 	users    []string
 	runTime  time.Time
+
+	// Background-cleanup lifecycle. cancel ends the periodic
+	// deleteExpiredShares loop; <-done blocks until the goroutine
+	// has fully exited so a graceful-shutdown coordinator can wait
+	// on it.
+	cancelCleanup context.CancelFunc
+	cleanupDone   chan struct{}
+
 	sync.RWMutex
 }
 
@@ -184,8 +192,21 @@ func (s *samba) HandlerEvent() cache.ResourceEventHandler {
 }
 
 func (s *samba) deleteExpiredShares() {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancelCleanup = cancel
+	s.cleanupDone = make(chan struct{})
+
 	go func() {
-		for range time.NewTicker(5 * time.Minute).C {
+		defer close(s.cleanupDone)
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+
 			klog.Info("samba delete crds with ticker")
 			cli, err := s.factory.DynamicClient()
 			if err != nil {
@@ -193,7 +214,7 @@ func (s *samba) deleteExpiredShares() {
 				continue
 			}
 
-			res, err := cli.Resource(SambaGVR).Namespace(common.DefaultNamespace).List(context.Background(), metav1.ListOptions{})
+			res, err := cli.Resource(SambaGVR).Namespace(common.DefaultNamespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
 				klog.Errorf("samba get shares list error: %v", err)
 				continue
@@ -211,7 +232,7 @@ func (s *samba) deleteExpiredShares() {
 					continue
 				}
 
-				if err := cli.Resource(SambaGVR).Namespace(common.DefaultNamespace).Delete(context.Background(), v.Name, metav1.DeleteOptions{}); err != nil {
+				if err := cli.Resource(SambaGVR).Namespace(common.DefaultNamespace).Delete(ctx, v.Name, metav1.DeleteOptions{}); err != nil {
 					klog.Errorf("samba delete, delete failed, error: %v, operate: %s", err, v.Spec.Operator)
 					continue
 				}
@@ -220,6 +241,22 @@ func (s *samba) deleteExpiredShares() {
 			}
 		}
 	}()
+}
+
+// Stop ends the background expired-share cleanup loop and waits
+// for it to exit (or returns ctx.Err() on shutdown deadline).
+// Safe to call multiple times.
+func (s *samba) Stop(ctx context.Context) error {
+	if s == nil || s.cancelCleanup == nil {
+		return nil
+	}
+	s.cancelCleanup()
+	select {
+	case <-s.cleanupDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *samba) getUsers() {
