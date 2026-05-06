@@ -310,7 +310,11 @@ func CreateRPCMethod(
 		case "json":
 			fret = func(s string) (interface{}, error) { return _fret_json(s) }
 		default:
-			panic(&SearpcError{"Invalid return type"})
+			// Previously panicked on a bad retType, killing the
+			// process from inside an RPC dispatcher. Return an
+			// error instead so a misconfigured method only fails
+			// its own call.
+			return nil, &SearpcError{"Invalid return type: " + retType}
 		}
 
 		if len(args) != len(paramTypes) {

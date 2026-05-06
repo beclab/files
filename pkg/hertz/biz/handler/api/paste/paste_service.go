@@ -53,6 +53,22 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// Share==1 means SrcOwner / DstOwner / SrcSharePath / DstSharePath
+	// in the request body have *already* been resolved server-side by
+	// proxySharePaste. We refuse to take those fields from anyone else;
+	// otherwise a caller could paste from / to another user's drive by
+	// just setting Share=1 with crafted owner fields. The proxy attaches
+	// HeaderInternalShareToken to mark the forward as trusted.
+	if req.Share == 1 {
+		got := string(c.GetHeader(common.HeaderInternalShareToken))
+		if !common.EqualInternalShareToken(got) {
+			klog.Warningf("[paste] reject Share=1 request from %s without valid internal token (owner=%s)",
+				c.RemoteAddr(), owner)
+			c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": "share paste must go through the share proxy"})
+			return
+		}
+	}
+
 	var pasteParam = &models.PasteParam{
 		Owner:        owner,
 		Action:       req.Action,

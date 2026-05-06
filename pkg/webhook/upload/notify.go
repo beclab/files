@@ -64,12 +64,17 @@ type newItemsBody struct {
 }
 
 var (
-	queue      chan NewItem
-	startOnce  sync.Once
-	stopOnce   sync.Once
-	workerWG   sync.WaitGroup
-	httpClient = &http.Client{} // intentionally no Timeout; keep-alive enabled by default transport
-	dropped    uint64           // atomic counter; updated when the queue is full
+	queue     chan NewItem
+	startOnce sync.Once
+	stopOnce  sync.Once
+	workerWG  sync.WaitGroup
+	// httpClient enforces the per-request 30s deadline documented in the
+	// package comment. The previous implementation used &http.Client{}
+	// (no timeout), which contradicted the doc and let a single stuck
+	// TCP connection block the only worker indefinitely - the queue
+	// would silently fill until items started dropping.
+	httpClient = &http.Client{Timeout: 30 * time.Second}
+	dropped    uint64 // atomic counter; updated when the queue is full
 )
 
 func enabled() bool {

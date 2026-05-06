@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"context"
 	"files/pkg/common"
 	"files/pkg/files"
 	"fmt"
@@ -143,7 +142,15 @@ func (t *Task) rsync() error {
 	_, err = common.ExecRsync(t.ctx, rsync, args, t.updateProgressRsync)
 	if err != nil {
 		klog.Errorf("exec rsync error: %v", err)
-		return nil
+		// If the task was canceled, return the bare context error so
+		// Task.Execute matches it against TaskCancel == "context canceled"
+		// and transitions to Canceled/Paused. Otherwise surface the
+		// failure (returning nil here previously made a failed rsync
+		// look successful - silent data loss).
+		if cerr := t.ctx.Err(); cerr != nil {
+			return cerr
+		}
+		return fmt.Errorf("rsync %s -> %s: %v", srcPath, dstPath, err)
 	}
 	if strings.HasSuffix(dstPath, "/") {
 		err = files.ChownRecursive(dstPath, 1000, 1000)
@@ -183,7 +190,13 @@ func (t *Task) move() error {
 
 	var args = []string{srcPath, dstPath}
 
-	if _, err = common.ExecCommand(context.Background(), mv, args); err != nil {
+	if _, err = common.ExecCommand(t.ctx, mv, args); err != nil {
+		// Match the rsync handler: if cancellation already happened,
+		// surface the bare context error so Task.Execute maps it to
+		// Canceled/Paused (TaskCancel == "context canceled").
+		if cerr := t.ctx.Err(); cerr != nil {
+			return cerr
+		}
 		return fmt.Errorf("exec mv error: %v", err)
 	}
 

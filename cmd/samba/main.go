@@ -55,11 +55,18 @@ var rootCmd = &cobra.Command{
 		coord.Add("external-fsnotify", 2*time.Second, func(context.Context) error {
 			return global.ExternalWatcherClose()
 		})
+		coord.Add("samba-cleanup", 5*time.Second, func(ctx context.Context) error {
+			return samba.SambaService.Stop(ctx)
+		})
 
 		watcherCtx, watcherCancel := context.WithCancel(context.Background())
 		var w = watchers.NewWatchers(watcherCtx, config)
-		watchers.AddToWatchers[v1.ShareSamba](w, samba.SambaGVR, samba.SambaService.HandlerEvent())
-		watchers.AddToWatchers[models.User](w, models.UserGVR, samba.SambaService.UserHandlerEvent())
+		if err := watchers.AddToWatchers[v1.ShareSamba](w, samba.SambaGVR, samba.SambaService.HandlerEvent()); err != nil {
+			klog.Fatalf("register ShareSamba watcher: %v", err)
+		}
+		if err := watchers.AddToWatchers[models.User](w, models.UserGVR, samba.SambaService.UserHandlerEvent()); err != nil {
+			klog.Fatalf("register User watcher: %v", err)
+		}
 
 		var wg sync.WaitGroup
 		wg.Add(1)

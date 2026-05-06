@@ -126,7 +126,19 @@ func AddToWatchers[R any](w *Watchers, gvr schema.GroupVersionResource, handler 
 
 	if handler != nil {
 		convert := func(obj interface{}, newObj *R) error {
-			err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.(*unstructured.Unstructured).Object, newObj)
+			// Use the comma-ok form: a malformed event (cache
+			// tombstone, future API gymnastics, test injections, ...)
+			// would otherwise panic the watch goroutine with a
+			// "interface conversion" runtime error. Returning an
+			// error here makes the FilterFunc / handler simply
+			// drop the event.
+			u, ok := obj.(*unstructured.Unstructured)
+			if !ok {
+				err := fmt.Errorf("watchers: expected *unstructured.Unstructured, got %T", obj)
+				klog.Error(err)
+				return err
+			}
+			err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, newObj)
 			if err != nil {
 				klog.Error("convert obj error, ", err)
 				return err
@@ -215,8 +227,12 @@ func AddToWatchers[R any](w *Watchers, gvr schema.GroupVersionResource, handler 
 		}
 		_, err := informer.Informer().AddEventHandler(newHandler)
 		if err != nil {
-			klog.Error("add to subscriber to watchers error, ", err, ", ", gvr.String())
-			panic(err)
+			// Previously this panicked, taking the whole process
+			// down at startup if a single GVR registration failed.
+			// AddToWatchers already returns an error - propagate it
+			// so the caller can decide (log+continue vs fatal).
+			klog.Errorf("add subscriber to watchers error, gvr=%s: %v", gvr.String(), err)
+			return fmt.Errorf("add event handler for %s: %w", gvr.String(), err)
 		}
 	}
 
