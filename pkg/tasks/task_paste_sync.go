@@ -1133,19 +1133,29 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 				if response != nil {
 					statusCode = response.StatusCode
 					statusMsg = response.Status
+					// Function returns immediately after this branch,
+					// so closing inline (rather than defer) keeps
+					// the lifetime obvious; no behavioral change.
 					if response.Body != nil {
-						defer response.Body.Close()
+						_ = response.Body.Close()
 					}
 				}
 
 				klog.Warningf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries)
 				return searpc.SyncConnectionFailedError(fmt.Errorf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries))
 			}
-			defer response.Body.Close()
 
-			// Read the response body as a string
+			// Read the response body as a string. NOTE: previously
+			// this used `defer response.Body.Close()` inside the
+			// chunk loop, which queued one defer per chunk -- for a
+			// large file (thousands of chunks) the queued bodies
+			// stayed open for the full function lifetime, eating
+			// connections/fds. Close inline now.
 			postBody, err := io.ReadAll(response.Body)
 			klog.Infoln("ReadAll")
+			if cerr := response.Body.Close(); cerr != nil && err == nil {
+				err = cerr
+			}
 			if err != nil {
 				klog.Errorln("ReadAll error: ", err)
 				return err
