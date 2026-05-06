@@ -45,25 +45,26 @@ func (t *Task) DownloadFromSync() error {
 	var tempParam *models.FileParam
 	var dst *models.FileParam
 
+	ps := t.pausedSnap()
+	snap := t.snapshot()
 	if t.param.Dst.IsCloud() { // sync->cloud, if phase 1 complete
-		if t.pausedPhase == t.totalPhases {
-			klog.Infof("[Task] Id: %s, resume phase: %d", t.id, t.pausedPhase)
+		if ps.Phase == snap.TotalPhases {
+			klog.Infof("[Task] Id: %s, resume phase: %d", t.id, ps.Phase)
 			return nil
 		}
 	}
 
-	if t.wasPaused && t.pausedParam == nil {
+	if ps.WasPaused && ps.Param == nil {
 		klog.Errorf("[Task] Id: %s, paused param invalid", t.id)
 		return errors.New("pause param invalid")
 	}
 
-	if !t.param.Dst.IsCloud() && t.wasPaused {
-		t.param.Dst = t.pausedParam
-		t.pausedParam = nil
+	if !t.param.Dst.IsCloud() && ps.WasPaused {
+		t.param.Dst = t.takePausedParam()
 	}
 
 	if t.param.Dst.IsCloud() {
-		if !t.wasPaused {
+		if !ps.WasPaused {
 			srcName, isFile := files.GetFileNameFromPath(src.Path)
 			srcPath := srcName
 			if !isFile {
@@ -78,8 +79,7 @@ func (t *Task) DownloadFromSync() error {
 			}
 			dst = tempParam
 		} else {
-			dst = t.pausedParam
-			t.pausedParam = nil
+			dst = t.takePausedParam()
 		}
 	} else {
 		dst = t.param.Dst
@@ -90,7 +90,7 @@ func (t *Task) DownloadFromSync() error {
 		dst.Owner = dstOwner
 	}
 
-	klog.Infof("[Task] Id: %s, start, downloadFormSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s, psrc: %s, pdst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst), common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
+	klog.Infof("[Task] Id: %s, start, downloadFormSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s, psrc: %s, pdst: %s", t.id, snap.CurrentPhase, snap.TotalPhases, user, action, common.ToJson(src), common.ToJson(dst), common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
 
 	// check local free space
 	srcTotalSize, err := t.GetFromSyncFileCount("size") // file and dir can both use this
@@ -133,8 +133,7 @@ func (t *Task) DownloadFromSync() error {
 	}
 
 	if err != nil {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return searpc.SyncConnectionFailedError(err)
 	}
 
@@ -178,13 +177,17 @@ func (t *Task) UploadToSync() error {
 		src = t.param.Src
 	}
 
-	if t.wasPaused && t.pausedPhase == t.totalPhases {
-		if t.pausedParam == nil {
-			return fmt.Errorf("[Task] Id: %s, pause param invalid", t.id)
+	{
+		ps := t.pausedSnap()
+		snap := t.snapshot()
+		if ps.WasPaused && ps.Phase == snap.TotalPhases {
+			if ps.Param == nil {
+				return fmt.Errorf("[Task] Id: %s, pause param invalid", t.id)
+			}
+			dst = ps.Param
+		} else {
+			dst = t.param.Dst
 		}
-		dst = t.pausedParam
-	} else {
-		dst = t.param.Dst
 	}
 
 	if share == 1 {
@@ -209,7 +212,10 @@ func (t *Task) UploadToSync() error {
 
 	_, isFile := src.IsFile()
 
-	klog.Infof("[Task] Id: %s, start, uploadToSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(src), common.ToJson(dst))
+	{
+		snap := t.snapshot()
+		klog.Infof("[Task] Id: %s, start, uploadToSync, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, snap.CurrentPhase, snap.TotalPhases, user, action, common.ToJson(src), common.ToJson(dst))
+	}
 
 	if isFile {
 		err = t.UploadFileToSync(src, dst)
@@ -224,9 +230,8 @@ func (t *Task) UploadToSync() error {
 	}
 
 	if err != nil {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
-		t.pausedSyncMkdir = true
+		t.markPaused(dst, t.snapshot().CurrentPhase)
+		t.setPausedSyncMkdir(true)
 		return err
 	}
 
@@ -287,7 +292,10 @@ func (t *Task) SyncCopy() error {
 		return err
 	}
 
-	klog.Infof("[Task] Id: %s, start, syncCopy, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
+	{
+		snap := t.snapshot()
+		klog.Infof("[Task] Id: %s, start, syncCopy, phase: %d/%d, user: %s, action: %s, src: %s, dst: %s", t.id, snap.CurrentPhase, snap.TotalPhases, user, action, common.ToJson(t.param.Src), common.ToJson(t.param.Dst))
+	}
 
 	t.updateTotalSize(totalSize)
 
@@ -422,7 +430,7 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam, root bool) error 
 
 	if root {
 		if !t.param.Dst.IsCloud() {
-			if !t.wasPaused {
+			if !t.pausedSnap().WasPaused {
 				downloadPath = AddVersionSuffix(downloadPath, dst, true, "")
 			}
 
@@ -550,7 +558,7 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 		return fmt.Errorf("unrecognizable response format")
 	}
 
-	if !t.wasPaused {
+	if !t.pausedSnap().WasPaused {
 		downloadFilePath = AddVersionSuffix(downloadPath+"/"+dstFileName, dst, false, "")
 	} else {
 		downloadFilePath = filepath.Join(downloadPath, dstFileName)
@@ -710,7 +718,8 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 	var fdstBase = strings.TrimPrefix(dstFullPath, dstUri)
 
 	if root {
-		if !t.wasPaused || !t.pausedSyncMkdir {
+		ps := t.pausedSnap()
+		if !ps.WasPaused || !ps.SyncMkdir {
 			dstFullPath = AddVersionSuffix(dstFullPath, dst, true, "")
 			fdstBase = strings.TrimPrefix(dstFullPath, dstUri)
 		}
@@ -844,7 +853,8 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 
 	_, isUploadFile := t.param.Src.IsFile()
 
-	if isUploadFile && !t.wasPaused {
+	wasPaused := t.pausedSnap().WasPaused
+	if isUploadFile && !wasPaused {
 		newDstPath, err := t.manager.GetSyncDupName(t.id, src, dst, t.param.Src, t.param.Dst)
 		if err != nil {
 			return err
@@ -854,7 +864,7 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		klog.Infof("[Task] Id: %s, generate dup name: %s, dst: %s", t.id, newDstPath, common.ToJson(dst))
 	}
 
-	if t.wasPaused {
+	if wasPaused {
 
 		getFileId, _ := seahub.GetUploadFile(dst)
 		if getFileId != "" {
@@ -1220,8 +1230,7 @@ func (t *Task) CalculateSyncProgressRange(currentFileSize int64) (left, mid, rig
 
 func (t *Task) DoSyncCopy(src, dst *models.FileParam, root bool) error {
 	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return ctxErr
 	}
 
@@ -1253,8 +1262,7 @@ func (t *Task) DoSyncCopy(src, dst *models.FileParam, root bool) error {
 	}
 
 	if err != nil {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return err
 	}
 

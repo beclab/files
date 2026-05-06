@@ -24,9 +24,9 @@ func (t *Task) DownloadFromFiles() error {
 	var src = t.param.Src
 	var dst *models.FileParam
 
-	if t.wasPaused {
-		t.param.Dst = t.pausedParam
-		t.pausedParam = nil
+	if ps := t.pausedSnap(); ps.WasPaused {
+		t.param.Dst = ps.Param
+		t.clearPausedParam()
 	}
 
 	dst = t.param.Dst
@@ -116,7 +116,7 @@ func (t *Task) DownloadFromFiles() error {
 
 	dstPath := dstUri + dstPathPrefix
 
-	if !t.wasPaused {
+	if !t.pausedSnap().WasPaused {
 		dupNames, err := files.CollectDupNames(dstPath, srcFilePrefix, srcFileExt, isSrcFile)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, get dup name error: %v", t.id, err)
@@ -140,8 +140,7 @@ func (t *Task) DownloadFromFiles() error {
 	}
 
 	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return ctxErr
 	}
 
@@ -250,12 +249,12 @@ func (t *Task) DownloadFromFiles() error {
 	}
 
 	if err != nil {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		snap := t.snapshot()
+		t.markPaused(dst, snap.CurrentPhase)
 		return err
 	}
 
-	klog.Infof("[Task] Id: %s done! phase: %d", t.id, t.currentPhase)
+	klog.Infof("[Task] Id: %s done! phase: %d", t.id, t.snapshot().CurrentPhase)
 
 	return err
 }

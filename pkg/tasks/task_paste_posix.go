@@ -66,7 +66,7 @@ func (t *Task) Rsync() error {
 	}
 	klog.Infof("[Task] Id: %s, dstFree: %d", t.id, dstFree)
 
-	if !t.wasPaused {
+	if !t.pausedSnap().WasPaused {
 		generatedDstNewName, generatedDstNewPath, err := t.generateNewName(pathMeta)
 		if err != nil {
 			return fmt.Errorf("generate dst name error: %v", err)
@@ -87,7 +87,7 @@ func (t *Task) Rsync() error {
 		}
 
 		klog.Infof("[Task] Id: %s, move done!", t.id)
-		t.appendDetail("move done")
+		t.details = append(t.details, "move done")
 
 		return nil
 	}
@@ -95,7 +95,7 @@ func (t *Task) Rsync() error {
 	err = t.rsync() // rsync
 	if err != nil {
 		klog.Errorf("[Task] Id: %s, copy dst error: %v", t.id, err)
-		t.pausedParam = t.param.Dst
+		t.setPausedParam(t.param.Dst)
 		return err
 	}
 
@@ -186,7 +186,7 @@ func (t *Task) move() error {
 	dstPath := dst + t.param.Dst.Path
 
 	klog.Infof("[Task] Id: %s, conditon move, srcPath: %s, dstPath: %s", t.id, srcPath, dstPath)
-	t.appendDetail(fmt.Sprintf("move %s -> %s", srcPath, dstPath))
+	t.details = append(t.details, fmt.Sprintf("move %s -> %s", srcPath, dstPath))
 
 	var args = []string{srcPath, dstPath}
 

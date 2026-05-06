@@ -37,25 +37,26 @@ func (t *Task) DownloadFromCloud() error {
 	var srcOwner = t.param.SrcOwner
 	var dstOwner = t.param.DstOwner
 
+	ps := t.pausedSnap()
+	snap := t.snapshot()
 	if t.param.Dst.IsSync() { // cloud->sync, if phase 1 complete
-		if t.pausedPhase == t.totalPhases {
-			klog.Infof("[Task] Id: %s, resume phase: %d", t.id, t.pausedPhase)
+		if ps.Phase == snap.TotalPhases {
+			klog.Infof("[Task] Id: %s, resume phase: %d", t.id, ps.Phase)
 			return nil
 		}
 	}
 
-	if t.wasPaused && t.pausedParam == nil {
+	if ps.WasPaused && ps.Param == nil {
 		klog.Errorf("[Task] Id: %s, paused param invalid", t.id)
 		return errors.New("pause param invalid")
 	}
 
-	if !t.param.Dst.IsSync() && t.wasPaused {
-		t.param.Dst = t.pausedParam
-		t.pausedParam = nil
+	if !t.param.Dst.IsSync() && ps.WasPaused {
+		t.param.Dst = t.takePausedParam()
 	}
 
 	if t.param.Dst.IsSync() {
-		if !t.wasPaused {
+		if !ps.WasPaused {
 			// copying files to Seahub, the files will first be downloaded to the local
 			srcName, isFile := files.GetFileNameFromPath(src.Path)
 			srcPath := srcName
@@ -71,8 +72,7 @@ func (t *Task) DownloadFromCloud() error {
 			}
 			dst = cacheParam
 		} else {
-			dst = t.pausedParam
-			t.pausedParam = nil
+			dst = t.takePausedParam()
 		}
 	} else {
 		dst = t.param.Dst // posix
@@ -83,7 +83,7 @@ func (t *Task) DownloadFromCloud() error {
 		dst.Owner = dstOwner
 	}
 
-	klog.Infof("[Task] Id: %s, start, downloadFromCloud, phase: %d/%d, paused: %v, user: %s, action: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, t.wasPaused, user, action, common.ToJson(src), common.ToJson(dst))
+	klog.Infof("[Task] Id: %s, start, downloadFromCloud, phase: %d/%d, paused: %v, user: %s, action: %s, src: %s, dst: %s", t.id, snap.CurrentPhase, snap.TotalPhases, ps.WasPaused, user, action, common.ToJson(src), common.ToJson(dst))
 
 	// check local free space
 	dstUri, err := dst.GetResourceUri()
@@ -111,8 +111,8 @@ func (t *Task) DownloadFromCloud() error {
 
 	t.updateTotalSize(cloudSize)
 
-	if !t.wasPaused {
-		if t.currentPhase == t.totalPhases {
+	if !ps.WasPaused {
+		if snap.CurrentPhase == snap.TotalPhases {
 			var newDstPath string
 			newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, action, parentPath, src, dst, t.param.Src, t.param.Dst)
 			if err != nil {
@@ -136,8 +136,7 @@ func (t *Task) DownloadFromCloud() error {
 	}
 
 	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return ctxErr
 	}
 
@@ -184,8 +183,7 @@ func (t *Task) DownloadFromCloud() error {
 	}
 
 	if err != nil {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return err
 	}
 
@@ -214,7 +212,7 @@ func (t *Task) DownloadFromCloud() error {
 
 	}
 
-	klog.Infof("[Task] Id: %s done! done: %v, phase: %d, error: %v", t.id, done, t.currentPhase, err)
+	klog.Infof("[Task] Id: %s done! done: %v, phase: %d, error: %v", t.id, done, t.snapshot().CurrentPhase, err)
 
 	return err
 }
@@ -236,9 +234,8 @@ func (t *Task) UploadToCloud() error {
 	var src *models.FileParam
 	var dst *models.FileParam
 
-	if t.pausedParam != nil {
-		dst = t.pausedParam
-		t.pausedParam = nil
+	if p := t.takePausedParam(); p != nil {
+		dst = p
 	} else {
 		dst = t.param.Dst
 	}
@@ -253,7 +250,8 @@ func (t *Task) UploadToCloud() error {
 		src = t.param.Src
 	}
 
-	klog.Infof("[Task] Id: %s, start, uploadToCloud, phase: %d/%d, user: %s, action: %s, uploadParentPath: %s, src: %s, dst: %s", t.id, t.currentPhase, t.totalPhases, user, action, uploadParentPath, common.ToJson(src), common.ToJson(dst))
+	snap := t.snapshot()
+	klog.Infof("[Task] Id: %s, start, uploadToCloud, phase: %d/%d, user: %s, action: %s, uploadParentPath: %s, src: %s, dst: %s", t.id, snap.CurrentPhase, snap.TotalPhases, user, action, uploadParentPath, common.ToJson(src), common.ToJson(dst))
 
 	if action == common.ActionUpload && uploadParentPath == "" {
 		return fmt.Errorf("uploaded parent path invalid")
@@ -272,9 +270,10 @@ func (t *Task) UploadToCloud() error {
 
 	t.updateTotalSize(posixSize)
 
-	if !t.wasPaused || (t.wasPaused && t.pausedPhase != t.currentPhase) {
+	ps := t.pausedSnap()
+	if !ps.WasPaused || (ps.WasPaused && ps.Phase != snap.CurrentPhase) {
 		// check duplicated names and generate new name
-		klog.Infof("[Task] Id: %s, check dup name, wasPaused: %v, pausedPhase: %d", t.id, t.wasPaused, t.pausedPhase)
+		klog.Infof("[Task] Id: %s, check dup name, wasPaused: %v, pausedPhase: %d", t.id, ps.WasPaused, ps.Phase)
 		var newDstPath string
 		newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, action, uploadParentPath, src, dst, t.param.Src, t.param.Dst) // uploadToCloud
 		if err != nil {
@@ -288,8 +287,7 @@ func (t *Task) UploadToCloud() error {
 	}
 
 	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return ctxErr
 	}
 
@@ -316,8 +314,7 @@ func (t *Task) UploadToCloud() error {
 	}
 
 	if err != nil {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return err
 	}
 
@@ -353,7 +350,7 @@ func (t *Task) UploadToCloud() error {
 		}
 	}
 
-	klog.Infof("[Task] Id: %s done! done: %v, phase: %d, error: %v", t.id, done, t.currentPhase, err)
+	klog.Infof("[Task] Id: %s done! done: %v, phase: %d, error: %v", t.id, done, t.snapshot().CurrentPhase, err)
 
 	return err
 }
@@ -369,9 +366,8 @@ func (t *Task) CopyToCloud() error {
 	var src = t.param.Src
 	var dst = t.param.Dst
 
-	if t.pausedParam != nil {
-		dst = t.pausedParam
-		t.pausedParam = nil
+	if p := t.takePausedParam(); p != nil {
+		dst = p
 	}
 
 	klog.Infof("[Task] Id: %s, start, copyToCloud, user: %s, action: %s, src: %s, dst: %s", t.id, user, action, common.ToJson(src), common.ToJson(dst))
@@ -384,8 +380,9 @@ func (t *Task) CopyToCloud() error {
 	}
 	t.updateTotalSize(srcSize)
 
-	if !t.wasPaused {
-		klog.Infof("[Task] Id: %s, check dup name, wasPaused: %v, pausedPhase: %d", t.id, t.wasPaused, t.pausedPhase)
+	ps2 := t.pausedSnap()
+	if !ps2.WasPaused {
+		klog.Infof("[Task] Id: %s, check dup name, wasPaused: %v, pausedPhase: %d", t.id, ps2.WasPaused, ps2.Phase)
 		var newDstPath string
 		newDstPath, err = t.manager.GetCloudOrPosixDupNames(t.id, action, parentPath, src, dst, t.param.Src, t.param.Dst)
 		if err != nil {
@@ -399,8 +396,7 @@ func (t *Task) CopyToCloud() error {
 	}
 
 	if ctxCancel, ctxErr := t.isCancel(); ctxCancel {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return ctxErr
 	}
 
@@ -447,8 +443,7 @@ func (t *Task) CopyToCloud() error {
 	}
 
 	if err != nil {
-		t.pausedParam = dst
-		t.pausedPhase = t.currentPhase
+		t.markPaused(dst, t.snapshot().CurrentPhase)
 		return err
 	}
 
@@ -459,7 +454,7 @@ func (t *Task) CopyToCloud() error {
 		}
 	}
 
-	klog.Infof("[Task] Id: %s done! done: %v, phase: %d, error: %v", t.id, done, t.currentPhase, err)
+	klog.Infof("[Task] Id: %s done! done: %v, phase: %d, error: %v", t.id, done, t.snapshot().CurrentPhase, err)
 
 	return err
 
@@ -570,12 +565,12 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 
 			if !jobStatusData.Finished {
 				if transferFinished {
-					t.setTidyDirs(true)
+					t.tidyDirs = true
 				}
 				continue
 			} else {
 				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)
-				t.appendDetail("finished")
+				t.details = append(t.details, "finished")
 				done = true
 				err = nil
 			}
