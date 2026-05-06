@@ -2298,9 +2298,14 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 	// The token must be issued for *this* share. Without this check,
 	// any valid token could be paired with another share's path_id to
 	// read that share's metadata (IDOR).
+	//
+	// NB: do not log the token itself — it is a bearer credential and
+	// would otherwise be persisted to centralized log storage. The
+	// path_id pair is enough to debug the mismatch (see PR #226 review
+	// comment that introduced this check).
 	if shareToken.PathID != req.PathId {
-		klog.Warningf("GetSharePath, token/path_id mismatch: token=%s wants path_id=%s, token belongs to path_id=%s",
-			req.Token, req.PathId, shareToken.PathID)
+		klog.Warningf("GetSharePath, token/path_id mismatch: req.path_id=%s, token belongs to path_id=%s",
+			req.PathId, shareToken.PathID)
 		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, time.Now().Unix())
 		return
 	}
