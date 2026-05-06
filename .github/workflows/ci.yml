@@ -1,0 +1,101 @@
+name: CI
+
+# PR-triggered checks. The existing update-server.yml only builds
+# Docker images on push to main; nothing ran on pull requests, so
+# regressions of the form "data race / nil deref / ignored error /
+# leaked goroutine / silent time.Parse" had no automated guard.
+#
+# This workflow adds the minimum set:
+#   1. go build (everything except known-broken packages)
+#   2. go test -race (catches the bug class that PRs #240 / #241 /
+#      #242 / #244 / #254 / #266 / #267 just spent 9 PRs fixing)
+#   3. go vet (advisory; copylocks etc.)
+#   4. staticcheck (advisory; nil/dead/SA*)
+#
+# vet and staticcheck are advisory until the repo cleans up its
+# pre-existing reports (e.g. "unreachable code" in
+# pkg/hertz/biz/handler/api/share/share_service.go). Flip
+# continue-on-error: false once the baseline is clean.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Generate Hertz IDL bindings
+        # Mirror the IDL regeneration that update-server.yml does
+        # before `go build`. Without these files several handler
+        # packages do not compile.
+        run: |
+          export GOPATH=$HOME/go
+          export PATH=$GOPATH/bin:$PATH
+          go install github.com/cloudwego/hertz/cmd/hz@latest
+          go install github.com/cloudwego/thriftgo@latest
+          go mod tidy
+          go mod edit -replace github.com/apache/thrift=github.com/apache/thrift@v0.13.0
+          go mod tidy
+          cd pkg/hertz
+          for f in idl/*.thrift; do
+            echo "hz update -idl $f"
+            hz update -idl "$f"
+          done
+          cd ../..
+          go mod tidy
+
+      - name: Compute build/test package list
+        # pkg/media/mediabrowser/common/net and pkg/media/api have
+        # pre-existing build errors (orphan code referencing types
+        # that no longer exist). Production builds via cmd/backend
+        # do not import them, so excluding here matches reality
+        # rather than blocking every PR on legacy media issues.
+        run: |
+          go list ./... 2>/dev/null \
+            | grep -v -E '^files/pkg/media/mediabrowser/common/net$|^files/pkg/media/api$' \
+            > .ci-pkgs.txt
+          echo "package count:"; wc -l < .ci-pkgs.txt
+
+      - name: Build
+        run: |
+          xargs go build < .ci-pkgs.txt
+
+      - name: Test (race detector)
+        # -vet=off: vet is run separately as an advisory step below;
+        # without this flag `go test` runs vet by default and would
+        # fail on pre-existing vet warnings in packages like
+        # pkg/media/ and pkg/hertz/.
+        #
+        # -race catches the data races that PRs #240/#241/#242/#244/
+        # #254/#266/#267 fixed; we keep -count=1 to defeat the test
+        # cache and -timeout to bound flakes from leak / time tests.
+        run: |
+          xargs go test -race -vet=off -count=1 -timeout=180s < .ci-pkgs.txt
+
+      - name: Vet
+        # Advisory until pre-existing "unreachable code" reports are
+        # cleaned up. Flip continue-on-error to false once clean.
+        continue-on-error: true
+        run: |
+          xargs go vet < .ci-pkgs.txt
+
+      - name: Staticcheck
+        continue-on-error: true
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          xargs $(go env GOPATH)/bin/staticcheck < .ci-pkgs.txt
