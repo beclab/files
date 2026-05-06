@@ -301,18 +301,29 @@ func Chown(fs afero.Fs, path string, uid, gid int) error {
 		klog.Infof("Function Chown execution time: %v\n", elapsed)
 	}()
 
-	var err error = nil
-	if fs == nil {
-		err = os.Chown(path, uid, gid)
-		err = os.Chmod(path, 0775)
-	} else {
-		err = fs.Chown(path, uid, gid)
-		err = fs.Chmod(path, 0775)
+	chown := os.Chown
+	chmod := os.Chmod
+	if fs != nil {
+		chown = fs.Chown
+		chmod = fs.Chmod
 	}
-	if err != nil {
-		klog.Errorf("can't chown directory %s to user %d: %s", path, uid, err)
+
+	var errs []error
+	if err := chown(path, uid, gid); err != nil {
+		// Previously this assignment was overwritten by Chmod's result
+		// on the next line, silently dropping ownership errors.
+		errs = append(errs, fmt.Errorf("chown %s to %d:%d: %w", path, uid, gid, err))
 	}
-	return err
+	if err := chmod(path, 0775); err != nil {
+		errs = append(errs, fmt.Errorf("chmod %s to 0775: %w", path, err))
+	}
+
+	if len(errs) > 0 {
+		err := e.Join(errs...)
+		klog.Errorf("can't chown/chmod directory %s to user %d: %s", path, uid, err)
+		return err
+	}
+	return nil
 }
 
 func createAndChownDir(fs afero.Fs, path string, mode os.FileMode, uid, gid int) error {
