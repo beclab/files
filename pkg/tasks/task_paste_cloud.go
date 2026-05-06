@@ -541,26 +541,24 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 
 			if jobStatusData.Success && jobStatusData.Finished {
 				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)
-				var progress = (totalTransfers * 100) / totalSize
 				transferFinished = true
-				t.updateProgress(int(progress), transfers)
+				t.updateProgress(safeProgressPct(totalTransfers, totalSize), transfers)
 				done = true
 				err = nil
 				break
 			}
 
 			if transfers != totalSize {
-				var progress = (totalTransfers * 100) / totalSize
+				progress := safeProgressPct(totalTransfers, totalSize)
 				klog.Infof("[Task] Id: %s, dst: %s, progress: %d (%s/%s)", t.id, dstPath, progress, common.FormatBytes(totalTransfers), common.FormatBytes(totalSize))
-				t.updateProgress(int(progress), transfers)
+				t.updateProgress(progress, transfers)
 				continue
 			}
 
 			if transfers == totalSize && data.Transferring == nil && data.Bytes == data.TotalBytes {
 				klog.Infof("[Task] Id: %s, upload success, dst: %s", t.id, dstPath)
-				var progress = (totalTransfers * 100) / totalSize
 				transferFinished = true
-				t.updateProgress(int(progress), transfers)
+				t.updateProgress(safeProgressPct(totalTransfers, totalSize), transfers)
 			}
 
 			if !jobStatusData.Finished {
@@ -823,4 +821,26 @@ func (t *Task) encodeDuplicateNames(dirs []DriveDir) []DriveDir {
 		parentNameCount[parent][name]++
 	}
 	return result
+}
+
+// safeProgressPct returns floor(transferred * 100 / total), clamped to
+// [0, 100]. It returns 0 (rather than panicking) when total <= 0.
+//
+// checkJobStats originally had three sites that did
+// `(totalTransfers * 100) / totalSize` directly. Under any race that
+// produces totalSize == 0 (e.g. snapshot read before SetTotalSize on
+// the worker, or a phase that legitimately handles zero-sized inputs)
+// the integer divide blew up and crashed the worker goroutine.
+func safeProgressPct(transferred, total int64) int {
+	if total <= 0 {
+		return 0
+	}
+	pct := (transferred * 100) / total
+	if pct < 0 {
+		return 0
+	}
+	if pct > 100 {
+		return 100
+	}
+	return int(pct)
 }
