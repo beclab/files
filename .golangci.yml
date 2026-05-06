@@ -1,0 +1,73 @@
+# golangci-lint config for the files backend.
+#
+# Scope: a small high-signal set targeting the bug classes the team
+# has actually been hit by. Each enabled linter maps to merged fixes:
+#
+#   govet (copylocks)  -> PR #240 (Listing copylocks)
+#   staticcheck (SA*)  -> general nil/dead/SA*
+#   errcheck           -> PR #229 (Chown ignored err),
+#                         PR #234 (download nil-deref)
+#   bodyclose          -> PR #238 (MountPathIncluster body leak),
+#                         PR #264 (UploadFileToSync chunk defer)
+#   ineffassign        -> would have caught PR #229's overwritten err
+#   misspell           -> hygiene
+#
+# Everything else is left default-off to keep noise down. We can add
+# `unused`, `gocritic`, `revive`, etc. once the team is comfortable
+# with this baseline.
+#
+# Once CI is wired (see follow-up to .github/workflows/ci.yml), the
+# linter is intended to run in advisory mode (continue-on-error)
+# until the existing report baseline is burned down. Use
+#   golangci-lint run --new-from-rev=origin/main
+# to fail only on issues introduced by the current PR.
+
+run:
+  timeout: 5m
+  tests: true
+  # The CI workflow precomputes the working package list into
+  # .ci-pkgs.txt (because pkg/media/api and pkg/media/mediabrowser/
+  # common/net have pre-existing build errors). Local invocations
+  # should pass the same list explicitly:
+  #   golangci-lint run $(cat .ci-pkgs.txt | sed 's,files/,./,')
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - bodyclose
+    - ineffassign
+    - misspell
+
+linters-settings:
+  errcheck:
+    # The repo uses klog and fmt as the primary log surfaces; their
+    # error returns are not interesting and would create thousands
+    # of false positives.
+    exclude-functions:
+      - (k8s.io/klog/v2).Errorln
+      - (k8s.io/klog/v2).Errorf
+      - (k8s.io/klog/v2).Infoln
+      - (k8s.io/klog/v2).Infof
+      - (k8s.io/klog/v2).Warningln
+      - (k8s.io/klog/v2).Warningf
+      - fmt.Println
+      - fmt.Printf
+      - fmt.Fprintln
+      - fmt.Fprintf
+  govet:
+    enable:
+      - copylocks
+      - shadow
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    # Pre-existing legacy media subpackages with build errors that
+    # cmd/backend does not actually import. Match what ci.yml's
+    # .ci-pkgs.txt skips.
+    - pkg/media/api
+    - pkg/media/mediabrowser/common/net
