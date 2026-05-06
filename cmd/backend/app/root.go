@@ -196,8 +196,10 @@ user created with the credentials from options "username" and "password".`,
 		})
 		coord.Add("global-data", 3*time.Second, func(ctx context.Context) error {
 			return global.GlobalData.Stop(ctx)
+		})
 		coord.Add("global-nodes", 3*time.Second, func(ctx context.Context) error {
 			return global.GlobalNode.Stop(ctx)
+		})
 		coord.Add("integration-watcher", 5*time.Second, func(ctx context.Context) error {
 			return integration.IntegrationManager().Stop(ctx)
 		})
