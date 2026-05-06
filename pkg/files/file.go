@@ -156,12 +156,16 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
+			// Previously this early return left resp.Body unread/unclosed,
+			// leaking the connection. Close before bailing out.
+			_ = resp.Body.Close()
 			return nil, err
 		}
 
 		var responseMap map[string]interface{}
 		err = json.Unmarshal(respBody, &responseMap)
 		if err != nil {
+			_ = resp.Body.Close()
 			return nil, err
 		}
 
