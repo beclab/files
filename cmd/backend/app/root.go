@@ -135,7 +135,6 @@ user created with the credentials from options "username" and "password".`,
 		// Step2: Init redis
 		// For watcher, preview, smb and other features in the future
 		redisutils.InitRedis()
-		// redisutils.InitFolderAndRedis() // todo
 
 		// step3-0: clean buffer
 		//
