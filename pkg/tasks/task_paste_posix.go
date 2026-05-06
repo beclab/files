@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"context"
 	"files/pkg/common"
 	"files/pkg/files"
 	"fmt"
@@ -191,7 +190,13 @@ func (t *Task) move() error {
 
 	var args = []string{srcPath, dstPath}
 
-	if _, err = common.ExecCommand(context.Background(), mv, args); err != nil {
+	if _, err = common.ExecCommand(t.ctx, mv, args); err != nil {
+		// Match the rsync handler: if cancellation already happened,
+		// surface the bare context error so Task.Execute maps it to
+		// Canceled/Paused (TaskCancel == "context canceled").
+		if cerr := t.ctx.Err(); cerr != nil {
+			return cerr
+		}
 		return fmt.Errorf("exec mv error: %v", err)
 	}
 
