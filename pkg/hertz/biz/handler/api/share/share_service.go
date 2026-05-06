@@ -2239,7 +2239,13 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("GetToken, sharePath expireTime: %s, shareId: %s", sharePath.ExpireTime, req.PathId)
 
-	expireTime, _ := time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
+	expireTime, ok := common.ParseRFC3339Nano(sharePath.ExpireTime)
+	if !ok {
+		// Treat unparseable expire as expired; do not return the
+		// year-1 zero-time Unix value to the client.
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+		return
+	}
 	if time.Now().After(expireTime) {
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expireTime.Unix())
 		return
@@ -2289,7 +2295,27 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	expired, _ := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
+	// The token must be issued for *this* share. Without this check,
+	// any valid token could be paired with another share's path_id to
+	// read that share's metadata (IDOR).
+	//
+	// NB: do not log the token itself — it is a bearer credential and
+	// would otherwise be persisted to centralized log storage. The
+	// path_id pair is enough to debug the mismatch (see PR #226 review
+	// comment that introduced this check).
+	if shareToken.PathID != req.PathId {
+		klog.Warningf("GetSharePath, token/path_id mismatch: req.path_id=%s, token belongs to path_id=%s",
+			req.PathId, shareToken.PathID)
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, time.Now().Unix())
+		return
+	}
+
+	expired, err := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
+	if err != nil {
+		klog.Errorf("GetSharePath, parse token expire_at %q error: %v", shareToken.ExpireAt, err)
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, time.Now().Unix())
+		return
+	}
 	if time.Now().After(expired) {
 		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expired.Unix())
 		return
@@ -2299,9 +2325,20 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 	if err != nil {
 		klog.Errorf("GetSharePath, get path error: %v", err)
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+		return
+	}
+	if sharePath == nil {
+		klog.Errorf("GetSharePath, path not found: %s", req.PathId)
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+		return
 	}
 
-	expired, _ = time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
+	expired, err = time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
+	if err != nil {
+		klog.Errorf("GetSharePath, parse path expire_time %q error: %v", sharePath.ExpireTime, err)
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+		return
+	}
 	if time.Now().After(expired) {
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expired.Unix())
 		return
@@ -2345,6 +2382,7 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 	if err != nil {
 		klog.Errorf("ResetPassword, querySharePath error: %v", err)
 		handler.RespError(c, fmt.Sprintf("ResetPassword Error: %v", err))
+		return
 	}
 
 	if sharePath == nil {
@@ -2356,6 +2394,7 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 
 	if err = database.ResetExternalSharePasswordTx(sharePath); err != nil {
 		klog.Errorf("ResetPassword, update error: %v", err)
+		handler.RespError(c, fmt.Sprintf("ResetPassword Error: %v", err))
 		return
 	}
 
@@ -2385,13 +2424,19 @@ func ListSmbUser(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// Do NOT include the SMB password in the response. We previously
+	// returned the base64-decoded plaintext to anyone who could call
+	// this endpoint as `owner`; that was a credential disclosure path
+	// (logs / proxies / browser dev-tools / frontend caches all
+	// retain it). The id/name pair is enough for UI listing; the
+	// caller already has the password if they need it for a separate
+	// flow (e.g. mounting), and there is no other legitimate reason
+	// to read it back from the server.
 	var data = make([]map[string]string, 0)
 	for _, r := range res {
-		p, _ := common.Base64Decode(r.Password)
 		var d = make(map[string]string)
 		d["id"] = r.UserID
 		d["name"] = r.UserName
-		d["password"] = p
 		data = append(data, d)
 	}
 
@@ -2439,10 +2484,14 @@ func CreateSmbUser(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// Do NOT echo the password back. The caller just sent it, so this
+	// is not new information for them, but echoing it lengthens the
+	// surface where the credential can leak (response logs, browser
+	// network panel screenshots, proxy buffers, etc.). Return id/name
+	// only to confirm the create.
 	var result = make(map[string]string)
 	result["id"] = userId
 	result["name"] = userName
-	result["password"] = req.Password
 
 	handler.RespSuccess(c, result)
 }

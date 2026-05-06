@@ -3,12 +3,17 @@ package files
 import (
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/maruel/natural"
 )
 
 // Listing is a collection of files.
+//
+// NOTE: Listing previously embedded sync.Mutex but no caller in the
+// repo ever locked it. Combined with `ApplySort` being declared on a
+// value receiver, this triggered `go vet copylocks` warnings every
+// time a Listing value was copied (e.g. through `byName(l)` below).
+// The mutex has been removed because it was never load-bearing.
 type Listing struct {
 	Items         []*FileInfo `json:"items"`
 	NumDirs       int         `json:"numDirs"`
@@ -17,20 +22,22 @@ type Listing struct {
 	Sorting       Sorting     `json:"sorting"`
 	Size          int64       `json:"size"`
 	FileSize      int64       `json:"fileSize"`
-	sync.Mutex
 }
 
 // ApplySort applies the sort order using .Order and .Sort
-func (l Listing) ApplySort() {
+func (l *Listing) ApplySort() {
+	if l == nil {
+		return
+	}
 	// Check '.Order' to know how to sort
 	if !l.Sorting.Asc {
 		switch l.Sorting.By {
 		case "name":
-			sort.Sort(sort.Reverse(byName(l)))
+			sort.Sort(sort.Reverse(byName(*l)))
 		case "size":
-			sort.Sort(sort.Reverse(bySize(l)))
+			sort.Sort(sort.Reverse(bySize(*l)))
 		case "modified":
-			sort.Sort(sort.Reverse(byModified(l)))
+			sort.Sort(sort.Reverse(byModified(*l)))
 		default:
 			// If not one of the above, do nothing
 			return
@@ -38,13 +45,13 @@ func (l Listing) ApplySort() {
 	} else { // If we had more Orderings we could add them here
 		switch l.Sorting.By {
 		case "name":
-			sort.Sort(byName(l))
+			sort.Sort(byName(*l))
 		case "size":
-			sort.Sort(bySize(l))
+			sort.Sort(bySize(*l))
 		case "modified":
-			sort.Sort(byModified(l))
+			sort.Sort(byModified(*l))
 		default:
-			sort.Sort(byName(l))
+			sort.Sort(byName(*l))
 			return
 		}
 	}

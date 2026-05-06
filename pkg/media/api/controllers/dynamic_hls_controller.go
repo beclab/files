@@ -376,10 +376,9 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 	} else if fileParam.FileType == common.AwsS3 {
 		authToken, err := utils.GetAuthToken(bflName)
 		if err != nil {
-			klog.Infoln(err)
+			klog.Errorf("GetAuthToken failed for user=%s: %v", bflName, err)
 			return "", err
 		}
-		klog.Infoln(authToken)
 		accountResp, err := utils.GetToken(bflName, fileParam.Extend, fileParam.FileType, authToken)
 		if err != nil {
 			return "", err
@@ -1111,8 +1110,9 @@ func (d *DynamicHlsController) GetCurrentTranscodingIndex(playlistPath, segmentE
 
 func GetLastTranscodingFile(playlistPath string, segmentExtension string, fileSystem ioo.IFileSystem) *ioo.FileSystemMetadata {
 	folder := filepath.Dir(playlistPath)
-	if folder == "" {
-		panic(fmt.Errorf("path can't be a root directory: %s", playlistPath))
+	if folder == "" || folder == "." {
+		klog.Errorf("GetLastTranscodingFile: invalid playlist path (no parent dir): %q", playlistPath)
+		return nil
 	}
 
 	filePrefix := filepath.Base(playlistPath)

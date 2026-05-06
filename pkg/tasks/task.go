@@ -148,24 +148,33 @@ func (t *Task) Cancel() {
 		}
 	}
 
+	t.doneMu.Lock()
 	if !t.suspend {
 		t.state = common.Canceled
 	} else {
 		t.state = common.Paused
 	}
+	finalState := t.state
+	pausedParam := t.pausedParam
+	suspend := t.suspend
+	wasPaused := t.wasPaused
+	currentPhase := t.currentPhase
+	totalPhases := t.totalPhases
+	t.doneMu.Unlock()
 
-	klog.Infof("[Task] Id: %s, Cancel Final, state: %s, running: %v, suspend: %v, wasPaused: %v, phase: %d/%d, pause: %s, temp: %s", t.id, t.state, t.running, t.suspend, t.wasPaused, t.currentPhase, t.totalPhases, common.ToJson(t.pausedParam), common.ToJson(t.param.Temp))
+	klog.Infof("[Task] Id: %s, Cancel Final, state: %s, suspend: %v, wasPaused: %v, phase: %d/%d, pause: %s, temp: %s",
+		t.id, finalState, suspend, wasPaused, currentPhase, totalPhases, common.ToJson(pausedParam), common.ToJson(t.param.Temp))
 
-	if t.state == common.Canceled {
-		klog.Infof("[Task] Id: %s, Cancel Final, pause result: %s, temp result: %s", t.id, common.ToJson(t.pausedParam), common.ToJson(t.param.Temp))
+	if finalState == common.Canceled {
+		klog.Infof("[Task] Id: %s, Cancel Final, pause result: %s, temp result: %s", t.id, common.ToJson(pausedParam), common.ToJson(t.param.Temp))
 
-		if t.pausedParam != nil {
-			if t.pausedParam.FileType != common.Sync {
-				if e := rclone.Command.Clear(t.pausedParam); e != nil {
+		if pausedParam != nil {
+			if pausedParam.FileType != common.Sync {
+				if e := rclone.Command.Clear(pausedParam); e != nil {
 					klog.Errorf("[Task] Id: %s, Cancel Final, delete pause result error: %v", t.id, e)
 				}
 			} else {
-				if e := seahub.HandleDelete(t.pausedParam); e != nil {
+				if e := seahub.HandleDelete(pausedParam); e != nil {
 					klog.Errorf("[Task] Id: %s, Cancel Final, delete seahub pause result error: %v", t.id, e)
 				}
 			}
@@ -202,16 +211,24 @@ func (t *Task) Execute(fs ...func() error) error {
 		var err error
 
 		defer func() {
-			klog.Infof("[Task] Id: %s defer! status: %s, progress: %d, size: %d, transfer: %d, elapse: %d, error: %v",
-				t.id, t.state, t.progress, t.totalSize, t.transfer, time.Since(t.execAt), err)
 
 			t.endAt = time.Now()
 			t.running = false
+			state := t.state
+			progress := t.progress
+			transfer := t.transfer
+			totalSize := t.totalSize
+			elapsed := time.Since(t.execAt)
 			// Wake any goroutine blocked in Cancel().
+
+			klog.Infof("[Task] Id: %s defer! status: %s, progress: %d, size: %d, transfer: %d, elapse: %d, error: %v",
+				t.id, state, progress, totalSize, transfer, elapsed, err)
+
 			t.closeDone()
+
 		}()
 
-		if common.ListContains([]string{common.Canceled, common.Paused, common.Failed, common.Running, common.Completed}, t.state) {
+		if common.ListContains([]string{common.Canceled, common.Paused, common.Failed, common.Running, common.Completed}, t.getState()) {
 			return
 		}
 
@@ -223,8 +240,10 @@ func (t *Task) Execute(fs ...func() error) error {
 
 		for phase, f := range t.funcs {
 			t.currentPhase = phase + 1
-			// If f() is not the final stage, such as downloadFromCloud, and uploadToSync will be executed afterwards, the src and dst need to be reset. After entering the next phase, src and dst will be extracted again.
-			klog.Infof("[Task] Id: %s, exec phase: %d/%d", t.id, t.currentPhase, t.totalPhases)
+			currentPhase := t.currentPhase
+			totalPhases := t.totalPhases
+
+			klog.Infof("[Task] Id: %s, exec phase: %d/%d", t.id, currentPhase, totalPhases)
 			err = f()
 
 			if err != nil {

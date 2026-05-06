@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -137,9 +138,15 @@ user created with the credentials from options "username" and "password".`,
 		// redisutils.InitFolderAndRedis() // todo
 
 		// step3-0: clean buffer
-		err := os.RemoveAll("/data/buffer")
-		if err != nil {
-			klog.Fatalf("clean buffer failed: %v", err)
+		//
+		// The buffer dir was previously hardcoded as "/data/buffer".
+		// That ignored the configurable common.RootPrefix (e.g. for
+		// dev / non-default deployments) and the CacheBuffer
+		// constant the rest of the code uses (see download.go,
+		// diskcache/cache.go).
+		bufferDir := filepath.Join(common.RootPrefix, common.CacheBuffer)
+		if err := os.RemoveAll(bufferDir); err != nil {
+			klog.Fatalf("clean buffer %s failed: %v", bufferDir, err)
 		}
 
 		// Step3-1: Build IMG service
@@ -180,7 +187,9 @@ user created with the credentials from options "username" and "password".`,
 		seaserv.InitSeaRPC()
 
 		// step8: integration
-		integration.NewIntegrationManager()
+		if err := integration.NewIntegrationManager(); err != nil {
+			klog.Fatalf("init integration manager: %v", err)
+		}
 		upload.Start()
 
 		coord := lifecycle.New()
@@ -192,13 +201,28 @@ user created with the credentials from options "username" and "password".`,
 		coord.Add("redis", 5*time.Second, func(context.Context) error {
 			return redisutils.Close()
 		})
+		coord.Add("global-data", 3*time.Second, func(ctx context.Context) error {
+			return global.GlobalData.Stop(ctx)
+		})
+		coord.Add("global-nodes", 3*time.Second, func(ctx context.Context) error {
+			return global.GlobalNode.Stop(ctx)
+		})
+		coord.Add("integration-watcher", 5*time.Second, func(ctx context.Context) error {
+			return integration.IntegrationManager().Stop(ctx)
+		})
 
 		// step9: watcher
 		watcherCtx, watcherCancel := context.WithCancel(context.Background())
 		var w = watchers.NewWatchers(watcherCtx, config)
-		watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent())
-		watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent())
-		watchers.AddToWatchers[models.User](w, models.UserGVR, integration.IntegrationManager().HandlerEvent())
+		if err := watchers.AddToWatchers[corev1.Node](w, global.NodeGVR, global.GlobalNode.Handlerevent()); err != nil {
+			klog.Fatalf("register Node watcher: %v", err)
+		}
+		if err := watchers.AddToWatchers[appsv1.StatefulSet](w, appsv1.SchemeGroupVersion.WithResource("statefulsets"), global.GlobalData.HandlerEvent()); err != nil {
+			klog.Fatalf("register StatefulSet watcher: %v", err)
+		}
+		if err := watchers.AddToWatchers[models.User](w, models.UserGVR, integration.IntegrationManager().HandlerEvent()); err != nil {
+			klog.Fatalf("register User watcher: %v", err)
+		}
 
 		var watcherWG sync.WaitGroup
 		watcherWG.Add(1)

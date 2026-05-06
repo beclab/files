@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/pkg/errors"
@@ -209,17 +210,44 @@ func (c *Command) Run() error {
 		}
 	}()
 
-	var gErr error
+	// gErr is written by two background goroutines (the ctx-watcher
+	// and the stdout reader) and read by the main goroutine after
+	// cmd.Wait. Without synchronization this is a classic data race
+	// (-race fails). Guard reads/writes with gErrMu.
+	var (
+		gErrMu sync.Mutex
+		gErr   error
+	)
+	setGErr := func(e error) {
+		gErrMu.Lock()
+		if gErr == nil {
+			gErr = e
+		}
+		gErrMu.Unlock()
+	}
+	getGErr := func() error {
+		gErrMu.Lock()
+		defer gErrMu.Unlock()
+		return gErr
+	}
+
+	// Use WaitGroup so we don't read gErr until both background
+	// goroutines have stopped writing.
+	var bg sync.WaitGroup
+	bg.Add(2)
+
 	go func() {
+		defer bg.Done()
 		select {
 		case <-c.ctx.Done():
-			gErr = c.ctx.Err()
+			setGErr(c.ctx.Err())
 			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		case <-waitDone:
 		}
 	}()
 
 	go func() {
+		defer bg.Done()
 		defer close(c.Ch)
 		var reader = bufio.NewReader(stdout)
 		for {
@@ -230,7 +258,7 @@ func (c *Command) Run() error {
 				if err == io.EOF || errors.Is(err, os.ErrClosed) {
 					return
 				}
-				gErr = err
+				setGErr(err)
 				return
 			}
 
@@ -250,19 +278,22 @@ func (c *Command) Run() error {
 
 	close(waitDone)
 	<-reaperDone
+	bg.Wait()
+
+	finalGErr := getGErr()
 
 	if err != nil {
 		if errors.Is(err, syscall.ECHILD) {
 			err = nil
 		}
-		if gErr != nil {
-			return gErr
+		if finalGErr != nil {
+			return finalGErr
 		}
 		return err
 	}
 
-	if gErr != nil {
-		return gErr
+	if finalGErr != nil {
+		return finalGErr
 	}
 
 	return nil

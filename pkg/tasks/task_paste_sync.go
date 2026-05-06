@@ -750,8 +750,20 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 		}
 	}
 
-	dir, _ := os.Open(srcFullPath)
+	// Open the source dir explicitly so we can:
+	//   1. propagate the os.Open error (previously discarded with `_`,
+	//      meaning a missing/permission-denied source caused dir to be
+	//      nil and the next dir.Readdir call to nil-deref panic the
+	//      worker goroutine);
+	//   2. close the file descriptor (previously leaked).
+	dir, err := os.Open(srcFullPath)
+	if err != nil {
+		return fmt.Errorf("UploadDirToSync open %s: %w", srcFullPath, err)
+	}
 	obs, err := dir.Readdir(-1)
+	if cerr := dir.Close(); cerr != nil && err == nil {
+		err = cerr
+	}
 	if err != nil {
 		return err
 	}
@@ -1121,19 +1133,29 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 				if response != nil {
 					statusCode = response.StatusCode
 					statusMsg = response.Status
+					// Function returns immediately after this branch,
+					// so closing inline (rather than defer) keeps
+					// the lifetime obvious; no behavioral change.
 					if response.Body != nil {
-						defer response.Body.Close()
+						_ = response.Body.Close()
 					}
 				}
 
 				klog.Warningf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries)
 				return searpc.SyncConnectionFailedError(fmt.Errorf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries))
 			}
-			defer response.Body.Close()
 
-			// Read the response body as a string
+			// Read the response body as a string. NOTE: previously
+			// this used `defer response.Body.Close()` inside the
+			// chunk loop, which queued one defer per chunk -- for a
+			// large file (thousands of chunks) the queued bodies
+			// stayed open for the full function lifetime, eating
+			// connections/fds. Close inline now.
 			postBody, err := io.ReadAll(response.Body)
 			klog.Infoln("ReadAll")
+			if cerr := response.Body.Close(); cerr != nil && err == nil {
+				err = cerr
+			}
 			if err != nil {
 				klog.Errorln("ReadAll error: ", err)
 				return err

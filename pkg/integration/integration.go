@@ -40,6 +40,12 @@ type integration struct {
 	authTokenMu sync.Mutex
 	authToken   map[string]*authToken
 
+	// watcher lifecycle: cancel ends the periodic GetIntegrations
+	// loop; <-watcherDone returns once the goroutine has fully
+	// exited, so a graceful-shutdown coordinator can wait on it.
+	cancelWatcher context.CancelFunc
+	watcherDone   chan struct{}
+
 	sync.RWMutex
 }
 
@@ -48,21 +54,26 @@ type authToken struct {
 	expire time.Time
 }
 
-func NewIntegrationManager() {
+// NewIntegrationManager builds the global IntegrationService and
+// starts its background watcher. It returns an error instead of
+// panicking, so callers (cmd/backend/app) can decide whether to
+// klog.Fatal or continue with degraded functionality. The previous
+// `panic(err)` made any transient API-server hiccup at startup
+// produce a panic stack instead of a single clear log line.
+func NewIntegrationManager() error {
 	config, err := ctrl.GetConfig()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("ctrl.GetConfig: %w", err)
 	}
 
 	client, err := dynamic.NewForConfig(config)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("dynamic.NewForConfig: %w", err)
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		klog.Errorf("Failed to create kube client: %v", err)
-		panic(err)
+		return fmt.Errorf("kubernetes.NewForConfig: %w", err)
 	}
 
 	IntegrationService = &integration{
@@ -73,6 +84,7 @@ func NewIntegrationManager() {
 	}
 
 	IntegrationService.watch()
+	return nil
 }
 
 func IntegrationManager() *integration {
@@ -80,11 +92,40 @@ func IntegrationManager() *integration {
 }
 
 func (i *integration) watch() {
+	ctx, cancel := context.WithCancel(context.Background())
+	i.cancelWatcher = cancel
+	i.watcherDone = make(chan struct{})
+
 	go func() {
-		for range time.NewTicker(15 * time.Second).C {
-			i.GetIntegrations()
+		defer close(i.watcherDone)
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				i.GetIntegrations()
+			}
 		}
 	}()
+}
+
+// Stop ends the background watcher goroutine and waits for it to
+// exit. Safe to call multiple times. Intended to be wired into the
+// process-wide lifecycle coordinator so the loop does not keep
+// running (and making API calls) past graceful-shutdown.
+func (i *integration) Stop(ctx context.Context) error {
+	if i == nil || i.cancelWatcher == nil {
+		return nil
+	}
+	i.cancelWatcher()
+	select {
+	case <-i.watcherDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (i *integration) HandlerEvent() cache.ResourceEventHandler {
