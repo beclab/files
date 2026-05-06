@@ -76,6 +76,32 @@ func (m *Mount) GetMountedData() []files.DiskInfo {
 	return res
 }
 
+// hasMount reports whether the mount map contains base under read lock.
+// watchMounted previously read m.Mounted directly without the lock,
+// racing with getMounted's full-map replacement and the cron-driven
+// Updated() refresh. The Go runtime treats this as a map race and may
+// crash with a fatal error.
+func (m *Mount) hasMount(base string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.Mounted[base]
+	return ok
+}
+
+// snapshotMountedJSON returns a JSON encoding of the current mount
+// map taken under read lock. Used by watchMounted log lines that
+// previously dumped m.Mounted directly while another goroutine could
+// be replacing the map.
+func (m *Mount) snapshotMountedJSON() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]*files.DiskInfo, len(m.Mounted))
+	for k, v := range m.Mounted {
+		out[k] = v
+	}
+	return common.ToJson(out)
+}
+
 //func (m *Mount) watchDiskUsage() {
 //	go func() {
 //		ticker := time.NewTicker(10 * time.Second)
@@ -136,9 +162,10 @@ func (m *Mount) watchMounted() {
 				if e.Op == fsnotify.Create {
 					found := false
 					m.getMounted()
-					if _, exists := m.Mounted[filepath.Base(e.Name)]; exists {
+					base := filepath.Base(e.Name)
+					if m.hasMount(base) {
 						found = true
-						klog.Infof("Found %s in mounted disks (immediate), mounted: %+v", e.Name, m.Mounted)
+						klog.Infof("Found %s in mounted disks (immediate), mounted: %s", e.Name, m.snapshotMountedJSON())
 					} else {
 						retryDelay := 1 * time.Second
 						for i := 0; i < maxRetries; i++ {
@@ -146,9 +173,9 @@ func (m *Mount) watchMounted() {
 							klog.Infof("Retry %d for %s (wait %v)", i+1, e.Name, retryDelay)
 
 							m.getMounted()
-							if _, exists = m.Mounted[filepath.Base(e.Name)]; exists {
+							if m.hasMount(base) {
 								found = true
-								klog.Infof("Found %s in mounted disks after %d retries, mounted: %+v", e.Name, i+1, m.Mounted)
+								klog.Infof("Found %s in mounted disks after %d retries, mounted: %s", e.Name, i+1, m.snapshotMountedJSON())
 								break
 							}
 							retryDelay *= 2
@@ -156,7 +183,7 @@ func (m *Mount) watchMounted() {
 					}
 
 					if !found {
-						klog.Warningf("Failed to find %s in mounted disks after %d attempts, mounted: %+v", e.Name, maxRetries, m.Mounted)
+						klog.Warningf("Failed to find %s in mounted disks after %d attempts, mounted: %s", e.Name, maxRetries, m.snapshotMountedJSON())
 					}
 				} else {
 					m.getMounted()
