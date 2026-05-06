@@ -171,7 +171,9 @@ func (t *Task) DownloadFromFiles() error {
 		downloadResp, err = streamHTTPClient.Do(downloadReq)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, download failed, url: %s, error: %v", t.id, downloadUrl, err)
-			downloadResp.Body.Close()
+			// On Do error the response is typically nil; touching
+			// downloadResp.Body would panic. Just break - there is
+			// nothing to close.
 			break
 		}
 
