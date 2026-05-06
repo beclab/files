@@ -125,6 +125,12 @@ func (t *Task) closeDone() {
 	}
 }
 
+func (t *Task) getState() string {
+	t.doneMu.Lock()
+	defer t.doneMu.Unlock()
+	return t.state
+}
+
 // ~ Cancel
 func (t *Task) Cancel() {
 	done := t.ensureDone()
@@ -370,4 +376,39 @@ func (t *Task) formatJobStatusError(s string) error {
 	}
 
 	return errors.New(s)
+}
+
+// taskSnapshot is an immutable snapshot of the mutable Task fields
+// taken under t.mu.RLock(). HTTP handlers should always project
+// through it instead of reading t.* directly.
+type taskSnapshot struct {
+	State        string
+	Message      string
+	CurrentPhase int
+	TotalPhases  int
+	Progress     int
+	Transfer     int64
+	TotalSize    int64
+	TidyDirs     bool
+	Running      bool
+	Suspend      bool
+	WasPaused    bool
+}
+
+func (t *Task) snapshot() taskSnapshot {
+	t.doneMu.Lock()
+	defer t.doneMu.Unlock()
+	return taskSnapshot{
+		State:        t.state,
+		Message:      t.message,
+		CurrentPhase: t.currentPhase,
+		TotalPhases:  t.totalPhases,
+		Progress:     t.progress,
+		Transfer:     t.transfer,
+		TotalSize:    t.totalSize,
+		TidyDirs:     t.tidyDirs,
+		Running:      t.running,
+		Suspend:      t.suspend,
+		WasPaused:    t.wasPaused,
+	}
 }
