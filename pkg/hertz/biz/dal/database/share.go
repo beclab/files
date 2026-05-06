@@ -97,14 +97,21 @@ func QuerySmbShares(owner string, shareType string, shareIds []string, userIds [
 	var res []*share.SmbShareView
 	var tx = DB.Table("share_paths").Select("share_paths.id, share_paths.owner, share_paths.file_type, share_paths.extend, share_paths.path, share_paths.share_type, share_paths.name, share_paths.expire_in, share_paths.expire_time, share_paths.permission as share_permission, share_paths.smb_share_public, share_smb_members.permission, share_smb_users.user_id, share_smb_users.user_name, share_smb_users.password").Joins("LEFT JOIN share_smb_members ON share_paths.id = share_smb_members.path_id").Joins("LEFT JOIN share_smb_users ON share_smb_members.user_id = share_smb_users.user_id").Where("share_paths.share_type  = ?", shareType)
 
+	// Use chain assignment (`tx = tx.Where(...)`) instead of bare
+	// `tx.Where(...)`. GORM v2 happens to mutate tx.Statement
+	// in-place for these calls, so the bare form usually works,
+	// but it is fragile: any future move to Session-style
+	// (`tx = tx.Session(...)`) or any reviewer reading "result
+	// discarded" will silently break or get confused. The chain
+	// form makes the intent unambiguous.
 	if owner != "" {
-		tx.Where("share_paths.owner = ?", owner)
+		tx = tx.Where("share_paths.owner = ?", owner)
 	}
 	if len(shareIds) > 0 {
-		tx.Where("share_paths.id IN ?", shareIds)
+		tx = tx.Where("share_paths.id IN ?", shareIds)
 	}
 	if len(userIds) > 0 {
-		tx.Where("share_smb_users.user_id IN ?", userIds)
+		tx = tx.Where("share_smb_users.user_id IN ?", userIds)
 	}
 
 	err := tx.Scan(&res).Error
@@ -517,8 +524,11 @@ func QuerySmbMembers(pathID string) ([]*share.ShareSmbMember, error) {
 func QuerySmbUsers(owner string, userIds []string) ([]*share.ShareSmbUser, error) {
 	var res []*share.ShareSmbUser
 	var tx = DB.Table("share_smb_users").Where("owner = ?", owner)
+	// See QuerySmbShares above: chain assignment is the
+	// unambiguous form even though GORM v2's bare tx.Where
+	// happens to mutate Statement in place today.
 	if len(userIds) > 0 {
-		tx.Where("user_id IN ?", userIds)
+		tx = tx.Where("user_id IN ?", userIds)
 	}
 	if err := tx.Find(&res).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
