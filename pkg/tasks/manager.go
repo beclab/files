@@ -115,9 +115,9 @@ func (t *taskManager) ResumeTask(owner, taskId string) error {
 
 	var ctx, cancel = context.WithCancel(context.Background())
 
-	task.mu.Lock()
+	task.doneMu.Lock()
 	if task.state != common.Paused {
-		task.mu.Unlock()
+		task.doneMu.Unlock()
 		cancel()
 		return fmt.Errorf("task is not paused")
 	}
@@ -126,7 +126,7 @@ func (t *taskManager) ResumeTask(owner, taskId string) error {
 	task.suspend = false
 	task.state = common.Pending
 	funcs := task.funcs
-	task.mu.Unlock()
+	task.doneMu.Unlock()
 
 	return task.Execute(funcs...)
 }
@@ -143,14 +143,14 @@ func (t *taskManager) PauseTask(owner, taskId string) error {
 
 	var task = val.(*Task)
 
-	task.mu.Lock()
+	task.doneMu.Lock()
 	if task.state != common.Pending && task.state != common.Running {
-		task.mu.Unlock()
+		task.doneMu.Unlock()
 		return fmt.Errorf("task is not pending or running")
 	}
 	task.suspend = true
 	task.wasPaused = true
-	task.mu.Unlock()
+	task.doneMu.Unlock()
 
 	go task.Cancel()
 
@@ -177,9 +177,9 @@ func (t *taskManager) CancelTask(owner, taskId string, all string) {
 	}
 
 	task := val.(*Task)
-	task.mu.Lock()
+	task.doneMu.Lock()
 	task.suspend = false
-	task.mu.Unlock()
+	task.doneMu.Unlock()
 	go task.Cancel()
 }
 
