@@ -53,19 +53,30 @@ func NewTaskManager() {
 
 func (t *taskManager) getOrCreateUserPool(owner string) *userPool {
 	if pool, ok := t.userPools.Load(owner); ok {
-		userPool := pool.(*userPool)
-		return userPool
+		return pool.(*userPool)
 	}
 
-	userPool := &userPool{
+	// Build a candidate pool, then atomically install it via
+	// LoadOrStore. The previous Load+Store dance allowed two
+	// concurrent callers for the same owner to both miss the Load
+	// and both Store, ending up with two different *userPool values
+	// for the same user (and so two distinct pond pools and two
+	// distinct task maps - tasks could land in either, breaking
+	// GetTask / CancelTask lookups).
+	candidate := &userPool{
 		owner: owner,
 		tasks: sync.Map{},
 		pool:  pond.NewPool(1, pond.WithContext(context.Background()), pond.WithNonBlocking(true)),
 	}
 
-	t.userPools.Store(owner, userPool)
+	actual, loaded := t.userPools.LoadOrStore(owner, candidate)
+	if loaded {
+		// Another goroutine won the race; drop our candidate and
+		// release the pool we just built.
+		candidate.pool.StopAndWait()
+	}
 
-	return userPool
+	return actual.(*userPool)
 }
 
 // create
