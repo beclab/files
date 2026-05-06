@@ -10,6 +10,12 @@ import (
 // customizeRegister registers customize routers.
 func customizedRegister(r *server.Hertz) {
 	r.GET("/ping", handler.Ping)
+	// /healthz and /health both alias to the simple liveness ping
+	// so Docker HEALTHCHECK / k8s liveness probes have a stable
+	// path. The Dockerfile previously hit /health and got 404
+	// every time, leaving the container perpetually unhealthy.
+	r.GET("/healthz", handler.Ping)
+	r.GET("/health", handler.Ping)
 
 	// your code ...
 }
