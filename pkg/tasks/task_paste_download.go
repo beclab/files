@@ -74,7 +74,10 @@ func (t *Task) DownloadFromFiles() error {
 		line = strings.TrimPrefix(line, "data: ")
 		var fi files.FileInfo
 		if e := json.Unmarshal([]byte(line), &fi); e != nil {
-			klog.Errorf("[Task] Id: %s, serialize fileInfo error: %v, data: %s", t.id, err, line)
+			// Log the actual unmarshal error e, not the outer err
+			// variable (which is the unrelated, possibly nil, error
+			// from the previous block).
+			klog.Errorf("[Task] Id: %s, serialize fileInfo error: %v, data: %s", t.id, e, line)
 			return e
 		}
 		totalSize += fi.Size
