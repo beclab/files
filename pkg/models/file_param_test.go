@@ -402,6 +402,30 @@ func TestExternal(t *testing.T) {
 	assert.Equal(t, resUri+param.Path, "/data/External/VendorCo-0/folder/pic.jpg")
 }
 
+// TestUnsupportedFileType pins the contract added when convert()
+// stopped silently returning a half-built FileParam (FileType == "")
+// for unknown top-level URL segments. Each input is a fileType that
+// none of the if/else branches in convert() match; all should
+// surface a parse error rather than slip through to GetResourceUri.
+func TestUnsupportedFileType(t *testing.T) {
+	owner = "user1"
+
+	cases := []string{
+		"unknown/foo/bar",   // bogus fileType
+		"USB/foo/bar",       // case-sensitive: convert lowercases, "usb" not handled
+		"hdd/foo/bar",       // historical mount subtype, never registered top-level
+		"smb/foo/bar",       // same
+		"fake-fs/foo/bar",   // arbitrary
+		"backup/foo/bar",    // arbitrary
+	}
+	for _, url := range cases {
+		_, err := CreateFileParam(owner, url)
+		if err == nil {
+			t.Errorf("CreateFileParam(%q) returned nil error; expected unsupported file type", url)
+		}
+	}
+}
+
 // + get file param from uri
 func TestAllFileParamFromUri(t *testing.T) {
 	TestHomeFrontUri(t)
