@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -137,9 +138,15 @@ user created with the credentials from options "username" and "password".`,
 		// redisutils.InitFolderAndRedis() // todo
 
 		// step3-0: clean buffer
-		err := os.RemoveAll("/data/buffer")
-		if err != nil {
-			klog.Fatalf("clean buffer failed: %v", err)
+		//
+		// The buffer dir was previously hardcoded as "/data/buffer".
+		// That ignored the configurable common.RootPrefix (e.g. for
+		// dev / non-default deployments) and the CacheBuffer
+		// constant the rest of the code uses (see download.go,
+		// diskcache/cache.go).
+		bufferDir := filepath.Join(common.RootPrefix, common.CacheBuffer)
+		if err := os.RemoveAll(bufferDir); err != nil {
+			klog.Fatalf("clean buffer %s failed: %v", bufferDir, err)
 		}
 
 		// Step3-1: Build IMG service
