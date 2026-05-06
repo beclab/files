@@ -99,3 +99,20 @@ jobs:
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
           xargs $(go env GOPATH)/bin/staticcheck < .ci-pkgs.txt
+
+      - name: golangci-lint
+        # Wires up the .golangci.yml config that landed in PR #269
+        # (govet/copylocks + staticcheck + errcheck + bodyclose +
+        # ineffassign + misspell). Without this step the config was
+        # only ever runnable locally; CI never enforced it.
+        #
+        # Advisory until the existing baseline of reports
+        # (~270 across the enabled linters as of PR #269) is burned
+        # down. Flip continue-on-error to false once clean, or
+        # switch to `--new-from-rev=origin/main` to fail only on
+        # issues this PR introduces.
+        continue-on-error: true
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.0
+          PKGS=$(sed 's|^files/|./|' .ci-pkgs.txt)
+          $(go env GOPATH)/bin/golangci-lint run --timeout=5m $PKGS
