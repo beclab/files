@@ -2295,29 +2295,29 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// The token must be issued for *this* share. Without this check,
-	// any valid token could be paired with another share's path_id to
-	// read that share's metadata (IDOR).
-	//
-	// NB: do not log the token itself — it is a bearer credential and
-	// would otherwise be persisted to centralized log storage. The
-	// path_id pair is enough to debug the mismatch (see PR #226 review
-	// comment that introduced this check).
-	if shareToken.PathID != req.PathId {
+	// All token-vs-path validation lives in ValidateShareTokenForPath
+	// (PR #273) so the IDOR + expiry contract is testable without a
+	// DB. NilToken / PathMismatch / BadExpire / Expired all map onto
+	// the same client-facing CodeTokenExpired envelope; logs use
+	// path-only identifiers so the bearer token is never persisted
+	// (PR #259).
+	switch reason, ts := ValidateShareTokenForPath(shareToken, req.PathId, time.Now()); reason {
+	case ShareTokenValidationOK:
+	case ShareTokenValidationPathMismatch:
+		var tokenPath string
+		if shareToken != nil {
+			tokenPath = shareToken.PathID
+		}
 		klog.Warningf("GetSharePath, token/path_id mismatch: req.path_id=%s, token belongs to path_id=%s",
-			req.PathId, shareToken.PathID)
-		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, time.Now().Unix())
+			req.PathId, tokenPath)
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, ts)
 		return
-	}
-
-	expired, err := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
-	if err != nil {
-		klog.Errorf("GetSharePath, parse token expire_at %q error: %v", shareToken.ExpireAt, err)
-		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, time.Now().Unix())
+	case ShareTokenValidationBadExpire:
+		klog.Errorf("GetSharePath, token expire_at unparseable for path_id=%s", req.PathId)
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, ts)
 		return
-	}
-	if time.Now().After(expired) {
-		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expired.Unix())
+	case ShareTokenValidationExpired, ShareTokenValidationNilToken:
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, ts)
 		return
 	}
 
@@ -2333,9 +2333,11 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	expired, err = time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
-	if err != nil {
-		klog.Errorf("GetSharePath, parse path expire_time %q error: %v", sharePath.ExpireTime, err)
+	// Use the same fail-closed parser the helper uses (PR #257) so
+	// a malformed sharePath.ExpireTime no longer produces a year-1
+	// Unix timestamp in the response payload.
+	expired, ok := common.ParseRFC3339Nano(sharePath.ExpireTime)
+	if !ok {
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
 		return
 	}
