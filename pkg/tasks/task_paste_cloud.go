@@ -468,7 +468,10 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 	var transferFinished bool
 	var done bool
 
-	var totalSize = t.totalSize
+	// Snapshot once: t.totalSize is set by another phase via the
+	// locked updateTotalSize / SetTotalSize, so a one-time read
+	// under the snapshot lock is enough for this loop.
+	var totalSize = t.snapshot().TotalSize
 	var preTransfered int64 = 0
 
 	var ticker = time.NewTicker(3 * time.Second)
@@ -530,10 +533,11 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 				}
 			}
 
+			snap := t.snapshot()
 			klog.Infof("[Task] Id: %s, job: %d, core stats: %s, status: %s", t.id, jobStatusData.Id, common.ToJson(data), common.ToJson(jobStatusData))
-			klog.Infof("[Task] Id: %s, job: %d, totalTransfer: %s(%s)", t.id, jobStatusData.Id, common.FormatBytes(t.transfer), common.FormatBytes(t.totalSize))
+			klog.Infof("[Task] Id: %s, job: %d, totalTransfer: %s(%s)", t.id, jobStatusData.Id, common.FormatBytes(snap.Transfer), common.FormatBytes(snap.TotalSize))
 
-			var totalTransfers = t.transfer
+			var totalTransfers = snap.Transfer
 
 			if jobStatusData.Success && jobStatusData.Finished {
 				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)

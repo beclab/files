@@ -89,8 +89,6 @@ func (t *Task) Id() string {
 }
 
 func (t *Task) SetTotalSize(size int64) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.totalSize = size
 }
 
@@ -129,7 +127,6 @@ func (t *Task) snapshot() taskSnapshot {
 	}
 }
 
-// getState returns just the current state string.
 func (t *Task) getState() string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

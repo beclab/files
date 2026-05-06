@@ -26,7 +26,18 @@ import (
 	"github.com/spf13/afero"
 )
 
-var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), os.Getenv("ROOT_PREFIX"))
+// DefaultFs is the OS filesystem rooted at common.RootPrefix.
+//
+// Previously this read os.Getenv("ROOT_PREFIX") directly, which
+// produces an empty prefix when the env var is unset. Meanwhile
+// common.RootPrefix is initialized in common.init() to fall back to
+// "/data". The two views of "the data root" diverged when the env
+// var was missing, leading to subtle path bugs in tests / dev.
+//
+// Go guarantees imported packages' init() runs before the importing
+// package's variable initializers, so common.RootPrefix is already
+// resolved by the time this line is evaluated.
+var DefaultFs = afero.NewBasePathFs(afero.NewOsFs(), common.RootPrefix)
 var DefaultSorting = Sorting{
 	By:  "name",
 	Asc: true,

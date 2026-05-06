@@ -759,8 +759,20 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 		}
 	}
 
-	dir, _ := os.Open(srcFullPath)
+	// Open the source dir explicitly so we can:
+	//   1. propagate the os.Open error (previously discarded with `_`,
+	//      meaning a missing/permission-denied source caused dir to be
+	//      nil and the next dir.Readdir call to nil-deref panic the
+	//      worker goroutine);
+	//   2. close the file descriptor (previously leaked).
+	dir, err := os.Open(srcFullPath)
+	if err != nil {
+		return fmt.Errorf("UploadDirToSync open %s: %w", srcFullPath, err)
+	}
 	obs, err := dir.Readdir(-1)
+	if cerr := dir.Close(); cerr != nil && err == nil {
+		err = cerr
+	}
 	if err != nil {
 		return err
 	}
@@ -1131,19 +1143,29 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 				if response != nil {
 					statusCode = response.StatusCode
 					statusMsg = response.Status
+					// Function returns immediately after this branch,
+					// so closing inline (rather than defer) keeps
+					// the lifetime obvious; no behavioral change.
 					if response.Body != nil {
-						defer response.Body.Close()
+						_ = response.Body.Close()
 					}
 				}
 
 				klog.Warningf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries)
 				return searpc.SyncConnectionFailedError(fmt.Errorf("%d, %s after %d attempts", statusCode, statusMsg, maxRetries))
 			}
-			defer response.Body.Close()
 
-			// Read the response body as a string
+			// Read the response body as a string. NOTE: previously
+			// this used `defer response.Body.Close()` inside the
+			// chunk loop, which queued one defer per chunk -- for a
+			// large file (thousands of chunks) the queued bodies
+			// stayed open for the full function lifetime, eating
+			// connections/fds. Close inline now.
 			postBody, err := io.ReadAll(response.Body)
 			klog.Infoln("ReadAll")
+			if cerr := response.Body.Close(); cerr != nil && err == nil {
+				err = cerr
+			}
 			if err != nil {
 				klog.Errorln("ReadAll error: ", err)
 				return err
@@ -1212,7 +1234,15 @@ func (t *Task) DoSyncCopy(src, dst *models.FileParam, root bool) error {
 		return ctxErr
 	}
 
-	go t.SimulateProgress(0, 99, 50000000)
+	// Bound the SimulateProgress goroutine to *this phase* with a
+	// per-invocation done channel. Previously we passed it the
+	// task ctx, which only fires on Cancel/Pause -- so a
+	// successfully completed DoSyncCopy left the goroutine running
+	// until process exit, ticking once per second and overwriting
+	// progress with stale values.
+	stopProgress := make(chan struct{})
+	defer close(stopProgress)
+	go t.SimulateProgress(stopProgress, 0, 99, 50000000)
 
 	var err error
 	srcParentDir := filepath.Dir(strings.TrimSuffix(src.Path, "/"))
@@ -1241,22 +1271,32 @@ func (t *Task) DoSyncCopy(src, dst *models.FileParam, root bool) error {
 	return err
 }
 
-func (t *Task) SimulateProgress(left, right int, speed int64) {
+// SimulateProgress drives a synthetic progress bar for phases that
+// don't otherwise report progress (e.g. DoSyncCopy that just calls
+// HandleBatch* and waits for a result).
+//
+// stop must be closed by the caller when the phase is over -
+// previously this loop only exited on t.ctx.Done(), so successful
+// completions left the goroutine ticking forever and overwriting
+// later phase progress.
+func (t *Task) SimulateProgress(stop <-chan struct{}, left, right int, speed int64) {
 	startTime := time.Now()
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-t.ctx.Done():
 			return
-		default:
-			// Simulate progress update
-			usedTime := int(time.Now().Sub(startTime).Seconds())
+		case <-stop:
+			return
+		case <-ticker.C:
+			usedTime := int(time.Since(startTime).Seconds())
 			status, _, _, size := t.GetProgress()
 			progress := MapProgressByTime(left, right, size, speed, usedTime)
 
 			if status == "running" {
 				t.updateProgress(progress, 0)
 			}
-			time.Sleep(1 * time.Second)
 		}
 	}
 }
