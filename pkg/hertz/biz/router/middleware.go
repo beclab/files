@@ -244,7 +244,7 @@ func ShareMiddleware() app.HandlerFunc {
 		}
 
 		if shareAccess.Paste {
-			proxySharePaste(c, bflName, pasteAction, shareParam, pasteDstParam)
+			proxySharePaste(ctx, c, bflName, pasteAction, shareParam, pasteDstParam)
 			return
 		}
 
@@ -399,7 +399,11 @@ func ShareMiddleware() app.HandlerFunc {
 		klog.Infof("[share] share rewrite url: %s, access: %s, shareby: %s, method: %s", url, bflName, shareBy, method)
 
 		var br io.Reader
-		req, err := http.NewRequest(string(c.Request.Method()), url, br)
+		// Tie the proxied request to the inbound request's ctx so a
+		// disconnect / cancellation propagates downstream and the
+		// shareProxyClient.Do call doesn't hang past the original
+		// caller's lifetime.
+		req, err := http.NewRequestWithContext(ctx, string(c.Request.Method()), url, br)
 		if err != nil {
 			klog.Errorf("[share] build proxy request error: %v, url: %s", err, url)
 			handler.RespError(c, fmt.Sprintf("build proxy request error: %v", err))
@@ -580,7 +584,7 @@ func checkNonSharedPath(path string) bool {
 	return isSharedPath
 }
 
-func proxySharePaste(c *app.RequestContext, owner string, action string, src, dst *models.FileParam) {
+func proxySharePaste(ctx context.Context, c *app.RequestContext, owner string, action string, src, dst *models.FileParam) {
 	var isSrcShare, isDstShare = src.FileType == common.Share, dst.FileType == common.Share
 
 	klog.Infof("[share] Paste, owner: %s, src: %s, dst: %s", owner, common.ParseString(src), common.ParseString(dst))
@@ -732,7 +736,17 @@ func proxySharePaste(c *app.RequestContext, owner string, action string, src, ds
 	}
 	br = bytes.NewBuffer(bodyBytes)
 
-	var req, _ = http.NewRequest(string(c.Request.Method()), url, br)
+	// Tie the proxied request to the inbound ctx so disconnects /
+	// cancellations propagate downstream. The previous bare
+	// http.NewRequest(...) also discarded its error, leaving req
+	// potentially nil before the immediate Header.Set calls
+	// nil-deref'd; surface that error explicitly now.
+	req, err := http.NewRequestWithContext(ctx, string(c.Request.Method()), url, br)
+	if err != nil {
+		klog.Errorf("[share] proxy paste build request error: %v, url: %s", err, url)
+		handler.RespError(c, fmt.Sprintf("build proxy request error: %v", err))
+		return
+	}
 
 	c.Request.Header.VisitAll(func(key, value []byte) {
 		req.Header.Set(string(key), string(value))
