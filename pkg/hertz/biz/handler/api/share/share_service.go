@@ -2295,7 +2295,22 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	expired, _ := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
+	// The token must be issued for *this* share. Without this check,
+	// any valid token could be paired with another share's path_id to
+	// read that share's metadata (IDOR).
+	if shareToken.PathID != req.PathId {
+		klog.Warningf("GetSharePath, token/path_id mismatch: token=%s wants path_id=%s, token belongs to path_id=%s",
+			req.Token, req.PathId, shareToken.PathID)
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, time.Now().Unix())
+		return
+	}
+
+	expired, err := time.Parse(time.RFC3339Nano, shareToken.ExpireAt)
+	if err != nil {
+		klog.Errorf("GetSharePath, parse token expire_at %q error: %v", shareToken.ExpireAt, err)
+		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, time.Now().Unix())
+		return
+	}
 	if time.Now().After(expired) {
 		handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expired.Unix())
 		return
@@ -2305,9 +2320,20 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 	if err != nil {
 		klog.Errorf("GetSharePath, get path error: %v", err)
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+		return
+	}
+	if sharePath == nil {
+		klog.Errorf("GetSharePath, path not found: %s", req.PathId)
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+		return
 	}
 
-	expired, _ = time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
+	expired, err = time.Parse(time.RFC3339Nano, sharePath.ExpireTime)
+	if err != nil {
+		klog.Errorf("GetSharePath, parse path expire_time %q error: %v", sharePath.ExpireTime, err)
+		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, time.Now().Unix())
+		return
+	}
 	if time.Now().After(expired) {
 		handler.RespErrorExpired(c, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expired.Unix())
 		return
