@@ -50,7 +50,7 @@ func Md5Method(ctx context.Context, c *app.RequestContext) {
 	urlPath := uri + fileParam.Path
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         files.DefaultFs,
-		Path:       strings.TrimPrefix(urlPath, "/data"),
+		Path:       strings.TrimPrefix(urlPath, common.RootPrefix),
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: true,

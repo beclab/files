@@ -42,7 +42,7 @@ func (d *Download) download() error {
 		return err
 	}
 
-	_, err := common.CheckDiskSpace("/data", d.fileSize, true) // d.checkFreeDiskSpace()
+	_, err := common.CheckDiskSpace(common.RootPrefix, d.fileSize, true) // d.checkFreeDiskSpace()
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,11 @@ func (d *Download) download() error {
 func (d *Download) generateBufferFolder() (string, error) {
 	var owner = d.fileParam.Owner
 	var exists = false
-	var bufferFolder = path.Join(common.ROOT_PREFIX, common.CacheBuffer, owner)
+	// Use RootPrefix (env-driven, fallback /data) so the buffer dir
+	// resolves to the same root the rest of the codebase uses (see
+	// PR #261/#262). ROOT_PREFIX is a hardcoded "/data" constant
+	// and ignores the deployment override.
+	var bufferFolder = path.Join(common.RootPrefix, common.CacheBuffer, owner)
 	if files.FilePathExists(bufferFolder) {
 		exists = true
 	}

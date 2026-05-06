@@ -203,7 +203,7 @@ func (t *Task) UploadToSync() error {
 		return err
 	}
 
-	_, err = common.CheckDiskSpace("/data", posixSize, true)
+	_, err = common.CheckDiskSpace(common.RootPrefix, posixSize, true)
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (t *Task) SyncCopy() error {
 		return err
 	}
 
-	_, err = common.CheckDiskSpace("/data", totalSize, true)
+	_, err = common.CheckDiskSpace(common.RootPrefix, totalSize, true)
 	if err != nil {
 		return err
 	}

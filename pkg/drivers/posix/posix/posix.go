@@ -613,7 +613,7 @@ func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte,
 
 	if fileUploadArg.TotalSize != 0 {
 		if fileUploadArg.FileParam.IsSystem() {
-			_, err := common.CheckDiskSpace("/data", fileUploadArg.TotalSize, true)
+			_, err := common.CheckDiskSpace(common.RootPrefix, fileUploadArg.TotalSize, true)
 			if err != nil {
 				return nil, err
 			}

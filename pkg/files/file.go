@@ -523,7 +523,14 @@ func (i *FileInfo) readDirents() ([]os.FileInfo, error) {
 			return nil, err
 		}
 
-		err = filepath.WalkDir("/data"+i.Path, func(path string, d fs.DirEntry, err error) error {
+		// SMB/CIFS fallback: walk the host filesystem under
+		// RootPrefix so the path matches DefaultFs's view of the
+		// data root. The literal "/data" used to be hardcoded here
+		// and would diverge whenever ROOT_PREFIX was set to
+		// anything else (PR #261/#262 made the rest of the codebase
+		// honor RootPrefix; this site was missed).
+		walkRoot := common.RootPrefix + i.Path
+		err = filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				if strings.Contains(err.Error(), "host is down") {
 					klog.Warningf("[WARN] skipping %s: %v\n", path, err)
@@ -533,11 +540,11 @@ func (i *FileInfo) readDirents() ([]os.FileInfo, error) {
 				return err
 			}
 
-			if path == "/data"+i.Path {
+			if path == walkRoot {
 				return nil
 			}
 
-			relPath, err := filepath.Rel("/data"+i.Path, path)
+			relPath, err := filepath.Rel(walkRoot, path)
 			if err != nil {
 				return nil
 			}

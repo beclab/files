@@ -47,7 +47,7 @@ func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	urlPath := uri + fileParam.Path
-	dealUrlPath := strings.TrimPrefix(urlPath, "/data")
+	dealUrlPath := strings.TrimPrefix(urlPath, common.RootPrefix)
 
 	exists, err := afero.Exists(files.DefaultFs, dealUrlPath)
 	if err != nil {
@@ -111,7 +111,7 @@ func PutPermissionMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	urlPath := uri + fileParam.Path
-	dealUrlPath := strings.TrimPrefix(urlPath, "/data")
+	dealUrlPath := strings.TrimPrefix(urlPath, common.RootPrefix)
 
 	exists, err := afero.Exists(files.DefaultFs, dealUrlPath)
 	if err != nil {
