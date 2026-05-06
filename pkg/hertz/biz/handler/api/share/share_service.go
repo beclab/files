@@ -2419,13 +2419,19 @@ func ListSmbUser(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// Do NOT include the SMB password in the response. We previously
+	// returned the base64-decoded plaintext to anyone who could call
+	// this endpoint as `owner`; that was a credential disclosure path
+	// (logs / proxies / browser dev-tools / frontend caches all
+	// retain it). The id/name pair is enough for UI listing; the
+	// caller already has the password if they need it for a separate
+	// flow (e.g. mounting), and there is no other legitimate reason
+	// to read it back from the server.
 	var data = make([]map[string]string, 0)
 	for _, r := range res {
-		p, _ := common.Base64Decode(r.Password)
 		var d = make(map[string]string)
 		d["id"] = r.UserID
 		d["name"] = r.UserName
-		d["password"] = p
 		data = append(data, d)
 	}
 
@@ -2473,10 +2479,14 @@ func CreateSmbUser(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// Do NOT echo the password back. The caller just sent it, so this
+	// is not new information for them, but echoing it lengthens the
+	// surface where the credential can leak (response logs, browser
+	// network panel screenshots, proxy buffers, etc.). Return id/name
+	// only to confirm the create.
 	var result = make(map[string]string)
 	result["id"] = userId
 	result["name"] = userName
-	result["password"] = req.Password
 
 	handler.RespSuccess(c, result)
 }
