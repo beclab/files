@@ -43,11 +43,16 @@ jobs:
         # Mirror the IDL regeneration that update-server.yml does
         # before `go build`. Without these files several handler
         # packages do not compile.
+        #
+        # Tool versions are pinned: @latest gave us non-reproducible
+        # builds (each CI run could pick up a new hz/thriftgo and
+        # regenerate the IDL bindings differently). Bump these when
+        # we deliberately want to take a new generator version.
         run: |
           export GOPATH=$HOME/go
           export PATH=$GOPATH/bin:$PATH
-          go install github.com/cloudwego/hertz/cmd/hz@latest
-          go install github.com/cloudwego/thriftgo@latest
+          go install github.com/cloudwego/hertz/cmd/hz@v0.9.7
+          go install github.com/cloudwego/thriftgo@v0.4.3
           go mod tidy
           go mod edit -replace github.com/apache/thrift=github.com/apache/thrift@v0.13.0
           go mod tidy
@@ -95,7 +100,9 @@ jobs:
           xargs go vet < .ci-pkgs.txt
 
       - name: Staticcheck
+        # Pinned for reproducibility (was @latest). Bump when
+        # taking a deliberate staticcheck rev change.
         continue-on-error: true
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
           xargs $(go env GOPATH)/bin/staticcheck < .ci-pkgs.txt
