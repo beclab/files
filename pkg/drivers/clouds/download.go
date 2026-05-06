@@ -54,8 +54,11 @@ func (d *Download) download() error {
 		err   error
 	}
 
+	// Buffered so the goroutine never blocks on send, even if we already
+	// returned via <-d.ctx.Done() and no one is reading. Do NOT close(ch)
+	// here: closing while the goroutine is still about to send would panic
+	// the entire process. Letting GC reclaim the channel is safe.
 	ch := make(chan asyncResult, 1)
-	defer close(ch)
 	go func() {
 		res, err := d.service.DownloadAsync(d.fileParam, d.fileTargetPath, d.fileName)
 		ch <- asyncResult{jobId: res, err: err}
