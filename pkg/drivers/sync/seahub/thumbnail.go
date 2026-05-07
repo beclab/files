@@ -153,7 +153,7 @@ func generateThumbnail(username, repoId string, sizeStr string, path string) (bo
 	}
 
 	thumbnailFile := filepath.Join(thumbnailDir, fileId+"."+fileext)
-	if _, err := os.Stat(thumbnailFile); err == nil {
+	if _, e := os.Stat(thumbnailFile); e == nil {
 		return true, http.StatusOK
 	}
 
@@ -268,8 +268,8 @@ func createPSDThumbnails(repo map[string]string, fileId, path string, size int, 
 		return false, 500
 	}
 
-	if _, err := io.Copy(psdTmp, resp.Body); err != nil {
-		fmt.Printf("Save PSD temp file error: %v\n", err)
+	if _, e := io.Copy(psdTmp, resp.Body); e != nil {
+		fmt.Printf("Save PSD temp file error: %v\n", e)
 		return false, 500
 	}
 
@@ -302,9 +302,9 @@ func createThumbnailCommon(srcFile, thumbnailFile string, size int) (bool, int) 
 		fileInfo.Size(), float64(fileInfo.Size())/1024/1024)
 
 	fileHeader := make([]byte, 512)
-	if hf, err := os.Open(srcFile); err == nil {
-		if _, err := hf.Read(fileHeader); err != nil {
-			klog.Warningf("2. Header read failed: %v", err)
+	if hf, e := os.Open(srcFile); e == nil {
+		if _, e2 := hf.Read(fileHeader); e2 != nil {
+			klog.Warningf("2. Header read failed: %v", e2)
 		}
 		hf.Close()
 	}
@@ -571,14 +571,14 @@ func ImageDecode(filePath string) (image.Image, error) {
 	}
 	defer file.Close()
 
-	if _, format, err := image.DecodeConfig(file); err != nil {
-		return nil, fmt.Errorf("pre-decode check failed: %v", err)
+	if _, format, e := image.DecodeConfig(file); e != nil {
+		return nil, fmt.Errorf("pre-decode check failed: %v", e)
 	} else {
 		klog.Infof("Detected format: %s", format)
 	}
 
-	if _, err := file.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("file reset failed: %v", err)
+	if _, e := file.Seek(0, 0); e != nil {
+		return nil, fmt.Errorf("file reset failed: %v", e)
 	}
 
 	img, format, err := image.Decode(file)

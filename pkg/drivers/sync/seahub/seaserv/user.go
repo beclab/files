@@ -32,14 +32,14 @@ func SaveUser(username, password string, isStaff, isActive bool) int {
 		}
 
 		if !isActive {
-			if _, err := GlobalSeafileAPI.DeleteRepoTokensByEmail(username); err != nil {
-				klog.Infof("Error clearing token for user %s: %v", username, err)
+			if _, e := GlobalSeafileAPI.DeleteRepoTokensByEmail(username); e != nil {
+				klog.Infof("Error clearing token for user %s: %v", username, e)
 			}
 		}
 
-		userId, err := strconv.Atoi(emailuser["id"])
-		if err != nil {
-			klog.Errorf("Error converting email user id %s: %v", emailuser["id"], err)
+		userId, e := strconv.Atoi(emailuser["id"])
+		if e != nil {
+			klog.Errorf("Error converting email user id %s: %v", emailuser["id"], e)
 			return -1
 		}
 		resultCode, err = GlobalCcnetAPI.UpdateEmailuser(

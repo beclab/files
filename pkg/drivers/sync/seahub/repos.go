@@ -289,12 +289,12 @@ func HandleRepoDelete(owner, repoId string) ([]byte, error) {
 	}
 
 	if repo == nil {
-		resultCode, err := seaserv.GlobalSeafileAPI.RemoveRepo(repoId)
-		if err != nil {
-			return nil, err
+		resultCode, e := seaserv.GlobalSeafileAPI.RemoveRepo(repoId)
+		if e != nil {
+			return nil, e
 		}
 		if resultCode != 0 {
-			klog.Errorf("Failed to remove repo: result_code: %d, err: %v", resultCode, err)
+			klog.Errorf("Failed to remove repo: result_code: %d, err: %v", resultCode, e)
 			return nil, errors.New("failed to remove repo")
 		}
 		return common.ToBytes(map[string]interface{}{"success": true}), nil
