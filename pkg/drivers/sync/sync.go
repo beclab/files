@@ -262,11 +262,11 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 		return nil, fmt.Errorf("invalid path")
 	}
 
-	var size = queryParam.PreviewSize
-	if size != "big" {
-		size = "thumb"
-	}
-
+	// Preview size selector is not used downstream by this function
+	// (the seafile API only exposes the original file via this
+	// path; thumb generation happens at the cache layer). Keep
+	// queryParam.PreviewSize as part of the cache key so big/thumb
+	// previews don't collide.
 	var previewFileName = fileParam.FileType + fileParam.Extend + fileInfo.Path + time.Unix(fileInfo.LastModified, 0).String() + queryParam.PreviewSize
 	klog.Infof("Preview preview, fileName: %s", previewFileName)
 	var key = diskcache.GenerateCacheKey(previewFileName)

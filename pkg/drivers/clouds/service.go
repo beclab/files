@@ -95,6 +95,10 @@ func (s *service) CreateFolder(param *models.FileParam) ([]byte, error) {
 	klog.Infof("[service] creatFolder, param: %s", common.ToJson(param))
 
 	fsPrefix, err := s.command.GetFsPrefix(param)
+	if err != nil {
+		klog.Errorf("[service] creatFolder, get fs prefix error: %v", err)
+		return nil, err
+	}
 	prefixPath := files.GetPrefixPath(param.Path)
 	fileName, _ := files.GetFileNameFromPath(param.Path)
 

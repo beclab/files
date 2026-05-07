@@ -165,8 +165,6 @@ func ShareMiddleware() app.HandlerFunc {
 
 		// if Paste, is's Source
 		var paramPath string
-		var urlShareType string
-		_ = urlShareType
 		var shareAccess = &ShareAccess{
 			Method: method,
 		}
@@ -262,8 +260,6 @@ func ShareMiddleware() app.HandlerFunc {
 			}
 			return
 		}
-
-		urlShareType = strings.ToLower(shared.ShareType)
 
 		klog.Infof("[share] share path: %s", common.ToJson(shared))
 

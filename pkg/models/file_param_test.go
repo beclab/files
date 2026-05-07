@@ -456,7 +456,7 @@ func TestDataFrontUri(t *testing.T) {
 	initGlobal(owner)
 	var err error
 	var uri string
-	var fp = new(FileParam)
+	var fp *FileParam
 
 	uri = "/data/user-pvc-user1/Data/"
 	fp = &FileParam{}
@@ -482,7 +482,7 @@ func TestCacheFrontUri(t *testing.T) {
 	initGlobal(owner)
 	var err error
 	var uri string
-	var fp = new(FileParam)
+	var fp *FileParam
 
 	uri = "/appcache/cache-pvc-user1/tailscale/"
 	fp = &FileParam{}
@@ -509,7 +509,7 @@ func TestExternalFrontUri(t *testing.T) {
 	initGlobal(owner)
 	var err error
 	var uri string
-	var fp = new(FileParam)
+	var fp *FileParam
 
 	// ~ internal
 	uri = "/data/External/s3/"
@@ -562,7 +562,7 @@ func TestSyncFrontUri(t *testing.T) {
 	initGlobal(owner)
 	var err error
 	var uri string
-	var fp = new(FileParam)
+	var fp *FileParam
 
 	uri = "/sync/"
 	fp = &FileParam{}
@@ -594,7 +594,7 @@ func TestCloudFrontUri(t *testing.T) {
 	initGlobal(owner)
 	var err error
 	var uri string
-	var fp = new(FileParam)
+	var fp *FileParam
 
 	// google
 	uri = "/google/account@gmail.com/"

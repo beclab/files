@@ -39,8 +39,7 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 		return true
 	}, func() error {
 		var newRequest *http.Request
-		var requestBody *bytes.Buffer = nil
-		requestBody = bytes.NewBuffer(requestParams)
+		requestBody := bytes.NewBuffer(requestParams)
 
 		if requestParams != nil {
 			newRequest, err = http.NewRequestWithContext(ctx, method, u, requestBody)

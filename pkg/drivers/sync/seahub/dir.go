@@ -653,6 +653,10 @@ func CheckFilenameWithRename(repoId, parentDir, objName string) string {
 	latestCommit := cmmts[0]
 
 	dirents, err := seaserv.GlobalSeafileAPI.ListDirByCommitAndPath(repoId, latestCommit["id"], parentDir, -1, -1)
+	if err != nil {
+		klog.Errorf("list dir by commit failed: %v", err)
+		return ""
+	}
 	existObjNames := make([]string, len(dirents))
 	for i, d := range dirents {
 		existObjNames[i] = d["obj_name"]

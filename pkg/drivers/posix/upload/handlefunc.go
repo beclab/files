@@ -193,11 +193,6 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		}
 	}
 
-	p := resumableInfo.ParentDir
-	if !strings.HasSuffix(p, "/") {
-		p = p + "/"
-	}
-
 	// dst storage path, if shared, fileParam must be sharedby Param
 	// uploadPath = uri + fileParam.Path
 	if share != "" {

@@ -83,6 +83,10 @@ func DeleteUser(username string) error {
 	}
 
 	ownedRepos, err := GlobalSeafileAPI.GetOwnedRepoList(username, false, -1, -1)
+	if err != nil {
+		klog.Errorf("get owned repo list for %s failed: %v", username, err)
+		return err
+	}
 
 	for _, repo := range ownedRepos {
 		resultCode, err = GlobalSeafileAPI.RemoveRepo(repo["id"])

@@ -541,7 +541,9 @@ func (t *Task) checkJobStats(jobId int, dstPath string) (bool, error) {
 
 			if jobStatusData.Success && jobStatusData.Finished {
 				klog.Infof("[Task] Id: %s, job finished: %v, dst: %s", t.id, jobStatusData.Finished, dstPath)
-				transferFinished = true
+				// transferFinished isn't read after break here; the
+				// only consumer is the !jobStatusData.Finished arm
+				// below where it gates t.setTidyDirs(true).
 				t.updateProgress(safeProgressPct(totalTransfers, totalSize), transfers)
 				done = true
 				err = nil
