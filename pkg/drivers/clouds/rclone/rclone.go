@@ -265,9 +265,9 @@ func (r *rclone) GetFilesSize(fileParam *models.FileParam) (int64, error) {
 
 	if !isFile {
 		var fs string = fsPrefix + fileParam.Path
-		resp, err := r.GetOperation().Size(fs)
-		if err != nil {
-			return 0, err
+		resp, e := r.GetOperation().Size(fs)
+		if e != nil {
+			return 0, e
 		}
 		return resp.Bytes, nil
 	}
@@ -560,9 +560,9 @@ func (r *rclone) Clear(param *models.FileParam) error {
 
 	var fsPrefix string
 	if isSrcLocal {
-		srcUri, err := param.GetResourceUri()
-		if err != nil {
-			return err
+		srcUri, e := param.GetResourceUri()
+		if e != nil {
+			return e
 		}
 		fsPrefix = fmt.Sprintf("%s:%s", configName, srcUri)
 	} else {

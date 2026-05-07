@@ -89,8 +89,8 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	}
 
 	var fileMeta *operations.OperationsStat
-	if err := json.Unmarshal(res, &fileMeta); err != nil {
-		return nil, err
+	if e := json.Unmarshal(res, &fileMeta); e != nil {
+		return nil, e
 	}
 
 	klog.Infof("Cloud preview, file meta: %s", string(res))
@@ -111,9 +111,9 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 		klog.Infof("Cloud preview, get cache, file: %s, cache name: %s, exists: %v", fileMeta.Item.Path, previewCacheName, ok)
 
 		var mods = fileMeta.Item.ModTime
-		modeTime, err := time.Parse(time.RFC3339Nano, mods)
-		if err != nil {
-			return nil, err
+		modeTime, e := time.Parse(time.RFC3339Nano, mods)
+		if e != nil {
+			return nil, e
 		}
 
 		if cachedData != nil {
@@ -128,15 +128,15 @@ func (s *CloudStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 	previewCachedPath := diskcache.GenerateCacheBufferPath(owner, fileMeta.Item.Path)
 
 	if !files.FilePathExists(previewCachedPath) {
-		if err := files.MkdirAllWithChown(nil, previewCachedPath, 0755, true, 1000, 1000); err != nil {
-			klog.Errorln(err)
-			return nil, err
+		if e := files.MkdirAllWithChown(nil, previewCachedPath, 0755, true, 1000, 1000); e != nil {
+			klog.Errorln(e)
+			return nil, e
 		}
 	}
 
 	var downloader = NewDownloader(s.handler.Ctx, s.service, fileParam, fileMeta.Item.Name, fileMeta.Item.Path, fileMeta.Item.Size, previewCachedPath)
-	if err := downloader.download(); err != nil {
-		return nil, err
+	if e := downloader.download(); e != nil {
+		return nil, e
 	}
 
 	var imageFilePath = filepath.Join(previewCachedPath, fileMeta.Item.Name)
@@ -484,24 +484,24 @@ func (s *CloudStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 	}
 
 	if fileParam.IsGoogleDrive() && driveId == "" {
-		fsPrefix, err := s.service.command.GetFsPrefix(fileParam)
-		if err != nil {
-			return nil, err
+		fsPrefix, e := s.service.command.GetFsPrefix(fileParam)
+		if e != nil {
+			return nil, e
 		}
 		fsName, _ := files.GetFileNameFromPath(fileParam.Path)
 		fsNameTmp := common.EscapeGlob(fsName)
 		fsPathPrefix := files.GetPrefixPath(fileParam.Path)
 		var fs = fsPrefix + fsPathPrefix
 		var fileter = s.service.command.FormatFilter(fsNameTmp, false, true, true)
-		items, err := s.service.command.GetOperation().List(fs, &operations.OperationsOpt{
+		items, e := s.service.command.GetOperation().List(fs, &operations.OperationsOpt{
 			NoModTime:  true,
 			NoMimeType: true,
 			Metadata:   false,
 		}, &operations.OperationsFilter{
 			FilterRule: fileter,
 		})
-		if err != nil {
-			return nil, err
+		if e != nil {
+			return nil, e
 		}
 
 		var count int
@@ -716,9 +716,9 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 	}
 
 	if fileInfo == nil {
-		uri, err := param.GetResourceUri()
-		if err != nil {
-			return nil, err
+		uri, e := param.GetResourceUri()
+		if e != nil {
+			return nil, e
 		}
 
 		uploadPath := uri + param.Path
