@@ -200,7 +200,7 @@ func TransSyncFilesToFileInfo(filesData *Files, contextArgs *models.HttpContextA
 			listing.NumDirs += item.NumDirs
 			listing.NumFiles += item.NumFiles
 			listing.NumTotalFiles += item.NumTotalFiles
-			klog.Info("resItem=%+v", resItem)
+			klog.Infof("resItem=%+v", resItem)
 
 			listing.Items = append(listing.Items, resItem)
 		}

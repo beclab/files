@@ -1475,9 +1475,9 @@ func (e *EncodingHelper) GetVideoProcessingFilterParam(state *EncodingJobInfo, o
 			filterStr := ""
 			// -filter_complex "[0:s]scale=s[sub]..."
 			if mainStr == "" {
-				filterStr = fmt.Sprintf(" -filter_complex \"[%s:%d]%s[sub];[0:%d][sub]%s\"", mapPrefix, subtitleStreamIndex, subStr, videoStreamIndex, overlayStr)
+				filterStr = fmt.Sprintf(" -filter_complex \"[%d:%d]%s[sub];[0:%d][sub]%s\"", mapPrefix, subtitleStreamIndex, subStr, videoStreamIndex, overlayStr)
 			} else {
-				filterStr = fmt.Sprintf(" -filter_complex \"[%s:%d]%s[sub];[0:%d]%s[main];[main][sub]%s\"", mapPrefix, subtitleStreamIndex, subStr, videoStreamIndex, mainStr, overlayStr)
+				filterStr = fmt.Sprintf(" -filter_complex \"[%d:%d]%s[sub];[0:%d]%s[main];[main][sub]%s\"", mapPrefix, subtitleStreamIndex, subStr, videoStreamIndex, mainStr, overlayStr)
 			}
 
 			if hasTextSubs {
@@ -3303,7 +3303,12 @@ func GetAlphaSrcFilter(state EncodingJobInfo, videoWidth, videoHeight, requested
 	if state.BaseRequest.StartTimeTicks != nil {
 		reqTicks = *state.BaseRequest.StartTimeTicks
 	}
-	startTime := fmt.Sprintf("hh\\:mm\\:ss\\.fff", time.Duration(reqTicks)*time.Nanosecond)
+	// FIXME: this format string was empty of any verbs but passed
+	// a duration arg; the arg was always discarded. Preserve the
+	// observable output (the format-string text) until the proper
+	// HH:MM:SS.fff formatting is implemented.
+	_ = time.Duration(reqTicks) * time.Nanosecond
+	startTime := "hh\\:mm\\:ss\\.fff"
 
 	outWidth, outHeight := GetFixedOutputSize(videoWidth, videoHeight, requestedWidth, requestedHeight, requestedMaxWidth, requestedMaxHeight)
 
@@ -4041,7 +4046,7 @@ func (e *EncodingHelper) GetVulkanDeviceArgs(deviceIndex int, deviceName, srcDev
 	if deviceName == "" {
 		vendorOpts = fmt.Sprintf(":%d", deviceIndex)
 	} else {
-		vendorOpts = fmt.Sprintf(":\"" + deviceName + "\"")
+		vendorOpts = ":\"" + deviceName + "\""
 	}
 
 	var options string

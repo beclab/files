@@ -481,7 +481,8 @@ func (d *DynamicHlsHelper) AddTrickplay(state StreamState, trickplayResolutions 
 func (d *DynamicHlsHelper) getOutputVideoCodecLevel(state *streaming.StreamState) *int {
 	var levelString string
 	if mediaencoding.IsCopyCodec(state.OutputVideoCodec) && state.VideoStream != nil && state.VideoStream.Level != nil {
-		levelString = fmt.Sprintf("%d", *state.VideoStream.Level)
+		// VideoStream.Level is float64; format as integer level (h264/hevc level numbers).
+		levelString = fmt.Sprintf("%d", int(*state.VideoStream.Level))
 	} else {
 		switch state.ActualOutputVideoCodec() {
 		case "h264":

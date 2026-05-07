@@ -296,7 +296,7 @@ func GetStreamingState(
 	if state.VideoRequest != nil {
 		state.OutputVideoCodec = state.BaseRequest.VideoCodec
 		outputVideoBitrate := encodingHelper.GetVideoBitrateParamValue(state.VideoRequest.StreamingRequestDto.BaseEncodingJobOptions, state.VideoStream, state.OutputVideoCodec)
-		klog.Infof("outputVideoBitrate: ", outputVideoBitrate)
+		klog.Infof("outputVideoBitrate: %v", outputVideoBitrate)
 		state.OutputVideoBitrate = &outputVideoBitrate
 
 		encodingHelper.TryStreamCopy(state.EncodingJobInfo)
