@@ -164,7 +164,12 @@ user created with the credentials from options "username" and "password".`,
 		// step4: init commands
 		rclone.NewCommandRclone()
 		rclone.Command.InitServes()
-		rclone.Command.StopJobs()
+		// Best-effort cleanup of any leftover rclone jobs from a
+		// previous process; if rclone hasn't fully started or is
+		// unreachable we'd rather warn and continue than fail boot.
+		if err := rclone.Command.StopJobs(); err != nil {
+			klog.Warningf("rclone StopJobs at boot failed: %v", err)
+		}
 
 		// step5: build driver handler
 		drivers.NewDriverHandler()
@@ -180,8 +185,12 @@ user created with the credentials from options "username" and "password".`,
 			klog.Fatalf("get client config error: %v", err)
 		}
 
-		global.InitGlobalData(config)
-		global.InitGlobalNodes(config)
+		if err := global.InitGlobalData(config); err != nil {
+			klog.Fatalf("init global data error: %v", err)
+		}
+		if err := global.InitGlobalNodes(config); err != nil {
+			klog.Fatalf("init global nodes error: %v", err)
+		}
 		global.InitGlobalMounted()
 
 		// step7: init seahub (for test now)

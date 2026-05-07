@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -64,7 +65,9 @@ func InitGlobalData(config *rest.Config) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				GlobalData.getGlobalData()
+				if err := GlobalData.getGlobalData(); err != nil {
+					klog.Warningf("[global] tick refresh of pvc data failed: %v", err)
+				}
 			}
 		}
 	}()
@@ -215,13 +218,19 @@ func (g *Data) HandlerEvent() cache.ResourceEventHandler {
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				GlobalData.getGlobalData()
+				if err := GlobalData.getGlobalData(); err != nil {
+					klog.Warningf("[global] pvc Add refresh failed: %v", err)
+				}
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				GlobalData.getGlobalData()
+				if err := GlobalData.getGlobalData(); err != nil {
+					klog.Warningf("[global] pvc Update refresh failed: %v", err)
+				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				GlobalData.getGlobalData()
+				if err := GlobalData.getGlobalData(); err != nil {
+					klog.Warningf("[global] pvc Delete refresh failed: %v", err)
+				}
 			},
 		},
 	}

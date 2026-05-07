@@ -43,8 +43,12 @@ var rootCmd = &cobra.Command{
 			klog.Fatalf("get client config error: %v", err)
 		}
 
-		global.InitGlobalData(config)
-		global.InitGlobalNodes(config)
+		if err := global.InitGlobalData(config); err != nil {
+			klog.Fatalf("init global data error: %v", err)
+		}
+		if err := global.InitGlobalNodes(config); err != nil {
+			klog.Fatalf("init global nodes error: %v", err)
+		}
 		global.InitGlobalMounted()
 
 		samba.NewSambaManager(f)
