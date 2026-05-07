@@ -30,12 +30,6 @@ type config struct {
 	sync.RWMutex
 }
 
-var localConfig = &Config{
-	ConfigName: common2.Local,
-	Name:       common2.Local,
-	Type:       common2.Local,
-}
-
 var _ Interface = &config{}
 
 func NewConfig() *config {
@@ -181,13 +175,6 @@ func (c *config) parseCreateConfigParameters(param *Config) *ConfigParameters {
 	}
 
 	return &ConfigParameters{}
-}
-
-func (c *config) parseGoogleDrive(param *Config) *ConfigParameters {
-	return &ConfigParameters{
-		ConfigName: param.ConfigName,
-		Name:       param.Name,
-	}
 }
 
 func (c *config) parseDropboxParams(param *Config) *ConfigParameters {

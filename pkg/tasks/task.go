@@ -444,12 +444,6 @@ func (t *Task) GetProgress() (string, int, int64, int64) {
 	return t.state, t.progress, t.transfer, t.totalSize
 }
 
-func (t *Task) isLastPhase() bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return t.currentPhase == t.totalPhases
-}
-
 func (t *Task) isCancel() (bool, error) {
 	select {
 	case <-t.ctx.Done():
