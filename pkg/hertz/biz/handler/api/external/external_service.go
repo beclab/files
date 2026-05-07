@@ -202,7 +202,7 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 
 	file, err := files.NewFileInfo(files.FileOptions{
 		Fs:         files.DefaultFs,
-		Path:       strings.TrimPrefix(urlPath, "/data"),
+		Path:       strings.TrimPrefix(urlPath, common.RootPrefix),
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: true,
