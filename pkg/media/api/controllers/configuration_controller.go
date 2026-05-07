@@ -79,9 +79,10 @@ func (c *ConfigurationController) UpdateNamedConfiguration(ctx context.Context, 
 	// Create a new instance of the configuration type
 	configInstance := reflect.New(configType).Interface()
 
-	// Deserialize the JSON into the configuration type
-	if err := json.Unmarshal(config, configInstance); err != nil {
-		klog.Errorf("[media] UpdateNamedConfiguration, err: %v", err)
+	// Deserialize the JSON into the configuration type. Inner err
+	// renamed to e to avoid shadowing the function-scope err.
+	if e := json.Unmarshal(config, configInstance); e != nil {
+		klog.Errorf("[media] UpdateNamedConfiguration, err: %v", e)
 		handler.RespBadRequest(r, "failed to deserialize configuration")
 		return
 	}
