@@ -60,7 +60,9 @@ func ClearAccessTokens() {
 
 func GenerateUniqueIdentifier(relativePath string) string {
 	h := md5.New()
-	io.WriteString(h, relativePath+time.Now().String())
+	// hash.Hash.Write never returns an error, so io.WriteString
+	// here cannot fail in practice.
+	_, _ = io.WriteString(h, relativePath+time.Now().String())
 	return fmt.Sprintf("%x%s", h.Sum(nil), relativePath)
 }
 

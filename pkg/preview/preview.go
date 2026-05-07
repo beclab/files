@@ -8,6 +8,7 @@ import (
 	"files/pkg/files"
 	"files/pkg/img"
 	"files/pkg/models"
+	"fmt"
 	"io"
 
 	"k8s.io/klog/v2"
@@ -76,7 +77,10 @@ func CreatePreview(owner string, key string,
 		return nil, err
 	}
 
-	fd.Seek(0, 0)
+	if _, err := fd.Seek(0, 0); err != nil {
+		fd.Close()
+		return nil, fmt.Errorf("seek preview source failed: %w", err)
+	}
 	defer fd.Close()
 
 	var (
