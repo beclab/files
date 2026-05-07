@@ -96,7 +96,9 @@ func NewSambaManager(f k8sclient.Factory) {
 func (s *samba) Start() {
 	s.getUsers()
 	s.generateConf()
-	s.commands.Run()
+	if err := s.commands.Run(); err != nil {
+		klog.Errorf("samba start: smbd run failed: %v", err)
+	}
 
 	s.deleteExpiredShares()
 }
@@ -307,7 +309,9 @@ func (s *samba) generateConf() {
 		klog.Infof("samba shares not found")
 	}
 
-	s.deleteExcludeUsers(smbUsers, smbShares)
+	if err := s.deleteExcludeUsers(smbUsers, smbShares); err != nil {
+		klog.Warningf("samba delete excluded users failed: %v", err)
+	}
 
 	for id, p := range smbShares {
 		klog.Infof("samba share paths, id: %s, owner: %s, fileType: %s, extend: %s, path: %s, shareType: %s, name: %s, users: %d", id, p.Owner, p.FileType, p.Extend, p.Path, p.ShareType, p.Name, len(p.Members))
@@ -388,7 +392,9 @@ func (s *samba) generateConf() {
 		} else {
 			// anonymous
 			anonymous = true
-			s.commands.SetAnonymousPermission(item.Owner, fileUri+fp.Path)
+			if err := s.commands.SetAnonymousPermission(item.Owner, fileUri+fp.Path); err != nil {
+				klog.Warningf("samba set anonymous permission failed: owner=%s path=%s: %v", item.Owner, fileUri+fp.Path, err)
+			}
 		}
 
 		var smbShare = SambaShare{
@@ -495,7 +501,9 @@ func (s *samba) deleteUserGroup(owner string) {
 	users, _ := s.commands.ListUser([]string{owner})
 
 	s.commands.DeleteUser(users)
-	s.commands.DeleteGroup(owner)
+	if err := s.commands.DeleteGroup(owner); err != nil {
+		klog.Warningf("samba delete group failed: %s: %v", owner, err)
+	}
 }
 
 func (s *samba) checkUserExists(owner string) bool {

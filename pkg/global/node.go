@@ -72,7 +72,9 @@ func InitGlobalNodes(config *rest.Config) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				GlobalNode.getGlobalNodes()
+				if err := GlobalNode.getGlobalNodes(); err != nil {
+					klog.Warningf("[global] tick refresh of cluster nodes failed: %v", err)
+				}
 			}
 		}
 	}()
@@ -193,10 +195,14 @@ func (g *Node) Handlerevent() cache.ResourceEventHandler {
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				GlobalNode.getGlobalNodes()
+				if err := GlobalNode.getGlobalNodes(); err != nil {
+					klog.Warningf("[global] node Add refresh failed: %v", err)
+				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				GlobalNode.getGlobalNodes()
+				if err := GlobalNode.getGlobalNodes(); err != nil {
+					klog.Warningf("[global] node Delete refresh failed: %v", err)
+				}
 			},
 		},
 	}
