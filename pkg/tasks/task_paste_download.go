@@ -3,6 +3,7 @@ package tasks
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"files/pkg/common"
 	"files/pkg/files"
 	"files/pkg/integration"
@@ -25,6 +26,14 @@ func (t *Task) DownloadFromFiles() error {
 	var dst *models.FileParam
 
 	if ps := t.pausedSnap(); ps.WasPaused {
+		// Match task_paste_sync.go and task_paste_cloud.go: a
+		// resume with no recorded paused param is corrupt state
+		// and should fail loudly, not nil out t.param.Dst and
+		// crash later in some unrelated downstream call.
+		if ps.Param == nil {
+			klog.Errorf("[Task] Id: %s, paused param invalid", t.id)
+			return errors.New("pause param invalid")
+		}
 		t.param.Dst = ps.Param
 		t.clearPausedParam()
 	}
