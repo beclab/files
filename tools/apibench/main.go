@@ -124,6 +124,16 @@ func main() {
 			seq++
 			fmt.Printf("[%d/%d] %s %s — %s", seq, total, route.Method, route.Pattern, route.Description)
 
+			if route.Skip {
+				fmt.Printf("  [SKIP: %s]\n", route.SkipReason)
+				results = append(results, BenchResult{
+					Route:  route,
+					Status: -1,
+					Note:   "skip",
+				})
+				continue
+			}
+
 			if phase < 0 {
 				// Setup phase: single request, capture state, don't benchmark
 				fmt.Println(" [SETUP]")

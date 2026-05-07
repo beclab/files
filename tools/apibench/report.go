@@ -29,9 +29,11 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 
 	// summary
 	fmt.Fprintf(f, "## Summary\n\n")
-	var ok, errored, setup, cleanup int
+	var ok, errored, setup, cleanup, skipped int
 	for _, r := range results {
 		switch {
+		case r.Note == "skip":
+			skipped++
 		case r.Note == "setup":
 			setup++
 		case r.Note == "cleanup":
@@ -47,6 +49,7 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 	fmt.Fprintf(f, "| Benchmarked | %d |\n", ok)
 	fmt.Fprintf(f, "| Setup | %d |\n", setup)
 	fmt.Fprintf(f, "| Cleanup | %d |\n", cleanup)
+	fmt.Fprintf(f, "| Skipped (unsafe) | %d |\n", skipped)
 	fmt.Fprintf(f, "| Errors | %d |\n\n", errored)
 
 	for _, cat := range cats {
@@ -59,6 +62,16 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 			stream := ""
 			if r.Route.Stream {
 				stream = "stream"
+			}
+
+			if r.Note == "skip" {
+				reason := r.Route.SkipReason
+				if reason == "" {
+					reason = "unsafe"
+				}
+				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | SKIP | %s | %s |\n",
+					r.Route.Method, r.Route.Pattern, r.Route.Description, stream, reason)
+				continue
 			}
 
 			if r.Status <= 0 && r.Note == "" {
@@ -92,7 +105,13 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 	fmt.Fprintf(f, "|----------|--------|---------|-----|-------------------|\n")
 	for _, cat := range cats {
 		for _, r := range grouped[cat] {
-			if r.Status <= 0 || r.Note == "setup" || r.Note == "cleanup" {
+			if r.Note == "setup" || r.Note == "cleanup" {
+				continue
+			}
+			if r.Note == "skip" {
+				continue // handled in the analysis section below
+			}
+			if r.Status <= 0 {
 				continue
 			}
 			multiplier := 3.0
@@ -113,6 +132,29 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 		}
 	}
 	fmt.Fprintln(f)
+
+	// skipped route analysis
+	hasSkipped := false
+	for _, r := range results {
+		if r.Note == "skip" && r.Route.Recommendation != "" {
+			hasSkipped = true
+			break
+		}
+	}
+	if hasSkipped {
+		fmt.Fprintf(f, "## Skipped Routes — Analysis & Recommendations\n\n")
+		fmt.Fprintf(f, "These routes were not executed due to safety concerns but have been analyzed based on code review:\n\n")
+		for _, cat := range cats {
+			for _, r := range grouped[cat] {
+				if r.Note != "skip" || r.Route.Recommendation == "" {
+					continue
+				}
+				fmt.Fprintf(f, "### %s `%s` (%s)\n\n", r.Route.Method, r.Route.Pattern, cat)
+				fmt.Fprintf(f, "**Skip reason**: %s\n\n", r.Route.SkipReason)
+				fmt.Fprintf(f, "**Analysis**: %s\n\n", r.Route.Recommendation)
+			}
+		}
+	}
 }
 
 func writeCSV(results []BenchResult, path string) {
@@ -129,6 +171,7 @@ func writeCSV(results []BenchResult, path string) {
 	_ = w.Write([]string{
 		"category", "method", "pattern", "test_path", "description",
 		"stream", "phase", "note",
+		"skip", "skip_reason", "recommendation",
 		"status", "samples",
 		"avg_ms", "p50_ms", "p95_ms", "min_ms", "max_ms",
 		"error",
@@ -150,6 +193,11 @@ func writeCSV(results []BenchResult, path string) {
 			testPath = r.Route.ResolvePath()
 		}
 
+		skipStr := "false"
+		if r.Route.Skip {
+			skipStr = "true"
+		}
+
 		_ = w.Write([]string{
 			r.Route.Category,
 			r.Route.Method,
@@ -159,6 +207,9 @@ func writeCSV(results []BenchResult, path string) {
 			stream,
 			strconv.Itoa(r.Route.Phase),
 			r.Note,
+			skipStr,
+			r.Route.SkipReason,
+			r.Route.Recommendation,
 			statusStr(r.Status),
 			strconv.Itoa(len(r.Samples)),
 			msStr(r.Avg),

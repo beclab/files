@@ -29,6 +29,15 @@ type RouteCase struct {
 
 	// DynBody, if set, overrides BodyFunc at runtime.
 	DynBody func() io.Reader
+
+	// Skip marks a route as unsafe to execute. The route will not be
+	// called but will appear in the report with the Recommendation.
+	Skip       bool
+	SkipReason string
+
+	// Recommendation is a human-written timeout suggestion for routes
+	// that cannot be safely benchmarked. Shown in the report as-is.
+	Recommendation string
 }
 
 func (r RouteCase) ResolvePath() string {
@@ -271,7 +280,7 @@ func AllRoutes() []RouteCase {
 		// Permission
 		// ────────────────────────────────────────────
 		{Method: "GET", Pattern: "/api/permission/*path", TestPath: "/api/permission/drive/Documents/", Description: "get permission", Category: "permission"},
-		{Method: "PUT", Pattern: "/api/permission/*path", TestPath: "/api/permission/drive/Documents/?uid=1000&recursive=0", Description: "set permission (uid 1000, non-recursive)", Category: "permission"},
+		{Method: "PUT", Pattern: "/api/permission/*path", TestPath: "/api/permission/drive/Documents/" + benchDir + "/?uid=1000&recursive=0", Description: "set permission on test dir (uid 1000)", Category: "permission"},
 
 		// ────────────────────────────────────────────
 		// MD5
@@ -292,19 +301,34 @@ func AllRoutes() []RouteCase {
 		{Method: "DELETE", Pattern: "/api/smb_history/:node", TestPath: "/api/smb_history/drive/", Description: "delete SMB history", Category: "external"},
 
 		// ────────────────────────────────────────────
-		// Callback
+		// Callback — SKIP: these are internal user lifecycle events.
+		// callback/create creates a Seafile user + default library;
+		// callback/delete REMOVES a Seafile user and all their shares.
+		// Both mutate Seafile state that may be shared across nodes.
 		// ────────────────────────────────────────────
-		{Method: "POST", Pattern: "/callback/create", TestPath: "/callback/create", Description: "callback create (internal event)", Category: "callback",
-			Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"name": "apibench_callback_test"})},
-		{Method: "POST", Pattern: "/callback/delete", TestPath: "/callback/delete", Description: "callback delete (internal event)", Category: "callback",
-			Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"name": "apibench_callback_test"})},
+		{Method: "POST", Pattern: "/callback/create", TestPath: "/callback/create", Description: "callback create (creates Seafile user)", Category: "callback",
+			Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"name": "apibench_callback_test"}),
+			Skip: true, SkipReason: "creates real Seafile user + library; affects shared Seafile DB",
+			Recommendation: "1s — handler calls Seafile RPC (CreateUser + CreateDefaultLibrary); " +
+				"comparable to POST /api/repos which also creates a Seafile library. " +
+				"Expect 200-800ms under normal load, suggest 3s timeout."},
+		{Method: "POST", Pattern: "/callback/delete", TestPath: "/callback/delete", Description: "callback delete (removes Seafile user)", Category: "callback",
+			Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"name": "apibench_callback_test"}),
+			Skip: true, SkipReason: "DELETES real Seafile user + all shares; affects shared Seafile DB",
+			Recommendation: "1s — handler calls RemoveUserRelativeAdjustShare (DB deletes) + " +
+				"RemoveUser (Seafile RPC). Comparable to DELETE /api/repos. " +
+				"Expect 200-500ms, suggest 3s timeout."},
 
 		// ────────────────────────────────────────────
 		// Media
 		// ────────────────────────────────────────────
 		{Method: "GET", Pattern: "/system/configuration/:key", TestPath: "/system/configuration/encoding", Description: "get media config", Category: "media"},
-		{Method: "POST", Pattern: "/system/configuration/:key", TestPath: "/system/configuration/encoding", Description: "update media config (read-back write)", Category: "media",
-			Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{})},
+		{Method: "POST", Pattern: "/system/configuration/:key", TestPath: "/system/configuration/encoding", Description: "update media config", Category: "media",
+			Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{}),
+			Skip: true, SkipReason: "sends empty JSON body which may corrupt encoding config",
+			Recommendation: "same as GET /system/configuration/:key — handler reads ConfigMap, " +
+				"deserializes, re-serializes, writes back. Expect same latency as " +
+				"the GET variant (typically <100ms). Suggest 3s timeout."},
 		{Method: "GET", Pattern: "/videos/master.m3u8", TestPath: "/videos/master.m3u8", Description: "master HLS playlist (no item, measures routing)", Category: "media", Stream: true},
 		{Method: "GET", Pattern: "/videos/:node", TestPath: "/videos/apibench-test-node", Description: "custom play controller (no item, measures routing)", Category: "media", Stream: true},
 		{Method: "GET", Pattern: "/videos/:node/main.m3u8", TestPath: "/videos/apibench-test-node/main.m3u8", Description: "variant HLS playlist (no item, measures routing)", Category: "media", Stream: true},
