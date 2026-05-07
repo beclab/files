@@ -650,10 +650,10 @@ func (p *ProbeResultNormalizer) getMediaAttachment(streamInfo MediaStreamInfo) *
 }
 
 func (p *ProbeResultNormalizer) getMediaStream(isAudio bool, streamInfo MediaStreamInfo, formatInfo *MediaFormatInfo) *entities.MediaStream {
-	// These are mp4 chapters
+	// These are mp4 chapters (but also sometimes subtitles, so we
+	// don't return nil here as the original Jellyfin port did).
 	if strings.EqualFold(streamInfo.CodecName, "mov_text") {
-		// Edit: but these are also sometimes subtitles?
-		// return nil
+		_ = streamInfo.CodecName
 	}
 
 	level := float64(streamInfo.Level)

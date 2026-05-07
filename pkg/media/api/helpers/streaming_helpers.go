@@ -194,6 +194,8 @@ func GetStreamingState(
 
 			headers = fmt.Sprintf("Authorization: Bearer %s", accountResp.RawData.AccessToken)
 		} else if fileParam.FileType == common.AwsS3 {
+			// TODO: GetToken-equivalent for AwsS3 streaming.
+			_ = headers
 		}
 
 		klog.Infof("[media] GetStreamingState, headers: %s", headers)
@@ -471,8 +473,9 @@ func ParseParams(r interface{}) {
 			*request.MaxAudioChannels, _ = strconv.Atoi(val)
 		case 11:
 			if ok {
-				//compile
-				//                videoRequest.MaxFramerate, _ = strconv.ParseFloat(val, 64)
+				// TODO: videoRequest.MaxFramerate = ParseFloat(val, 64)
+				// once MaxFramerate is added to the request DTO.
+				_ = val
 			}
 		case 12:
 			if ok {
@@ -516,12 +519,9 @@ func ParseParams(r interface{}) {
 			}
 		case 25:
 			if ok && val != "" {
-				/* compile
-				   var method dlna.SubtitleDeliveryMethod
-				   if err := method.UnmarshalText([]byte(val)); err == nil {
-				       videoRequest.SubtitleMethod = method
-				   }
-				*/
+				// TODO: parse SubtitleMethod via dlna.SubtitleDeliveryMethod
+				// once UnmarshalText is implemented on the enum.
+				_ = val
 			}
 		case 26:
 			*request.TranscodingMaxAudioChannels, _ = strconv.Atoi(val)

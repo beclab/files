@@ -106,12 +106,9 @@ func (m *MediaInfoController) GetPostedPlaybackInfo(w http.ResponseWriter, r *ht
 	// Get the device profile
 	profile := playbackInfoDto.DeviceProfile
 	if profile == nil {
-		/*
-			caps := GetCapabilities(User.GetDeviceId())
-			if caps != nil {
-				profile = caps.DeviceProfile
-			}
-		*/
+		// TODO: derive profile from device capabilities when the
+		// User.GetDeviceId / GetCapabilities path is wired up.
+		_ = profile
 	}
 
 	// Copy parameters from the request body
@@ -153,46 +150,11 @@ func (m *MediaInfoController) GetPostedPlaybackInfo(w http.ResponseWriter, r *ht
 	}
 
 	if profile != nil {
-		/*
-				// Set device-specific data
-				for _, mediaSource := range info.MediaSources {
-					MediaInfoHelper.SetDeviceSpecificData(item, mediaSource, profile, User, maxStreamingBitrate, startTimeTicks, mediaSourceId, audioStreamIndex, subtitleStreamIndex, maxAudioChannels, info.PlaySessionId, userId, enableDirectPlay, enableDirectStream, enableTranscoding, allowVideoStreamCopy, allowAudioStreamCopy, r.RemoteAddr)
-				}
-
-				MediaInfoHelper.SortMediaSources(info, maxStreamingBitrate)
-			}
-
-			if autoOpenLiveStream {
-				var mediaSource *MediaSource
-				if mediaSourceId == "" {
-					mediaSource = info.MediaSources[0]
-				} else {
-					for _, ms := range info.MediaSources {
-						if ms.ID == mediaSourceId {
-							mediaSource = ms
-							break
-						}
-					}
-				}
-
-				if mediaSource != nil && mediaSource.RequiresOpening && mediaSource.LiveStreamId == "" {
-					openStreamResult := MediaInfoHelper.OpenMediaSource(r.Context(), LiveStreamRequest{
-						AudioStreamIndex:    audioStreamIndex,
-						DeviceProfile:       playbackInfoDto.DeviceProfile,
-						EnableDirectPlay:    enableDirectPlay,
-						EnableDirectStream:  enableDirectStream,
-						ItemId:              itemId,
-						MaxAudioChannels:    maxAudioChannels,
-						MaxStreamingBitrate: maxStreamingBitrate,
-						PlaySessionId:       info.PlaySessionId,
-						StartTimeTicks:      startTimeTicks,
-						SubtitleStreamIndex: subtitleStreamIndex,
-						UserId:              userId,
-						OpenToken:           mediaSource.OpenToken,
-					})
-					info.MediaSources = []MediaSource{openStreamResult.MediaSource}
-				}
-		*/
+		// TODO: device-specific data + autoOpenLiveStream branch.
+		// Original C# / Jellyfin port body kept commented above
+		// the function until MediaInfoHelper.SetDeviceSpecificData
+		// / OpenMediaSource etc. are implemented.
+		_ = profile
 	}
 
 	w.Header().Set("Content-Type", "application/json")

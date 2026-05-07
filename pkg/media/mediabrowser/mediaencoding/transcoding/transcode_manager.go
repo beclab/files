@@ -232,32 +232,11 @@ func (t *TranscodeManager) StartFfMpeg(state streaming.StreamState, outputPath, 
 	}
 
 	if state.SubtitleStream != nil && state.SubtitleDeliveryMethod == dlna.Encode {
-		// klog.Infoln("comment.........")
-		/*
-		   attachmentPath := filepath.Join(_appPaths.CachePath, "attachments", state.MediaSource.ID)
-		   if *state.MediaSource.VideoType == entities.Dvd || *state.MediaSource.VideoType == entities.BluRay {
-		       concatPath := filepath.Join(_serverConfigurationManager.GetTranscodePath(), state.MediaSource.ID+".concat")
-		       err = _attachmentExtractor.ExtractAllAttachments(concatPath, state.MediaSource, attachmentPath, cancellationTokenSource)
-		       if err != nil {
-		           return &mediaencoding.TranscodingJob{}, err
-		       }
-		   } else {
-		       err = _attachmentExtractor.ExtractAllAttachments(state.MediaPath, state.MediaSource, attachmentPath, cancellationTokenSource)
-		       if err != nil {
-		           return &mediaencoding.TranscodingJob{}, err
-		       }
-		   }
-
-		   if state.SubtitleStream.IsExternal && strings.EqualFold(filepath.Ext(state.SubtitleStream.Path), ".mks") {
-		       subtitlePath := state.SubtitleStream.Path
-		       subtitlePathArgument := fmt.Sprintf("file:\"%s\"", strings.ReplaceAll(subtitlePath, "\"", "\\\""))
-		       subtitleID := fmt.Sprintf("%x", md5.Sum([]byte(subtitlePath)))
-		       err = _attachmentExtractor.ExtractAllAttachmentsExternal(subtitlePathArgument, subtitleID, attachmentPath, cancellationTokenSource)
-		       if err != nil {
-		           return &mediaencoding.TranscodingJob{}, err
-		       }
-		   }
-		*/
+		// TODO: ExtractAllAttachments + .mks subtitle extract
+		// path. Original Jellyfin port body kept in git history;
+		// re-add once attachmentExtractor / serverConfigManager
+		// dependencies are wired into TranscodeManager.
+		_ = state.SubtitleStream
 	}
 
 	/*
@@ -423,26 +402,16 @@ func (m *TranscodeManager) killTranscodingJob(job *mediaencoding.TranscodingJob,
 			m.logger.Errorf("Error deleting partial stream files: %v", err)
 		}
 		if job.MediaSource != nil && (*job.MediaSource.VideoType == entities.Dvd || *job.MediaSource.VideoType == entities.BluRay) {
-			/*
-				concatFilePath := filepath.Join(m.serverConfigManager.GetTranscodePath(), job.MediaSource.ID+".concat")
-				if _, err := os.Stat(concatFilePath); err == nil {
-					m.logger.Infof("Deleting ffmpeg concat configuration at %s", concatFilePath)
-					err = os.Remove(concatFilePath)
-					if err != nil {
-						m.logger.Errorf("Error deleting ffmpeg concat configuration: %v", err)
-					}
-				}
-			*/
+			// TODO: delete the .concat ffmpeg config file once
+			// serverConfigManager.GetTranscodePath is wired up.
+			_ = job.MediaSource
 		}
 	}
 
 	if closeLiveStream && *job.LiveStreamID != "" {
-		/*
-			err := m.mediaSourceManager.closeLiveStream(job.LiveStreamID)
-			if err != nil {
-				m.logger.Errorf("Error closing live stream for %s: %v", job.Path, err)
-			}
-		*/
+		// TODO: m.mediaSourceManager.closeLiveStream(job.LiveStreamID)
+		// once mediaSourceManager is part of TranscodeManager.
+		_ = job.LiveStreamID
 	}
 
 	return nil

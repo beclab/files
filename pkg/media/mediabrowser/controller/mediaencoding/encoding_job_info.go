@@ -500,7 +500,8 @@ func (e *EncodingJobInfo) ReportTranscodingProgress(
 ) {
 	klog.Infoln("EncodingJobInfo ..................................$$$$$$$$$$$$$$$$$$$......... ReportTranscodingProgress")
 	if percentComplete != nil {
-		//        e.Progress.Report(*percentComplete)
+		// TODO: e.Progress.Report(*percentComplete) once Progress is wired.
+		_ = percentComplete
 	}
 }
 
