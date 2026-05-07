@@ -162,8 +162,8 @@ func (c *Command) Run() error {
 	c.cmd.Stderr = c.cmd.Stdout
 
 	klog.Infof("[Cmd] %s", c.cmd.String())
-	if err := c.cmd.Start(); err != nil {
-		return errors.Wrap(err, "cmd start error")
+	if e := c.cmd.Start(); e != nil {
+		return errors.Wrap(e, "cmd start error")
 	}
 
 	pgid, err := syscall.Getpgid(c.cmd.Process.Pid)
@@ -191,16 +191,16 @@ func (c *Command) Run() error {
 					continue
 				}
 				for {
-					pid, err := syscall.Wait4(-pgid, &ws, syscall.WNOHANG, nil)
-					if pid <= 0 || err != nil {
+					pid, e := syscall.Wait4(-pgid, &ws, syscall.WNOHANG, nil)
+					if pid <= 0 || e != nil {
 						break
 					}
 				}
 			case <-waitDone:
 				if c.options.Reaper {
 					for {
-						pid, err := syscall.Wait4(-pgid, &ws, 0, nil)
-						if pid <= 0 || err != nil {
+						pid, e := syscall.Wait4(-pgid, &ws, 0, nil)
+						if pid <= 0 || e != nil {
 							break
 						}
 					}

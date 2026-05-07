@@ -57,15 +57,15 @@ func CreatePreview(owner string, key string,
 	fileFormat, err := imgSvc.FormatFromExtension(bufferFile.Extension)
 	klog.Infof("[preview] fileFormat: %s", fileFormat)
 	if err == img.ErrUnsupportedFormat || fileFormat == img.FormatGif {
-		fd, err := bufferFile.Fs.Open(bufferFile.Path)
-		if err != nil {
-			return nil, err
+		fd, e := bufferFile.Fs.Open(bufferFile.Path)
+		if e != nil {
+			return nil, e
 		}
 		defer fd.Close()
 
-		data, err := io.ReadAll(fd)
-		if err != nil {
-			return nil, err
+		data, e2 := io.ReadAll(fd)
+		if e2 != nil {
+			return nil, e2
 		}
 
 		return data, err

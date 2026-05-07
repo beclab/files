@@ -317,14 +317,14 @@ func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, erro
 			}
 		}
 
-		uid, gid, err := files.GetUidGid(afs, parentDir)
-		if err != nil {
-			klog.Errorf("Get uid gid error: %v", err)
-			return nil, err
+		uid, gid, e := files.GetUidGid(afs, parentDir)
+		if e != nil {
+			klog.Errorf("Get uid gid error: %v", e)
+			return nil, e
 		}
-		if err = files.Chown(afs, createPath, uid, gid); err != nil {
-			klog.Errorf("Chown file error: %v", err)
-			return nil, err
+		if e = files.Chown(afs, createPath, uid, gid); e != nil {
+			klog.Errorf("Chown file error: %v", e)
+			return nil, e
 		}
 	} else {
 		if !strings.HasSuffix(createPath, "/") {

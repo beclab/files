@@ -267,8 +267,8 @@ func NewFileInfo(opts FileOptions) (*FileInfo, error) {
 
 	if opts.Expand {
 		if file.IsDir {
-			if err := file.readListing(opts.ReadHeader); err != nil {
-				return nil, err
+			if e := file.readListing(opts.ReadHeader); e != nil {
+				return nil, e
 			}
 			return file, nil
 		}
