@@ -165,7 +165,7 @@ func (cm *BaseConfigurationManager) ValidateCachePath(newConfig *configuration.B
 	newPath := newConfig.CachePath
 	if (newPath != nil || *newPath != "") && newPath != cm.CommonConfiguration().CachePath {
 		if _, err := os.Stat(*newPath); os.IsNotExist(err) {
-			return fmt.Errorf("%s does not exist", newPath)
+			return fmt.Errorf("%s does not exist", *newPath)
 		}
 		if err := cm.EnsureWriteAccess(*newPath); err != nil {
 			return err

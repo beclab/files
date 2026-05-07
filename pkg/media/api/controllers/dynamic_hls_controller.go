@@ -763,7 +763,11 @@ func (d *DynamicHlsController) GetDynamicSegment(c *app.RequestContext, request 
 	klog.Infof("state: %+v\n", state)
 	klog.Infof("state BaseRequest: %+v\n", state.BaseRequest)
 	klog.Infoln("______________________________")
-	klog.Infof("SegmentContainer: %s\n", state.Request.SegmentContainer)
+	if state.Request.SegmentContainer != nil {
+		klog.Infof("SegmentContainer: %s\n", *state.Request.SegmentContainer)
+	} else {
+		klog.Infof("SegmentContainer: <nil>\n")
+	}
 
 	playlistPath := d.changeExtension(state.OutputFilePath, ".m3u8")
 	klog.Infoln(state.OutputFilePath, playlistPath, segmentId)
@@ -793,7 +797,7 @@ func (d *DynamicHlsController) GetDynamicSegment(c *app.RequestContext, request 
 	currentTranscodingIndex := d.GetCurrentTranscodingIndex(playlistPath, segmentExtension)
 	klog.Infoln("########################### >>", currentTranscodingIndex)
 	segmentGapRequiringTranscodingChange := 24 / state.SegmentLength()
-	klog.Infoln(state.SegmentLength)
+	klog.Infoln(state.SegmentLength())
 	klog.Infoln("segmentlength.......................................................")
 	/*
 		segmentGapRequiringTranscodingChange := 24 / 3

@@ -292,8 +292,8 @@ func (vc *VideosController) GetVideoStreamByContainer(w http.ResponseWriter, r *
 	klog.Infoln("SegmentContainer", state.Request.SegmentContainer)
 
 	if static && state.InputProtocol != mediaprotocol.File {
-		//		return http.StatusBadRequest, fmt.Sprintf("Input protocol %s cannot be streamed statically", state.InputProtocol)
-		http.Error(w, fmt.Sprintf("Input protocol %s cannot be streamed statically", state.InputProtocol), http.StatusBadRequest)
+		//		return http.StatusBadRequest, fmt.Sprintf("Input protocol %v cannot be streamed statically", state.InputProtocol)
+		http.Error(w, fmt.Sprintf("Input protocol %v cannot be streamed statically", state.InputProtocol), http.StatusBadRequest)
 		return
 	}
 
