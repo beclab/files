@@ -112,3 +112,57 @@ func TestTask_GetStateConsistent(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestTask_AppendDetailAndSetTidyDirsAreLockProtected pins the
+// existence and locking contract of appendDetail and setTidyDirs.
+//
+// History note: an earlier version of these helpers landed in PR
+// #266 but was lost when PR #267's merge resolved task.go's
+// conflict by taking the A.4b side, dropping the A.4a additions.
+// The unsynchronized writes (`t.tidyDirs = true`,
+// `t.details = append(t.details, ...)`) returned to the worker
+// path and the race detector started catching them again.
+//
+// If a future merge drops these helpers a third time, this test
+// fails to compile (call to undefined func) - a clear signal in
+// CI long before any real -race symptom shows up.
+func TestTask_AppendDetailAndSetTidyDirsAreLockProtected(t *testing.T) {
+	task := &Task{id: "test"}
+
+	const (
+		writers  = 4
+		readers  = 4
+		duration = 200 * time.Millisecond
+	)
+
+	deadline := time.Now().Add(duration)
+	var wg sync.WaitGroup
+
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(seed int) {
+			defer wg.Done()
+			n := 0
+			for time.Now().Before(deadline) {
+				n++
+				task.appendDetail("tick")
+				if n%3 == 0 {
+					task.setTidyDirs(n%6 == 0)
+				}
+			}
+		}(i)
+	}
+
+	for i := 0; i < readers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for time.Now().Before(deadline) {
+				snap := task.snapshot()
+				_ = snap.TidyDirs
+			}
+		}()
+	}
+
+	wg.Wait()
+}

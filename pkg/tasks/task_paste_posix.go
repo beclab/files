@@ -87,7 +87,7 @@ func (t *Task) Rsync() error {
 		}
 
 		klog.Infof("[Task] Id: %s, move done!", t.id)
-		t.details = append(t.details, "move done")
+		t.appendDetail("move done")
 
 		return nil
 	}
@@ -186,7 +186,7 @@ func (t *Task) move() error {
 	dstPath := dst + t.param.Dst.Path
 
 	klog.Infof("[Task] Id: %s, conditon move, srcPath: %s, dstPath: %s", t.id, srcPath, dstPath)
-	t.details = append(t.details, fmt.Sprintf("move %s -> %s", srcPath, dstPath))
+	t.appendDetail(fmt.Sprintf("move %s -> %s", srcPath, dstPath))
 
 	var args = []string{srcPath, dstPath}
 
