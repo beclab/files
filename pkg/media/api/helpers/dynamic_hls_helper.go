@@ -326,7 +326,11 @@ func (d *DynamicHlsHelper) appendPlaylistCodecsField(builder *strings.Builder, s
 }
 
 func (d *DynamicHlsHelper) appendPlaylistResolutionField(builder *strings.Builder, state *streaming.StreamState) {
-	if state.OutputWidth != nil && state.OutputHeight != nil {
+	// state.OutputHeight is a method (returns *int); the original
+	// `state.OutputHeight != nil` was comparing a function value to
+	// nil and was always true. Call the method and nil-check its
+	// pointer result.
+	if state.OutputWidth != nil && state.OutputHeight() != nil {
 		builder.WriteString(",RESOLUTION=")
 		builder.WriteString(strconv.Itoa(*state.OutputWidth))
 		builder.WriteString("x")

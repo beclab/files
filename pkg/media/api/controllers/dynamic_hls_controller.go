@@ -63,8 +63,8 @@ const (
 )
 
 var (
-	minFFmpegFlacInMp4        = version.Version{6, 0, 0}
-	minFFmpegX265BframeInFmp4 = version.Version{7, 0, 1}
+	minFFmpegFlacInMp4        = version.Version{Major: 6, Minor: 0, Patch: 0}
+	minFFmpegX265BframeInFmp4 = version.Version{Major: 7, Minor: 0, Patch: 1}
 )
 
 type DynamicHlsController struct {
@@ -1552,7 +1552,11 @@ func (d *DynamicHlsController) GetAudioArguments(state *streaming.StreamState) s
 			audioTranscodeParams += " -ac " + strconv.Itoa(*audioChannels)
 		}
 
-		if state.OutputAudioSampleRate != nil {
+		// OutputAudioSampleRate is a method (returns *int); the
+		// previous `state.OutputAudioSampleRate != nil` compared
+		// the function value to nil and was always true. Call
+		// the method and nil-check its pointer result.
+		if state.OutputAudioSampleRate() != nil {
 			audioTranscodeParams += " -ar " + strconv.Itoa(*state.OutputAudioSampleRate())
 		}
 
@@ -1594,7 +1598,8 @@ func (d *DynamicHlsController) GetAudioArguments(state *streaming.StreamState) s
 		}
 	}
 
-	if state.OutputAudioSampleRate != nil {
+	// see note above; OutputAudioSampleRate is a method.
+	if state.OutputAudioSampleRate() != nil {
 		args += " -ar " + strconv.Itoa(*state.OutputAudioSampleRate())
 	}
 
