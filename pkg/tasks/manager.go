@@ -645,12 +645,16 @@ func (t *taskManager) ClearCacheFiles() {
 		files = nil
 		var pvcname = global.GlobalData.GetPvcCache(user)
 		var uploadPath = fmt.Sprintf("%s/%s%s", common.CACHE_PREFIX, pvcname, common.DefaultUploadToCloudTempPath)
-		filepath.Walk(uploadPath, func(path string, info fs.FileInfo, err error) error {
+		// filepath.Walk's err return is best-effort here -- the path
+		// may not yet exist for new users; log + continue.
+		if walkErr := filepath.Walk(uploadPath, func(path string, info fs.FileInfo, err error) error {
 			if info != nil && info.ModTime().Before(uploadCacheExpired) {
 				files = append(files, path)
 			}
 			return nil
-		})
+		}); walkErr != nil && !os.IsNotExist(walkErr) {
+			klog.Warningf("[gc] walk upload cache %s: %v", uploadPath, walkErr)
+		}
 
 		if len(files) > 0 {
 			for _, f := range files {
@@ -663,14 +667,16 @@ func (t *taskManager) ClearCacheFiles() {
 		// clear expired download
 		files = nil
 		var downloadPath = fmt.Sprintf("%s/%s%s", common.CACHE_PREFIX, pvcname, common.DefaultSyncUploadToCloudTempPath)
-		filepath.Walk(downloadPath, func(path string, info fs.FileInfo, err error) error {
+		if walkErr := filepath.Walk(downloadPath, func(path string, info fs.FileInfo, err error) error {
 			if info != nil && info.IsDir() {
 				if info.ModTime().Before(downloadCacheExpired) {
 					files = append(files, path)
 				}
 			}
 			return nil
-		})
+		}); walkErr != nil && !os.IsNotExist(walkErr) {
+			klog.Warningf("[gc] walk download cache %s: %v", downloadPath, walkErr)
+		}
 
 		if len(files) > 0 {
 			for _, f := range files {
@@ -683,12 +689,14 @@ func (t *taskManager) ClearCacheFiles() {
 		// clear expired thumb
 		files = nil
 		var thumbPath = fmt.Sprintf("%s/%s%s%s", common.CACHE_PREFIX, pvcname, common.DefaultLocalFileCachePath, common.CacheThumb)
-		filepath.Walk(thumbPath, func(path string, info fs.FileInfo, err error) error {
+		if walkErr := filepath.Walk(thumbPath, func(path string, info fs.FileInfo, err error) error {
 			if info != nil && info.ModTime().Before(thumbCacheExpired) {
 				files = append(files, path)
 			}
 			return nil
-		})
+		}); walkErr != nil && !os.IsNotExist(walkErr) {
+			klog.Warningf("[gc] walk thumb cache %s: %v", thumbPath, walkErr)
+		}
 
 		if len(files) > 0 {
 			for _, f := range files {
@@ -701,14 +709,16 @@ func (t *taskManager) ClearCacheFiles() {
 		// clear expired buffer
 		files = nil
 		var bufferPath = fmt.Sprintf("%s/%s%s%s", common.CACHE_PREFIX, pvcname, common.DefaultLocalFileCachePath, common.CacheBuffer)
-		filepath.Walk(bufferPath, func(path string, info fs.FileInfo, err error) error {
+		if walkErr := filepath.Walk(bufferPath, func(path string, info fs.FileInfo, err error) error {
 			if info != nil && info.IsDir() {
 				if info.ModTime().Before(bufferCacheExpired) {
 					files = append(files, path)
 				}
 			}
 			return nil
-		})
+		}); walkErr != nil && !os.IsNotExist(walkErr) {
+			klog.Warningf("[gc] walk buffer cache %s: %v", bufferPath, walkErr)
+		}
 
 		if len(files) > 0 {
 			for _, f := range files {

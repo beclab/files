@@ -189,7 +189,10 @@ func (t *Task) DownloadFromFiles() error {
 		}
 
 		if downloadResp.StatusCode != http.StatusOK {
-			io.Copy(io.Discard, downloadResp.Body)
+			// Drain the body so the underlying TCP connection can be
+			// reused; the io.Copy err is unactionable here because
+			// we're already on the error path.
+			_, _ = io.Copy(io.Discard, downloadResp.Body)
 			downloadResp.Body.Close()
 			klog.Errorf("[Task] Id: %s, download status invalid: %d", t.id, downloadResp.StatusCode)
 			err = fmt.Errorf("download status invalid: %d", downloadResp.StatusCode)
@@ -200,7 +203,7 @@ func (t *Task) DownloadFromFiles() error {
 		fileWriter, err = os.Create(filePath)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, create file writer error: %v, path: %s", t.id, err, filePath)
-			io.Copy(io.Discard, downloadResp.Body)
+			_, _ = io.Copy(io.Discard, downloadResp.Body)
 			downloadResp.Body.Close()
 			break
 		}
@@ -210,7 +213,7 @@ func (t *Task) DownloadFromFiles() error {
 		for {
 			ctxCanceled, ctxErr := t.isCancel()
 			if ctxCanceled {
-				io.Copy(io.Discard, downloadResp.Body)
+				_, _ = io.Copy(io.Discard, downloadResp.Body)
 				err = ctxErr
 				break
 			}
@@ -226,7 +229,7 @@ func (t *Task) DownloadFromFiles() error {
 
 				if nw != nr {
 					klog.Errorf("[Task] Id: %s, error short write", t.id)
-					io.Copy(io.Discard, downloadResp.Body)
+					_, _ = io.Copy(io.Discard, downloadResp.Body)
 					err = io.ErrShortWrite
 					break
 				}
@@ -241,7 +244,7 @@ func (t *Task) DownloadFromFiles() error {
 				}
 
 				klog.Errorf("[Task] Id: %s, read buffer error: %v", t.id, er)
-				io.Copy(io.Discard, downloadResp.Body)
+				_, _ = io.Copy(io.Discard, downloadResp.Body)
 				err = er
 				break
 			}
