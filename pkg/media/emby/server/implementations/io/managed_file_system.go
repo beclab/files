@@ -159,7 +159,7 @@ func containsString(slice []string, str string, caseSensitive bool) bool {
 				return true
 			}
 		} else {
-			if strings.ToLower(s) == strings.ToLower(str) {
+			if strings.EqualFold(s, str) {
 				return true
 			}
 		}

@@ -192,6 +192,10 @@ func ListAllUsers() (map[string]map[string]interface{}, error) {
 	totalCount := emailUserCount + inactiveEmailUserCount
 
 	users, err := GlobalCcnetAPI.GetEmailusers("DB", 0, totalCount, nil)
+	if err != nil {
+		klog.Errorf("get email users failed: %v", err)
+		return nil, err
+	}
 
 	data := make(map[string]map[string]interface{})
 

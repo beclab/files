@@ -32,15 +32,19 @@ type EnqueueObj struct {
 
 type Watchers struct {
 	ctx             context.Context
-	workqueue       workqueue.RateLimitingInterface
+	workqueue       workqueue.TypedRateLimitingInterface[any]
 	informerFactory dynamicinformer.DynamicSharedInformerFactory
 }
 
 func NewWatchers(ctx context.Context, kubeconfig *rest.Config) *Watchers {
 	client := dynamic.NewForConfigOrDie(kubeconfig)
 	return &Watchers{
-		ctx:             ctx,
-		workqueue:       workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		ctx: ctx,
+		// Use the typed variants (the untyped RateLimitingInterface
+		// + NewRateLimitingQueue were deprecated in client-go in
+		// favor of the generics-aware Typed* counterparts).
+		// `any` matches the workqueue's prior interface{} payload.
+		workqueue:       workqueue.NewTypedRateLimitingQueue[any](workqueue.DefaultTypedControllerRateLimiter[any]()),
 		informerFactory: dynamicinformer.NewDynamicSharedInformerFactory(client, 0),
 	}
 }

@@ -7,6 +7,15 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
+// ctxKey is the unexported type used by this package as the key
+// type for context.WithValue. Using a distinct type (rather than
+// the built-in string) prevents accidental collisions with keys
+// defined in other packages, which is what staticcheck SA1029
+// flags.
+type ctxKey string
+
+const ctxUserIDKey ctxKey = "userId"
+
 type hertzResponseWriter struct {
 	ctx     *app.RequestContext
 	wroteHS bool

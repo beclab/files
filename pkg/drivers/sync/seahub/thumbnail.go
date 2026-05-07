@@ -376,11 +376,11 @@ func createThumbnailCommon(srcFile, thumbnailFile string, size int) (bool, int) 
 	if fileType == "GIF" {
 		thumb = img
 	} else {
+		// imaging.Thumbnail returns a concrete *image.NRGBA wrapped
+		// in the image.Image interface; the wrapped value is never
+		// nil for non-nil inputs, so the previous `thumb == nil`
+		// check could never fire (staticcheck SA4023). Drop it.
 		thumb = imaging.Thumbnail(img, size, size, imaging.Lanczos)
-		if thumb == nil {
-			klog.Errorf("Thumbnail generation failed: nil image returned")
-			return false, http.StatusInternalServerError
-		}
 	}
 
 	_, ext := common.SplitNameExt(thumbnailFile)

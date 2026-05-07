@@ -744,7 +744,7 @@ func (d *DynamicHlsController) GetDynamicSegment(c *app.RequestContext, request 
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ctx = context.WithValue(ctx, "userId", "root")
+	ctx = context.WithValue(ctx, ctxUserIDKey, "root")
 	defer cancel()
 
 	state, _ := helpers.GetStreamingState(
@@ -843,7 +843,7 @@ func (d *DynamicHlsController) GetDynamicSegment(c *app.RequestContext, request 
 			*state,
 			playlistPath,
 			d.GetCommandLineArguments(playlistPath, state, false, segmentId),
-			ctx.Value("userId").(string),
+			ctx.Value(ctxUserIDKey).(string),
 			transcodingJobType,
 			ctx,
 			".",
