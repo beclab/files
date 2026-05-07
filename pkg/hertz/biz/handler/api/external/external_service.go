@@ -84,7 +84,7 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 
-		request, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
+		request, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
 		if err != nil {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 			return
@@ -245,7 +245,15 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 	klog.Infoln("body (byte slice):", body)
 	klog.Infoln("body (string):", string(body))
 
-	request, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	request, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		// Without this check, an err here would be silently
+		// shadowed by the next call to client.Do(request) and
+		// `request` would be nil at the moment of Do/Header use
+		// (panic).
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
 	c.Request.Header.VisitAll(func(key []byte, value []byte) {
 		request.Header.Set(string(key), string(value))
 	})
