@@ -183,6 +183,15 @@ func SyncSearch(ctx context.Context, c *app.RequestContext) {
 	}
 
 	res, err := seahub.HandleSearch(owner, req.Q)
+	if err != nil {
+		// Without this check we silently fell into json.Unmarshal
+		// of whatever res happened to be (often nil or a partial
+		// response), and clients got "Failed to unmarshal" as the
+		// only signal -- the actual upstream error was lost.
+		klog.Errorf("[sync search] HandleSearch error: %v", err)
+		c.AbortWithStatusJSON(consts.StatusBadGateway, utils.H{"error": fmt.Sprintf("search upstream error: %v", err)})
+		return
+	}
 	klog.Infof("[sync search] res=%s", string(res))
 
 	resp := new(search.SyncSearchResp)
