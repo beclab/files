@@ -140,6 +140,15 @@ func DeleteReposMethod(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("Repo delete repo, user: %s, id: %s", owner, repoId)
 
+	// dal.Init can legitimately leave database.DB as nil when PG env
+	// vars are unset (see PR #277). Without this guard the next
+	// database.DB.Begin() call nil-derefs and panics the request.
+	if database.DB == nil {
+		klog.Errorf("Repo delete repo, database not configured")
+		c.AbortWithStatusJSON(consts.StatusServiceUnavailable, utils.H{"error": "database not configured"})
+		return
+	}
+
 	tx := database.DB.Begin()
 	// sync relative must be done before real delete, or else dir or repo will not be found
 	deleteFileParam := &models.FileParam{
