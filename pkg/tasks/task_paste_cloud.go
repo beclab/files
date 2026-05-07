@@ -161,10 +161,10 @@ func (t *Task) DownloadFromCloud() error {
 
 	} else {
 
-		jobResp, err := cmd.Copy(src, dst)
-		if err != nil {
-			klog.Errorf("[Task] Id: %s, copy error: %v", t.id, err)
-			return fmt.Errorf("copy error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
+		jobResp, e := cmd.Copy(src, dst)
+		if e != nil {
+			klog.Errorf("[Task] Id: %s, copy error: %v", t.id, e)
+			return fmt.Errorf("copy error: %v, src: %s, dst: %s", e, common.ToJson(src), common.ToJson(dst))
 		}
 
 		if jobResp.JobId == nil {
@@ -421,10 +421,10 @@ func (t *Task) CopyToCloud() error {
 		}
 	} else {
 		// create download job
-		jobResp, err := cmd.Copy(src, dst)
-		if err != nil {
-			klog.Errorf("[Task] Id: %s, copy error: %v", t.id, err)
-			return fmt.Errorf("copy error: %v, src: %s, dst: %s", err, common.ToJson(src), common.ToJson(dst))
+		jobResp, e := cmd.Copy(src, dst)
+		if e != nil {
+			klog.Errorf("[Task] Id: %s, copy error: %v", t.id, e)
+			return fmt.Errorf("copy error: %v, src: %s, dst: %s", e, common.ToJson(src), common.ToJson(dst))
 		}
 
 		if jobResp.JobId == nil {
@@ -620,14 +620,20 @@ func (t *Task) copyId(src, dst *models.FileParam, driveId string) error {
 	if isSrcFile {
 
 		var done bool
-		var fs = fsPrefix
+		// NOTE: the inner fs and err renamed (innerFs / e) to
+		// silence govet shadow against the outer fs and err
+		// declared at the top of copyId. Behavior is preserved:
+		// the outer err is still the one returned at the bottom
+		// of the function, and remains nil unless the else branch
+		// below (or t.checkJobStats below) assigns to it.
+		innerFs := fsPrefix
 		var args = []string{
 			driveId,
 			dstFsPrefix,
 		}
-		jobCopyAsyncJob, err := cmd.GetOperation().CopyIdAsync(fs, args)
-		if err != nil {
-			return err
+		jobCopyAsyncJob, e := cmd.GetOperation().CopyIdAsync(innerFs, args)
+		if e != nil {
+			return e
 		}
 		var jobId = *jobCopyAsyncJob.JobId
 		done, err = t.checkJobStats(jobId, dst.Path)

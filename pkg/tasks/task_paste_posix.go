@@ -67,9 +67,9 @@ func (t *Task) Rsync() error {
 	klog.Infof("[Task] Id: %s, dstFree: %d", t.id, dstFree)
 
 	if !t.pausedSnap().WasPaused {
-		generatedDstNewName, generatedDstNewPath, err := t.generateNewName(pathMeta)
-		if err != nil {
-			return fmt.Errorf("generate dst name error: %v", err)
+		generatedDstNewName, generatedDstNewPath, e := t.generateNewName(pathMeta)
+		if e != nil {
+			return fmt.Errorf("generate dst name error: %v", e)
 		}
 
 		if generatedDstNewName != "" {

@@ -94,9 +94,9 @@ func (t *Task) DownloadFromFiles() error {
 		result = append(result, fi)
 	}
 
-	if err := scanner.Err(); err != nil {
-		klog.Errorf("[Task] Id: %s, scan resp body error: %v", t.id, err)
-		return err
+	if e := scanner.Err(); e != nil {
+		klog.Errorf("[Task] Id: %s, scan resp body error: %v", t.id, e)
+		return e
 	}
 
 	if len(result) == 0 {
@@ -126,10 +126,10 @@ func (t *Task) DownloadFromFiles() error {
 	dstPath := dstUri + dstPathPrefix
 
 	if !t.pausedSnap().WasPaused {
-		dupNames, err := files.CollectDupNames(dstPath, srcFilePrefix, srcFileExt, isSrcFile)
-		if err != nil {
-			klog.Errorf("[Task] Id: %s, get dup name error: %v", t.id, err)
-			return err
+		dupNames, e := files.CollectDupNames(dstPath, srcFilePrefix, srcFileExt, isSrcFile)
+		if e != nil {
+			klog.Errorf("[Task] Id: %s, get dup name error: %v", t.id, e)
+			return e
 		}
 
 		klog.Infof("[Task] Id: %s, srcName: %s, dstPath: %s, isfile: %v, dupName: %v", t.id, srcFileName, dstPath, isSrcFile, dupNames)
