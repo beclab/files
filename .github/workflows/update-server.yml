@@ -106,6 +106,12 @@ jobs:
               mkdir -p dist/$GOOS-$GOARCH
               mv filebrowser dist/$GOOS-$GOARCH/
               cd ../..
+
+              cd tools/apibench
+              go build -o apibench .
+              mkdir -p ../../cmd/backend/dist/$GOOS-$GOARCH
+              mv apibench ../../cmd/backend/dist/$GOOS-$GOARCH/
+              cd ../..
             done
           done
 
