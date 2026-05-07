@@ -105,7 +105,9 @@ func (i *integration) watch() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				i.GetIntegrations()
+				if err := i.GetIntegrations(); err != nil {
+					klog.Warningf("[integration] tick refresh failed: %v", err)
+				}
 			}
 		}
 	}()
@@ -316,7 +318,9 @@ func (i *integration) GetIntegrations() error {
 
 	// klog.Infof("integration new configs: %d", len(configs))
 
-	rclone.Command.StartHttp(configs)
+	if err := rclone.Command.StartHttp(configs); err != nil {
+		klog.Warningf("[integration] StartHttp failed (rclone may not be ready yet): %v", err)
+	}
 
 	return nil
 }

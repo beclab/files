@@ -198,9 +198,13 @@ func UpdateUserDirPermission(repoID, path, owner, shareTo, permission string) {
 	}
 
 	if path == "/" {
-		seaserv.GlobalSeafileAPI.SetSharePermission(repoID, owner, shareTo, permission)
+		if _, err := seaserv.GlobalSeafileAPI.SetSharePermission(repoID, owner, shareTo, permission); err != nil {
+			klog.Warningf("UpdateUserDirPermission SetSharePermission failed repo=%s shareTo=%s perm=%s: %v", repoID, shareTo, permission, err)
+		}
 	} else {
-		seaserv.GlobalSeafileAPI.UpdateShareSubdirPermForUser(repoID, path, owner, shareTo, permission)
+		if _, err := seaserv.GlobalSeafileAPI.UpdateShareSubdirPermForUser(repoID, path, owner, shareTo, permission); err != nil {
+			klog.Warningf("UpdateUserDirPermission UpdateShareSubdirPermForUser failed repo=%s path=%s shareTo=%s perm=%s: %v", repoID, path, shareTo, permission, err)
+		}
 	}
 }
 

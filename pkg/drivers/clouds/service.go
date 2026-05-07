@@ -87,7 +87,10 @@ func (s *service) CreateFile(fileParam *models.FileParam, dstR string, body io.R
 	var srcR = filepath.Base(createCacheFilePath)
 	var dstFs = filepath.Join(fsPrefix, filepath.Dir(fileParam.Path)) + "/"
 
-	s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR)
+	if err := s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR); err != nil {
+		klog.Errorf("[service] copyfile failed, srcFs=%s srcR=%s dstFs=%s dstR=%s: %v", srcFs, srcR, dstFs, dstR, err)
+		return nil, err
+	}
 	return nil, nil
 }
 

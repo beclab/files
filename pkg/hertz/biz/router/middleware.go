@@ -441,7 +441,10 @@ func ShareMiddleware() app.HandlerFunc {
 		} else {
 			bodyRes, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			c.Write(bodyRes)
+			// c.Write writes to the Hertz response buffer; failures
+			// here are unactionable (we can't alter the response any
+			// more), drop explicitly to satisfy errcheck.
+			_, _ = c.Write(bodyRes)
 		}
 		c.Abort()
 	}
@@ -767,7 +770,8 @@ func proxySharePaste(ctx context.Context, c *app.RequestContext, owner string, a
 	}
 	c.Status(resp.StatusCode)
 	bodyRes, _ := io.ReadAll(resp.Body)
-	c.Write(bodyRes)
+	// see notes above: Hertz response buffer; can't surface err.
+	_, _ = c.Write(bodyRes)
 	c.Abort()
 }
 
@@ -834,7 +838,12 @@ func ShareUpload() app.HandlerFunc {
 			handler.RespBadRequest(ctx, err.Error())
 			return
 		}
-		defer mf.RemoveAll()
+		// Best-effort cleanup of multipart temp files.
+		defer func() {
+			if err := mf.RemoveAll(); err != nil {
+				klog.Warningf("multipart RemoveAll failed: %v", err)
+			}
+		}()
 
 		var hasPathname, hasRepoId, hasDriveType bool
 		var hasShareBy bool
