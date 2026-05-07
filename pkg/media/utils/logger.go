@@ -31,7 +31,7 @@ func (l *Logger) Info(format string, v ...interface{}) {
         klog.Infof("[INFO] "+format, v...)
 }
 
-func (l *Logger) Infomation(format string, v ...interface{}) {
+func (l *Logger) Information(format string, v ...interface{}) {
         klog.Infof("[INFO] "+format, v...)
 }
 

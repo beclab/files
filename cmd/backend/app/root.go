@@ -61,7 +61,7 @@ func init() {
 
 	persistent.StringVarP(&cfgFile, "config", "c", "", "config file path")
 	persistent.StringP("database", "d", "./filebrowser.db", "database path")
-	flags.Bool("noauth", false, "use the noauth auther when using quick setup")
+	flags.Bool("noauth", false, "use the noauth authenticator when using quick setup")
 	flags.String("username", "admin", "username for the first user when using quick config")
 	flags.String("password", "", "hashed password for the first user when using quick config (default \"admin\")")
 

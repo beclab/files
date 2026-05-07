@@ -125,7 +125,7 @@ func (t *TranscodingJob) Stop() {
 	if !t.HasExited {
 		klog.Infoln(t.Path)
 		klog.Infoln(*t.Path)
-		t.Logger.Infomation("Stopping ffmpeg process with q command for %s", *t.Path)
+		t.Logger.Information("Stopping ffmpeg process with q command for %s", *t.Path)
 
 		/*
 			stdin, err := process.StdinPipe()
@@ -141,7 +141,7 @@ func (t *TranscodingJob) Stop() {
 
 		// Need to wait because killing is asynchronous.
 		if err := process.WaitForExit(5 * time.Second); err != nil {
-			t.Logger.Infomation("Killing FFmpeg process for %s %v", *t.Path, err)
+			t.Logger.Information("Killing FFmpeg process for %s %v", *t.Path, err)
 			process.Kill()
 		}
 	}

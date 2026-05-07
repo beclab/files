@@ -124,7 +124,7 @@ func (t *Task) rsync() error {
 	srcPath := src + t.param.Src.Path
 	dstPath := dst + t.param.Dst.Path
 
-	klog.Infof("[Task] Id: %s, conditon rsync, srcPath: %s, dstPath: %s", t.id, srcPath, dstPath)
+	klog.Infof("[Task] Id: %s, condition rsync, srcPath: %s, dstPath: %s", t.id, srcPath, dstPath)
 
 	var args = []string{
 		"-av",
@@ -185,7 +185,7 @@ func (t *Task) move() error {
 	srcPath := src + t.param.Src.Path
 	dstPath := dst + t.param.Dst.Path
 
-	klog.Infof("[Task] Id: %s, conditon move, srcPath: %s, dstPath: %s", t.id, srcPath, dstPath)
+	klog.Infof("[Task] Id: %s, condition move, srcPath: %s, dstPath: %s", t.id, srcPath, dstPath)
 	t.appendDetail(fmt.Sprintf("move %s -> %s", srcPath, dstPath))
 
 	var args = []string{srcPath, dstPath}

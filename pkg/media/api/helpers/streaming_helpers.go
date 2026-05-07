@@ -229,7 +229,7 @@ func GetStreamingState(
 			mediaSource = &mediaInfo.MediaSourceInfo
 		}
 	} else {
-		// Enforce more restrictive transcoding profile for LiveTV due to compatability reasons
+		// Enforce more restrictive transcoding profile for LiveTV due to compatibility reasons
 		// Cap the MaxStreamingBitrate to 30Mbps, because we are unable to reliably probe source bitrate,
 		// which will cause the client to request extremely high bitrate that may fail the player/encoder
 		if *streamingRequest.VideoBitRate > 30000000 {
