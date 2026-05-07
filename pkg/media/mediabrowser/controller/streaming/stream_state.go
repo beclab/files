@@ -81,8 +81,9 @@ func (s *StreamState) Dispose2(disposing bool) {
 	if disposing {
 		if s.MediaSource.RequiresClosing &&
 			(s.Request.LiveStreamId == "" && s.MediaSource.LiveStreamID != "") {
-			//compile
-			//            s.mediaSourceManager.CloseLiveStream(s.MediaSource.LiveStreamId)
+			// TODO: s.mediaSourceManager.CloseLiveStream(s.MediaSource.LiveStreamId)
+			// once mediaSourceManager is wired into StreamState.
+			_ = s.MediaSource.LiveStreamID
 		}
 	}
 

@@ -570,21 +570,17 @@ func (e *EncodingHelper) TryStreamCopy(state EncodingJobInfo) {
 	if state.VideoStream != nil && e.CanStreamCopyVideo(state, state.VideoStream) {
 		state.OutputVideoCodec = "copy"
 	} else {
-		//        user := state.User
-		// If the user doesn't have access to transcoding, then force stream copy, regardless of whether it will be compatible or not
-		//        if user != nil && !user.HasPermission(PermissionKind_EnableVideoPlaybackTranscoding) {
-		//            state.OutputVideoCodec = "copy"
-		//        }
+		// TODO: force-copy when state.User lacks
+		// EnableVideoPlaybackTranscoding permission, once the
+		// User permission API is wired up.
+		_ = state.OutputVideoCodec
 	}
 
 	if state.AudioStream != nil && e.CanStreamCopyAudio(state, state.AudioStream, state.SupportedAudioCodecs) {
 		state.OutputAudioCodec = "copy"
 	} else {
-		//        user := state.User
-		// If the user doesn't have access to transcoding, then force stream copy, regardless of whether it will be compatible or not
-		//        if user != nil && !user.HasPermission(PermissionKind_EnableAudioPlaybackTranscoding) {
-		//           state.OutputAudioCodec = "copy"
-		//        }
+		// TODO: same as above for EnableAudioPlaybackTranscoding.
+		_ = state.OutputAudioCodec
 	}
 }
 
@@ -618,7 +614,9 @@ func (e *EncodingHelper) CanStreamCopyVideo(state EncodingJobInfo, videoStream *
 	requestedProfiles := state.GetRequestedProfiles(videoStream.Codec)
 	if len(requestedProfiles) > 0 {
 		if videoStream.Profile == "" {
-			// return false
+			// TODO: original Jellyfin returns false here; left
+			// disabled while compatibility testing decides.
+			_ = videoStream.Profile
 		}
 
 		requestedProfile := requestedProfiles[0]
@@ -696,7 +694,9 @@ func (e *EncodingHelper) CanStreamCopyVideo(state EncodingJobInfo, videoStream *
 		requestLevel, err := strconv.ParseFloat(level, 64)
 		if err == nil {
 			if videoStream.Level != nil {
-				// return false
+				// TODO: original Jellyfin returns false here; left
+				// disabled while compatibility testing decides.
+				_ = videoStream.Level
 			}
 			if videoStream.Level != nil && *videoStream.Level > requestLevel {
 				return false
