@@ -809,7 +809,11 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 		if err != nil && strings.Contains(err.Error(), "folder not found") {
 			klog.Warningf("[UploadDirToSync] child got 'folder not found', re-ensuring dir %s and retrying child %s", fdstBase, obj.Name())
 			username := src.Owner + "@auth.local"
-			seaserv.GlobalSeafileAPI.PostDir(dst.Extend, filepath.Dir(fdstBase), filepath.Base(fdstBase), username)
+			// Best-effort re-create; if it fails the retry below will
+			// surface the real error from UploadDirToSync / UploadFileToSync.
+			if _, postDirErr := seaserv.GlobalSeafileAPI.PostDir(dst.Extend, filepath.Dir(fdstBase), filepath.Base(fdstBase), username); postDirErr != nil {
+				klog.Warningf("[UploadDirToSync] re-create dir %s failed (will still retry child): %v", fdstBase, postDirErr)
+			}
 			time.Sleep(2 * time.Second)
 			if obj.IsDir() {
 				err = t.UploadDirToSync(fsrcFileParam, fdstFileParam, false)
@@ -955,16 +959,21 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
 
-		writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
-		writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
-		writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
-		writer.WriteField("resumableTotalSize", strconv.FormatInt(diskSize, 10))
-		writer.WriteField("resumableType", mimeType)
-		writer.WriteField("resumableIdentifier", identifier)
-		writer.WriteField("resumableFilename", filename)
-		writer.WriteField("resumableRelativePath", filename)
-		writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
-		writer.WriteField("parent_dir", "/"+prefix)
+		// multipart.Writer.WriteField writes to the underlying
+		// io.Writer (here a *bytes.Buffer) which never fails, so
+		// the err returns are unactionable in practice. Discard
+		// explicitly to satisfy errcheck without sprinkling
+		// 10x identical err checks.
+		_ = writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
+		_ = writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
+		_ = writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
+		_ = writer.WriteField("resumableTotalSize", strconv.FormatInt(diskSize, 10))
+		_ = writer.WriteField("resumableType", mimeType)
+		_ = writer.WriteField("resumableIdentifier", identifier)
+		_ = writer.WriteField("resumableFilename", filename)
+		_ = writer.WriteField("resumableRelativePath", filename)
+		_ = writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
+		_ = writer.WriteField("parent_dir", "/"+prefix)
 
 		part, err := writer.CreateFormFile("file", common.EscapeAndJoin(filename, "/"))
 		if err != nil {
@@ -1032,16 +1041,17 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 				newBody := &bytes.Buffer{}
 				writer = multipart.NewWriter(newBody)
 
-				writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
-				writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
-				writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
-				writer.WriteField("resumableTotalSize", strconv.FormatInt(diskSize, 10))
-				writer.WriteField("resumableType", mimeType)
-				writer.WriteField("resumableIdentifier", identifier)
-				writer.WriteField("resumableFilename", filename)
-				writer.WriteField("resumableRelativePath", filename)
-				writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
-				writer.WriteField("parent_dir", "/"+prefix)
+				// See note above; bytes.Buffer-backed writer.
+				_ = writer.WriteField("resumableChunkNumber", strconv.FormatInt(chunkNumber, 10))
+				_ = writer.WriteField("resumableChunkSize", strconv.FormatInt(chunkSize, 10))
+				_ = writer.WriteField("resumableCurrentChunkSize", strconv.FormatInt(int64(bytesRead), 10))
+				_ = writer.WriteField("resumableTotalSize", strconv.FormatInt(diskSize, 10))
+				_ = writer.WriteField("resumableType", mimeType)
+				_ = writer.WriteField("resumableIdentifier", identifier)
+				_ = writer.WriteField("resumableFilename", filename)
+				_ = writer.WriteField("resumableRelativePath", filename)
+				_ = writer.WriteField("resumableTotalChunks", strconv.FormatInt(totalChunks, 10))
+				_ = writer.WriteField("parent_dir", "/"+prefix)
 
 				part, err = writer.CreateFormFile("file", common.EscapeAndJoin(filename, "/"))
 				if err != nil {
