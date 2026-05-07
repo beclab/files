@@ -449,15 +449,14 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 		}
 
 		var repo map[string]string
-		var repoId string
-		_ = repoId
 		if shared.FileType == common.Sync {
 			repo, err = seaserv.GlobalSeafileAPI.GetRepo(shared.Extend)
 			if err != nil {
 				return "", fmt.Errorf("get sync repo error: %v", err)
 			}
-			repoId = repo["id"]
-
+			// repo["id"] used to be captured into a `repoId` local
+			// that was never read further down. Drop the dead var
+			// and just log the repo payload.
 			klog.Infof("[media] pathCommon, repo data: %s", common.ParseString(repo))
 		}
 

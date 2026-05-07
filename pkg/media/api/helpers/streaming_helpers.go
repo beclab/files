@@ -290,7 +290,12 @@ func GetStreamingState(
 	}
 
 	if strings.HasPrefix(outputAudioCodec, "pcm_") {
-		containerInternal = ".pcm"
+		// state.OutputContainer was already set above from
+		// containerInternal; re-derive when the audio codec is a
+		// PCM variant so the output container reflects the actual
+		// stream format. (Previously this only updated the local
+		// containerInternal which is no longer read.)
+		state.OutputContainer = "pcm"
 	}
 
 	if state.VideoRequest != nil {
