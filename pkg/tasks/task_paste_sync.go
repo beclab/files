@@ -738,10 +738,10 @@ func (t *Task) UploadDirToSync(src, dst *models.FileParam, root bool) error {
 	}
 
 	if created {
-		res, err := seahub.HandleDirOperation(src.Owner, dst.Extend, fdstBase, "", "mkdir", true)
-		if err != nil {
-			klog.Errorf("Sync create error: %v, path: %s", err, dst.Path)
-			return err
+		res, e := seahub.HandleDirOperation(src.Owner, dst.Extend, fdstBase, "", "mkdir", true)
+		if e != nil {
+			klog.Errorf("Sync create error: %v, path: %s", e, dst.Path)
+			return e
 		}
 		klog.Infof("Sync create success, result: %s, path: %s", string(res), dst.Path)
 
@@ -855,9 +855,9 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 
 	wasPaused := t.pausedSnap().WasPaused
 	if isUploadFile && !wasPaused {
-		newDstPath, err := t.manager.GetSyncDupName(t.id, src, dst, t.param.Src, t.param.Dst)
-		if err != nil {
-			return err
+		newDstPath, e := t.manager.GetSyncDupName(t.id, src, dst, t.param.Src, t.param.Dst)
+		if e != nil {
+			return e
 		}
 		dst.Path = newDstPath
 
@@ -887,9 +887,9 @@ func (t *Task) UploadFileToSync(src, dst *models.FileParam) error {
 	if diskSize == 0 {
 		parentDir := "/" + strings.TrimSuffix(prefix, "/")
 		username := dst.Owner + "@auth.local"
-		if _, err := seaserv.GlobalSeafileAPI.PostEmptyFile(dst.Extend, parentDir, filename, username); err != nil {
-			klog.Errorf("[Task] Id: %s, post empty file %s failed: %v", t.id, dst.Path, err)
-			return err
+		if _, e := seaserv.GlobalSeafileAPI.PostEmptyFile(dst.Extend, parentDir, filename, username); e != nil {
+			klog.Errorf("[Task] Id: %s, post empty file %s failed: %v", t.id, dst.Path, e)
+			return e
 		}
 		t.updateProgress(left, 0)
 		t.updateProgress(right, 0)
@@ -1325,9 +1325,9 @@ func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool, up
 	for {
 		if fileParam.FileType == "sync" {
 			if isDir {
-				dirInfoRes, err := seahub.HandleGetRepoDir(fileParam)
-				if err != nil {
-					klog.Error(err)
+				dirInfoRes, e := seahub.HandleGetRepoDir(fileParam)
+				if e != nil {
+					klog.Error(e)
 					break
 				}
 				if dirInfoRes == nil {
