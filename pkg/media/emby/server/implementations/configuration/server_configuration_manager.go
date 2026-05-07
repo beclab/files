@@ -45,7 +45,10 @@ func NewServerConfigurationManager(
 	scm := &ServerConfigurationManager{
 		BaseConfigurationManager: appbase.NewBaseConfigurationManager(applicationPaths, loggerFactory, serializer, reflect.TypeOf(configuration.ServerConfiguration{})),
 	}
-	scm.UpdateMetadataPath()
+	// UpdateMetadataPath is currently a TODO scaffold returning nil;
+	// silence errcheck explicitly so a future implementation that
+	// returns real errors is forced to revisit this site.
+	_ = scm.UpdateMetadataPath()
 	return scm
 }
 
@@ -74,7 +77,8 @@ func (scm *ServerConfigurationManager) Configuration() *configuration.ServerConf
 
 // OnConfigurationUpdated is called when configuration is updated
 func (scm *ServerConfigurationManager) OnConfigurationUpdated() {
-	scm.UpdateMetadataPath()
+	// see ctor: TODO scaffold.
+	_ = scm.UpdateMetadataPath()
 	scm.BaseConfigurationManager.OnConfigurationUpdated()
 }
 

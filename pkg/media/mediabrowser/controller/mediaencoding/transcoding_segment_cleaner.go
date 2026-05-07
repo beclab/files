@@ -103,7 +103,9 @@ func (t *TranscodingSegmentCleaner) timerCallback(state interface{}) {
 				idxMaxToDelete := (downloadPositionSeconds - segmentKeepSeconds) / int64(t.segmentLength)
 
 				if idxMaxToDelete > 0 {
-					t.DeleteSegmentFiles(t.job, 0, idxMaxToDelete, 1500)
+					// Best-effort cleanup; partial-delete errors
+					// are surfaced via klog inside the helper.
+					_ = t.DeleteSegmentFiles(t.job, 0, idxMaxToDelete, 1500)
 				}
 			}
 		}

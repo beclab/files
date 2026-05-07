@@ -113,7 +113,9 @@ func (t *TranscodingJob) Stop() {
 	defer t.processLock.Unlock()
 
 	if t.TranscodingThrottler != nil {
-		t.TranscodingThrottler.Stop()
+		// Best-effort shutdown; throttler stop errors are not
+		// actionable from this side.
+		_ = t.TranscodingThrottler.Stop()
 	}
 
 	if t.TranscodingSegmentCleaner != nil {
@@ -136,13 +138,16 @@ func (t *TranscodingJob) Stop() {
 		_, err := t.Stdin.Write([]byte("q"))
 		if err != nil {
 			t.Logger.Errorf("Error writing to ffmpeg stdin: %v", err)
-			process.Kill()
+			// Force-kill on stdin write failure; if Kill itself
+			// fails the process is already gone or unkillable
+			// (errcheck unactionable).
+			_ = process.Kill()
 		}
 
 		// Need to wait because killing is asynchronous.
 		if err := process.WaitForExit(5 * time.Second); err != nil {
 			t.Logger.Information("Killing FFmpeg process for %s %v", *t.Path, err)
-			process.Kill()
+			_ = process.Kill()
 		}
 	}
 }

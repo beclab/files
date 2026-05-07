@@ -1368,7 +1368,8 @@ func (d *DynamicHlsController) GetVariantHlsVideoPlaylist(ctx context.Context, c
 	klog.Infof("[media] GetVariantHlsVideoPlaylist playlist: %s", playlist)
 
 	c.Response.Header.Set("Content-Type", "application/x-mpegURL")
-	c.Write([]byte(playlist))
+	// Hertz response buffer; err can't surface this late.
+	_, _ = c.Write([]byte(playlist))
 }
 
 func (d *DynamicHlsController) GetVariantPlaylistInternal(c *app.RequestContext, ctx context.Context, request interface{}) (string, error) {

@@ -157,7 +157,9 @@ func (cm *BaseConfigurationManager) UpdateCachePath() {
 	//      to resolve
 	//	cm.commonApplicationPaths.(*BaseApplicationPaths).SetCachePath(cachePath)
 	//	cm.commonApplicationPaths.SetCachePath(cachePath)
-	cm.commonApplicationPaths.CreateAndCheckMarker(cachePath, "cache", false)
+	if err := cm.commonApplicationPaths.CreateAndCheckMarker(cachePath, "cache", false); err != nil {
+		cm.logger.Error("create cache marker failed at %s: %v", cachePath, err)
+	}
 }
 
 // ValidateCachePath validates the cache path

@@ -274,7 +274,9 @@ func (m *MediaEncoder) SetFFmpegPath() bool {
 	} else {
 		options.EncoderAppPathDisplay = ""
 	}
-	m.configurationManager.SaveConfigurationByKey("encoding", options)
+	if err := m.configurationManager.SaveConfigurationByKey("encoding", options); err != nil {
+		klog.Warningf("media encoder: SaveConfigurationByKey(encoding) failed: %v", err)
+	}
 
 	// Only if mpeg path is set, try and set path to probe
 	if m.ffmpegPath != nil {
@@ -635,7 +637,7 @@ func (m *MediaEncoder) GetMediaInfoInternal(
 
 	var memoryBuffer bytes.Buffer
 	if _, err := io.Copy(&memoryBuffer, stdout); err != nil {
-		cmd.Process.Kill()
+		_ = cmd.Process.Kill()
 		klog.Infoln("Copy Errrrrrrrrrrrrr")
 		klog.Infoln(err)
 		return nil, err
