@@ -82,9 +82,9 @@ func WriteConfigMap(clientset *kubernetes.Clientset, namespace, name string, dat
 	if apierrors.IsNotFound(err) {
 		// Create new ConfigMap
 		configMap.Data = data // Set input data for creation
-		created, err := clientset.CoreV1().ConfigMaps(namespace).Create(ctx, configMap, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to create ConfigMap %s in namespace %s: %v", name, namespace, err)
+		created, e := clientset.CoreV1().ConfigMaps(namespace).Create(ctx, configMap, metav1.CreateOptions{})
+		if e != nil {
+			return fmt.Errorf("failed to create ConfigMap %s in namespace %s: %v", name, namespace, e)
 		}
 		klog.Infof("Created ConfigMap %s in namespace %s (ResourceVersion: %s)\n", name, namespace, created.ResourceVersion)
 		return nil

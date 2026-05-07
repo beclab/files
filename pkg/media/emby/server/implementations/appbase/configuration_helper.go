@@ -35,17 +35,17 @@ func GetXmlConfiguration(t reflect.Type, path string, xmlSerializer serializatio
 		configuration = CreateInstance(t)
 	} else {
 		// Deserialize the configuration
-		config, err := xmlSerializer.DeserializeFromBytes(t, buffer)
-		if err != nil {
-			return nil, err
+		config, e := xmlSerializer.DeserializeFromBytes(t, buffer)
+		if e != nil {
+			return nil, e
 		}
 		configuration = config
 	}
 
 	// Serialize configuration to bytes
 	var buf bytes.Buffer
-	if err := xmlSerializer.SerializeToStream(configuration, &buf); err != nil {
-		return nil, err
+	if e := xmlSerializer.SerializeToStream(configuration, &buf); e != nil {
+		return nil, e
 	}
 	newBytes := buf.Bytes()
 
@@ -105,9 +105,9 @@ func GetConfigurationFromConfigMap(t reflect.Type, configMapName, configMapKey s
 		} else {
 			// Deserialize the configuration from ConfigMap data
 			buffer = []byte(data)
-			config, err := jsonSerializer.DeserializeFromBytes(t, buffer)
-			if err != nil {
-				return nil, fmt.Errorf("failed to deserialize ConfigMap data: %v", err)
+			config, e := jsonSerializer.DeserializeFromBytes(t, buffer)
+			if e != nil {
+				return nil, fmt.Errorf("failed to deserialize ConfigMap data: %v", e)
 			}
 			configuration = config
 		}
@@ -115,8 +115,8 @@ func GetConfigurationFromConfigMap(t reflect.Type, configMapName, configMapKey s
 
 	// Serialize configuration to bytes
 	var buf bytes.Buffer
-	if err := jsonSerializer.SerializeToStream(configuration, &buf); err != nil {
-		return nil, fmt.Errorf("failed to serialize configuration: %v", err)
+	if e := jsonSerializer.SerializeToStream(configuration, &buf); e != nil {
+		return nil, fmt.Errorf("failed to serialize configuration: %v", e)
 	}
 	newBytes := buf.Bytes()
 
