@@ -427,17 +427,12 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		return nil, nil
 	}
 
-	var srcFilenamePrefix = srcName
-	var dstFilenamePrefix = dstName
-	var srcFilenameExt, dstFilenameExt string
-
-	if isSrcFile {
-		_, srcFilenameExt = common.SplitNameExt(srcName)
-		srcFilenamePrefix = strings.TrimSuffix(srcFilenamePrefix, srcFilenameExt)
-
-		_, dstFilenameExt = common.SplitNameExt(dstName)
-		dstFilenamePrefix = strings.TrimSuffix(dstFilenamePrefix, dstFilenameExt)
-	}
+	// NOTE: previously this block computed srcFilenamePrefix /
+	// dstFilenamePrefix (name minus extension) for filename
+	// collision handling, but the values were never consumed by
+	// the rest of the function. Removed to keep the lint baseline
+	// clean. If extension-aware collision rename is added later,
+	// reintroduce these locals together with the consumer.
 
 	var afs = afero.NewOsFs()
 	var srcPrefixPath = files.GetPrefixPath(fileParam.Path)
@@ -508,6 +503,10 @@ func (s *PosixStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHa
 	}
 
 	info, err := files.WriteFile(filePath, contextArgs.QueryParam.Body)
+	if err != nil {
+		klog.Errorf("Posix edit, write file %s failed: %v", filePath, err)
+		return nil, err
+	}
 	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
 
 	return &models.EditHandlerResponse{

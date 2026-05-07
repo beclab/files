@@ -139,9 +139,14 @@ func (s *PosixStorage) copyToCloud() (task *tasks.Task, err error) {
 	var currentNodeName = global.CurrentNodeName
 	var isCurrentNodeMaster = global.GlobalNode.IsMasterNode(currentNodeName)
 
+	// Bail out before creating a task if we aren't the master node.
+	// (Previously the err was set then immediately overwritten by
+	// task.Execute below, so the "not master node" error was never
+	// surfaced to the caller.)
 	if !isCurrentNodeMaster {
 		klog.Error("not master node")
 		err = errors.New("Posix copyToCloud, not master node")
+		return
 	}
 
 	task = tasks.TaskManager.CreateTask(s.paste)

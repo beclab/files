@@ -266,6 +266,10 @@ func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string,
 	}
 
 	folderPerms, err := GetSubFolderPermissionByDir(username, srcRepoId, srcParentDir)
+	if err != nil {
+		klog.Errorf("get sub folder permission failed: %v", err)
+		return nil, err
+	}
 	for _, dirent := range srcDirents {
 		if perm, exists := folderPerms[dirent]; exists {
 			if perm != "rw" {

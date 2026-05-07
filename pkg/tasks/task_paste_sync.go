@@ -573,7 +573,7 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 
 	var downloadFilePathShortName = t.manager.formatFilePathWithoutTask(downloadFilePath, t.id)
 
-	dstFileStat, err := os.Stat(downloadFilePath)
+	dstFileStat, _ := os.Stat(downloadFilePath)
 	if dstFileStat != nil && dstFileStat.Size() == fileSize {
 		var p = int(float64(t.transfer+fileSize) / float64(t.totalSize) * 100)
 		t.updateProgress(p, fileSize)

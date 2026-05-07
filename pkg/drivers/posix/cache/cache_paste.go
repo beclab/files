@@ -103,10 +103,14 @@ func (s *CacheStorage) copyToCache() (task *tasks.Task, err error) {
 	var srcNode = s.paste.Src.Extend
 	var dstNode = s.paste.Dst.Extend
 
-	// Route to the dst node
+	// Route to the dst node. If we're not the dst node, bail out
+	// before creating the task so the caller actually sees the
+	// "not master node" error. (Previously the err was set but
+	// immediately overwritten by task.Execute below.)
 	if dstNode != global.CurrentNodeName {
 		klog.Errorf("not dst node")
 		err = errors.New("Cache copyToCache, not master node")
+		return
 	}
 
 	if srcNode == dstNode {

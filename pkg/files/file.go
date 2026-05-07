@@ -198,7 +198,7 @@ func MountPathIncluster(r *http.Request) (map[string]interface{}, error) {
 
 func UnmountPathIncluster(r *http.Request, path string) (map[string]interface{}, error) {
 	externalType := r.URL.Query().Get("external_type")
-	var url = ""
+	var url string
 	if externalType == "usb" {
 		url = "http://" + TerminusdHost + "/command/umount-usb-incluster"
 	} else if externalType == "smb" {

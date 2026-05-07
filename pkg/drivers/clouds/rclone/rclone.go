@@ -400,7 +400,8 @@ func (r *rclone) CreateEmptyDirectories(src, target *models.FileParam) error {
 
 	// create
 	var localFs, localRemote string = fmt.Sprintf("%s:%s", common.Local, common.DefaultLocalRootPath), common.DefaultKeepFileName
-	var dstFs, dstRemote string = dstFsPrefix, ""
+	var dstFs string = dstFsPrefix
+	var dstRemote string
 
 	for _, item := range srcPathFormated {
 		dstRemote = dstPrefix + filepath.Join(dstName, item) + "/"
@@ -435,8 +436,8 @@ func (r *rclone) CreatePlaceHolder(dst *models.FileParam) error {
 	dstPrefix := files.GetPrefixPath(dst.Path)
 	dstName, isFile := files.GetFileNameFromPath(dst.Path)
 
-	var dstFs, dstRemote string = dstFsPrefix, ""
-	dstRemote = dstPrefix + dstName
+	var dstFs string = dstFsPrefix
+	dstRemote := dstPrefix + dstName
 
 	if isFile {
 		dstRemote = strings.TrimPrefix(dstRemote, "/")
@@ -609,6 +610,11 @@ func (r *rclone) Delete(param *models.FileParam, dirents []string) ([]string, er
 		klog.Infof("[rclone] delete, delete (%d/%d), user: %s, file: %s", current+1, total, user, dp)
 
 		fsPrefix, err := r.GetFsPrefix(param)
+		if err != nil {
+			klog.Errorf("[rclone] delete, get fs prefix error: %v", err)
+			deleteFailedPaths = append(deleteFailedPaths, dp)
+			continue
+		}
 		_, isFile := files.GetFileNameFromPath(dp)
 
 		var fs, remote string
