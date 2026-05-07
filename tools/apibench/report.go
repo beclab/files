@@ -32,7 +32,7 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 	var ok, errored, setup, cleanup, skipped int
 	for _, r := range results {
 		switch {
-		case r.Note == "skip":
+		case r.Note == "skip" || r.Note == "skip-dep":
 			skipped++
 		case r.Note == "setup":
 			setup++
@@ -64,9 +64,11 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 				stream = "stream"
 			}
 
-			if r.Note == "skip" {
+			if r.Note == "skip" || r.Note == "skip-dep" {
 				reason := r.Route.SkipReason
-				if reason == "" {
+				if r.Note == "skip-dep" {
+					reason = "prerequisite not available"
+				} else if reason == "" {
 					reason = "unsafe"
 				}
 				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | SKIP | %s | %s |\n",
@@ -108,7 +110,7 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 			if r.Note == "setup" || r.Note == "cleanup" {
 				continue
 			}
-			if r.Note == "skip" {
+			if r.Note == "skip" || r.Note == "skip-dep" {
 				continue // handled in the analysis section below
 			}
 			if r.Status <= 0 {

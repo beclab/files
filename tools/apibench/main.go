@@ -134,6 +134,16 @@ func main() {
 				continue
 			}
 
+			if route.DynPath != nil && route.DynPath() == "" {
+				fmt.Println("  [SKIP: prerequisite not available]")
+				results = append(results, BenchResult{
+					Route:  route,
+					Status: -1,
+					Note:   "skip-dep",
+				})
+				continue
+			}
+
 			if phase < 0 {
 				// Setup phase: single request, capture state, don't benchmark
 				fmt.Println(" [SETUP]")

@@ -167,9 +167,10 @@ func AllRoutes() []RouteCase {
 		{Method: "GET", Pattern: "/api/share/smb_share_user", TestPath: "/api/share/smb_share_user/", Description: "list SMB users", Category: "share"},
 
 		// create share path (setup for further operations)
-		{Method: "POST", Pattern: "/api/share/share_path/*path", TestPath: "/api/share/share_path/drive/Documents/", Description: "create share path", Category: "share",
+		// NOTE: use "internal" share_type — "external" would create a K8s ClusterRole+Binding
+		{Method: "POST", Pattern: "/api/share/share_path/*path", TestPath: "/api/share/share_path/drive/Documents/", Description: "create share path (internal)", Category: "share",
 			Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{
-				"share_type": "external", "name": "apibench_share", "password": "bench123",
+				"share_type": "internal", "name": "apibench_share", "password": "bench123",
 				"expire_in": 86400, "permission": 1,
 			})},
 		// get_token (validate share)
@@ -212,16 +213,16 @@ func AllRoutes() []RouteCase {
 		{Method: "DELETE", Pattern: "/api/share/share_token", TestPath: "/api/share/share_token/", Description: "revoke share token", Category: "share",
 			Phase: 97, DynPath: func() string {
 				if createdTokenID == "" {
-					return "/api/share/share_token/?token=none"
+					return "" // empty → skipped at runtime
 				}
 				return "/api/share/share_token/?token=" + createdTokenID
 			}},
 
-		// cleanup: delete share path
+		// cleanup: delete share path — skip if setup never captured a path ID
 		{Method: "DELETE", Pattern: "/api/share/share_path", TestPath: "/api/share/share_path/", Description: "cleanup: delete share path", Category: "share",
 			Phase: 99, DynPath: func() string {
 				if createdSharePath == "" {
-					return "/api/share/share_path/?path_ids=none"
+					return "" // empty → skipped at runtime
 				}
 				return "/api/share/share_path/?path_ids=" + createdSharePath
 			}},
@@ -256,21 +257,21 @@ func AllRoutes() []RouteCase {
 		{Method: "PATCH", Pattern: "/api/repos", TestPath: "/api/repos/", Description: "rename repo", Category: "repos",
 			DynPath: func() string {
 				if createdRepoID == "" {
-					return "/api/repos/?repoId=none&destination=apibench_renamed_repo"
+					return "" // empty → skipped at runtime
 				}
 				return "/api/repos/?repoId=" + createdRepoID + "&destination=apibench_renamed_repo"
 			}},
 		{Method: "GET", Pattern: "/api/repos/:repo_id/download-info", TestPath: "/api/repos/", Description: "get repo download info", Category: "repos",
 			DynPath: func() string {
 				if createdRepoID == "" {
-					return "/api/repos/none/download-info/"
+					return "" // empty → skipped at runtime
 				}
 				return "/api/repos/" + createdRepoID + "/download-info/"
 			}},
 		{Method: "DELETE", Pattern: "/api/repos", TestPath: "/api/repos/", Description: "cleanup: delete repo", Category: "repos",
 			Phase: 99, DynPath: func() string {
 				if createdRepoID == "" {
-					return "/api/repos/?repoId=none"
+					return "" // empty → skipped at runtime
 				}
 				return "/api/repos/?repoId=" + createdRepoID
 			}},
@@ -309,15 +310,40 @@ func AllRoutes() []RouteCase {
 		{Method: "POST", Pattern: "/callback/create", TestPath: "/callback/create", Description: "callback create (creates Seafile user)", Category: "callback",
 			Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"name": "apibench_callback_test"}),
 			Skip: true, SkipReason: "creates real Seafile user + library; affects shared Seafile DB",
-			Recommendation: "1s — handler calls Seafile RPC (CreateUser + CreateDefaultLibrary); " +
-				"comparable to POST /api/repos which also creates a Seafile library. " +
-				"Expect 200-800ms under normal load, suggest 3s timeout."},
+			Recommendation: "Call chain: HandleCallbackCreate → CreateUser → ListAllUsers " +
+				"(3 Ccnet RPCs + O(N) Redis HGetAll per user for email mapping) → " +
+				"SaveUser (GetEmailuser + AddEmailuser, 2 Ccnet RPCs) → " +
+				"CreateDefaultLibrary (1 Seafile CreateRepo RPC + GetSystemDefaultRepoId + " +
+				"ListDirByPath + sequential CopyFile per template entry). " +
+				"All I/O is over Unix domain socket with no application-level timeout. " +
+				"Dominant cost: ListAllUsers scales with user count (Redis round-trips); " +
+				"CopyFile is sequential per template file. " +
+				"For a fresh system (~1-5 users, 3-5 template files): ~500-1500ms. " +
+				"For a system with 50+ users: could reach 2-5s due to Redis HGetAll loop. " +
+				"Comparable: POST /api/repos (benchmarked) does CreateRepo only (~200-500ms), " +
+				"but callback/create adds user creation + template copies on top. " +
+				"Suggest timeout: 10s (accounts for large user lists and template copies)."},
 		{Method: "POST", Pattern: "/callback/delete", TestPath: "/callback/delete", Description: "callback delete (removes Seafile user)", Category: "callback",
 			Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"name": "apibench_callback_test"}),
 			Skip: true, SkipReason: "DELETES real Seafile user + all shares; affects shared Seafile DB",
-			Recommendation: "1s — handler calls RemoveUserRelativeAdjustShare (DB deletes) + " +
-				"RemoveUser (Seafile RPC). Comparable to DELETE /api/repos. " +
-				"Expect 200-500ms, suggest 3s timeout."},
+			Recommendation: "Call chain: RemoveUserRelativeAdjustShare (Postgres tx: " +
+				"QuerySharePath + per-path DeleteSharePathRelations + per-sync-share " +
+				"HandleDeleteDirSharedItems which does GetRepo/GetDirIdByPath/GetRepoOwner/" +
+				"RemoveShare RPCs sequentially + DeleteShareMember + Commit) → " +
+				"HandleCallbackDelete → RemoveUser (GetEmailuser + GetOwnedRepoList + " +
+				"sequential RemoveRepo per owned repo + GetShareInRepoList + " +
+				"sequential RemoveShare per inbound share + DeleteRepoTokensByEmail + " +
+				"RemoveGroupUser + RemoveEmailuser). " +
+				"All Seafile RPCs are Unix socket, no timeout. GetRepo/GetDirIdByPath " +
+				"use rpcWithRetry (up to 4 attempts, 200ms backoff). " +
+				"Dominant cost: scales with owned repos + inbound shares " +
+				"(each is a sequential RPC). " +
+				"For a user with 1-3 repos, few shares: ~500-1500ms. " +
+				"For a user with 10+ repos and many shares: could reach 5-10s. " +
+				"Comparable: DELETE /api/repos (benchmarked) does similar share cleanup " +
+				"+ single repo delete (~300-800ms), but callback/delete adds " +
+				"full user deletion across ALL repos. " +
+				"Suggest timeout: 15s (accounts for heavy users with many repos/shares)."},
 
 		// ────────────────────────────────────────────
 		// Media
@@ -326,9 +352,17 @@ func AllRoutes() []RouteCase {
 		{Method: "POST", Pattern: "/system/configuration/:key", TestPath: "/system/configuration/encoding", Description: "update media config", Category: "media",
 			Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{}),
 			Skip: true, SkipReason: "sends empty JSON body which may corrupt encoding config",
-			Recommendation: "same as GET /system/configuration/:key — handler reads ConfigMap, " +
-				"deserializes, re-serializes, writes back. Expect same latency as " +
-				"the GET variant (typically <100ms). Suggest 3s timeout."},
+			Recommendation: "Call chain: UpdateNamedConfiguration → JSON unmarshal (CPU) → " +
+				"Validate → GetConfiguration → GetConfigurationFromConfigMap " +
+				"(K8s API: ConfigMaps.Get, ~10-50ms intra-cluster) → " +
+				"SaveConfigurationToConfigMap (serialize JSON + WriteConfigMap: " +
+				"ConfigMaps.Get + ConfigMaps.Update, ~20-80ms total). " +
+				"All K8s calls use client-go REST with context.Background() " +
+				"and no per-request deadline. " +
+				"GET variant (benchmarked) does the read path only (~10-50ms). " +
+				"POST adds one extra ConfigMap write (~10-30ms on top). " +
+				"Total expected: 30-100ms under normal K8s API server load. " +
+				"Suggest timeout: 5s (K8s API can spike under etcd pressure)."},
 		{Method: "GET", Pattern: "/videos/master.m3u8", TestPath: "/videos/master.m3u8", Description: "master HLS playlist (no item, measures routing)", Category: "media", Stream: true},
 		{Method: "GET", Pattern: "/videos/:node", TestPath: "/videos/apibench-test-node", Description: "custom play controller (no item, measures routing)", Category: "media", Stream: true},
 		{Method: "GET", Pattern: "/videos/:node/main.m3u8", TestPath: "/videos/apibench-test-node/main.m3u8", Description: "variant HLS playlist (no item, measures routing)", Category: "media", Stream: true},
