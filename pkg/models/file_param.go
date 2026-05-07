@@ -109,6 +109,13 @@ func (p *FileParam) convert(url string) (err error) {
 		p.Extend = extend
 		p.Path = subPath
 
+	} else {
+		// Previously this fell through and returned (nil, *FileParam)
+		// with FileType == "". Downstream GetResourceUri then reported
+		// "invalid file type:" and the caller saw a confusing
+		// half-built param. Surface the unsupported type explicitly
+		// so the offending URL is visible at the parse site.
+		return fmt.Errorf("unsupported file type: %q (url: %s)", fileType, url)
 	}
 	return nil
 }
