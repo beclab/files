@@ -111,7 +111,12 @@ func (m *MediaInfoController) GetPostedPlaybackInfo(w http.ResponseWriter, r *ht
 		_ = profile
 	}
 
-	// Copy parameters from the request body
+	// Copy parameters from the request body. The receivers of these
+	// values (MediaInfoHelper.SetDeviceSpecificData / OpenMediaSource)
+	// are still commented out further down, so log the merged values
+	// for visibility -- this both documents the body-overrides-query
+	// contract and silences ineffassign on assignments that would
+	// otherwise be unread until the TODOs above are completed.
 	//	userId = RequestHelpers.GetUserId(User, userId)
 	maxStreamingBitrate = strconv.Itoa(*playbackInfoDto.MaxStreamingBitrate)
 	startTimeTicks = *playbackInfoDto.StartTimeTicks
@@ -126,6 +131,11 @@ func (m *MediaInfoController) GetPostedPlaybackInfo(w http.ResponseWriter, r *ht
 	enableTranscoding = *playbackInfoDto.EnableTranscoding
 	allowVideoStreamCopy = *playbackInfoDto.AllowVideoStreamCopy
 	allowAudioStreamCopy = *playbackInfoDto.AllowAudioStreamCopy
+	klog.V(4).Infoln("merged playback params:",
+		userId, maxStreamingBitrate, startTimeTicks, audioStreamIndex,
+		subtitleStreamIndex, maxAudioChannels, mediaSourceId, liveStreamId,
+		autoOpenLiveStream, enableDirectPlay, enableDirectStream,
+		enableTranscoding, allowVideoStreamCopy, allowAudioStreamCopy)
 
 	/*
 		userId = helpers.GetUserId(User, userId)

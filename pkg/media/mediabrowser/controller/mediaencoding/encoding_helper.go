@@ -3199,7 +3199,11 @@ func GetHwTonemapFilter(options configuration.EncodingOptions, hwTonemapSuffix, 
 	var args string
 	algorithm := strings.ToLower(fmt.Sprintf("%d", options.TonemappingAlgorithm))
 	mode := strings.ToLower(fmt.Sprintf("%d", options.TonemappingMode))
-	rangeValue := entities.TonemappingRangePC
+	// Default to PC range; overridden by options when forceFullRange
+	// is false. Keep the explicit if/else (instead of just
+	// initializing to TonemappingRangePC then assigning in the
+	// else) so the intent is obvious to future readers.
+	var rangeValue entities.TonemappingRange
 	if forceFullRange {
 		rangeValue = entities.TonemappingRangePC
 	} else {
