@@ -155,7 +155,10 @@ func (m *MediaInfoController) GetPostedPlaybackInfo(w http.ResponseWriter, r *ht
 
 	if info.ErrorCode != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		// json.Encoder.Encode err is unactionable here (we already
+		// set the Content-Type header and there's no graceful
+		// error response we can write). Discard explicitly.
+		_ = json.NewEncoder(w).Encode(info)
 		return
 	}
 
@@ -168,5 +171,6 @@ func (m *MediaInfoController) GetPostedPlaybackInfo(w http.ResponseWriter, r *ht
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(info)
+	// see comment on the ErrorCode branch above.
+	_ = json.NewEncoder(w).Encode(info)
 }

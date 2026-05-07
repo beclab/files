@@ -155,7 +155,9 @@ func (m *TranscodeManager) onTranscodeKillTimerStopped(state interface{}) {
 	}
 
 	m.logger.Infof("Transcoding kill timer stopped for JobId %d PlaySessionId %d. Killing transcoding", job.ID, job.PlaySessionID)
-	m.killTranscodingJob(job, true, func(path string) bool { return true })
+	if err := m.killTranscodingJob(job, true, func(path string) bool { return true }); err != nil {
+		m.logger.Errorf("Transcoding kill timer cleanup failed for JobId %d: %v", job.ID, err)
+	}
 }
 
 func (m *TranscodeManager) KillTranscodingJobs(deviceID, playSessionID string, deleteFiles func(string) bool) error {
@@ -577,7 +579,10 @@ func (m *TranscodeManager) DeletePartialStreamFiles(path string, jobType mediaen
 
 	if err != nil {
 		m.logger.Errorf("Error deleting partial stream file(s) %s: %v", path, err)
-		m.DeletePartialStreamFiles(path, jobType, retryCount+1, 500)
+		// Recursive retry; the result is intentionally discarded
+		// (the caller already saw the original error and we just
+		// surface a single delete attempt's worth of logging).
+		_ = m.DeletePartialStreamFiles(path, jobType, retryCount+1, 500)
 	}
 
 	return nil

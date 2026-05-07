@@ -428,12 +428,16 @@ func (p *ProbeResultNormalizer) fetchFromItunesInfo(xmlData string, info *mediai
 			case "dict":
 				//				if decoder.IsEmpty() {
 				if se.Name.Space == "" && len(se.Attr) == 0 {
-					decoder.Skip()
+					// Best-effort skip; the loop below continues
+					// to advance the decoder so a Skip error here
+					// just means we'll process odd tokens next
+					// iteration.
+					_ = decoder.Skip()
 					continue
 				}
 				p.readFromDictNode(decoder, info)
 			default:
-				decoder.Skip()
+				_ = decoder.Skip()
 			}
 		default:
 			// ignore other token types

@@ -39,7 +39,10 @@ var fileSystem *iio.ManagedFileSystem
 
 func Init() {
 
-	CreateApplicationPaths()
+	if err := CreateApplicationPaths(); err != nil {
+		klog.Errorf("media service Init: CreateApplicationPaths failed: %v", err)
+		// fall through; downstream code logs subsequent failures.
+	}
 
 	logger = utils.NewLogger("media-server ", log.LstdFlags)
 	sessionManager := session.NewSessionManager()

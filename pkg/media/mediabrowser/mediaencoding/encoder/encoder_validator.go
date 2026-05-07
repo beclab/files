@@ -224,14 +224,14 @@ type Logger interface {
 func (ev *EncoderValidator) ValidateVersion() bool {
 	output, err := ev.getProcessOutput(ev.encoderPath, "-version", false, "")
 	if err != nil {
-		//ev.logger.LogError(err, "Error validating encoder")
-		fmt.Errorf("Error validating encoder %v\n", err)
+		// Was a stray fmt.Errorf whose result was thrown away;
+		// route to the logger so the message actually surfaces.
+		ev.logger.Errorf("Error validating encoder: %v", err)
 		return false
 	}
 
 	if output == "" {
-		//ev.logger.LogError(errors.New("FFmpeg validation: The process returned no result"), "")
-		fmt.Errorf("FFmpeg validation: The process returned no result")
+		ev.logger.Errorf("FFmpeg validation: The process returned no result")
 		return false
 	}
 
