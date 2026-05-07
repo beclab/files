@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	commonutils "files/pkg/common"
 	"files/pkg/drivers/clouds/rclone/common"
-	"files/pkg/drivers/clouds/rclone/config"
 	"files/pkg/drivers/clouds/rclone/utils"
 	"fmt"
 	"net/http"
@@ -46,9 +45,7 @@ type Interface interface {
 	BackendCommand(command string, fs string, args []string, async bool) (*OperationsAsyncJobResp, error)
 }
 
-type operations struct {
-	config config.Interface
-}
+type operations struct{}
 
 func NewOperations() *operations {
 	return &operations{}

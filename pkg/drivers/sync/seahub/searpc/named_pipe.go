@@ -26,10 +26,6 @@ type NamedPipeTransport struct {
 	client     *NamedPipeClient
 }
 
-func (c *NamedPipeClient) validateTransport(t *NamedPipeTransport) bool {
-	return t.conn != nil
-}
-
 func (t *NamedPipeTransport) Connect() error {
 	if t.conn == nil {
 		conn, err := net.Dial("unix", t.socketPath)

@@ -12,12 +12,10 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"io/fs"
 	"mime"
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -506,73 +504,6 @@ func (i *FileInfo) detectSubtitles() {
 			}
 		}
 	}
-}
-
-func (i *FileInfo) readDirents() ([]os.FileInfo, error) {
-	var (
-		dir      []os.FileInfo
-		firstErr error
-		err      error
-	)
-
-	afs := &afero.Afero{Fs: i.Fs}
-	dir, err = afs.ReadDir(i.Path)
-	if err != nil {
-		klog.Error(err)
-		if !strings.Contains(err.Error(), "host is down") {
-			return nil, err
-		}
-
-		// SMB/CIFS fallback: walk the host filesystem under
-		// RootPrefix so the path matches DefaultFs's view of the
-		// data root. The literal "/data" used to be hardcoded here
-		// and would diverge whenever ROOT_PREFIX was set to
-		// anything else (PR #261/#262 made the rest of the codebase
-		// honor RootPrefix; this site was missed).
-		walkRoot := common.RootPrefix + i.Path
-		err = filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				if strings.Contains(err.Error(), "host is down") {
-					klog.Warningf("[WARN] skipping %s: %v\n", path, err)
-					return nil
-				}
-				firstErr = fmt.Errorf("walk error %s: %w", path, err)
-				return err
-			}
-
-			if path == walkRoot {
-				return nil
-			}
-
-			relPath, err := filepath.Rel(walkRoot, path)
-			if err != nil {
-				return nil
-			}
-
-			if strings.Count(relPath, "/") > 0 {
-				return filepath.SkipDir
-			}
-
-			info, err := d.Info()
-			if err != nil {
-				if strings.Contains(err.Error(), "host is down") {
-					klog.Warningf("[WARN] skipping %s: %v\n", path, err)
-					return nil
-				}
-				firstErr = fmt.Errorf("get file info failed %s: %w", path, err)
-				return err
-			}
-
-			dir = append(dir, info)
-			return nil
-		})
-
-		if err != nil {
-			klog.Errorln(firstErr)
-			return nil, err
-		}
-	}
-	return dir, nil
 }
 
 func (i *FileInfo) readListing(readHeader bool) error {

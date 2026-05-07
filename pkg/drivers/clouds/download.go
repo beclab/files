@@ -4,10 +4,7 @@ import (
 	"context"
 	"errors"
 	"files/pkg/common"
-	"files/pkg/files"
 	"files/pkg/models"
-	"path"
-	"strings"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -118,30 +115,6 @@ func (d *Download) download() error {
 	}
 }
 
-func (d *Download) generateBufferFolder() (string, error) {
-	var owner = d.fileParam.Owner
-	var exists = false
-	// Use RootPrefix (env-driven, fallback /data) so the buffer dir
-	// resolves to the same root the rest of the codebase uses (see
-	// PR #261/#262). ROOT_PREFIX is a hardcoded "/data" constant
-	// and ignores the deployment override.
-	var bufferFolder = path.Join(common.RootPrefix, common.CacheBuffer, owner)
-	if files.FilePathExists(bufferFolder) {
-		exists = true
-	}
-
-	if !exists {
-		if err := files.MkdirAllWithChown(nil, bufferFolder, 0755, true, 1000, 1000); err != nil {
-			return "", err
-		}
-	}
-
-	if !strings.HasSuffix(bufferFolder, "/") {
-		bufferFolder = bufferFolder + "/"
-	}
-
-	return bufferFolder, nil
-}
 
 func (d *Download) checkCtx() error {
 	select {
