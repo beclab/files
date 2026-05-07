@@ -35,7 +35,13 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 	var result []byte
 	var err error
 
-	if err := retry.OnError(backoff, func(err error) bool {
+	// Use = (not :=) so we don't shadow the function-scope err.
+	// Note the inner closures (lines below) write to the same
+	// captured outer err, so this matters for behavior too: the
+	// retry-loop's last NewRequestWithContext / Do / ReadAll
+	// error is preserved on the outer err for callers that may
+	// want to inspect it via debugger / future logging.
+	if err = retry.OnError(backoff, func(err error) bool {
 		return true
 	}, func() error {
 		var newRequest *http.Request
@@ -63,10 +69,10 @@ func Request(ctx context.Context, u string, method string, header *http.Header, 
 		// newRequest.Header.Add("Content-Type", "application/octet-stream")
 
 		start := time.Now()
-		resp, err := rcloneHTTPClient.Do(newRequest)
-		if err != nil {
-			klog.Errorf("[request] do error: %v", err)
-			return err
+		resp, e := rcloneHTTPClient.Do(newRequest)
+		if e != nil {
+			klog.Errorf("[request] do error: %v", e)
+			return e
 		}
 		defer resp.Body.Close()
 		if strings.Contains(u, "operations/") || strings.Contains(u, "sync/") {

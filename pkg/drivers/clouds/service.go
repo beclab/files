@@ -107,8 +107,8 @@ func (s *service) CreateFolder(param *models.FileParam) ([]byte, error) {
 
 	if param.FileType == common.AwsS3 || param.FileType == common.TencentCos {
 		var keepFilePath = common.DefaultLocalRootPath + common.DefaultKeepFileName
-		if err := files.CheckKeepFile(keepFilePath); err != nil {
-			return nil, err
+		if e := files.CheckKeepFile(keepFilePath); e != nil {
+			return nil, e
 		}
 
 		var srcFs = fmt.Sprintf("local:%s", common.DefaultLocalRootPath)
@@ -116,10 +116,10 @@ func (s *service) CreateFolder(param *models.FileParam) ([]byte, error) {
 		var dstFs = fsPrefix + prefixPath
 		var dstR = fileName + "/"
 
-		err := s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR)
-		if err != nil {
-			klog.Errorf("[service] createfolder, type: %s, dstFs: %s, dstR: %s, error: %v", param.FileType, dstFs, dstR, err)
-			return nil, err
+		e := s.command.GetOperation().Copyfile(srcFs, srcR, dstFs, dstR)
+		if e != nil {
+			klog.Errorf("[service] createfolder, type: %s, dstFs: %s, dstR: %s, error: %v", param.FileType, dstFs, dstR, e)
+			return nil, e
 		}
 
 		klog.Infof("[service] createfolder done!")
