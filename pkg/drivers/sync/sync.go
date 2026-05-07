@@ -252,7 +252,7 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	}
 
 	var fileInfo *models.SyncFile
-	if err := json.Unmarshal(filesData, &fileInfo); err != nil {
+	if e := json.Unmarshal(filesData, &fileInfo); e != nil {
 		return nil, errors.New("file not found")
 	}
 
@@ -293,9 +293,9 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 	previewCachedPath := diskcache.GenerateCacheBufferPath(owner, filepath.Dir(fileInfo.Path))
 
 	if !files.FilePathExists(previewCachedPath) {
-		if err := files.MkdirAllWithChown(nil, previewCachedPath, 0755, true, 1000, 1000); err != nil {
-			klog.Errorln(err)
-			return nil, err
+		if e := files.MkdirAllWithChown(nil, previewCachedPath, 0755, true, 1000, 1000); e != nil {
+			klog.Errorln(e)
+			return nil, e
 		}
 	}
 
@@ -436,14 +436,14 @@ func (s *SyncStorage) Raw(contextArgs *models.HttpContextArgs) (*models.RawHandl
 		_, ext := common.SplitNameExt(fileName)
 		ext = strings.ToLower(ext)
 		if queryParam.RawInline == "true" && (ext == ".txt" || ext == ".log" || ext == ".md") {
-			rawData, err := seahub.ViewLibFile(fileParam, "dict")
-			if err != nil {
-				return nil, err
+			rawData, e := seahub.ViewLibFile(fileParam, "dict")
+			if e != nil {
+				return nil, e
 			}
 
 			var result map[string]interface{}
-			if err := json.Unmarshal(rawData, &result); err != nil {
-				klog.Errorf("JSON parse failed: data=%s, err=%v", string(rawData), err)
+			if e2 := json.Unmarshal(rawData, &result); e2 != nil {
+				klog.Errorf("JSON parse failed: data=%s, err=%v", string(rawData), e2)
 			}
 
 			fileContent, ok := result["file_content"].(string)

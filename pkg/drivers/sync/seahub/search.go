@@ -23,10 +23,10 @@ func HandleSearch(owner, q string) ([]byte, error) {
 	}
 	for _, repo := range ownedRepos {
 		repoId := repo["id"]
-		data, err := HandleSearchFile(username, repoId, q, false)
-		if err != nil {
-			klog.Errorln(err)
-			return nil, err
+		data, e := HandleSearchFile(username, repoId, q, false)
+		if e != nil {
+			klog.Errorln(e)
+			return nil, e
 		}
 		result = append(result, data...)
 	}
@@ -70,10 +70,10 @@ func HandleSearchFile(username, repoId, q string, shared bool) ([]map[string]str
 		if repo["origin_repo_id"] != "" {
 			originRepoId = repo["origin_repo_id"]
 		}
-		sharePath, err := database.QuerySharePathByExtendAndMember(originRepoId, strings.TrimSuffix(username, "@auth.local"))
-		if err != nil {
-			klog.Errorln(err)
-			return nil, err
+		sharePath, e := database.QuerySharePathByExtendAndMember(originRepoId, strings.TrimSuffix(username, "@auth.local"))
+		if e != nil {
+			klog.Errorln(e)
+			return nil, e
 		}
 		klog.Infof("sharePath: %+v", sharePath)
 		if len(sharePath) > 0 {
