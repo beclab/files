@@ -282,9 +282,27 @@ func GetShareToken(token string) (*share.ShareToken, error) {
 	return res, nil
 }
 
+// QueryShareMembers returns all share_members rows for the given
+// share path id.
+//
+// History note: this used to be a silent stub:
+//
+//	DB.Table("share_members").Where("path_id = ?", shareId)
+//	return nil, nil
+//
+// The chain was built and immediately discarded; callers got an
+// empty list with nil error and no DB query was issued. There were
+// no callers in-tree, so the bug was latent -- but anyone wiring
+// this up would silently see "no members" forever.
 func QueryShareMembers(shareId string) ([]*share.ShareMember, error) {
-	DB.Table("share_members").Where("path_id = ?", shareId)
-	return nil, nil
+	var res []*share.ShareMember
+	if err := DB.Table("share_members").Where("path_id = ?", shareId).Find(&res).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return res, nil
 }
 
 func DeleteShareToken(token string, db *gorm.DB) error {
