@@ -26,6 +26,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// maxTerminusdResponseBytes caps how much we read from a single
+// upstream response. Terminusd responses for these endpoints are
+// small JSON envelopes (<<1 MiB in practice); a hostile or buggy
+// peer that streams gigabytes would otherwise OOM the handler.
+const maxTerminusdResponseBytes = 4 << 20 // 4 MiB
+
 // MountedMethod .
 // @router /api/mounted/:node/ [GET]
 func MountedMethod(ctx context.Context, c *app.RequestContext) {
@@ -106,7 +112,7 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 			continue
 		}
 
-		respBody, err := io.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxTerminusdResponseBytes))
 		if err != nil {
 			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 			return
@@ -266,7 +272,7 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	defer response.Body.Close()
 
-	respBody, err := io.ReadAll(response.Body)
+	respBody, err := io.ReadAll(io.LimitReader(response.Body, maxTerminusdResponseBytes))
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
