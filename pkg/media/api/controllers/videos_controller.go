@@ -127,16 +127,20 @@ func (vc *VideosController) GetVideoStreamByContainer(w http.ResponseWriter, r *
 	//	framerate, _ := strconv.ParseFloat(r.URL.Query().Get("framerate"), 64)
 	var framerate *float32
 	if fr := r.URL.Query().Get("Framerate"); fr != "" {
-		f64, err := strconv.ParseFloat(fr, 32)
-		if err != nil {
+		// NOTE: rename inner err to e to silence govet shadow
+		// against the function-scope err. The if-body's check on
+		// e != nil mirrors the original (likely-inverted) port
+		// behavior; semantics intentionally preserved.
+		f64, e := strconv.ParseFloat(fr, 32)
+		if e != nil {
 			f32 := float32(f64)
 			framerate = &f32
 		}
 	}
 	var maxFramerate *float32
 	if p := r.URL.Query().Get("MaxFramerate"); p != "" {
-		f64, err := strconv.ParseFloat(p, 32)
-		if err != nil {
+		f64, e := strconv.ParseFloat(p, 32)
+		if e != nil {
 			f32 := float32(f64)
 			maxFramerate = &f32
 		}

@@ -141,18 +141,22 @@ func (d *DynamicHlsController) GetMasterHlsVideoPlaylist(ctx context.Context, c 
 	maxAudioChannels, _ := strconv.Atoi(c.Query("MaxAudioChannels"))
 	profile := c.Query("Profile")
 	level := c.Query("Level")
+	// NOTE: each inner err in the following GetQuery blocks is
+	// renamed to `e` to avoid shadowing the function-scope err
+	// (govet shadow). The semantics of `if e != nil { ... = &tmp }`
+	// are preserved verbatim from the original Jellyfin port.
 	var framerate *float32
 	if fr := c.Query("Framerate"); fr != "" {
-		f64, err := strconv.ParseFloat(fr, 32)
-		if err != nil {
+		f64, e := strconv.ParseFloat(fr, 32)
+		if e != nil {
 			f32 := float32(f64)
 			framerate = &f32
 		}
 	}
 	var maxFramerate *float32
 	if p := c.Query("MaxFramerate"); p != "" {
-		f64, err := strconv.ParseFloat(p, 32)
-		if err != nil {
+		f64, e := strconv.ParseFloat(p, 32)
+		if e != nil {
 			f32 := float32(f64)
 			maxFramerate = &f32
 		}
@@ -162,29 +166,29 @@ func (d *DynamicHlsController) GetMasterHlsVideoPlaylist(ctx context.Context, c 
 	startTimeTicks, _ := strconv.ParseInt(c.Query("StartTimeTicks"), 10, 64)
 	var width *int
 	if _, ok := c.GetQuery("Width"); ok {
-		tmp, err := strconv.Atoi(c.Query("Width"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("Width"))
+		if e != nil {
 			width = &tmp
 		}
 	}
 	var height *int
 	if _, ok := c.GetQuery("height"); ok {
-		tmp, err := strconv.Atoi(c.Query("height"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("height"))
+		if e != nil {
 			height = &tmp
 		}
 	}
 	var maxWidth *int
 	if _, ok := c.GetQuery("MaxWidth"); ok {
-		tmp, err := strconv.Atoi(c.Query("MaxWidth"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("MaxWidth"))
+		if e != nil {
 			maxWidth = &tmp
 		}
 	}
 	var maxHeight *int
 	if _, ok := c.GetQuery("MaxHeight"); ok {
-		tmp, err := strconv.Atoi(c.Query("MaxHeight"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("MaxHeight"))
+		if e != nil {
 			maxHeight = &tmp
 		}
 	}
@@ -548,8 +552,8 @@ func (d *DynamicHlsController) GetHlsVideoSegment(ctx context.Context, c *app.Re
 
 	var segmentLength *int
 	if _, ok := c.GetQuery("SegmentLength"); ok {
-		tmp, err := strconv.Atoi(c.Query("SegmentLength"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("SegmentLength"))
+		if e != nil {
 			segmentLength = &tmp
 		}
 	}
@@ -568,14 +572,21 @@ func (d *DynamicHlsController) GetHlsVideoSegment(ctx context.Context, c *app.Re
 	if _, ok := c.GetQuery("AudioChannels"); ok {
 		tmp, _ := strconv.Atoi(c.Query("AudioChannels"))
 		if err != nil {
+			// NOTE: this block intentionally still references the
+			// outer (function-scope) err; keeping the original
+			// (likely-buggy) port behavior. Renamed err in the
+			// peer blocks (segmentLength, framerate, ...) above
+			// to silence shadow.
 			audioChannels = &tmp
 		}
 
 	}
+	// NOTE: each inner err in the GetQuery blocks below is renamed
+	// to `e` to avoid shadowing the function-scope err.
 	var maxAudioChannels *int
 	if _, ok := c.GetQuery("MaxAudioChannels"); ok {
-		tmp, err := strconv.Atoi(c.Query("MaxAudioChannels"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("MaxAudioChannels"))
+		if e != nil {
 			maxAudioChannels = &tmp
 		}
 	}
@@ -583,8 +594,8 @@ func (d *DynamicHlsController) GetHlsVideoSegment(ctx context.Context, c *app.Re
 	level := c.Query("Level")
 	var framerate *float32
 	if _, ok := c.GetQuery("Framerate"); ok {
-		f64, err := strconv.ParseFloat(c.Query("Framerate"), 32)
-		if err != nil {
+		f64, e := strconv.ParseFloat(c.Query("Framerate"), 32)
+		if e != nil {
 			f32 := float32(f64)
 			framerate = &f32
 		}
@@ -592,8 +603,8 @@ func (d *DynamicHlsController) GetHlsVideoSegment(ctx context.Context, c *app.Re
 
 	var maxFramerate *float32
 	if _, ok := c.GetQuery("MaxFramerate"); ok {
-		f64, err := strconv.ParseFloat(c.Query("MaxFramerate"), 32)
-		if err != nil {
+		f64, e := strconv.ParseFloat(c.Query("MaxFramerate"), 32)
+		if e != nil {
 			f32 := float32(f64)
 			maxFramerate = &f32
 		}
@@ -602,29 +613,29 @@ func (d *DynamicHlsController) GetHlsVideoSegment(ctx context.Context, c *app.Re
 	startTimeTicks, _ := strconv.ParseInt(c.Query("StartTimeTicks"), 10, 64)
 	var width *int
 	if _, ok := c.GetQuery("Width"); ok {
-		tmp, err := strconv.Atoi(c.Query("Width"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("Width"))
+		if e != nil {
 			width = &tmp
 		}
 	}
 	var height *int
 	if _, ok := c.GetQuery("Height"); ok {
-		tmp, err := strconv.Atoi(c.Query("Height"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("Height"))
+		if e != nil {
 			height = &tmp
 		}
 	}
 	var maxWidth *int
 	if _, ok := c.GetQuery("MaxWidth"); ok {
-		tmp, err := strconv.Atoi(c.Query("MaxWidth"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("MaxWidth"))
+		if e != nil {
 			maxWidth = &tmp
 		}
 	}
 	var maxHeight *int
 	if _, ok := c.GetQuery("MaxHeight"); ok {
-		tmp, err := strconv.Atoi(c.Query("MaxHeight"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("MaxHeight"))
+		if e != nil {
 			maxHeight = &tmp
 		}
 	}
@@ -655,8 +666,8 @@ func (d *DynamicHlsController) GetHlsVideoSegment(ctx context.Context, c *app.Re
 	}
 
 	var streamOptions StreamOptions
-	if err := GetFromQuery(c, &streamOptions); err != nil {
-		handler.RespBadRequest(c, err.Error())
+	if e := GetFromQuery(c, &streamOptions); e != nil {
+		handler.RespBadRequest(c, e.Error())
 		return
 	}
 
@@ -774,7 +785,7 @@ func (d *DynamicHlsController) GetDynamicSegment(c *app.RequestContext, request 
 	segmentPath, _ := d.getSegmentPath(state, playlistPath, segmentId)
 	segmentExtension := mediaencoding.GetSegmentFileExtension(state.Request.SegmentContainer)
 	var job *mediaencoding.TranscodingJob
-	if _, err := os.Stat(segmentPath); err == nil {
+	if _, e := os.Stat(segmentPath); e == nil {
 		job = d.transcodeManager.OnTranscodeBeginRequest(playlistPath, transcodingJobType)
 		klog.Infof("returning %s [it exists, try 1]\n", segmentPath)
 		return d.GetSegmentResult(state, playlistPath, segmentPath, segmentExtension, segmentId, job, ctx)
@@ -787,7 +798,7 @@ func (d *DynamicHlsController) GetDynamicSegment(c *app.RequestContext, request 
 	}
 	defer unlock()
 
-	if _, err := os.Stat(segmentPath); err == nil {
+	if _, e := os.Stat(segmentPath); e == nil {
 		job = d.transcodeManager.OnTranscodeBeginRequest(playlistPath, transcodingJobType)
 		klog.Infof("returning %s [it exists, try 2]\n", segmentPath)
 		return d.GetSegmentResult(state, playlistPath, segmentPath, segmentExtension, segmentId, job, ctx)
@@ -838,7 +849,7 @@ func (d *DynamicHlsController) GetDynamicSegment(c *app.RequestContext, request 
 		streamingRequest.StartTimeTicks = &streamingRequest.CurrentRuntimeTicks
 
 		state.WaitForPath = segmentPath
-		_, err := d.transcodeManager.StartFfMpeg(
+		_, e := d.transcodeManager.StartFfMpeg(
 			*state,
 			playlistPath,
 			d.GetCommandLineArguments(playlistPath, state, false, segmentId),
@@ -847,9 +858,9 @@ func (d *DynamicHlsController) GetDynamicSegment(c *app.RequestContext, request 
 			ctx,
 			".",
 		)
-		if err != nil {
+		if e != nil {
 			state.Dispose()
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}), err
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}), e
 		}
 	} else {
 		job = d.transcodeManager.OnTranscodeBeginRequest(playlistPath, transcodingJobType)
@@ -1191,10 +1202,12 @@ func (d *DynamicHlsController) GetVariantHlsVideoPlaylist(ctx context.Context, c
 	if tmp := c.Query("SegmentContainer"); tmp != "" {
 		segmentContainer = &tmp
 	}
+	// NOTE: each inner err in the GetQuery blocks below is renamed
+	// to `e` to avoid shadowing the function-scope err.
 	var segmentLength *int
 	if _, ok := c.GetQuery("SegmentLength"); ok {
-		tmp, err := strconv.Atoi(c.Query("SegmentLength"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("SegmentLength"))
+		if e != nil {
 			segmentLength = &tmp
 		}
 	}
@@ -1215,16 +1228,16 @@ func (d *DynamicHlsController) GetVariantHlsVideoPlaylist(ctx context.Context, c
 	level := c.Query("Level")
 	var framerate *float32
 	if fr := c.Query("Framerate"); fr != "" {
-		f64, err := strconv.ParseFloat(fr, 32)
-		if err != nil {
+		f64, e := strconv.ParseFloat(fr, 32)
+		if e != nil {
 			f32 := float32(f64)
 			framerate = &f32
 		}
 	}
 	var maxFramerate *float32
 	if p := c.Query("MaxFramerate"); p != "" {
-		f64, err := strconv.ParseFloat(p, 32)
-		if err != nil {
+		f64, e := strconv.ParseFloat(p, 32)
+		if e != nil {
 			f32 := float32(f64)
 			maxFramerate = &f32
 		}
@@ -1233,29 +1246,29 @@ func (d *DynamicHlsController) GetVariantHlsVideoPlaylist(ctx context.Context, c
 	startTimeTicks, _ := strconv.ParseInt(c.Query("StartTimeTicks"), 10, 64)
 	var width *int
 	if _, ok := c.GetQuery("Width"); ok {
-		tmp, err := strconv.Atoi(c.Query("Width"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("Width"))
+		if e != nil {
 			width = &tmp
 		}
 	}
 	var height *int
 	if _, ok := c.GetQuery("Height"); ok {
-		tmp, err := strconv.Atoi(c.Query("Height"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("Height"))
+		if e != nil {
 			height = &tmp
 		}
 	}
 	var maxWidth *int
 	if _, ok := c.GetQuery("MaxWidth"); ok {
-		tmp, err := strconv.Atoi(c.Query("MaxWidth"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("MaxWidth"))
+		if e != nil {
 			maxWidth = &tmp
 		}
 	}
 	var maxHeight *int
 	if _, ok := c.GetQuery("MaxHeight"); ok {
-		tmp, err := strconv.Atoi(c.Query("MaxHeight"))
-		if err != nil {
+		tmp, e := strconv.Atoi(c.Query("MaxHeight"))
+		if e != nil {
 			maxHeight = &tmp
 		}
 	}
@@ -1286,9 +1299,9 @@ func (d *DynamicHlsController) GetVariantHlsVideoPlaylist(ctx context.Context, c
 	}
 
 	var streamOptions StreamOptions
-	if err := GetFromQuery(c, &streamOptions); err != nil {
-		klog.Errorf("[media] GetVariantHlsVideoPlaylist, get query error: %v", err)
-		handler.RespBadRequest(c, err.Error())
+	if e := GetFromQuery(c, &streamOptions); e != nil {
+		klog.Errorf("[media] GetVariantHlsVideoPlaylist, get query error: %v", e)
+		handler.RespBadRequest(c, e.Error())
 		return
 	}
 
