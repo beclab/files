@@ -91,10 +91,6 @@ func main() {
 	}
 
 	// Group routes by phase: negative = setup, 0 = normal, positive = teardown
-	type phaseGroup struct {
-		phase  int
-		routes []RouteCase
-	}
 	phaseMap := make(map[int][]RouteCase)
 	for _, r := range routes {
 		phaseMap[r.Phase] = append(phaseMap[r.Phase], r)
@@ -251,7 +247,13 @@ func benchmark(client *http.Client, cfg Config, route RouteCase) BenchResult {
 		sum += d
 	}
 	br.Avg = sum / time.Duration(len(durations))
-	br.Status = br.Samples[0].StatusCode
+
+	for _, s := range br.Samples {
+		if s.Error == "" {
+			br.Status = s.StatusCode
+			break
+		}
+	}
 
 	return br
 }
