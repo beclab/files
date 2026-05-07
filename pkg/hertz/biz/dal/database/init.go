@@ -17,22 +17,32 @@ var PGDB1 = os.Getenv("PGDB1")
 
 var DB *gorm.DB
 
-func Init() {
-	var err error
+// Init connects the package-level DB to Postgres if all required
+// PG* environment variables are set. If any of them is missing the
+// function returns nil and DB is left as nil; callers must handle
+// the "no DB" case (see dal.Init).
+//
+// On a real connection failure Init now returns the error instead
+// of panicking; callers can decide whether to klog.Fatal or run
+// degraded. The previous panic produced a backtrace into the log
+// for what is conceptually a fatal-with-clear-message situation.
+func Init() error {
 	if PGHOST == "" || PGPORT == "" || PGUSER == "" || PGPASSWORD == "" || PGDB1 == "" {
 		klog.Infoln("Postgres Database required environment variables are not set. Won't link to database.")
-		return
+		return nil
 	}
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable timezone=UTC",
 		PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDB1)
-	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
 		PrepareStmt:            true,
 		Logger:                 logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("postgres open: %w", err)
 	}
+	DB = db
+	return nil
 }
 
 // Close releases the underlying *sql.DB connection pool. Safe to call when

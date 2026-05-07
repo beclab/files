@@ -35,8 +35,23 @@ func migration(table interface{}, tableName string, rebuild bool) {
 	}
 }
 
-func Init() {
-	database.Init()
+// Init connects to Postgres (via database.Init) and, if connected,
+// runs schema migrations and one-time data cleanups. Returns the
+// connection error, if any; the caller decides whether to fail
+// startup or run degraded.
+//
+// If database.Init returned nil DB (PG env vars unset), this
+// function logs a warning and returns nil without attempting any
+// migration -- the previous behavior nil-derefed inside
+// migration(...) on database.DB.Migrator() and crashed the process.
+func Init() error {
+	if err := database.Init(); err != nil {
+		return err
+	}
+	if database.DB == nil {
+		klog.Warning("dal.Init: database.DB is nil after database.Init (PG env not set); skipping migrations and cleanup")
+		return nil
+	}
 
 	rebuild := os.Getenv("REBUILD_DATABASE") == "true"
 	migration(&share.SharePath{}, "share_paths", rebuild)
@@ -46,6 +61,7 @@ func Init() {
 	migration(&share.ShareSmbMember{}, "share_smb_members", rebuild)
 
 	cleanupOwnerAsShareMember()
+	return nil
 }
 
 // cleanupOwnerAsShareMember removes any share_members rows whose
