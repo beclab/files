@@ -267,7 +267,7 @@ func (vc *VideosController) GetVideoStreamByContainer(w http.ResponseWriter, r *
 
 	vc.logger.Infof("%v", request)
 	ctx, cancel := context.WithCancel(context.Background())
-	ctx = context.WithValue(ctx, "userId", "root")
+	ctx = context.WithValue(ctx, ctxUserIDKey, "root")
 	defer cancel()
 
 	state, err := helpers.GetStreamingState(

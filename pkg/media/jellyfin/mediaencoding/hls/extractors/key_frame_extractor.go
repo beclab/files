@@ -64,7 +64,10 @@ func (d *FfProbeKeyframeExtractor) TryExtractKeyframes(filePath string) (keyfram
 				}
 			}
 		} else if strings.EqualFold(lineType, "format") {
-			if formatDurationResult, err := strconv.ParseFloat(rest, 10); err == nil {
+			// strconv.ParseFloat's bitSize must be 32 or 64; this
+			// used to pass 10 (bug, probably copy-paste from a
+			// strconv.ParseInt call).
+			if formatDurationResult, err := strconv.ParseFloat(rest, 64); err == nil {
 				keyframes.TotalDuration = int64(formatDurationResult * float64(time.Second))
 			}
 		}

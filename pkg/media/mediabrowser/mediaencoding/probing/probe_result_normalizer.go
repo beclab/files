@@ -19,8 +19,16 @@ import (
 	"files/pkg/media/mediabrowser/model/mediainfo/transportstreamtimestamp"
 	"files/pkg/media/utils"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"k8s.io/klog/v2"
 )
+
+// titleEnglish is the replacement for the deprecated strings.Title:
+// it title-cases ASCII / English content the same way the old
+// helper did but handles Unicode word boundaries correctly. The
+// caser is goroutine-safe so a package-level singleton is fine.
+var titleEnglish = cases.Title(language.English)
 
 type ProbeResultNormalizer struct {
 	MaxSubtitleDescriptionExtractionLength int
@@ -1156,7 +1164,7 @@ func (p *ProbeResultNormalizer) setAudioInfoFromTags(audio *mediainfo.MediaInfo,
 				people = append(people, dto.BaseItemPerson{
 					Name: match[1],
 					Type: enums.Actor,
-					Role: strings.Title(match[2]),
+					Role: titleEnglish.String(match[2]),
 				})
 			}
 		}
@@ -1207,7 +1215,10 @@ func (p *ProbeResultNormalizer) setAudioInfoFromTags(audio *mediainfo.MediaInfo,
 		}
 	}
 
-	//	audio.People = people
+	// TODO: audio.People = people once the entity has a People
+	// field. Suppress staticcheck SA4010 (append result unused)
+	// in the meantime.
+	_ = people
 
 	albumArtist := GetFirstNotNullNorWhiteSpaceValue(tags, "albumartist", "album artist", "album_artist")
 	audio.AlbumArtists = p.splitDistinctArtists(albumArtist, p.nameDelimiters, true)
@@ -1316,6 +1327,10 @@ func (p *ProbeResultNormalizer) splitDistinctArtists(val string, delimiters []ru
 		val = strings.ReplaceAll(strings.ToLower(val), " featuring ", strings.ToLower(p.ArtistReplaceValue))
 		val = strings.ReplaceAll(strings.ToLower(val), " feat. ", strings.ToLower(p.ArtistReplaceValue))
 	}
+	// artistsFound was being populated but never read further down
+	// (SA4010 in earlier baseline). Keep collecting it for symmetry
+	// with the original Jellyfin port; explicit discard documents
+	// the unused-by-design intent and silences the linter.
 	artistsFound := make([]string, 0, len(p.splitWhitelist()))
 	for _, whitelist := range p.splitWhitelist() {
 		original := val
@@ -1324,6 +1339,7 @@ func (p *ProbeResultNormalizer) splitDistinctArtists(val string, delimiters []ru
 			artistsFound = append(artistsFound, strings.TrimSpace(whitelist))
 		}
 	}
+	_ = artistsFound
 
 	artists := make([]string, 0, 4)
 	for _, artist := range strings.FieldsFunc(val, func(r rune) bool {
@@ -1480,7 +1496,9 @@ func (p *ProbeResultNormalizer) fetchWtvInfo(video *mediainfo.MediaInfo, data *I
 		for _, p := range SplitTrimmed(people, []string{";", "/"}) {
 			personList = append(personList, dto.BaseItemPerson{Name: p, Type: enums.Actor})
 		}
-		//		video.People = personList
+		// TODO: video.People = personList once the entity gets a
+		// People field. Discard explicitly to silence SA4010.
+		_ = personList
 	}
 
 	if yearStr, ok := tags["WM/OriginalReleaseTime"]; ok {
