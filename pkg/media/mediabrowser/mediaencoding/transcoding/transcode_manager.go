@@ -809,7 +809,7 @@ func (t *TranscodeManager) DeleteProgressivePartialStreamFiles(outputFilePath st
 	if _, err := os.Stat(outputFilePath); err == nil {
 		err = os.Remove(outputFilePath)
 		if err != nil {
-			t.logger.Errorf("Error deleteing file %s: %v", outputFilePath, err)
+			t.logger.Errorf("Error deleting file %s: %v", outputFilePath, err)
 			return err
 		}
 	}

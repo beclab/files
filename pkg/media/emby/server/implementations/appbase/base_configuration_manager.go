@@ -83,10 +83,17 @@ func (cm *BaseConfigurationManager) AddParts(factories []cc.IConfigurationFactor
 	}
 }
 
-// SaveConfiguration saves the system configuration
+// SaveConfiguration saves the system configuration.
+//
+// Currently panics: this method is part of the partial Emby/Jellyfin
+// port and the underlying serializer wiring is not finished. The
+// code below the panic is the to-be-completed implementation kept
+// in place so the missing pieces are visible at the call site; it
+// is intentionally unreachable until the panic is removed.
 func (cm *BaseConfigurationManager) SaveConfiguration() error {
 	cm.logger.Info("Saving system configuration")
 	panic("Save")
+	//nolint:govet // unreachable: kept as TODO scaffold until panic is removed
 	path := cm.commonApplicationPaths.SystemConfigurationFilePath()
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {

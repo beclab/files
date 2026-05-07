@@ -73,7 +73,13 @@ func (s *serve) Get(configName string, fpath string, header *http.Header) *Serve
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	// Body is intentionally passed up the call stack inside
+	// ServeResp.Body and consumed (and Close'd) by the Hertz
+	// RawHandler framework. bodyclose cannot follow that chain;
+	// the nolint pin documents the contract so future readers
+	// don't "fix" this into an immediate Close that would break
+	// streaming downloads.
+	resp, err := http.DefaultClient.Do(req) //nolint:bodyclose // Body returned in ServeResp; caller closes
 	if err != nil {
 		result.Error = err
 		return result
