@@ -32,7 +32,8 @@ RUN mkdir dist
 COPY cmd/backend/dist dist
 
 # Detect the CPU architecture and copy the appropriate binary
-RUN if [ "$(uname -m)" = "x86_64" ]; then \
+RUN touch /apibench && \
+  if [ "$(uname -m)" = "x86_64" ]; then \
   cp dist/linux-amd64/filebrowser /filebrowser; \
   [ -f dist/linux-amd64/apibench ] && cp dist/linux-amd64/apibench /apibench || true; \
   elif [ "$(uname -m)" = "aarch64" ]; then \

@@ -192,7 +192,9 @@ func writeCSV(results []BenchResult, path string) {
 
 		testPath := r.Route.TestPath
 		if r.Route.DynPath != nil {
-			testPath = r.Route.ResolvePath()
+			if resolved := r.Route.ResolvePath(); resolved != "" {
+				testPath = resolved
+			}
 		}
 
 		skipStr := "false"

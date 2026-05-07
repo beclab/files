@@ -134,14 +134,17 @@ func main() {
 				continue
 			}
 
-			if route.DynPath != nil && route.DynPath() == "" {
-				fmt.Println("  [SKIP: prerequisite not available]")
-				results = append(results, BenchResult{
-					Route:  route,
-					Status: -1,
-					Note:   "skip-dep",
-				})
-				continue
+			if route.DynPath != nil {
+				resolved := route.DynPath()
+				if resolved == "" {
+					fmt.Println("  [SKIP: prerequisite not available]")
+					results = append(results, BenchResult{
+						Route:  route,
+						Status: -1,
+						Note:   "skip-dep",
+					})
+					continue
+				}
 			}
 
 			if phase < 0 {
@@ -170,11 +173,12 @@ func main() {
 
 			fmt.Println()
 			br := benchmark(client, cfg, route)
-			results = append(results, br)
 
 			if phase >= 99 {
 				br.Note = "cleanup"
 			}
+
+			results = append(results, br)
 
 			if br.Status > 0 {
 				fmt.Printf("    → avg=%v  p50=%v  p95=%v  min=%v  max=%v  status=%d\n",
@@ -201,23 +205,9 @@ func main() {
 	fmt.Printf("\nDone. %d routes benchmarked. Results written to:\n  %s\n  %s\n", total, mdPath, csvPath)
 }
 
-func captureSetupState(route RouteCase, sr SampleResult) {
-	if sr.Error != "" || sr.StatusCode < 200 || sr.StatusCode >= 300 {
-		return
-	}
-
-	// Try to extract IDs from response bodies for dynamic routes.
-	// The exact field names depend on the API; we try common patterns.
-	switch {
-	case route.Pattern == "/api/share/share_path/*path" && route.Method == "POST":
-		// share create response may contain path_id
-		var resp map[string]interface{}
-		// We stored the body in sr — but we don't have it.
-		// The share list can be queried later. For now, we'll
-		// extract from the next list call.
-		_ = resp
-	}
-}
+// captureSetupState is a post-setup hook.
+// Actual ID capture happens inside doRequest → captureResponseIDs.
+func captureSetupState(_ RouteCase, _ SampleResult) {}
 
 func benchmark(client *http.Client, cfg Config, route RouteCase) BenchResult {
 	br := BenchResult{Route: route}

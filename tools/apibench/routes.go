@@ -103,12 +103,12 @@ func AllRoutes() []RouteCase {
 		{Method: "GET", Pattern: "/api/resources/*path", TestPath: "/api/resources/drive/", Description: "list root directory", Category: "resources"},
 		{Method: "GET", Pattern: "/api/resources/*path (subdir)", TestPath: "/api/resources/drive/Documents/" + benchDir + "/", Description: "list test subdirectory", Category: "resources"},
 
-		// benchmark writes
-		{Method: "POST", Pattern: "/api/resources/*path (mkdir)", TestPath: "/api/resources/drive/Documents/" + benchDir + "/subdir_bench/", Description: "create directory", Category: "resources",
-			Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"action": "mkdir"})},
-		{Method: "PATCH", Pattern: "/api/resources/*path", TestPath: "/api/resources/drive/Documents/" + benchDir + "/subdir_bench/", Description: "rename resource", Category: "resources",
-			Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{"action": "rename", "destination": "/drive/Documents/" + benchDir + "/subdir_renamed/"})},
-		{Method: "DELETE", Pattern: "/api/resources/*path (subdir)", TestPath: "/api/resources/drive/Documents/" + benchDir + "/subdir_renamed/", Description: "delete renamed subdirectory", Category: "resources", Phase: 1},
+		// non-idempotent writes: run once in setup, not N samples
+		{Method: "POST", Pattern: "/api/resources/*path (mkdir)", TestPath: "/api/resources/drive/Documents/" + benchDir + "/subdir_bench/", Description: "setup: create sub-directory", Category: "resources",
+			Phase: -1, Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"action": "mkdir"})},
+		{Method: "PATCH", Pattern: "/api/resources/*path", TestPath: "/api/resources/drive/Documents/" + benchDir + "/subdir_bench/", Description: "setup: rename resource", Category: "resources",
+			Phase: -1, Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{"action": "rename", "destination": "/drive/Documents/" + benchDir + "/subdir_renamed/"})},
+		{Method: "DELETE", Pattern: "/api/resources/*path (subdir)", TestPath: "/api/resources/drive/Documents/" + benchDir + "/subdir_renamed/", Description: "cleanup: delete renamed subdirectory", Category: "resources", Phase: 97},
 		{Method: "PUT", Pattern: "/api/resources/*path (file)", TestPath: "/api/resources/drive/Documents/" + benchDir + "/bench_upload.txt", Description: "upload small file via PUT", Category: "resources",
 			BodyFunc: stringBody("benchmark upload content"), Stream: true},
 
@@ -166,10 +166,10 @@ func AllRoutes() []RouteCase {
 		{Method: "GET", Pattern: "/api/share/share_token", TestPath: "/api/share/share_token/", Description: "list share tokens", Category: "share"},
 		{Method: "GET", Pattern: "/api/share/smb_share_user", TestPath: "/api/share/smb_share_user/", Description: "list SMB users", Category: "share"},
 
-		// create share path (setup for further operations)
+		// create share path — non-idempotent, run once in setup
 		// NOTE: use "internal" share_type — "external" would create a K8s ClusterRole+Binding
-		{Method: "POST", Pattern: "/api/share/share_path/*path", TestPath: "/api/share/share_path/drive/Documents/", Description: "create share path (internal)", Category: "share",
-			Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{
+		{Method: "POST", Pattern: "/api/share/share_path/*path", TestPath: "/api/share/share_path/drive/Documents/", Description: "setup: create share path (internal)", Category: "share",
+			Phase: -1, Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{
 				"share_type": "internal", "name": "apibench_share", "password": "bench123",
 				"expire_in": 86400, "permission": 1,
 			})},
@@ -192,9 +192,9 @@ func AllRoutes() []RouteCase {
 				return jsonBody(map[string]interface{}{"path_id": createdSharePath, "password": "newpass456"})()
 			}},
 
-		// SMB user lifecycle
-		{Method: "POST", Pattern: "/api/share/smb_share_user", TestPath: "/api/share/smb_share_user/", Description: "create SMB user", Category: "share",
-			Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"user": "apibench_smb_user", "password": "smbpass123"})},
+		// SMB user lifecycle — create is non-idempotent, run once
+		{Method: "POST", Pattern: "/api/share/smb_share_user", TestPath: "/api/share/smb_share_user/", Description: "setup: create SMB user", Category: "share",
+			Phase: -1, Headers: jsonCT, BodyFunc: jsonBody(map[string]string{"user": "apibench_smb_user", "password": "smbpass123"})},
 		{Method: "DELETE", Pattern: "/api/share/smb_share_user", TestPath: "/api/share/smb_share_user/", Description: "delete SMB user", Category: "share",
 			Phase: 98, Headers: jsonCT, BodyFunc: jsonBody(map[string]interface{}{"users": []string{"apibench_smb_user"}})},
 
@@ -205,9 +205,9 @@ func AllRoutes() []RouteCase {
 					"users": []map[string]interface{}{{"id": "apibench_smb_user", "permission": 1}}})()
 			}},
 
-		// Generate + revoke share token
-		{Method: "POST", Pattern: "/api/share/share_token", TestPath: "/api/share/share_token/", Description: "generate share token", Category: "share",
-			Headers: jsonCT, DynBody: func() io.Reader {
+		// Generate share token — non-idempotent (each call creates a new token)
+		{Method: "POST", Pattern: "/api/share/share_token", TestPath: "/api/share/share_token/", Description: "setup: generate share token", Category: "share",
+			Phase: -1, Headers: jsonCT, DynBody: func() io.Reader {
 				return jsonBody(map[string]interface{}{"path_id": createdSharePath, "expire_at": "2099-01-01T00:00:00Z"})()
 			}},
 		{Method: "DELETE", Pattern: "/api/share/share_token", TestPath: "/api/share/share_token/", Description: "revoke share token", Category: "share",
@@ -253,7 +253,7 @@ func AllRoutes() []RouteCase {
 		// Repos / Sync — full lifecycle via query params
 		// ────────────────────────────────────────────
 		{Method: "GET", Pattern: "/api/repos", TestPath: "/api/repos/", Description: "list repos", Category: "repos"},
-		{Method: "POST", Pattern: "/api/repos", TestPath: "/api/repos/?repoName=apibench_test_repo", Description: "create repo", Category: "repos"},
+		{Method: "POST", Pattern: "/api/repos", TestPath: "/api/repos/?repoName=apibench_test_repo", Description: "setup: create repo", Category: "repos", Phase: -1},
 		{Method: "PATCH", Pattern: "/api/repos", TestPath: "/api/repos/", Description: "rename repo", Category: "repos",
 			DynPath: func() string {
 				if createdRepoID == "" {
