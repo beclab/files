@@ -41,9 +41,9 @@ func (c *commands) CreateUser(userName, password, groupName string) error {
 
 	if u == nil {
 		cmd := exec.Command("useradd", "-M", "-s", "/sbin/nologin", userName)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			klog.Errorf("samba useradd error: %v, output: %s, cmd: %s", err, string(out), cmd.String())
+		out, e := cmd.CombinedOutput()
+		if e != nil {
+			klog.Errorf("samba useradd error: %v, output: %s, cmd: %s", e, string(out), cmd.String())
 		} else {
 			klog.Infof("samba useradd cmd: %s", cmd.String())
 		}

@@ -201,13 +201,13 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 	// dst storage path, if shared, fileParam must be sharedby Param
 	// uploadPath = uri + fileParam.Path
 	if share != "" {
-		shareParam, err := models.CreateFileParam(shareby, resumableInfo.ParentDir) // sharebyPath
-		if err != nil {
-			return false, nil, err
+		shareParam, e := models.CreateFileParam(shareby, resumableInfo.ParentDir) // sharebyPath
+		if e != nil {
+			return false, nil, e
 		}
-		sharebyUri, err := shareParam.GetResourceUri()
-		if err != nil {
-			return false, nil, err
+		sharebyUri, e2 := shareParam.GetResourceUri()
+		if e2 != nil {
+			return false, nil, e2
 		}
 		uploadPath = sharebyUri + shareParam.Path
 	} else {
@@ -387,10 +387,10 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 
 	if info.Offset == offsetStart || (info.Offset-offsetEnd < 0 && info.Offset-offsetStart > 0) {
 		klog.Infof("resumableInfo.MD5=%s", resumableInfo.MD5)
-		fileSize, chunkMd5, err := SaveFile(fileHeader, filepath.Join(uploadTempPath, tmpName), newFile, offsetStart, resumableInfo.MD5 != "")
-		if err != nil {
-			klog.Warningf("[upload] uploadId: %s, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, err)
-			return false, nil, err
+		fileSize, chunkMd5, e := SaveFile(fileHeader, filepath.Join(uploadTempPath, tmpName), newFile, offsetStart, resumableInfo.MD5 != "")
+		if e != nil {
+			klog.Warningf("[upload] uploadId: %s, innerIdentifier:%s, info:%+v, err:%v", uploadId, innerIdentifier, info, e)
+			return false, nil, e
 		}
 		if resumableInfo.MD5 != "" && chunkMd5 != resumableInfo.MD5 {
 			msg := fmt.Sprintf("Invalid MD5, accepted %s, calculated %s", resumableInfo.MD5, chunkMd5)
@@ -422,14 +422,14 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 		}
 
 		if resumableInfo.Share != "" { // upload to shared directory
-			sharedParam, err := models.CreateFileParam(resumableInfo.Shareby, resumableInfo.ParentDir)
-			if err != nil {
-				return false, data, err
+			sharedParam, e := models.CreateFileParam(resumableInfo.Shareby, resumableInfo.ParentDir)
+			if e != nil {
+				return false, data, e
 			}
 
-			uri, err := sharedParam.GetResourceUri()
-			if err != nil {
-				return false, data, err
+			uri, e := sharedParam.GetResourceUri()
+			if e != nil {
+				return false, data, e
 			}
 
 			info.FullPath = uri + sharedParam.Path + resumableInfo.ResumableRelativePath

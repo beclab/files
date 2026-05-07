@@ -79,8 +79,8 @@ func connectDBWithRetry(dsn string, dbName string, maxRetries int) (*gorm.DB, er
 	for i := 0; i < maxRetries; i++ {
 		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err == nil {
-			if sqlDB, err := db.DB(); err == nil {
-				if err = sqlDB.Ping(); err == nil {
+			if sqlDB, e := db.DB(); e == nil {
+				if e = sqlDB.Ping(); e == nil {
 					return db, nil
 				}
 			}

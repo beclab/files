@@ -323,9 +323,9 @@ func (s *samba) generateConf() {
 				continue
 			}
 		}
-		expire, err := time.Parse(timeFormat, item.ExpireTime)
-		if err != nil {
-			klog.Errorf("samba sharePath time expired, error: %v, time: %s", err, item.ExpireTime)
+		expire, e := time.Parse(timeFormat, item.ExpireTime)
+		if e != nil {
+			klog.Errorf("samba sharePath time expired, error: %v, time: %s", e, item.ExpireTime)
 			continue
 		}
 
@@ -335,15 +335,15 @@ func (s *samba) generateConf() {
 		}
 
 		fPath := fmt.Sprintf("/%s/%s%s", item.FileType, item.Extend, item.Path)
-		fp, err := models.CreateFileParam(item.Owner, fPath)
-		if err != nil {
-			klog.Errorf("samba create fileParam error: %v", err)
+		fp, e := models.CreateFileParam(item.Owner, fPath)
+		if e != nil {
+			klog.Errorf("samba create fileParam error: %v", e)
 			return
 		}
 
-		fileUri, err := fp.GetResourceUri()
-		if err != nil {
-			klog.Errorf("samba get fileParam uri error: %v", err)
+		fileUri, e := fp.GetResourceUri()
+		if e != nil {
+			klog.Errorf("samba get fileParam uri error: %v", e)
 			return
 		}
 
@@ -364,19 +364,19 @@ func (s *samba) generateConf() {
 
 					validUser = append(validUser, user.UserName)
 
-					if err := s.commands.CreateGroup(item.Owner, ""); err != nil {
-						klog.Errorf("samba create group %s error: %v", item.Owner, err)
+					if e := s.commands.CreateGroup(item.Owner, ""); e != nil {
+						klog.Errorf("samba create group %s error: %v", item.Owner, e)
 						return
 					}
 
-					if err := s.commands.CreateUser(user.UserName, sharePwd, item.Owner); err != nil {
-						klog.Errorf("samba create user %s error: %v", user.UserName, err)
+					if e := s.commands.CreateUser(user.UserName, sharePwd, item.Owner); e != nil {
+						klog.Errorf("samba create user %s error: %v", user.UserName, e)
 						return
 					}
 
 					if user.Permission > 1 {
-						if err := s.commands.SetAcl(user.UserName, item.Owner, "-m", "rwx", fileUri+fp.Path); err != nil {
-							klog.Errorf("samba setfacl error: %v", err)
+						if e := s.commands.SetAcl(user.UserName, item.Owner, "-m", "rwx", fileUri+fp.Path); e != nil {
+							klog.Errorf("samba setfacl error: %v", e)
 							return
 						}
 						writeUser = append(writeUser, user.UserName)
@@ -414,8 +414,8 @@ func (s *samba) generateConf() {
 	}
 
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, shares); err != nil {
-		klog.Errorf("samba template generate error: %v", err)
+	if e := tmpl.Execute(&buf, shares); e != nil {
+		klog.Errorf("samba template generate error: %v", e)
 		return
 	}
 

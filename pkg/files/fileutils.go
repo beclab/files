@@ -97,20 +97,20 @@ func IoCopyFileWithBufferOs(sourcePath, targetPath string, bufferSize int) error
 
 	buf := make([]byte, bufferSize)
 	for {
-		n, err := sourceFile.Read(buf)
-		if err != nil && err != io.EOF {
-			return err
+		n, e := sourceFile.Read(buf)
+		if e != nil && e != io.EOF {
+			return e
 		}
 		if n == 0 {
 			break
 		}
-		if _, err := targetFile.Write(buf[:n]); err != nil {
-			return err
+		if _, e2 := targetFile.Write(buf[:n]); e2 != nil {
+			return e2
 		}
 	}
 
-	if err := targetFile.Sync(); err != nil {
-		return err
+	if e := targetFile.Sync(); e != nil {
+		return e
 	}
 
 	uid, gid, err := GetUidGid(nil, dir)
@@ -155,20 +155,20 @@ func IoCopyFileWithBufferFs(fs afero.Fs, sourcePath, targetPath string, bufferSi
 
 	buf := make([]byte, bufferSize)
 	for {
-		n, err := sourceFile.Read(buf)
-		if err != nil && err != io.EOF {
-			return err
+		n, e := sourceFile.Read(buf)
+		if e != nil && e != io.EOF {
+			return e
 		}
 		if n == 0 {
 			break
 		}
-		if _, err := targetFile.Write(buf[:n]); err != nil {
-			return err
+		if _, e2 := targetFile.Write(buf[:n]); e2 != nil {
+			return e2
 		}
 	}
 
-	if err := targetFile.Sync(); err != nil {
-		return err
+	if e := targetFile.Sync(); e != nil {
+		return e
 	}
 
 	uid, gid, err := GetUidGid(fs, dir)
