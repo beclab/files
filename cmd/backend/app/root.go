@@ -167,8 +167,8 @@ user created with the credentials from options "username" and "password".`,
 		// Best-effort cleanup of any leftover rclone jobs from a
 		// previous process; if rclone hasn't fully started or is
 		// unreachable we'd rather warn and continue than fail boot.
-		if err := rclone.Command.StopJobs(); err != nil {
-			klog.Warningf("rclone StopJobs at boot failed: %v", err)
+		if e := rclone.Command.StopJobs(); e != nil {
+			klog.Warningf("rclone StopJobs at boot failed: %v", e)
 		}
 
 		// step5: build driver handler

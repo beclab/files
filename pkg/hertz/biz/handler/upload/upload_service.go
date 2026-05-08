@@ -398,7 +398,9 @@ func SyncUploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 			seahub.DeleteAccessToken(originalUid)
 			klog.Errorf("Sync uploadChunks, redirect error: %v", err)
 			if err == nil {
-				err = fmt.Errorf(errMsg.Error)
+				// errMsg.Error is a runtime string; passing it as
+				// a format would interpret stray %-directives.
+				err = fmt.Errorf("%s", errMsg.Error)
 			}
 			c.String(http.StatusBadRequest, searpc.SyncConnectionFailedError(err).Error())
 			return

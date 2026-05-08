@@ -145,7 +145,10 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if int(res["code"].(float64)) != consts.StatusOK {
-		klog.Warningf(res["message"].(string))
+		// res["message"] is a runtime string from terminusd; using
+		// it as the format string would interpret stray %-directives
+		// and trigger `go vet` printf failures.
+		klog.Warningf("%s", res["message"].(string))
 		if strings.Contains(res["message"].(string), "mount error(13)") {
 			res["message"] = "Incorrect username or password"
 		}

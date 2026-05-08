@@ -77,9 +77,9 @@ func CreatePreview(owner string, key string,
 		return nil, err
 	}
 
-	if _, err := fd.Seek(0, 0); err != nil {
+	if _, e := fd.Seek(0, 0); e != nil {
 		fd.Close()
-		return nil, fmt.Errorf("seek preview source failed: %w", err)
+		return nil, fmt.Errorf("seek preview source failed: %w", e)
 	}
 	defer fd.Close()
 

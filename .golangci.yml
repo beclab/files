@@ -61,6 +61,10 @@ linters-settings:
     enable:
       - copylocks
       - shadow
+      - printf      # catches `klog.Warningf(userInput)` style bugs
+      - nilfunc     # catches `if obj.SomeMethod != nil` (always true)
+      - composites  # catches unkeyed struct literals like Version{1,2,3}
+      - structtag   # catches malformed struct tags
 
 issues:
   max-issues-per-linter: 0
