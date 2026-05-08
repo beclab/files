@@ -144,10 +144,9 @@ func main() {
 			}
 
 			if phase < 0 {
-				// Setup phase: single request, capture state, don't benchmark
+				// Setup phase: single request, don't benchmark
 				fmt.Println(" [SETUP]")
 				sr := doRequest(client, cfg, route)
-				captureSetupState(route, sr)
 				if sr.Error != "" {
 					fmt.Printf("    → SETUP ERROR: %s\n", sr.Error)
 				} else {
@@ -200,10 +199,6 @@ func main() {
 
 	fmt.Printf("\nDone. %d routes benchmarked. Results written to:\n  %s\n  %s\n", total, mdPath, csvPath)
 }
-
-// captureSetupState is a post-setup hook.
-// Actual ID capture happens inside doRequest → captureResponseIDs.
-func captureSetupState(_ RouteCase, _ SampleResult) {}
 
 func benchmark(client *http.Client, cfg Config, route RouteCase) BenchResult {
 	br := BenchResult{Route: route}

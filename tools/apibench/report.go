@@ -286,7 +286,7 @@ func statusStr(code int) string {
 }
 
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if maxLen < 4 || len(s) <= maxLen {
 		return s
 	}
 	return s[:maxLen-3] + "..."

@@ -66,6 +66,7 @@ jobs:
             for GOARCH in amd64 arm64; do
               export GOOS=$GOOS
               export GOARCH=$GOARCH
+              export CGO_ENABLED=0
 
               export GOPATH=~/go
               export PATH=$GOPATH/bin:$PATH

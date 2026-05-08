@@ -32,7 +32,7 @@ RUN mkdir dist
 COPY cmd/backend/dist dist
 
 # Detect the CPU architecture and copy the appropriate binary
-RUN touch /apibench && \
+RUN printf '#!/bin/sh\necho "apibench was not included in this build." >&2\nexit 1\n' > /apibench && chmod +x /apibench && \
   if [ "$(uname -m)" = "x86_64" ]; then \
   cp dist/linux-amd64/filebrowser /filebrowser; \
   [ -f dist/linux-amd64/apibench ] && cp dist/linux-amd64/apibench /apibench || true; \
