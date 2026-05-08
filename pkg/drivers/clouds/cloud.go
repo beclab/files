@@ -750,8 +750,8 @@ func (s *CloudStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 		uploadTempPath = uploadTempPath + "/"
 	}
 	var srcParam = &models.FileParam{}
-	if err := srcParam.GetFileParam(uploadTempPath); err != nil {
-		klog.Warningf("[cloud] UploadFileToCloud: parse temp upload path %q failed: %v", uploadTempPath, err)
+	if e := srcParam.GetFileParam(uploadTempPath); e != nil {
+		klog.Warningf("[cloud] UploadFileToCloud: parse temp upload path %q failed: %v", uploadTempPath, e)
 	}
 	srcParam.Path = srcParam.Path + fileInfo.Id
 

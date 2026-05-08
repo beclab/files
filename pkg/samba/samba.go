@@ -309,8 +309,8 @@ func (s *samba) generateConf() {
 		klog.Infof("samba shares not found")
 	}
 
-	if err := s.deleteExcludeUsers(smbUsers, smbShares); err != nil {
-		klog.Warningf("samba delete excluded users failed: %v", err)
+	if e := s.deleteExcludeUsers(smbUsers, smbShares); e != nil {
+		klog.Warningf("samba delete excluded users failed: %v", e)
 	}
 
 	for id, p := range smbShares {
@@ -392,8 +392,8 @@ func (s *samba) generateConf() {
 		} else {
 			// anonymous
 			anonymous = true
-			if err := s.commands.SetAnonymousPermission(item.Owner, fileUri+fp.Path); err != nil {
-				klog.Warningf("samba set anonymous permission failed: owner=%s path=%s: %v", item.Owner, fileUri+fp.Path, err)
+			if e := s.commands.SetAnonymousPermission(item.Owner, fileUri+fp.Path); e != nil {
+				klog.Warningf("samba set anonymous permission failed: owner=%s path=%s: %v", item.Owner, fileUri+fp.Path, e)
 			}
 		}
 

@@ -840,8 +840,8 @@ func ShareUpload() app.HandlerFunc {
 		}
 		// Best-effort cleanup of multipart temp files.
 		defer func() {
-			if err := mf.RemoveAll(); err != nil {
-				klog.Warningf("multipart RemoveAll failed: %v", err)
+			if e := mf.RemoveAll(); e != nil {
+				klog.Warningf("multipart RemoveAll failed: %v", e)
 			}
 		}()
 
