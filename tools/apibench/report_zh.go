@@ -91,7 +91,7 @@ func zhSkipReason(en string) string {
 		return zh
 	}
 	if strings.Contains(en, "Sync upload differs only") || strings.Contains(en, "Sync upload goes through Seafile") || strings.Contains(en, "Sync upload requires") {
-		return "Sync 上传仅最后一步提交 API 不同，组装请求体需要重复调用已在 Posix 上传中测试过的 upload-link 和分片上传接口，为避免重复测量予以跳过"
+		return "Sync 上传仅最后一步提交 API 不同，组装请求体需要重复调用已在 Posix 上传中测试过的 upload-link 接口，为避免重复测量予以跳过"
 	}
 	return en
 }
