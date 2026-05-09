@@ -219,9 +219,9 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 
 		for _, r := range group {
 			if r.Note == "skip" || r.Note == "skip-dep" {
-				reason := "跳过"
+				reason := zhSkipReason(r.Route.SkipReason)
 				if r.Note == "skip-dep" {
-					reason = "依赖跳过"
+					reason = enhancedSkipDepReason(r)
 				}
 				row := []string{r.Route.Method, r.Route.Pattern, zhDesc(r.Route.Description),
 					"-", "-", "-", "-", "-", "-", "-", "跳过", r.Route.CurrentTimeout, reason}
@@ -286,7 +286,7 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 		for _, r := range skippedRoutes {
 			reason := zhSkipReason(r.Route.SkipReason)
 			if r.Note == "skip-dep" {
-				reason = "前置条件不满足"
+				reason = enhancedSkipDepReason(r)
 			}
 			suggested := fmtDuration(estimateSkippedTimeout(r, benchedP95s))
 			skipTableData = append(skipTableData, []string{
@@ -340,6 +340,24 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 
 	if err := writeDocxFile(doc, path); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: write enhanced docx: %v\n", err)
+	}
+}
+
+func enhancedSkipDepReason(r BenchResult) string {
+	p := r.Route.Pattern
+	switch {
+	case strings.Contains(p, "share_token") || strings.Contains(p, "get_token"):
+		return "依赖 share_path 前置创建的分享令牌，该令牌未能在 setup 阶段成功获取"
+	case strings.Contains(p, "get_share"):
+		return "依赖 share_path + share_token 前置创建的分享路径和令牌"
+	case strings.Contains(p, "share_path") && (strings.Contains(p, "DELETE") || r.Route.Method == "DELETE"):
+		return "依赖 share_path 前置创建的分享路径 ID，该 ID 未能在 setup 阶段捕获"
+	case strings.Contains(p, "share_path") || strings.Contains(p, "share_password"):
+		return "依赖 share_path 前置创建的分享路径 ID，该 ID 未能在 setup 阶段捕获"
+	case strings.Contains(p, "share_member") || strings.Contains(p, "smb_share_member"):
+		return "依赖 share_path 前置创建的分享路径 ID，该 ID 未能在 setup 阶段捕获"
+	default:
+		return "前置接口未返回预期数据，动态参数无法组装"
 	}
 }
 
