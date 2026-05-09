@@ -90,8 +90,8 @@ func zhSkipReason(en string) string {
 	if zh, ok := m[en]; ok {
 		return zh
 	}
-	if strings.Contains(en, "Sync upload requires") {
-		return "Sync 上传需要 Seafile 内部 GetUploadLink API 获取的真实访问令牌，无法从外部客户端测试"
+	if strings.Contains(en, "Sync upload goes through Seafile") || strings.Contains(en, "Sync upload requires") {
+		return "Sync 上传走 Seafile 文件服务器，其分片上传协议与 Posix 上传不同，需要按照 Seafile 内部的分块约定组装请求，本测试工具暂未覆盖该协议"
 	}
 	return en
 }
