@@ -71,8 +71,8 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 	for _, cat := range cats {
 		group := grouped[cat]
 		fmt.Fprintf(f, "## %s\n\n", cat)
-		fmt.Fprintf(f, "| Method | Pattern | Description | ReqSize | Avg | P50 | P95 | TTFB(avg) | Min | Max | Status | Note |\n")
-		fmt.Fprintf(f, "|--------|---------|-------------|---------|-----|-----|-----|-----------|-----|-----|--------|------|\n")
+		fmt.Fprintf(f, "| Method | Pattern | Description | ReqSize | Avg | P50 | P95 | TTFB(avg) | Min | Max | Status | CurTimeout | Note |\n")
+		fmt.Fprintf(f, "|--------|---------|-------------|---------|-----|-----|-----|-----------|-----|-----|--------|------------|------|\n")
 
 		for _, r := range group {
 			if r.Note == "skip" || r.Note == "skip-dep" {
@@ -82,8 +82,8 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 				} else if reason == "" {
 					reason = "unsafe"
 				}
-				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | - | - | SKIP | %s |\n",
-					r.Route.Method, r.Route.Pattern, r.Route.Description, reason)
+				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | - | - | SKIP | %s | %s |\n",
+				r.Route.Method, r.Route.Pattern, r.Route.Description, r.Route.CurrentTimeout, reason)
 				continue
 			}
 
@@ -92,8 +92,8 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 				if len(r.Samples) > 0 && r.Samples[0].Error != "" {
 					errMsg = truncate(r.Samples[0].Error, 60)
 				}
-				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | - | - | ERR | %s |\n",
-					r.Route.Method, r.Route.Pattern, r.Route.Description, errMsg)
+				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | - | - | ERR | %s | %s |\n",
+					r.Route.Method, r.Route.Pattern, r.Route.Description, r.Route.CurrentTimeout, errMsg)
 				continue
 			}
 
@@ -105,13 +105,13 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 			reqSize := avgReqSize(r.Samples)
 			avgTTFB := avgTTFBDuration(r.Samples)
 
-			fmt.Fprintf(f, "| %s | `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %d | %s |\n",
+			fmt.Fprintf(f, "| %s | `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %d | %s | %s |\n",
 				r.Route.Method, r.Route.Pattern, r.Route.Description,
 				fmtBytes(reqSize),
 				fmtDuration(r.Avg), fmtDuration(r.P50), fmtDuration(r.P95),
 				fmtDuration(avgTTFB),
 				fmtDuration(r.Min), fmtDuration(r.Max),
-				r.Status, note)
+				r.Status, r.Route.CurrentTimeout, note)
 		}
 		fmt.Fprintln(f)
 	}
@@ -130,9 +130,9 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 
 	// timeout recommendations
 	fmt.Fprintf(f, "## Timeout Recommendations\n\n")
-	fmt.Fprintf(f, "Based on P95 latency with safety multiplier (3x normal, 5x stream, min 1s):\n\n")
-	fmt.Fprintf(f, "| Category | Method | Pattern | P95 | Suggested Timeout | Basis |\n")
-	fmt.Fprintf(f, "|----------|--------|---------|-----|-------------------|-------|\n")
+	fmt.Fprintf(f, "Based on P95 latency with safety multiplier (3x normal, 5x stream; floor: 5s normal, 10s stream):\n\n")
+	fmt.Fprintf(f, "| Category | Method | Pattern | P95 | Current Timeout | Suggested Timeout | Basis |\n")
+	fmt.Fprintf(f, "|----------|--------|---------|-----|-----------------|-------------------|-------|\n")
 	for _, cat := range cats {
 		for _, r := range grouped[cat] {
 			if r.Note == "setup" || r.Note == "cleanup" {
@@ -145,43 +145,68 @@ func writeMarkdown(results []BenchResult, path string, cfg Config) {
 				continue
 			}
 			suggested := suggestTimeout(r.P95, r.Route.Stream)
-			fmt.Fprintf(f, "| %s | %s | `%s` | %s | %s | measured |\n",
+			fmt.Fprintf(f, "| %s | %s | `%s` | %s | %s | %s | measured |\n",
 				cat, r.Route.Method, r.Route.Pattern,
-				fmtDuration(r.P95), fmtDuration(suggested))
+				fmtDuration(r.P95), r.Route.CurrentTimeout, fmtDuration(suggested))
 		}
 	}
 
 	// estimated timeouts for skipped routes
 	for _, cat := range cats {
 		for _, r := range grouped[cat] {
-			if r.Note != "skip" || r.Route.Recommendation == "" {
+			if r.Note != "skip" && r.Note != "skip-dep" {
 				continue
 			}
 			estimated := estimateSkippedTimeout(r, benchedP95s)
-			fmt.Fprintf(f, "| %s | %s | `%s` | - | %s | estimated |\n",
-				cat, r.Route.Method, r.Route.Pattern, fmtDuration(estimated))
+			fmt.Fprintf(f, "| %s | %s | `%s` | - | %s | %s | estimated |\n",
+				cat, r.Route.Method, r.Route.Pattern, r.Route.CurrentTimeout, fmtDuration(estimated))
 		}
 	}
 	fmt.Fprintln(f)
 
-	// skipped route analysis
-	hasSkipped := false
-	for _, r := range results {
-		if r.Note == "skip" && r.Route.Recommendation != "" {
-			hasSkipped = true
-			break
+	// skipped routes summary table
+	var skippedRoutes []BenchResult
+	for _, cat := range cats {
+		for _, r := range grouped[cat] {
+			if r.Note == "skip" || r.Note == "skip-dep" {
+				skippedRoutes = append(skippedRoutes, r)
+			}
 		}
 	}
-	if hasSkipped {
-		fmt.Fprintf(f, "## Skipped Routes — Analysis & Recommendations\n\n")
-		fmt.Fprintf(f, "These routes were not executed due to safety concerns but have been analyzed based on code review:\n\n")
-		for _, cat := range cats {
-			for _, r := range grouped[cat] {
-				if r.Note != "skip" || r.Route.Recommendation == "" {
+
+	if len(skippedRoutes) > 0 {
+		fmt.Fprintf(f, "## Skipped Routes Summary\n\n")
+		fmt.Fprintf(f, "%d routes were skipped.\n\n", len(skippedRoutes))
+		fmt.Fprintf(f, "| Category | Method | Pattern | Description | CurTimeout | Suggested | Skip Reason |\n")
+		fmt.Fprintf(f, "|----------|--------|---------|-------------|------------|-----------|-------------|\n")
+		for _, r := range skippedRoutes {
+			reason := r.Route.SkipReason
+			if r.Note == "skip-dep" {
+				reason = "prerequisite not available"
+			}
+			suggested := fmtDuration(estimateSkippedTimeout(r, benchedP95s))
+			fmt.Fprintf(f, "| %s | %s | `%s` | %s | %s | %s | %s |\n",
+				r.Route.Category, r.Route.Method, r.Route.Pattern,
+				r.Route.Description, r.Route.CurrentTimeout, suggested, reason)
+		}
+		fmt.Fprintln(f)
+
+		hasAnalysis := false
+		for _, r := range skippedRoutes {
+			if r.Route.Recommendation != "" {
+				hasAnalysis = true
+				break
+			}
+		}
+		if hasAnalysis {
+			fmt.Fprintf(f, "## Skipped Routes — Detailed Analysis & Recommendations\n\n")
+			for _, r := range skippedRoutes {
+				if r.Route.Recommendation == "" {
 					continue
 				}
-				fmt.Fprintf(f, "### %s `%s` (%s)\n\n", r.Route.Method, r.Route.Pattern, cat)
+				fmt.Fprintf(f, "### %s `%s` (%s)\n\n", r.Route.Method, r.Route.Pattern, r.Route.Category)
 				fmt.Fprintf(f, "**Skip reason**: %s\n\n", r.Route.SkipReason)
+				fmt.Fprintf(f, "**Current timeout**: %s\n\n", r.Route.CurrentTimeout)
 				fmt.Fprintf(f, "**Analysis**: %s\n\n", r.Route.Recommendation)
 			}
 		}
@@ -206,6 +231,7 @@ func writeCSV(results []BenchResult, path string) {
 		"status", "samples",
 		"avg_ms", "p50_ms", "p95_ms", "min_ms", "max_ms",
 		"avg_ttfb_ms", "avg_req_bytes", "avg_resp_bytes",
+		"current_timeout",
 		"error",
 	})
 
@@ -258,6 +284,7 @@ func writeCSV(results []BenchResult, path string) {
 			msStr(ttfb),
 			fmt.Sprintf("%d", reqBytes),
 			fmt.Sprintf("%d", respBytes),
+			r.Route.CurrentTimeout,
 			errMsg,
 		})
 	}
@@ -265,18 +292,17 @@ func writeCSV(results []BenchResult, path string) {
 
 func suggestTimeout(p95 time.Duration, stream bool) time.Duration {
 	multiplier := 3.0
+	minTimeout := 5
 	if stream {
 		multiplier = 5.0
+		minTimeout = 10
 	}
-	suggested := time.Duration(float64(p95) * multiplier)
-	if suggested < time.Second {
-		suggested = time.Second
+	secs := float64(p95) * multiplier / float64(time.Second)
+	rounded := (int(secs)/5 + 1) * 5 // round up to next multiple of 5s
+	if rounded < minTimeout {
+		rounded = minTimeout
 	}
-	suggested = suggested.Round(time.Second)
-	if suggested == 0 {
-		suggested = time.Second
-	}
-	return suggested
+	return time.Duration(rounded) * time.Second
 }
 
 // estimateSkippedTimeout parses the "Suggest timeout: Xs" from the
@@ -296,12 +322,12 @@ func estimateSkippedTimeout(r BenchResult, benchedP95s []time.Duration) time.Dur
 	}
 	if len(benchedP95s) > 0 {
 		top := percentile(benchedP95s, 0.95)
-		est := time.Duration(float64(top) * 5)
-		est = est.Round(time.Second)
-		if est < 5*time.Second {
-			est = 5 * time.Second
+		est := float64(top) * 5 / float64(time.Second)
+		rounded := (int(est)/5 + 1) * 5 // round up to next multiple of 5s
+		if rounded < 10 {
+			rounded = 10
 		}
-		return est
+		return time.Duration(rounded) * time.Second
 	}
 	return 10 * time.Second
 }

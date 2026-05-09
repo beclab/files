@@ -364,7 +364,7 @@ func writeDocx(results []BenchResult, path string, cfg Config) {
 		group := grouped[cat]
 		items = append(items, heading(zhCat(cat)+"（"+cat+"）", 2))
 
-		headers := []string{"方法", "路径", "说明", "请求大小", "平均", "P50", "P95", "首字节", "最小", "最大", "状态码", "备注"}
+		headers := []string{"方法", "路径", "说明", "请求大小", "平均", "P50", "P95", "首字节", "最小", "最大", "状态码", "当前超时", "备注"}
 		var tableData [][]string
 		tableData = append(tableData, headers)
 
@@ -375,7 +375,7 @@ func writeDocx(results []BenchResult, path string, cfg Config) {
 					reason = "依赖跳过"
 				}
 				row := []string{r.Route.Method, truncate(r.Route.Pattern, 40), zhDesc(r.Route.Description),
-					"-", "-", "-", "-", "-", "-", "-", "跳过", reason}
+					"-", "-", "-", "-", "-", "-", "-", "跳过", r.Route.CurrentTimeout, reason}
 				tableData = append(tableData, row)
 				continue
 			}
@@ -385,7 +385,7 @@ func writeDocx(results []BenchResult, path string, cfg Config) {
 					errMsg = truncate(r.Samples[0].Error, 30)
 				}
 				row := []string{r.Route.Method, truncate(r.Route.Pattern, 40), zhDesc(r.Route.Description),
-					"-", "-", "-", "-", "-", "-", "-", "错误", errMsg}
+					"-", "-", "-", "-", "-", "-", "-", "错误", r.Route.CurrentTimeout, errMsg}
 				tableData = append(tableData, row)
 				continue
 			}
@@ -403,6 +403,7 @@ func writeDocx(results []BenchResult, path string, cfg Config) {
 				fmtDuration(avgTTFB),
 				fmtDuration(r.Min), fmtDuration(r.Max),
 				fmt.Sprintf("%d", r.Status),
+				r.Route.CurrentTimeout,
 				note,
 			}
 			tableData = append(tableData, row)
@@ -414,7 +415,7 @@ func writeDocx(results []BenchResult, path string, cfg Config) {
 
 	// Timeout recommendations
 	items = append(items, heading("三、超时建议", 1))
-	items = append(items, para("基于 P95 延迟乘以安全系数（普通接口 3 倍，流式接口 5 倍），所有建议超时值不低于 1 秒。", 18))
+	items = append(items, para("基于 P95 延迟乘以安全系数（普通接口 3 倍、最低 5 秒，流式接口 5 倍、最低 10 秒），兼顾网络波动与生产环境实际经验。", 18))
 
 	var benchedP95s []time.Duration
 	for _, r := range results {
@@ -427,7 +428,7 @@ func writeDocx(results []BenchResult, path string, cfg Config) {
 	}
 	sort.Slice(benchedP95s, func(i, j int) bool { return benchedP95s[i] < benchedP95s[j] })
 
-	timeoutHeaders := []string{"分类", "方法", "路径", "P95", "建议超时", "依据"}
+	timeoutHeaders := []string{"分类", "方法", "路径", "P95", "当前超时", "建议超时", "依据"}
 	var timeoutData [][]string
 	timeoutData = append(timeoutData, timeoutHeaders)
 
@@ -442,19 +443,19 @@ func writeDocx(results []BenchResult, path string, cfg Config) {
 			suggested := suggestTimeout(r.P95, r.Route.Stream)
 			timeoutData = append(timeoutData, []string{
 				zhCat(cat), r.Route.Method, truncate(r.Route.Pattern, 40),
-				fmtDuration(r.P95), fmtDuration(suggested), "实测",
+				fmtDuration(r.P95), r.Route.CurrentTimeout, fmtDuration(suggested), "实测",
 			})
 		}
 	}
 	for _, cat := range cats {
 		for _, r := range grouped[cat] {
-			if r.Note != "skip" || r.Route.Recommendation == "" {
+			if r.Note != "skip" && r.Note != "skip-dep" {
 				continue
 			}
 			estimated := estimateSkippedTimeout(r, benchedP95s)
 			timeoutData = append(timeoutData, []string{
 				zhCat(cat), r.Route.Method, truncate(r.Route.Pattern, 40),
-				"-", fmtDuration(estimated), "估算",
+				"-", r.Route.CurrentTimeout, fmtDuration(estimated), "估算",
 			})
 		}
 	}
@@ -464,29 +465,71 @@ func writeDocx(results []BenchResult, path string, cfg Config) {
 		items = append(items, tbl)
 	}
 
-	// Skipped analysis
-	hasSkipped := false
-	for _, r := range results {
-		if r.Note == "skip" && r.Route.Recommendation != "" {
-			hasSkipped = true
-			break
+	// Skipped routes: summary table + detailed analysis
+	var skippedRoutes []BenchResult
+	for _, cat := range cats {
+		for _, r := range grouped[cat] {
+			if r.Note == "skip" || r.Note == "skip-dep" {
+				skippedRoutes = append(skippedRoutes, r)
+			}
 		}
 	}
-	if hasSkipped {
-		items = append(items, heading("四、跳过的接口分析", 1))
-		for _, cat := range cats {
-			for _, r := range grouped[cat] {
-				if r.Note != "skip" || r.Route.Recommendation == "" {
+
+	if len(skippedRoutes) > 0 {
+		items = append(items, heading("四、跳过的接口一览", 1))
+		items = append(items, para(fmt.Sprintf("共 %d 个接口被跳过，未执行实际测试。", len(skippedRoutes)), 18))
+
+		skipHeaders := []string{"分类", "方法", "路径", "说明", "当前超时", "建议超时", "跳过原因"}
+		var skipTableData [][]string
+		skipTableData = append(skipTableData, skipHeaders)
+		for _, r := range skippedRoutes {
+			reason := zhSkipReason(r.Route.SkipReason)
+			if r.Note == "skip-dep" {
+				reason = "前置条件不满足"
+			}
+			suggested := fmtDuration(estimateSkippedTimeout(r, benchedP95s))
+			skipTableData = append(skipTableData, []string{
+				zhCat(r.Route.Category),
+				r.Route.Method,
+				truncate(r.Route.Pattern, 40),
+				truncate(zhDesc(r.Route.Description), 30),
+				r.Route.CurrentTimeout,
+				suggested,
+				truncate(reason, 40),
+			})
+		}
+		skipTbl := buildSimpleTable(skipTableData, len(skipHeaders), true)
+		items = append(items, skipTbl)
+
+		// Detailed analysis for routes that have recommendations
+		hasAnalysis := false
+		for _, r := range skippedRoutes {
+			if r.Route.Recommendation != "" {
+				hasAnalysis = true
+				break
+			}
+		}
+		if hasAnalysis {
+			items = append(items, heading("五、跳过的接口详细分析与建议", 1))
+			items = append(items, para("以下接口因安全原因未执行，已基于代码分析给出评估：", 18))
+			for _, r := range skippedRoutes {
+				if r.Route.Recommendation == "" {
 					continue
 				}
-				items = append(items, heading(r.Route.Method+" "+r.Route.Pattern, 3))
+				items = append(items, heading(r.Route.Method+" "+r.Route.Pattern+"（"+zhCat(r.Route.Category)+"）", 3))
 				items = append(items, wParagraph{
 					Runs: []wRun{
 						mkRun("跳过原因：", true, 18),
-						mkRun(r.Route.SkipReason, false, 18),
+						mkRun(zhSkipReason(r.Route.SkipReason), false, 18),
 					},
 				})
-				items = append(items, para("分析建议："+r.Route.Recommendation, 18))
+				items = append(items, wParagraph{
+					Runs: []wRun{
+						mkRun("当前 Nginx 超时：", true, 18),
+						mkRun(r.Route.CurrentTimeout, false, 18),
+					},
+				})
+				items = append(items, para("分析建议："+zhRecommendation(r.Route.Recommendation), 18))
 			}
 		}
 	}

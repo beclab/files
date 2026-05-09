@@ -73,6 +73,65 @@ func zhCat(en string) string {
 	return en
 }
 
+// zhSkipReason translates skip reasons to Chinese.
+func zhSkipReason(en string) string {
+	m := map[string]string{
+		"latency = network + O(file_size) MD5 computation; single-file benchmark is not representative":
+			"延迟 = 网络 + O(文件大小) MD5 计算；单文件基准测试不具代表性",
+		"creates real Seafile user + library; affects shared Seafile DB":
+			"会创建真实的 Seafile 用户和资料库，影响共享的 Seafile 数据库",
+		"DELETES real Seafile user + all shares; affects shared Seafile DB":
+			"会删除真实的 Seafile 用户及所有分享，影响共享的 Seafile 数据库",
+		"sends empty JSON body which may corrupt encoding config":
+			"发送空 JSON 体可能损坏编码配置",
+		"prerequisite not available":
+			"前置条件不满足",
+	}
+	if zh, ok := m[en]; ok {
+		return zh
+	}
+	if strings.Contains(en, "Sync upload requires") {
+		return "Sync 上传需要 Seafile 内部 GetUploadLink API 获取的真实访问令牌，无法从外部客户端测试"
+	}
+	return en
+}
+
+// zhRecommendation translates recommendation text to Chinese.
+func zhRecommendation(en string) string {
+	if strings.Contains(en, "MD5 computation is CPU-bound") {
+		return "MD5 计算是 CPU 密集型操作，耗时与文件大小成线性关系。" +
+			"处理器读取整个文件进行哈希计算并返回十六进制摘要。" +
+			"对于 100MB 文件约需 0.5-2 秒，1GB 文件约需 5-15 秒。" +
+			"建议超时设置：5 秒（小文件）至 1800 秒（大文件），与 nginx 的 proxy_read_timeout 1800s 一致。"
+	}
+	if strings.Contains(en, "HandleCallbackCreate") {
+		return "调用链路：HandleCallbackCreate → CreateUser → ListAllUsers" +
+			"（3 次 Ccnet RPC + 每个用户 O(N) 次 Redis HGetAll 用于邮箱映射）→ " +
+			"CreatePersonalRepo（Seafile RPC）。涉及多次网络往返和 DB 操作。" +
+			"建议超时：5 秒（K8s API 在 etcd 压力下可能出现峰值）。"
+	}
+	if strings.Contains(en, "RemoveUserRelativeAdjustShare") {
+		return "调用链路：RemoveUserRelativeAdjustShare（Postgres 事务：" +
+			"QuerySharePath + 每路径 DeleteSharePathRelations + 每同步分享 " +
+			"DeleteSyncShareRelations）→ RemoveAllReposByOwner（Seafile RPC）→ " +
+			"RemoveUser（Ccnet RPC）。O(用户拥有的仓库数 + 分享数) 次数据库操作。" +
+			"建议超时：5 秒（K8s API 在 etcd 压力下可能出现峰值）。"
+	}
+	if strings.Contains(en, "UpdateNamedConfiguration") {
+		return "调用链路：UpdateNamedConfiguration → JSON 反序列化 → " +
+			"校验 → GetConfiguration → GetConfigurationFromConfigMap" +
+			"（K8s API 调用获取 ConfigMap）→ 写入 ConfigMap。" +
+			"建议超时：5 秒（K8s API 在 etcd 压力下可能出现峰值）。"
+	}
+	if strings.Contains(en, "Sync upload shares the same nginx") {
+		return "Sync 上传与 Posix 上传共享相同的 nginx location /seafhttp/（proxy_read_timeout 600s），" +
+			"请求代理到 seafile:8082。实际上传 I/O 路径与 Posix 类似，但多了一层 Seafile 文件服务器转发。" +
+			"以 Posix 上传的实测数据为基准；Sync 上传可能因额外的 Seafile 跳转而略慢。" +
+			"建议超时：与 Posix 上传相同或更高（最差网络下至少每 MB 30 秒）。"
+	}
+	return en
+}
+
 func zhNote(note string, status int) string {
 	switch note {
 	case "setup":
@@ -154,8 +213,8 @@ func writeMarkdownZh(results []BenchResult, path string, cfg Config) {
 	for _, cat := range cats {
 		group := grouped[cat]
 		fmt.Fprintf(f, "## %s（%s）\n\n", zhCat(cat), cat)
-		fmt.Fprintf(f, "| 方法 | 路径 | 说明 | 请求大小 | 平均 | P50 | P95 | 首字节(均) | 最小 | 最大 | 状态码 | 备注 |\n")
-		fmt.Fprintf(f, "|------|------|------|----------|------|-----|-----|------------|------|------|--------|------|\n")
+		fmt.Fprintf(f, "| 方法 | 路径 | 说明 | 请求大小 | 平均 | P50 | P95 | 首字节(均) | 最小 | 最大 | 状态码 | 当前超时 | 备注 |\n")
+		fmt.Fprintf(f, "|------|------|------|----------|------|-----|-----|------------|------|------|--------|----------|------|\n")
 
 		for _, r := range group {
 			if r.Note == "skip" || r.Note == "skip-dep" {
@@ -165,8 +224,8 @@ func writeMarkdownZh(results []BenchResult, path string, cfg Config) {
 				} else if reason == "" {
 					reason = "不安全"
 				}
-				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | - | - | 跳过 | %s |\n",
-					r.Route.Method, r.Route.Pattern, zhDesc(r.Route.Description), reason)
+			fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | - | - | 跳过 | %s | %s |\n",
+					r.Route.Method, r.Route.Pattern, zhDesc(r.Route.Description), r.Route.CurrentTimeout, reason)
 				continue
 			}
 
@@ -175,8 +234,8 @@ func writeMarkdownZh(results []BenchResult, path string, cfg Config) {
 				if len(r.Samples) > 0 && r.Samples[0].Error != "" {
 					errMsg = truncate(r.Samples[0].Error, 50)
 				}
-				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | - | - | 错误 | %s |\n",
-					r.Route.Method, r.Route.Pattern, zhDesc(r.Route.Description), errMsg)
+				fmt.Fprintf(f, "| %s | `%s` | %s | - | - | - | - | - | - | - | 错误 | %s | %s |\n",
+					r.Route.Method, r.Route.Pattern, zhDesc(r.Route.Description), r.Route.CurrentTimeout, errMsg)
 				continue
 			}
 
@@ -184,13 +243,13 @@ func writeMarkdownZh(results []BenchResult, path string, cfg Config) {
 			reqSize := avgReqSize(r.Samples)
 			avgTTFB := avgTTFBDuration(r.Samples)
 
-			fmt.Fprintf(f, "| %s | `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %d | %s |\n",
+			fmt.Fprintf(f, "| %s | `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %d | %s | %s |\n",
 				r.Route.Method, r.Route.Pattern, zhDesc(r.Route.Description),
 				fmtBytes(reqSize),
 				fmtDuration(r.Avg), fmtDuration(r.P50), fmtDuration(r.P95),
 				fmtDuration(avgTTFB),
 				fmtDuration(r.Min), fmtDuration(r.Max),
-				r.Status, note)
+				r.Status, r.Route.CurrentTimeout, note)
 		}
 		fmt.Fprintln(f)
 	}
@@ -207,9 +266,9 @@ func writeMarkdownZh(results []BenchResult, path string, cfg Config) {
 	sort.Slice(benchedP95s, func(i, j int) bool { return benchedP95s[i] < benchedP95s[j] })
 
 	fmt.Fprintf(f, "## 超时建议\n\n")
-	fmt.Fprintf(f, "基于 P95 延迟乘以安全系数（普通接口 3 倍，流式接口 5 倍，最低 1 秒）：\n\n")
-	fmt.Fprintf(f, "| 分类 | 方法 | 路径 | P95 | 建议超时 | 依据 |\n")
-	fmt.Fprintf(f, "|------|------|------|-----|----------|------|\n")
+	fmt.Fprintf(f, "基于 P95 延迟乘以安全系数（普通接口 3 倍、最低 5 秒，流式接口 5 倍、最低 10 秒），兼顾网络波动与生产环境实际经验：\n\n")
+	fmt.Fprintf(f, "| 分类 | 方法 | 路径 | P95 | 当前超时 | 建议超时 | 依据 |\n")
+	fmt.Fprintf(f, "|------|------|------|-----|----------|----------|------|\n")
 	for _, cat := range cats {
 		for _, r := range grouped[cat] {
 			if r.Note == "setup" || r.Note == "cleanup" || r.Note == "skip" || r.Note == "skip-dep" {
@@ -219,41 +278,69 @@ func writeMarkdownZh(results []BenchResult, path string, cfg Config) {
 				continue
 			}
 			suggested := suggestTimeout(r.P95, r.Route.Stream)
-			fmt.Fprintf(f, "| %s | %s | `%s` | %s | %s | 实测 |\n",
+			fmt.Fprintf(f, "| %s | %s | `%s` | %s | %s | %s | 实测 |\n",
 				zhCat(cat), r.Route.Method, r.Route.Pattern,
-				fmtDuration(r.P95), fmtDuration(suggested))
+				fmtDuration(r.P95), r.Route.CurrentTimeout, fmtDuration(suggested))
 		}
 	}
 	for _, cat := range cats {
 		for _, r := range grouped[cat] {
-			if r.Note != "skip" || r.Route.Recommendation == "" {
+			if r.Note != "skip" && r.Note != "skip-dep" {
 				continue
 			}
 			estimated := estimateSkippedTimeout(r, benchedP95s)
-			fmt.Fprintf(f, "| %s | %s | `%s` | - | %s | 估算 |\n",
-				zhCat(cat), r.Route.Method, r.Route.Pattern, fmtDuration(estimated))
+			fmt.Fprintf(f, "| %s | %s | `%s` | - | %s | %s | 估算 |\n",
+				zhCat(cat), r.Route.Method, r.Route.Pattern, r.Route.CurrentTimeout, fmtDuration(estimated))
 		}
 	}
 	fmt.Fprintln(f)
 
-	hasSkipped := false
-	for _, r := range results {
-		if r.Note == "skip" && r.Route.Recommendation != "" {
-			hasSkipped = true
-			break
+	// Skipped routes summary table
+	var skippedRoutes []BenchResult
+	for _, cat := range cats {
+		for _, r := range grouped[cat] {
+			if r.Note == "skip" || r.Note == "skip-dep" {
+				skippedRoutes = append(skippedRoutes, r)
+			}
 		}
 	}
-	if hasSkipped {
-		fmt.Fprintf(f, "## 跳过的接口分析与建议\n\n")
-		fmt.Fprintf(f, "以下接口因安全原因未执行，已基于代码分析给出评估：\n\n")
-		for _, cat := range cats {
-			for _, r := range grouped[cat] {
-				if r.Note != "skip" || r.Route.Recommendation == "" {
+
+	if len(skippedRoutes) > 0 {
+		fmt.Fprintf(f, "## 跳过的接口一览\n\n")
+		fmt.Fprintf(f, "共 %d 个接口被跳过，未执行实际测试。\n\n", len(skippedRoutes))
+		fmt.Fprintf(f, "| 分类 | 方法 | 路径 | 说明 | 当前超时 | 建议超时 | 跳过原因 |\n")
+		fmt.Fprintf(f, "|------|------|------|------|----------|----------|----------|\n")
+		for _, r := range skippedRoutes {
+			reason := zhSkipReason(r.Route.SkipReason)
+			if r.Note == "skip-dep" {
+				reason = "前置条件不满足"
+			}
+			suggested := fmtDuration(estimateSkippedTimeout(r, benchedP95s))
+			fmt.Fprintf(f, "| %s | %s | `%s` | %s | %s | %s | %s |\n",
+				zhCat(r.Route.Category), r.Route.Method, r.Route.Pattern,
+				zhDesc(r.Route.Description), r.Route.CurrentTimeout, suggested, reason)
+		}
+		fmt.Fprintln(f)
+
+		// Detailed analysis
+		hasAnalysis := false
+		for _, r := range skippedRoutes {
+			if r.Route.Recommendation != "" {
+				hasAnalysis = true
+				break
+			}
+		}
+		if hasAnalysis {
+			fmt.Fprintf(f, "## 跳过的接口详细分析与建议\n\n")
+			fmt.Fprintf(f, "以下接口因安全原因未执行，已基于代码分析给出评估：\n\n")
+			for _, r := range skippedRoutes {
+				if r.Route.Recommendation == "" {
 					continue
 				}
-				fmt.Fprintf(f, "### %s `%s`（%s）\n\n", r.Route.Method, r.Route.Pattern, zhCat(cat))
-				fmt.Fprintf(f, "**跳过原因**：%s\n\n", r.Route.SkipReason)
-				fmt.Fprintf(f, "**分析建议**：%s\n\n", r.Route.Recommendation)
+				fmt.Fprintf(f, "### %s `%s`（%s）\n\n", r.Route.Method, r.Route.Pattern, zhCat(r.Route.Category))
+				fmt.Fprintf(f, "**跳过原因**：%s\n\n", zhSkipReason(r.Route.SkipReason))
+				fmt.Fprintf(f, "**当前 Nginx 超时**：%s\n\n", r.Route.CurrentTimeout)
+				fmt.Fprintf(f, "**分析建议**：%s\n\n", zhRecommendation(r.Route.Recommendation))
 			}
 		}
 	}
@@ -277,6 +364,7 @@ func writeCSVZh(results []BenchResult, path string) {
 		"状态码", "采样数",
 		"平均(ms)", "P50(ms)", "P95(ms)", "最小(ms)", "最大(ms)",
 		"首字节均值(ms)", "请求大小(字节)", "响应大小(字节)",
+		"当前超时",
 		"错误",
 	})
 
@@ -331,6 +419,7 @@ func writeCSVZh(results []BenchResult, path string) {
 			msStr(ttfb),
 			fmt.Sprintf("%d", reqBytes),
 			fmt.Sprintf("%d", respBytes),
+			r.Route.CurrentTimeout,
 			errMsg,
 		})
 	}

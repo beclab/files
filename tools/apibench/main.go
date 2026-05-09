@@ -22,18 +22,22 @@ type SampleResult struct {
 	BodySize   int64
 	ReqSize    int64
 	Error      string
+	RespSnip   string // first N bytes of response body for error diagnosis
 }
 
 type BenchResult struct {
-	Route   RouteCase
-	Samples []SampleResult
-	Min     time.Duration
-	Max     time.Duration
-	Avg     time.Duration
-	P50     time.Duration
-	P95     time.Duration
-	Status  int
-	Note    string
+	Route        RouteCase
+	Samples      []SampleResult
+	Min          time.Duration
+	Max          time.Duration
+	Avg          time.Duration
+	P50          time.Duration
+	P95          time.Duration
+	Status       int
+	Note         string
+	WarmupStatus int
+	WarmupErr    string
+	WarmupSnip   string
 }
 
 type Config struct {
@@ -53,6 +57,8 @@ type Config struct {
 func main() {
 	cfg := Config{}
 	var uploadSizesStr string
+	var regenCSV string
+	var regenOut string
 	flag.StringVar(&cfg.BaseURL, "base-url", "http://localhost:8080", "target service base URL")
 	flag.StringVar(&cfg.Owner, "owner", "", "test user (X-Bfl-User header)")
 	flag.IntVar(&cfg.Samples, "samples", 5, "samples per route")
@@ -64,7 +70,17 @@ func main() {
 	flag.IntVar(&cfg.Concurrency, "concurrency", 1, "concurrent workers for benchmark sampling")
 	flag.StringVar(&uploadSizesStr, "upload-sizes", "1,8", "upload chunk sizes in MB (comma-separated)")
 	flag.BoolVar(&cfg.BigDir, "big-dir", false, "create many files in setup to test large directory listing")
+	flag.StringVar(&regenCSV, "regen", "", "regenerate enhanced docx from existing Chinese CSV (skip benchmarking)")
+	flag.StringVar(&regenOut, "regen-out", "", "output path for regenerated docx (default: same dir as CSV)")
 	flag.Parse()
+
+	if regenCSV != "" {
+		if regenOut == "" {
+			regenOut = strings.TrimSuffix(regenCSV, ".csv") + "_enhanced.docx"
+		}
+		regenFromCSV(regenCSV, regenOut)
+		return
+	}
 
 	if cfg.Owner == "" {
 		fmt.Fprintln(os.Stderr, "ERROR: --owner is required (e.g. --owner admin)")
@@ -137,6 +153,65 @@ func main() {
 	seq := 0
 	var results []BenchResult
 
+	runCleanup := func() {
+		fmt.Println("\n=== EMERGENCY CLEANUP ===")
+		for _, p := range phases {
+			if p < 97 {
+				continue
+			}
+			for _, r := range phaseMap[p] {
+				if r.DynPath != nil && r.DynPath() == "" {
+					continue
+				}
+				fmt.Printf("  cleanup: %s %s\n", r.Method, r.Pattern)
+				sr := doRequest(client, cfg, r)
+				if sr.Error != "" {
+					fmt.Printf("    cleanup error (ignored): %s\n", sr.Error)
+				} else {
+					fmt.Printf("    cleanup status=%d\n", sr.StatusCode)
+				}
+			}
+		}
+	}
+
+	abortWithError := func(context string, route RouteCase, sr SampleResult) {
+		fmt.Printf("\n\n!!! ABORT: %s !!!\n", context)
+		fmt.Printf("    Route:  %s %s\n", route.Method, route.Pattern)
+		fmt.Printf("    Path:   %s\n", route.ResolvePath())
+		if sr.Error != "" {
+			fmt.Printf("    Error:  %s\n", sr.Error)
+		} else {
+			fmt.Printf("    Status: %d\n", sr.StatusCode)
+		}
+		if sr.RespSnip != "" {
+			fmt.Printf("    Response: %s\n", sr.RespSnip)
+		}
+		fmt.Println("\nThis likely means the request parameters are wrong and")
+		fmt.Println("the measurement would be inaccurate. Fix the issue and retry.")
+		runCleanup()
+		os.Exit(1)
+	}
+
+	isExpectedError := func(route RouteCase, statusCode int) bool {
+		if statusCode >= 200 && statusCode < 300 {
+			return true
+		}
+		desc := route.Description
+		if strings.Contains(desc, "may 4xx") ||
+			strings.Contains(desc, "may 5xx") ||
+			strings.Contains(desc, fmt.Sprintf("may %d", statusCode)) ||
+			strings.Contains(desc, "will error") ||
+			strings.Contains(desc, "will fail") ||
+			strings.Contains(desc, "no active task") ||
+			strings.Contains(desc, "no such mount") ||
+			strings.Contains(desc, "no item") ||
+			strings.Contains(desc, "no session") ||
+			strings.Contains(desc, "measures routing") {
+			return true
+		}
+		return false
+	}
+
 	for _, phase := range phases {
 		group := phaseMap[phase]
 
@@ -179,10 +254,12 @@ func main() {
 				fmt.Println(" [SETUP]")
 				sr := doRequest(client, cfg, route)
 				if sr.Error != "" {
-					fmt.Printf("    → SETUP ERROR: %s\n", sr.Error)
-				} else {
-					fmt.Printf("    → status=%d duration=%v\n", sr.StatusCode, sr.Duration.Round(time.Millisecond))
+					abortWithError("setup request failed (network error)", route, sr)
 				}
+				if !isExpectedError(route, sr.StatusCode) {
+					abortWithError(fmt.Sprintf("setup request returned unexpected status %d", sr.StatusCode), route, sr)
+				}
+				fmt.Printf("    → status=%d duration=%v\n", sr.StatusCode, sr.Duration.Round(time.Millisecond))
 				results = append(results, BenchResult{
 					Route:   route,
 					Status:  sr.StatusCode,
@@ -198,9 +275,19 @@ func main() {
 			}
 
 			fmt.Println()
+
 			br := benchmark(client, cfg, route)
 
-			if phase >= 99 {
+			// Fail-fast: if warmup probe got unexpected error, abort
+			if phase < 97 && br.WarmupErr != "" {
+				abortWithError("benchmark warmup failed", route, SampleResult{Error: br.WarmupErr})
+			}
+			if phase < 97 && br.WarmupStatus > 0 && !isExpectedError(route, br.WarmupStatus) {
+				abortWithError(fmt.Sprintf("benchmark warmup returned unexpected status %d", br.WarmupStatus),
+					route, SampleResult{StatusCode: br.WarmupStatus, RespSnip: br.WarmupSnip})
+			}
+
+			if phase >= 97 {
 				br.Note = "cleanup"
 			}
 
@@ -228,22 +315,26 @@ func main() {
 	csvZhPath := fmt.Sprintf("%s/api_benchmark_%s_zh.csv", cfg.OutputDir, ts)
 
 	docxPath := fmt.Sprintf("%s/api_benchmark_%s_zh.docx", cfg.OutputDir, ts)
+	docxEnhancedPath := fmt.Sprintf("%s/api_benchmark_%s_zh_enhanced.docx", cfg.OutputDir, ts)
 
 	writeMarkdown(results, mdPath, cfg)
 	writeCSV(results, csvPath)
 	writeMarkdownZh(results, mdZhPath, cfg)
 	writeCSVZh(results, csvZhPath)
 	writeDocx(results, docxPath, cfg)
+	writeDocxEnhanced(results, docxEnhancedPath, cfg)
 
 	fmt.Printf("\nDone. %d routes benchmarked. Results written to:\n", total)
-	fmt.Printf("  %s\n  %s\n  %s\n  %s\n  %s\n", mdPath, csvPath, mdZhPath, csvZhPath, docxPath)
+	fmt.Printf("  %s\n  %s\n  %s\n  %s\n  %s\n  %s\n", mdPath, csvPath, mdZhPath, csvZhPath, docxPath, docxEnhancedPath)
 }
 
 func benchmark(client *http.Client, cfg Config, route RouteCase) BenchResult {
 	br := BenchResult{Route: route}
 
-	// warmup
-	_ = doRequest(client, cfg, route)
+	warmup := doRequest(client, cfg, route)
+	br.WarmupStatus = warmup.StatusCode
+	br.WarmupErr = warmup.Error
+	br.WarmupSnip = warmup.RespSnip
 
 	if cfg.Concurrency <= 1 {
 		for i := 0; i < cfg.Samples; i++ {
@@ -357,6 +448,14 @@ func doRequest(client *http.Client, cfg Config, route RouteCase) SampleResult {
 		TTFB:       ttfb,
 		BodySize:   int64(len(respBody)),
 		ReqSize:    reqSize,
+	}
+
+	if resp.StatusCode >= 400 {
+		snip := string(respBody)
+		if len(snip) > 512 {
+			snip = snip[:512] + "..."
+		}
+		sr.RespSnip = snip
 	}
 
 	captureResponseIDs(route, resp.StatusCode, respBody)
