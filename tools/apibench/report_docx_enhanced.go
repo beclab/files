@@ -154,7 +154,7 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 			}
 			suggested := suggestTimeout(r.P95, r.Route.Stream)
 			timeoutMeasured = append(timeoutMeasured, []string{
-				zhCat(cat), r.Route.Method, truncate(r.Route.Pattern, 40),
+				zhCat(cat), r.Route.Method, r.Route.Pattern,
 				fmtDuration(r.P95), r.Route.CurrentTimeout, fmtDuration(suggested), "实测",
 			})
 		}
@@ -166,7 +166,7 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 			}
 			estimated := estimateSkippedTimeout(r, benchedP95s)
 			timeoutEstimated = append(timeoutEstimated, []string{
-				zhCat(cat), r.Route.Method, truncate(r.Route.Pattern, 40),
+				zhCat(cat), r.Route.Method, r.Route.Pattern,
 				"-", r.Route.CurrentTimeout, fmtDuration(estimated), "估算",
 			})
 		}
@@ -223,7 +223,7 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 				if r.Note == "skip-dep" {
 					reason = "依赖跳过"
 				}
-				row := []string{r.Route.Method, truncate(r.Route.Pattern, 40), zhDesc(r.Route.Description),
+				row := []string{r.Route.Method, r.Route.Pattern, zhDesc(r.Route.Description),
 					"-", "-", "-", "-", "-", "-", "-", "跳过", r.Route.CurrentTimeout, reason}
 				tableData = append(tableData, row)
 				continue
@@ -231,9 +231,9 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 			if r.Status <= 0 && r.Note == "" {
 				errMsg := "请求失败"
 				if len(r.Samples) > 0 && r.Samples[0].Error != "" {
-					errMsg = truncate(r.Samples[0].Error, 30)
+					errMsg = r.Samples[0].Error
 				}
-				row := []string{r.Route.Method, truncate(r.Route.Pattern, 40), zhDesc(r.Route.Description),
+				row := []string{r.Route.Method, r.Route.Pattern, zhDesc(r.Route.Description),
 					"-", "-", "-", "-", "-", "-", "-", "错误", r.Route.CurrentTimeout, errMsg}
 				tableData = append(tableData, row)
 				continue
@@ -245,8 +245,8 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 
 			row := []string{
 				r.Route.Method,
-				truncate(r.Route.Pattern, 40),
-				truncate(zhDesc(r.Route.Description), 35),
+				r.Route.Pattern,
+				zhDesc(r.Route.Description),
 				fmtBytes(reqSize),
 				fmtDuration(r.Avg), fmtDuration(r.P50), fmtDuration(r.P95),
 				fmtDuration(avgTTFB),
@@ -292,11 +292,11 @@ func writeDocxEnhanced(results []BenchResult, path string, cfg Config) {
 			skipTableData = append(skipTableData, []string{
 				zhCat(r.Route.Category),
 				r.Route.Method,
-				truncate(r.Route.Pattern, 40),
-				truncate(zhDesc(r.Route.Description), 30),
+				r.Route.Pattern,
+				zhDesc(r.Route.Description),
 				r.Route.CurrentTimeout,
 				suggested,
-				truncate(reason, 40),
+				reason,
 			})
 		}
 		skipTbl := buildSimpleTable(skipTableData, len(skipHeaders), true)
