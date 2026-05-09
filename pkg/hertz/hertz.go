@@ -49,12 +49,8 @@ func HertzServer(cfg *common.Server, coord *lifecycle.Coordinator) {
 		server.WithHostPorts(hostPort),
 		server.WithMaxRequestBodySize(20<<20),
 		server.WithTransport(standard.NewTransporter),
-		// 30min covers the worst-case finalize for very large uploads
-		// (e.g. tens of GB cross-PVC io.Copy). Must stay >= the
-		// matching nginx proxy_read_timeout / proxy_send_timeout /
-		// send_timeout / client_body_timeout for the /upload location.
-		server.WithReadTimeout(30*time.Minute),
-		server.WithWriteTimeout(30*time.Minute),
+		server.WithReadTimeout(5*time.Minute),
+		server.WithWriteTimeout(5*time.Minute),
 		server.WithKeepAliveTimeout(3*time.Minute),
 		server.WithStreamBody(true),
 		server.WithReadBufferSize(64*1024),

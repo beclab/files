@@ -203,7 +203,7 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 	var dst = task.param.Dst
 
 	var srcUri, dstUri string
-	if task.isShare {
+	if task.isShare && task.param.SrcSharePath != nil && task.param.DstSharePath != nil {
 		srcUri = fmt.Sprintf("/%s/%s/%s", task.param.SrcSharePath.FileType, task.param.SrcSharePath.Extend, strings.TrimPrefix(task.param.SrcSharePath.Path, "/"))
 		dstUri = fmt.Sprintf("/%s/%s/%s", task.param.DstSharePath.FileType, task.param.DstSharePath.Extend, strings.TrimPrefix(task.param.DstSharePath.Path, "/"))
 	} else {
@@ -217,6 +217,9 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 	var pauseAble bool = true
 
 	if src.IsSync() && dst.IsSync() {
+		pauseAble = false
+	}
+	if task.param.Action == common.ActionUploadFinalize {
 		pauseAble = false
 	}
 
@@ -280,7 +283,7 @@ func (t *taskManager) GetTasksByStatus(owner, status string) []*TaskInfo {
 
 		var srcUri, dstUri string
 
-		if task.isShare {
+		if task.isShare && task.param.SrcSharePath != nil && task.param.DstSharePath != nil {
 			srcUri = fmt.Sprintf("/%s/%s/%s", task.param.SrcSharePath.FileType, task.param.SrcSharePath.Extend, strings.TrimPrefix(task.param.SrcSharePath.Path, "/"))
 			dstUri = fmt.Sprintf("/%s/%s/%s", task.param.DstSharePath.FileType, task.param.DstSharePath.Extend, strings.TrimPrefix(task.param.DstSharePath.Path, "/"))
 		} else {

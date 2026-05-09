@@ -430,6 +430,16 @@ func HandleUploadChunks(fileParam *models.FileParam, uploadId string, resumableI
 			info.FullPath = uri + sharedParam.Path + resumableInfo.ResumableRelativePath
 		}
 
+		data.FileInfo = &info
+
+		// Large files: return without MoveFileByInfo so the caller can
+		// run it asynchronously in a task, avoiding platform-level
+		// proxy timeouts on the last-chunk HTTP response.
+		if info.FileSize >= common.AsyncFinalizeThreshold {
+			klog.Infof("[upload] uploadId: %s, large file (%d bytes), deferring finalize to async task", uploadId, info.FileSize)
+			return true, data, nil
+		}
+
 		klog.Infof("[upload] uploadId: %s, move by, src: %s, dst: %s", uploadId, uploadTempPath, info.FullPath)
 
 		if err = MoveFileByInfo(info, uploadTempPath); err != nil {

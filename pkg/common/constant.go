@@ -74,9 +74,12 @@ const (
 	Paused    = "paused"
 	Resumed   = "resumed"
 
-	ActionCopy   = "copy"
-	ActionMove   = "move"
-	ActionUpload = "upload"
+	ActionCopy            = "copy"
+	ActionMove            = "move"
+	ActionUpload          = "upload"
+	ActionUploadFinalize  = "upload_finalize"
+
+	AsyncFinalizeThreshold int64 = 2 * 1024 * 1024 * 1024 // 2GB
 )
 
 var (

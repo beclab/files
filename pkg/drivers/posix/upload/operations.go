@@ -248,7 +248,7 @@ func UpdateFileInfo(fileInfo FileInfo, uploadsDir string) error {
 }
 
 // dst, src
-func MoveFileByInfo(fileInfo FileInfo, uploadsDir string) error {
+func MoveFileByInfo(fileInfo FileInfo, uploadsDir string, onProgress ...files.ProgressFunc) error {
 	// Construct file path
 	filePath := filepath.Join(uploadsDir, fileInfo.ID)
 
@@ -256,7 +256,7 @@ func MoveFileByInfo(fileInfo FileInfo, uploadsDir string) error {
 	destinationPath := AddVersionSuffix(fileInfo.FullPath, nil, false)
 
 	// Move files to target path
-	err := files.MoveFileOs(filePath, destinationPath)
+	err := files.MoveFileOs(filePath, destinationPath, onProgress...)
 	if err != nil {
 		return err
 	}

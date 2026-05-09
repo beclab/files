@@ -408,6 +408,81 @@ func (t *Task) Execute(fs ...func() error) error {
 	return nil
 }
 
+// ExecuteAsync runs the given phase functions in a bare goroutine,
+// bypassing the per-user pond pool. This allows upload-finalize tasks
+// to run concurrently with paste/copy tasks without pool contention.
+func (t *Task) ExecuteAsync(fs ...func() error) {
+	userPool := t.manager.getOrCreateUserPool(t.param.Owner)
+	userPool.tasks.LoadOrStore(t.id, t)
+
+	t.mu.Lock()
+	if t.funcs == nil {
+		t.funcs = append(t.funcs, fs...)
+	}
+	t.mu.Unlock()
+
+	go func() {
+		var err error
+
+		defer func() {
+			t.mu.Lock()
+			t.endAt = time.Now()
+			t.running = false
+			state := t.state
+			progress := t.progress
+			transfer := t.transfer
+			totalSize := t.totalSize
+			elapsed := time.Since(t.execAt)
+			t.mu.Unlock()
+
+			klog.Infof("[Task] Id: %s defer! status: %s, progress: %d, size: %d, transfer: %d, elapse: %d, error: %v",
+				t.id, state, progress, totalSize, transfer, elapsed, err)
+		}()
+
+		if common.ListContains([]string{common.Canceled, common.Paused, common.Failed, common.Running, common.Completed}, t.getState()) {
+			return
+		}
+
+		t.mu.Lock()
+		t.totalPhases = len(fs)
+		t.execAt = time.Now()
+		t.state = common.Running
+		t.running = true
+		t.details = nil
+		t.mu.Unlock()
+
+		for phase, f := range t.funcs {
+			t.mu.Lock()
+			t.currentPhase = phase + 1
+			currentPhase := t.currentPhase
+			totalPhases := t.totalPhases
+			t.mu.Unlock()
+
+			klog.Infof("[Task] Id: %s, exec phase: %d/%d", t.id, currentPhase, totalPhases)
+			err = f()
+
+			if err != nil {
+				klog.Errorf("[Task] Id: %s, exec failed, error: %s", t.id, err.Error())
+
+				t.mu.Lock()
+				errmsg := common.RemoveBlank(err.Error())
+				t.message = errmsg
+				t.state = common.Failed
+				t.details = append(t.details, errmsg)
+				t.mu.Unlock()
+				return
+			}
+		}
+
+		t.mu.Lock()
+		t.state = common.Completed
+		t.progress = 100
+		t.transfer = t.totalSize
+		t.details = append(t.details, "successed")
+		t.mu.Unlock()
+	}()
+}
+
 func (t *Task) updateProgress(progress int, transfer int64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

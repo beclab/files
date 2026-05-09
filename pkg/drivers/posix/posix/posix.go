@@ -11,6 +11,7 @@ import (
 	"files/pkg/global"
 	"files/pkg/models"
 	"files/pkg/preview"
+	"files/pkg/tasks"
 	"fmt"
 	"net/url"
 	"os"
@@ -678,6 +679,40 @@ func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 
 	if fileInfo == nil {
 		return common.ToBytes(&upload.FileUploadSucced{Success: true}), nil
+	}
+
+	// Large file: run MoveFileByInfo asynchronously via a task so the
+	// HTTP response is sent before the platform proxy timeout fires.
+	if fileInfo.FileInfo != nil && fileInfo.FileInfo.FileSize >= common.AsyncFinalizeThreshold {
+		taskFileParam := &models.FileParam{
+			Owner:    fileUploadArg.FileParam.Owner,
+			FileType: fileUploadArg.FileParam.FileType,
+			Extend:   fileUploadArg.FileParam.Extend,
+			Path:     fileUploadArg.FileParam.Path + chunkInfo.ResumableRelativePath,
+		}
+		taskDisplayParam := taskFileParam
+		if chunkInfo.Share != "" && chunkInfo.SharebyPath != "" {
+			if sp, err := models.CreateFileParam(user, chunkInfo.SharebyPath+chunkInfo.ResumableRelativePath); err == nil {
+				taskDisplayParam = sp
+			}
+		}
+		uploadParam := &models.PasteParam{
+			Owner:  user,
+			Action: common.ActionUploadFinalize,
+			Src:    taskDisplayParam,
+			Dst:    taskDisplayParam,
+		}
+		task := tasks.TaskManager.CreateTask(uploadParam)
+		task.SetTotalSize(fileInfo.FileInfo.FileSize)
+		task.ExecuteAsync(task.UploadFinalizePosix(&tasks.PosixFinalizeParams{
+			Info:            *fileInfo.FileInfo,
+			UploadTempPath:  fileInfo.UploadTempPath,
+			InnerIdentifier: fileInfo.Id,
+			FileParam:       fileUploadArg.FileParam,
+			ResumableInfo:   chunkInfo,
+		}))
+		fileInfo.TaskId = task.Id()
+		klog.Infof("Posix uploadChunks, large file, async finalize task: %s", fileInfo.TaskId)
 	}
 
 	klog.Infof("Posix uploadChunks, done! data: %s", common.ToJson(fileInfo))
