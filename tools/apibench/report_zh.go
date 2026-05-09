@@ -90,8 +90,8 @@ func zhSkipReason(en string) string {
 	if zh, ok := m[en]; ok {
 		return zh
 	}
-	if strings.Contains(en, "Sync upload goes through Seafile") || strings.Contains(en, "Sync upload requires") {
-		return "Sync 上传走 Seafile 文件服务器，其分片上传协议与 Posix 上传不同，需要按照 Seafile 内部的分块约定组装请求，本测试工具暂未覆盖该协议"
+	if strings.Contains(en, "Sync upload differs only") || strings.Contains(en, "Sync upload goes through Seafile") || strings.Contains(en, "Sync upload requires") {
+		return "Sync 上传仅最后一步提交 API 不同，组装请求体需要重复调用已在 Posix 上传中测试过的 upload-link 和分片上传接口，为避免重复测量予以跳过"
 	}
 	return en
 }

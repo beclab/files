@@ -515,7 +515,7 @@ func AllRoutes(cfg Config) []RouteCase {
 			Category:    "upload",
 			Stream:      true,
 			Skip:        true,
-			SkipReason:  "Sync upload goes through Seafile file-server with a different multipart protocol; assembling a valid request requires matching Seafile's internal chunking conventions which are not covered by this benchmark tool",
+			SkipReason:  "Sync upload differs only in the final commit API; constructing its request body requires calling the same upload-link and chunked-upload endpoints already benchmarked under Posix, so it is skipped to avoid redundant measurement",
 			Recommendation: fmt.Sprintf("Sync upload shares the same nginx location /seafhttp/ (proxy_read_timeout 600s) and proxies to seafile:8082. "+
 				"The actual upload I/O path is similar to Posix but goes through Seafile's file-server. "+
 				"Use the Posix %dMB upload measurement as a baseline; Sync uploads may be slightly slower due to the extra Seafile hop. "+
