@@ -344,20 +344,9 @@ func (t *Task) GetFromSyncFileCount(countType string) (int64, error) {
 			return 0, err
 		}
 
-		direntInterfaceList, ok := curDirInfo["dirent_list"].([]interface{})
-		if !ok {
-			klog.Errorf("Invalid dirent_list format at path: %s", curFileParam.Path)
-			return 0, fmt.Errorf("invalid directory format")
-		}
-
-		direntList := make([]map[string]interface{}, 0)
-		for _, item := range direntInterfaceList {
-			if dirent, ok := item.(map[string]interface{}); ok {
-				direntList = append(direntList, dirent)
-			} else {
-				klog.Errorf("Invalid dirent item type at path: %s", curFileParam.Path)
-				return 0, fmt.Errorf("invalid directory item type")
-			}
+		direntList, err := normalizeSyncDirentList(curDirInfo["dirent_list"], curFileParam.Path)
+		if err != nil {
+			return 0, err
 		}
 
 		for _, dirent := range direntList {
@@ -398,6 +387,26 @@ func (t *Task) GetFromSyncFileCount(countType string) (int64, error) {
 	}
 
 	return count, nil
+}
+
+func normalizeSyncDirentList(raw interface{}, path string) ([]map[string]interface{}, error) {
+	direntInterfaceList, ok := raw.([]interface{})
+	if !ok {
+		klog.Errorf("Invalid dirent_list format at path: %s", path)
+		return nil, fmt.Errorf("invalid directory format")
+	}
+
+	direntList := make([]map[string]interface{}, 0, len(direntInterfaceList))
+	for _, item := range direntInterfaceList {
+		dirent, ok := item.(map[string]interface{})
+		if !ok {
+			klog.Errorf("Invalid dirent item type at path: %s", path)
+			return nil, fmt.Errorf("invalid directory item type")
+		}
+		direntList = append(direntList, dirent)
+	}
+
+	return direntList, nil
 }
 
 func (t *Task) DownloadDirFromSync(src, dst *models.FileParam, root bool) error {
@@ -458,20 +467,9 @@ func (t *Task) DownloadDirFromSync(src, dst *models.FileParam, root bool) error 
 
 	klog.Infof("[Task] Id: %s, dstFullPath: %s, fdstBase: %s, dstUri: %s", t.id, downloadPath, fdstBase, dstUri)
 
-	direntInterfaceList, ok := dirInfo["dirent_list"].([]interface{})
-	if !ok {
-		klog.Errorf("Invalid dirent_list format at path: %s", src.Path)
-		return fmt.Errorf("invalid directory format")
-	}
-
-	direntList := make([]map[string]interface{}, 0)
-	for _, item := range direntInterfaceList {
-		if dirent, ok := item.(map[string]interface{}); ok {
-			direntList = append(direntList, dirent)
-		} else {
-			klog.Errorf("Invalid dirent item type at path: %s", src.Path)
-			return fmt.Errorf("invalid directory item type")
-		}
+	direntList, err := normalizeSyncDirentList(dirInfo["dirent_list"], src.Path)
+	if err != nil {
+		return err
 	}
 
 	for _, item := range direntList {
@@ -1312,9 +1310,7 @@ func (t *Task) SimulateProgress(stop <-chan struct{}, left, right int, speed int
 }
 
 func AddVersionSuffix(source string, fileParam *models.FileParam, isDir bool, uploadedFilename string) string {
-	if strings.HasSuffix(source, "/") {
-		source = strings.TrimSuffix(source, "/")
-	}
+	source = strings.TrimSuffix(source, "/")
 
 	counter := 1
 	dir, name := path.Split(source)
