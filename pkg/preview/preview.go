@@ -10,6 +10,7 @@ import (
 	"files/pkg/models"
 	"fmt"
 	"io"
+	"strings"
 
 	"k8s.io/klog/v2"
 )
@@ -69,7 +70,17 @@ func CreatePreview(owner string, key string,
 			return nil, e2
 		}
 
-		return data, err
+		ext := strings.ToLower(bufferFile.Extension)
+		if (ext == ".heic" || ext == ".heif") && previewSize == PreviewSizeThumb {
+			buf := &bytes.Buffer{}
+			if e3 := imgSvc.Resize(context.TODO(), bytes.NewReader(data), W256, H256, buf,
+				img.WithMode(img.ResizeModeFill), img.WithQuality(img.QualityLow),
+				img.WithFormat(img.FormatJpeg)); e3 == nil {
+				return buf.Bytes(), nil
+			}
+		}
+
+		return data, nil
 	}
 
 	fd, err := bufferFile.Fs.Open(bufferFile.Path)
