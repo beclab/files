@@ -12,6 +12,7 @@ import (
 
 	"github.com/disintegration/imaging"
 	"github.com/dsoprea/go-exif/v3"
+	_ "github.com/gen2brain/heic"
 	"github.com/marusama/semaphore/v2"
 	"k8s.io/klog/v2"
 
@@ -205,12 +206,18 @@ func (s *Service) detectFormat(in io.Reader) (Format, io.Reader, error) {
 		return 0, nil, fmt.Errorf("%s: %w", err.Error(), ErrUnsupportedFormat)
 	}
 
+	wrappedReader := io.MultiReader(buf, in)
+
+	if imgFormat == "heic" {
+		return FormatJpeg, wrappedReader, nil
+	}
+
 	format, err := ParseFormat(imgFormat)
 	if err != nil {
 		return 0, nil, ErrUnsupportedFormat
 	}
 
-	return format, io.MultiReader(buf, in), nil
+	return format, wrappedReader, nil
 }
 
 func getEmbeddedThumbnail(in io.Reader) ([]byte, io.Reader, error) {
