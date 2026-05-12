@@ -4,9 +4,9 @@ package permission
 
 import (
 	"context"
-	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/files"
+	"files/pkg/hertz/biz/handler"
 	permission "files/pkg/hertz/biz/model/api/permission"
 	"files/pkg/models"
 	"fmt"
@@ -67,9 +67,7 @@ func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(permission.GetPermissionResp)
-	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+	if !handler.DecodeResponse(c, common.ToBytes(res), resp) {
 		return
 	}
 	c.JSON(consts.StatusOK, resp)

@@ -4,9 +4,9 @@ package md5
 
 import (
 	"context"
-	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/files"
+	"files/pkg/hertz/biz/handler"
 	"files/pkg/models"
 	"fmt"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -73,9 +73,7 @@ func Md5Method(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(md5.Md5Resp)
-	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+	if !handler.DecodeResponse(c, common.ToBytes(res), resp) {
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
