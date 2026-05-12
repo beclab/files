@@ -11,6 +11,7 @@ import (
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/drivers/sync/seahub/searpc"
+	"files/pkg/hertz/biz/handler"
 	upload "files/pkg/hertz/biz/model/upload"
 	"files/pkg/models"
 	"files/pkg/tasks"
@@ -147,9 +148,7 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(upload.UploadedBytesResp)
-	if err = json.Unmarshal(respBytes, &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+	if !handler.DecodeResponse(c, respBytes, resp) {
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -243,17 +242,13 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	if req.ResumableChunkNumber == req.ResumableTotalChunks {
 		resp.Success = nil
 		resp.Items = make([]*upload.UploadChunksFileItem, 0)
-		if err = json.Unmarshal(respBytes, &resp.Items); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+		if !handler.DecodeResponse(c, respBytes, &resp.Items) {
 			return
 		}
 	} else {
 		resp.Items = nil
 		resp.Success = new(upload.UploadChunksSuccess)
-		if err = json.Unmarshal(respBytes, &resp.Success); err != nil {
-			klog.Errorf("Failed to unmarshal response body: %v", err)
-			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+		if !handler.DecodeResponse(c, respBytes, &resp.Success) {
 			return
 		}
 	}

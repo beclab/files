@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	bizhandler "files/pkg/hertz/biz/handler"
 	"files/pkg/hertz/biz/handler/api/share"
 	resources "files/pkg/hertz/biz/model/api/resources"
 	"files/pkg/models"
@@ -23,25 +24,12 @@ import (
 // GetResourcesMethod .
 // @router /api/resources [GET]
 func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
-	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
-	if err != nil {
-		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+	contextArg, handler, ok := bizhandler.ResolveFileHandler(ctx, c, "/api/resources", "", consts.StatusInternalServerError)
+	if !ok {
 		return
 	}
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
-
-	var handlerParam = &base.HandlerParam{
-		Ctx:   ctx,
-		Owner: contextArg.FileParam.Owner,
-	}
-
-	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
-	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
-		return
-	}
 
 	res, err := handler.List(contextArg)
 	if err != nil {
@@ -53,9 +41,7 @@ func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(map[string]interface{}) // different disk type with different responses
-	if err := json.Unmarshal(res, &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+	if !bizhandler.DecodeResponse(c, res, resp) {
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -72,25 +58,12 @@ func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
-	if err != nil {
-		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+	contextArg, handler, ok := bizhandler.ResolveFileHandler(ctx, c, "/api/resources", "", consts.StatusInternalServerError)
+	if !ok {
 		return
 	}
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
-
-	var handlerParam = &base.HandlerParam{
-		Ctx:   ctx,
-		Owner: contextArg.FileParam.Owner,
-	}
-
-	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
-	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
-		return
-	}
 
 	_, err = handler.Create(contextArg)
 	if err != nil {
@@ -116,25 +89,12 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
-	if err != nil {
-		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+	contextArg, handler, ok := bizhandler.ResolveFileHandler(ctx, c, "/api/resources", "", consts.StatusInternalServerError)
+	if !ok {
 		return
 	}
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
-
-	var handlerParam = &base.HandlerParam{
-		Ctx:   ctx,
-		Owner: contextArg.FileParam.Owner,
-	}
-
-	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
-	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
-		return
-	}
 
 	_, err = handler.Rename(contextArg)
 	if err != nil {
@@ -169,25 +129,12 @@ func PutResourcesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	contextArg, err := models.NewHttpContextArgs(ctx, c, "/api/resources", false, false)
-	if err != nil {
-		klog.Errorf("context args error: %v, path: %s", err, string(c.Path()))
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+	contextArg, handler, ok := bizhandler.ResolveFileHandler(ctx, c, "/api/resources", "", consts.StatusInternalServerError)
+	if !ok {
 		return
 	}
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
-
-	var handlerParam = &base.HandlerParam{
-		Ctx:   ctx,
-		Owner: contextArg.FileParam.Owner,
-	}
-
-	var handler = drivers.Adaptor.NewFileHandler(contextArg.FileParam.FileType, handlerParam)
-	if handler == nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("handler not found, type: %s", contextArg.FileParam.FileType)})
-		return
-	}
 
 	res, err := handler.Edit(contextArg)
 	if err != nil {

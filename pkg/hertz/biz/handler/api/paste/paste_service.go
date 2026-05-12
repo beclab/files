@@ -4,10 +4,10 @@ package paste
 
 import (
 	"context"
-	"encoding/json"
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	bizhandler "files/pkg/hertz/biz/handler"
 	"files/pkg/models"
 	"files/pkg/tasks"
 	"fmt"
@@ -115,9 +115,7 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	var res = map[string]string{"task_id": task.Id()}
 
 	resp := new(paste.PasteResp)
-	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+	if !bizhandler.DecodeResponse(c, common.ToBytes(res), resp) {
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -162,9 +160,7 @@ func GetTaskMethod(ctx context.Context, c *app.RequestContext) {
 	klog.Infof("Task - id: %s, status: %s, res: %s", req.TaskId, status, common.ToJson(res))
 
 	resp := new(paste.GetTaskResp)
-	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+	if !bizhandler.DecodeResponse(c, common.ToBytes(res), resp) {
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -200,9 +196,7 @@ func DeleteTaskMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(paste.DeleteTaskResp)
-	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+	if !bizhandler.DecodeResponse(c, common.ToBytes(res), resp) {
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
@@ -236,9 +230,7 @@ func PauseResumeTaskMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := new(paste.PauseResumeTaskResp)
-	if err = json.Unmarshal(common.ToBytes(res), &resp); err != nil {
-		klog.Errorf("Failed to unmarshal response body: %v", err)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "Failed to unmarshal response body"})
+	if !bizhandler.DecodeResponse(c, common.ToBytes(res), resp) {
 		return
 	}
 	c.JSON(consts.StatusOK, resp)
