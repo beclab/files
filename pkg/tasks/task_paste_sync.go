@@ -525,7 +525,7 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 		return err
 	}
 
-	downloadPath = dstUri + filepath.Dir(dst.Path)
+	downloadPath = filepath.Join(dstUri, filepath.Dir(dst.Path))
 
 	fileInfo := seahub.GetFileInfo(src.Extend, src.Path)
 	fileSize := fileInfo["size"].(int64)
@@ -557,7 +557,7 @@ func (t *Task) DownloadFileFromSync(src, dst *models.FileParam, root bool) error
 	}
 
 	if !t.pausedSnap().WasPaused {
-		downloadFilePath = AddVersionSuffix(downloadPath+"/"+dstFileName, dst, false, "")
+		downloadFilePath = AddVersionSuffix(filepath.Join(downloadPath, dstFileName), dst, false, "")
 	} else {
 		downloadFilePath = filepath.Join(downloadPath, dstFileName)
 	}
