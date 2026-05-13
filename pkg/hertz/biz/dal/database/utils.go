@@ -2,9 +2,12 @@ package database
 
 import (
 	"fmt"
-	"gorm.io/gorm/clause"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"gorm.io/gorm/clause"
+	"k8s.io/klog/v2"
 )
 
 type Filter struct {
@@ -107,16 +110,15 @@ func QueryData(
 		}
 	}
 
-	if order == "" {
-		order = "DESC"
+	direction := sanitizeOrderDirection(order)
+	sanitizedOrderBy, ok := sanitizeOrderBy(orderBy)
+	if !ok {
+		klog.Warningf("QueryData: rejecting non-allowlisted orderBy %q; falling back to create_time", orderBy)
 	}
-	if order != "ASC" && order != "DESC" {
-		order = "DESC"
-	}
-	if orderBy != "" {
-		db = db.Order(orderBy + " " + order)
+	if sanitizedOrderBy == "" {
+		db = db.Order("create_time " + direction)
 	} else {
-		db = db.Order("create_time " + order)
+		db = db.Order(sanitizedOrderBy + " " + direction)
 	}
 
 	var total int64
@@ -129,6 +131,68 @@ func QueryData(
 	}
 
 	return total, db.Find(result).Error
+}
+
+// orderByIdentifierPattern matches a bare or schema-qualified column
+// reference like "create_time" or "share_paths.id". Identifiers must
+// start with a letter or underscore and may contain letters, digits,
+// and underscores; an optional single dot separates table and column.
+var orderByIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$`)
+
+// orderByLengthPattern matches a wrapping LENGTH(<identifier>)
+// expression (the only function call this codebase passes through
+// QueryData today). Add new safe wrappers here only after confirming
+// the inner identifier can never come from user input.
+var orderByLengthPattern = regexp.MustCompile(`^LENGTH\([A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?\)$`)
+
+// allowedOrderDirections is the closed set of ORDER BY direction
+// suffixes accepted by QueryData. Anything else falls back to DESC.
+var allowedOrderDirections = map[string]struct{}{
+	"ASC":              {},
+	"DESC":             {},
+	"ASC NULLS FIRST":  {},
+	"ASC NULLS LAST":   {},
+	"DESC NULLS FIRST": {},
+	"DESC NULLS LAST":  {},
+}
+
+// sanitizeOrderBy validates an ORDER BY column expression. An empty
+// orderBy is allowed (the caller substitutes the default column). For
+// non-empty input it returns the original string when it matches one
+// of the safe patterns, or ("", false) when it must be rejected.
+//
+// QueryData currently passes orderBy values straight into
+// gorm's db.Order via string concatenation; every existing caller
+// uses a literal, but this allowlist exists so a future caller that
+// accidentally forwards user input cannot turn that pattern into a
+// SQL injection.
+func sanitizeOrderBy(orderBy string) (string, bool) {
+	if orderBy == "" {
+		return "", true
+	}
+	if orderByIdentifierPattern.MatchString(orderBy) ||
+		orderByLengthPattern.MatchString(orderBy) {
+		return orderBy, true
+	}
+	return "", false
+}
+
+// sanitizeOrderDirection normalizes the order direction suffix and
+// rejects anything outside the closed allowlist by falling back to
+// DESC. The previous implementation only checked for "ASC"/"DESC"
+// and silently accepted "DESC NULLS LAST" because the check ran
+// before that string ever appeared; preserve the legitimate variants
+// here so callers that depend on them keep working.
+func sanitizeOrderDirection(order string) string {
+	upper := strings.ToUpper(strings.TrimSpace(order))
+	if upper == "" {
+		return "DESC"
+	}
+	if _, ok := allowedOrderDirections[upper]; ok {
+		return upper
+	}
+	klog.Warningf("QueryData: rejecting non-allowlisted order direction %q; falling back to DESC", order)
+	return "DESC"
 }
 
 func buildCondition(field, op string, value interface{}) (string, []interface{}, error) {
