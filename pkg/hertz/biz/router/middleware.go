@@ -847,8 +847,20 @@ func ShareUpload() app.HandlerFunc {
 
 		var hasPathname, hasRepoId, hasDriveType bool
 		var hasShareBy bool
-		var buf bytes.Buffer
-		mw := multipart.NewWriter(&buf)
+		// Spool the rebuilt multipart body to disk above
+		// SpoolDefaultMemLimit. Hertz already caps inbound bodies
+		// at 20 MiB, but copying every uploaded file into a single
+		// in-memory bytes.Buffer doubled the per-request peak; the
+		// spool keeps it bounded regardless of how many uploads are
+		// in flight concurrently. Cleanup deletes the temp file once
+		// the downstream handler has finished consuming the stream.
+		spool := common.NewSpoolWriter(common.SpoolDefaultMemLimit)
+		defer func() {
+			if e := spool.Cleanup(); e != nil {
+				klog.Warningf("share upload spool cleanup: %v", e)
+			}
+		}()
+		mw := multipart.NewWriter(spool)
 
 		for name := range mf.Value {
 			switch name {
@@ -943,9 +955,16 @@ func ShareUpload() app.HandlerFunc {
 		}
 
 		newCT := mw.FormDataContentType()
-		ctx.Request.SetBody(buf.Bytes())
+		bodyReader, err := spool.Reader()
+		if err != nil {
+			klog.Errorf("Sync uploadChunks, spool reader error: %v", err)
+			handler.RespBadRequest(ctx, err.Error())
+			return
+		}
+		bodySize := spool.Size()
+		ctx.Request.SetBodyStream(bodyReader, int(bodySize))
 		ctx.Request.Header.Set("Content-Type", newCT)
-		ctx.Request.Header.Set("Content-Length", strconv.Itoa(buf.Len()))
+		ctx.Request.Header.Set("Content-Length", strconv.FormatInt(bodySize, 10))
 
 		ctx.Next(c)
 	}
