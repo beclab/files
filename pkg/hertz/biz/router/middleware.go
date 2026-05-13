@@ -83,10 +83,23 @@ var shareProxyClient = &http.Client{
 	},
 }
 
+// Cors sets per-response CORS headers. It echoes Origin only when
+// common.AllowedOrigin authorizes it (same effective host, or a host
+// listed in $CORS_ALLOWED_ORIGINS). Reflecting an arbitrary Origin
+// alongside Allow-Credentials: true - the previous behavior - lets
+// any cross-site page issue credentialed XHR against this service,
+// so the header is now omitted for unrelated origins and the browser
+// blocks the response from JavaScript.
 func Cors() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
-		c.Response.Header.Set("Access-Control-Allow-Origin", string(c.Request.Header.Get("Origin")))
-		c.Response.Header.Set("Access-Control-Allow-Credentials", "true")
+		origin := string(c.Request.Header.Get("Origin"))
+		forwardedHost := string(c.GetHeader("X-Forwarded-Host"))
+		host := string(c.Request.Host())
+		if allowed := common.AllowedOrigin(origin, forwardedHost, host); allowed != "" {
+			c.Response.Header.Set("Access-Control-Allow-Origin", allowed)
+			c.Response.Header.Set("Access-Control-Allow-Credentials", "true")
+			c.Response.Header.Add("Vary", "Origin")
+		}
 		c.Response.Header.Set("Access-Control-Allow-Headers", "access-control-allow-headers,access-control-allow-methods,access-control-allow-origin,content-type,x-auth,x-unauth-error,x-authorization")
 		c.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Response.Header.Set("Access-Control-Max-Age", "600")
@@ -99,8 +112,11 @@ func Options() app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		if bytes.Equal(ctx.Method(), []byte("OPTIONS")) {
 			origin := string(ctx.Request.Header.Peek("Origin"))
-			if origin != "" {
-				ctx.Header("Access-Control-Allow-Origin", origin)
+			forwardedHost := string(ctx.GetHeader("X-Forwarded-Host"))
+			host := string(ctx.Request.Host())
+			if allowed := common.AllowedOrigin(origin, forwardedHost, host); allowed != "" {
+				ctx.Header("Access-Control-Allow-Origin", allowed)
+				ctx.Header("Access-Control-Allow-Credentials", "true")
 				ctx.Header("Vary", "Origin")
 			}
 			ctx.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
