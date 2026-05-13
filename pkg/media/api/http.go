@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"files/pkg/common"
 	"files/pkg/media/service"
 
 	"github.com/gorilla/mux"
@@ -30,11 +31,16 @@ func UpdateNamedConfiguration(w http.ResponseWriter, r *http.Request) {
 	// service.GetConfigurationController().UpdateNamedConfiguration(w, r)
 }
 
+// setupCORS sets per-response CORS headers for the media subsystem.
+// Origin is echoed only when common.AllowedOrigin authorizes it
+// (same effective host, or a host listed in $CORS_ALLOWED_ORIGINS),
+// matching the policy applied to the main HTTP server.
 func setupCORS(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers for all responses
-	w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-	//	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	if allowed := common.AllowedOrigin(r.Header.Get("Origin"), r.Header.Get("X-Forwarded-Host"), r.Host); allowed != "" {
+		w.Header().Set("Access-Control-Allow-Origin", allowed)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Add("Vary", "Origin")
+	}
 	w.Header().Set("Access-Control-Allow-Headers", "access-control-allow-headers,access-control-allow-methods,access-control-allow-origin,content-type,x-auth,x-unauth-error,x-authorization")
 	w.Header().Set("Access-Control-Allow-Methods", "PUT, GET, DELETE, POST, OPTIONS")
 }
