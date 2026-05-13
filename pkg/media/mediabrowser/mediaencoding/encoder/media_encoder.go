@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-
-	//	"strconv"
 	"os"
 	"os/exec"
 	"regexp"
@@ -577,57 +576,28 @@ func (m *MediaEncoder) GetMediaInfoInternal(
 	ctx context.Context,
 	headers string,
 ) (*mediainfo.MediaInfo, error) {
-	args := "-v warning -print_format json -show_streams -show_format"
-	if extractChapters {
-		args += " -show_chapters"
+	if m.ffprobePath == nil || *m.ffprobePath == "" {
+		return nil, errors.New("ffprobe path is not configured")
 	}
 
-	if protocol == mediaprotocol.Http {
-		if headers != "" {
-			args += ` -headers "` + headers + `"`
-		}
-	}
+	args := buildFFProbeArgs(inputPath, headers, m.threads, extractChapters, protocol == mediaprotocol.Http)
 
-	args = fmt.Sprintf(`%s -i %s -threads %d`, args, inputPath, m.threads)
-	args = strings.TrimSpace(args)
-	/*
-		args := []string{
-			"-v" ,
-			"warning",
-			"-print_format",
-			"json",
-			"-show_streams",
-			"-show_format",
-		}
-		if  extractChapters {
-			args = append(args, "-show_chapters")
-		}
-		args = append(args, []string{
-			"-i",
-			inputPath,
-			"-threads",
-			fmt.Sprintf("%d", m.threads),
-		}...)
-	*/
+	// Argv-style invocation: each element is passed as a distinct
+	// argument and is never re-parsed by a shell. The previous
+	// implementation built a single command string and ran it via
+	// "sh -c", so any shell metacharacter reaching inputPath (or the
+	// HTTP headers blob) - which originate from the user-supplied
+	// PlayPath query parameter - became remote command execution.
+	cmd := exec.CommandContext(ctx, *m.ffprobePath, args...)
 
-	//cmd := exec.CommandContext(ctx, *m.ffprobePath, strings.Split(args, " ")...)
-	//cmd := exec.CommandContext(ctx, *m.ffprobePath, args...)
-	if m.ffprobePath == nil {
-		klog.Infoln("probe.........................")
-	}
-	cmd := exec.CommandContext(ctx, "sh", "-c", *m.ffprobePath+" "+args)
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		//		CreationFlags: 0,
-		//		HideWindow:    true,
-	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
 	cmd.Stderr = os.Stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
 
-	m.logger.Infof("Starting %s with args %s\n", *m.ffprobePath, args)
+	m.logger.Infof("Starting %s with args %v\n", *m.ffprobePath, args)
 
 	if err := cmd.Start(); err != nil {
 		klog.Infoln("Start Errrrrrrrrrrrrr")
