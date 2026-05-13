@@ -169,15 +169,23 @@ func TestCheckPermission_Matrix(t *testing.T) {
 func TestCheckNonSharedPath_KnownPaths(t *testing.T) {
 	mustSkipShare := []string{
 		"/api/nodes",
+		"/api/nodes/master",
+		"/api/task",
 		"/api/task/list",
+		"/api/accounts",
 		"/api/accounts/me",
+		"/api/users",
 		"/api/users/alice",
+		"/api/share",
 		"/api/share/path",
 		"/api/mounted",
+		"/api/mount",
 		"/api/mount/abc",
+		"/api/unmount",
 		"/api/unmount/abc",
 		"/api/smb_history",
-		"/api/search?q=foo",
+		"/api/search",
+		"/videos/",
 		"/videos/preview/abc.mp4",
 	}
 	for _, p := range mustSkipShare {
@@ -205,25 +213,29 @@ func TestCheckNonSharedPath_KnownPaths(t *testing.T) {
 	}
 }
 
-// TestCheckNonSharedPath_LooseMatchingDocumented documents the
-// current strings.Contains-based behavior of checkNonSharedPath so
-// the next PR (which is expected to switch to prefix-based matching)
-// has a concrete test to update. Until then, paths that simply
-// contain a non-share substring are incorrectly skipped.
-func TestCheckNonSharedPath_LooseMatchingDocumented(t *testing.T) {
-	loose := []struct {
-		path           string
-		currentlyShare bool // current behavior; true=goes through share middleware
-	}{
-		{"/api/sharepoint/file", false},     // contains "/api/share"
-		{"/api/users-data", false},          // contains "/api/users"
-		{"/api/resources/api/share", false}, // share substring later in path
+// TestCheckNonSharedPath_RejectsPrefixCollisions is a regression test
+// for the previous strings.Contains-based gate. Paths that merely
+// share a textual prefix with a non-share route - e.g. /api/sharefoo
+// vs /api/share - must NOT bypass the share middleware. Loosening
+// this check effectively grants unauthenticated access to whatever
+// route an attacker can craft on top of the prefix.
+func TestCheckNonSharedPath_RejectsPrefixCollisions(t *testing.T) {
+	mustGoThroughShare := []string{
+		"/api/sharefoo",
+		"/api/sharepoint/file",
+		"/api/share-thing",
+		"/api/users-data",
+		"/api/usersbackup/dump",
+		"/api/nodesfoo",
+		"/api/taskmanager/list",
+		"/api/searchengine",
+		"/videos",
+		"/videosproxy/x",
 	}
-	for _, c := range loose {
-		t.Run(c.path, func(t *testing.T) {
-			if got := checkNonSharedPath(c.path); got != c.currentlyShare {
-				t.Fatalf("checkNonSharedPath(%q) = %v, want %v (current loose-match behavior)",
-					c.path, got, c.currentlyShare)
+	for _, p := range mustGoThroughShare {
+		t.Run(p, func(t *testing.T) {
+			if got := checkNonSharedPath(p); !got {
+				t.Fatalf("checkNonSharedPath(%q) = false, want true (prefix collision must not bypass share middleware)", p)
 			}
 		})
 	}

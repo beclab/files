@@ -571,16 +571,30 @@ func checkPermission(currentUser string, shareBy string, shareType string, permi
 	}
 }
 
+// checkNonSharedPath reports whether path should be processed by the
+// share middleware. It returns false (i.e. skip share middleware) when
+// path is, or sits under, one of the well-known non-share routes in
+// nonSharePath.
+//
+// Matching is path-segment based: an entry "/api/share" matches
+// "/api/share" and "/api/share/<anything>" but NOT "/api/sharefoo" or
+// "/api/share-thing". An entry that already ends with "/" (e.g.
+// "/videos/") behaves as a literal prefix. The previous implementation
+// used strings.Contains, which let attacker-controlled prefixes such as
+// "/api/sharefoo" silently bypass the share authorization middleware.
 func checkNonSharedPath(path string) bool {
-	var isSharedPath = true
 	for _, sp := range nonSharePath {
-		if strings.Contains(path, sp) {
-			isSharedPath = false
-			break
+		if strings.HasSuffix(sp, "/") {
+			if strings.HasPrefix(path, sp) {
+				return false
+			}
+			continue
+		}
+		if path == sp || strings.HasPrefix(path, sp+"/") {
+			return false
 		}
 	}
-
-	return isSharedPath
+	return true
 }
 
 func proxySharePaste(ctx context.Context, c *app.RequestContext, owner string, action string, src, dst *models.FileParam) {
