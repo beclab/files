@@ -552,8 +552,13 @@ func (m *MediaEncoder) GetMediaInfo(request *mediaencoding.MediaInfoRequest, ctx
 	extractChapters := request.MediaType == dlna.Video && request.ExtractChapters
 	extraArgs := m.GetExtraArguments(request)
 
+	// ffprobe is now invoked via argv (see GetMediaInfoInternal); the
+	// shell-style wrapping that GetInputArgument adds (e.g.
+	// `file:"<path>"` or `"<url>"`) would otherwise be passed verbatim
+	// to ffprobe and break the open. ffprobe accepts a bare local path
+	// or URL as -i directly, so feed it the raw MediaSource.Path.
 	return m.GetMediaInfoInternal(
-		m.GetInputArgument(request.MediaSource.Path, *request.MediaSource),
+		request.MediaSource.Path,
 		request.MediaSource.Path,
 		request.MediaSource.Protocol,
 		extractChapters,
