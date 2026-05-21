@@ -1256,14 +1256,30 @@ func (t *Task) DoSyncCopy(src, dst *models.FileParam, root bool) error {
 	srcParentDir := filepath.Dir(strings.TrimSuffix(src.Path, "/"))
 	srcDirents := []string{filepath.Base(strings.TrimSuffix(src.Path, "/"))}
 	dstParentDir := filepath.Dir(strings.TrimSuffix(dst.Path, "/"))
+
+	// Allow rename-on-copy/move when dst.Path's basename differs from the
+	// source's basename. The historical contract treats dst.Path as
+	// "<parent>/<target-name>" (SyncCopy's AddVersionSuffix already relies on
+	// that convention to compute the (N) conflict suffix). Previously the
+	// dst basename was silently dropped and the destination always inherited
+	// the source name; we now forward it so the underlying seafile RPC --
+	// which accepts independent src/dst filenames -- actually renames the
+	// pasted entry. Falling back to nil keeps the original behavior when the
+	// caller didn't specify a different name.
+	var dstDirents []string
+	dstBase := filepath.Base(strings.TrimSuffix(dst.Path, "/"))
+	if dstBase != "" && dstBase != "." && dstBase != "/" && dstBase != srcDirents[0] {
+		dstDirents = []string{dstBase}
+	}
+
 	if t.param.Action == common.ActionCopy {
-		_, err = seahub.HandleBatchCopy(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
+		_, err = seahub.HandleBatchCopy(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir, dstDirents)
 		if err != nil {
 			// return err
 			klog.Errorf("[Task] Id: %s, batch copy error: %v", t.id, err)
 		}
 	} else {
-		_, err = seahub.HandleBatchMove(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir)
+		_, err = seahub.HandleBatchMove(src.Owner, src.Extend, srcParentDir, srcDirents, dst.Extend, dstParentDir, dstDirents)
 		if err != nil {
 			klog.Errorf("[Task] Id: %s, batch move error: %v", t.id, err)
 		}

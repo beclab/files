@@ -110,6 +110,7 @@ var (
 	ErrorMessagePasteSourceExpired         = "The sharing source path to copy has expired."
 	ErrorMessagePasteWrongDestinationShare = "Invalid destination share path to copy."
 	ErrorMessagePasteDestinationExpired    = "The sharing destination path to copy has expired."
+	ErrorMessagePasteSrcNotExists          = "Source path to copy does not exist or is not accessible."
 	ErrorMessageTokenExpired               = "Token expired."
 	ErrorMessageTokenInvalid               = "Token is invalid."
 	ErrorMessageLinkExpired                = "Link expired."

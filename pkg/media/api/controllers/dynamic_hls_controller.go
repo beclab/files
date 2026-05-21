@@ -29,6 +29,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/drivers/sync/seahub/seaserv"
+	"files/pkg/global"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
 	"files/pkg/models"
@@ -369,7 +370,7 @@ func (d *DynamicHlsController) pathCommon(playPath, bflName string) (string, err
 		return "", errors.New("parse url error")
 	}
 
-	fileParam.Extend = common.TrimShareId(fileParam.Extend)
+	fileParam.Extend = common.TrimShareId(fileParam.Extend, global.GlobalNode.CheckNodeExists)
 
 	formalizedPath := ""
 	if fileParam.FileType == common.Sync {

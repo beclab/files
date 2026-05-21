@@ -263,7 +263,7 @@ func ShareMiddleware() app.HandlerFunc {
 		}
 
 		if shareParam.FileType == common.Share {
-			shareParam.Extend = common.TrimShareId(shareParam.Extend)
+			shareParam.Extend = common.TrimShareId(shareParam.Extend, global.GlobalNode.CheckNodeExists)
 		}
 
 		shared, expires, err := checkSharePath(bflName, shareParam.Extend, shareAccess.FromShare)
@@ -619,11 +619,11 @@ func proxySharePaste(ctx context.Context, c *app.RequestContext, owner string, a
 	klog.Infof("[share] Paste, owner: %s, src: %s, dst: %s", owner, common.ParseString(src), common.ParseString(dst))
 
 	if src.FileType == common.Share {
-		src.Extend = common.TrimShareId(src.Extend)
+		src.Extend = common.TrimShareId(src.Extend, global.GlobalNode.CheckNodeExists)
 	}
 
 	if dst.FileType == common.Share {
-		dst.Extend = common.TrimShareId(dst.Extend)
+		dst.Extend = common.TrimShareId(dst.Extend, global.GlobalNode.CheckNodeExists)
 	}
 
 	var srcDriveParam, dstDriveParam *models.FileParam
@@ -848,7 +848,7 @@ func ShareUpload() app.HandlerFunc {
 
 		fp, _ := models.CreateFileParam(owner, uploadReq.ParentDir)
 		if fp.FileType == common.Share {
-			fp.Extend = common.TrimShareId(fp.Extend)
+			fp.Extend = common.TrimShareId(fp.Extend, global.GlobalNode.CheckNodeExists)
 		}
 
 		shared, err := database.GetSharePath(fp.Extend)

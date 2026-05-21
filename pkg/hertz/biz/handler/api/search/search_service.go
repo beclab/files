@@ -113,7 +113,7 @@ func CheckDirectory(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	fileParam.Extend = common.TrimShareId(fileParam.Extend)
+	fileParam.Extend = common.TrimShareId(fileParam.Extend, global.GlobalNode.CheckNodeExists)
 
 	var permission int32
 

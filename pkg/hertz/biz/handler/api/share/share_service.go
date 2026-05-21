@@ -249,7 +249,7 @@ func ListSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	if req.Permission != "" {
 		permissions := strings.Split(req.Permission, ",")
@@ -518,7 +518,7 @@ func UpdateSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	err = database.UpdateSharePath(req.PathId, map[string]interface{}{"name": req.Name}, database.DB)
 	if err != nil {
@@ -570,7 +570,7 @@ func UpdateSharePathMembers(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	owner := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 	if owner == "" {
@@ -832,7 +832,7 @@ func DeleteSharePath(ctx context.Context, c *app.RequestContext) {
 	pathIdsTmp := strings.Split(req.PathIds, ",")
 	var pathIds []string
 	for _, id := range pathIdsTmp {
-		pathIds = append(pathIds, common.TrimShareId(id))
+		pathIds = append(pathIds, common.TrimShareId(id, global.GlobalNode.CheckNodeExists))
 	}
 
 	klog.Infof("[samba] DeleteSharePath, owner: %s, pathIds: %v", owner, pathIds)
@@ -924,7 +924,7 @@ func GenerateShareToken(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	queryParams := &database.QueryParams{}
 	queryParams.AND = []database.Filter{}
@@ -969,7 +969,7 @@ func ListShareToken(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	queryParams := &database.QueryParams{}
 	queryParams.AND = []database.Filter{}
@@ -1022,7 +1022,7 @@ func AddShareMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	queryParams := &database.QueryParams{}
 	queryParams.AND = []database.Filter{}
@@ -1188,7 +1188,7 @@ func ListShareMember(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	if req.Permission != "" {
 		permissions := strings.Split(req.Permission, ",")
@@ -2211,7 +2211,7 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("GetToken, pathId: %s", req.PathId)
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	sharePath, err := database.QueryShareById(req.PathId)
 	if err != nil {
@@ -2286,7 +2286,7 @@ func GetExternalSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	shareToken, err := database.GetShareToken(req.Token)
 	if err != nil {
@@ -2378,7 +2378,7 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("[samba] ResetPassword, data: %s", req.PathId)
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	sharePath, err := database.QueryShareById(req.PathId)
 	if err != nil {
@@ -2630,7 +2630,7 @@ func ModifySmbMember(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("[samba] ModifySmbMember, req: %s", common.ParseString(req))
 
-	req.PathId = common.TrimShareId(req.PathId)
+	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
 	shared, err := database.GetSharePath(req.PathId)
 	if err != nil {
