@@ -37,6 +37,7 @@ yarn-error.log*
 *.sw*
 bin/
 build/
+tmp/
 /pkg/backend/img/testdata/
 Dockerfile.local
 Dockerfile.samba.local

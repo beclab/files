@@ -292,6 +292,12 @@ func CommonPrefix(sep byte, paths ...string) string {
 }
 
 func ChownRecursive(path string, uid, gid int) error {
+	// FAT/exFAT/NTFS mounts EPERM any chown; check the root once and
+	// skip the walk.
+	if !SupportsOwnership(path) {
+		klog.Warningf("ChownRecursive: filesystem at %s does not support ownership; skipping", path)
+		return nil
+	}
 	return filepath.Walk(path, func(name string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -314,6 +320,14 @@ func Chown(fs afero.Fs, path string, uid, gid int) error {
 		elapsed := time.Since(start)
 		klog.Infof("Function Chown execution time: %v\n", elapsed)
 	}()
+
+	// FAT/exFAT/NTFS have no ownership concept; chown would EPERM and
+	// fail paste-to-USB. Only check OS-backed callers; afero paths may
+	// not map to a real mount.
+	if fs == nil && !SupportsOwnership(path) {
+		klog.V(2).Infof("Chown: filesystem at %s does not support ownership; skipping chown/chmod", path)
+		return nil
+	}
 
 	chown := os.Chown
 	chmod := os.Chmod
