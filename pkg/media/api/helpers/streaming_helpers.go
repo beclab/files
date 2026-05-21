@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"files/pkg/common"
+	"files/pkg/global"
 	"files/pkg/models"
 
 	"files/pkg/media/mediabrowser/model/mediainfo/mediaprotocol"
@@ -173,7 +174,7 @@ func GetStreamingState(
 			return nil, errors.New("parse url error")
 		}
 
-		fileParam.Extend = common.TrimShareId(fileParam.Extend)
+		fileParam.Extend = common.TrimShareId(fileParam.Extend, global.GlobalNode.CheckNodeExists)
 
 		if fileParam.FileType == common.Share { // todo share
 

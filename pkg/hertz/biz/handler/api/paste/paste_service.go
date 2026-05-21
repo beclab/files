@@ -7,6 +7,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	"files/pkg/drivers/precheck"
 	bizhandler "files/pkg/hertz/biz/handler"
 	"files/pkg/models"
 	"files/pkg/tasks"
@@ -98,6 +99,26 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		}
 		pasteParam.DstSharePath = dstShareParam
 
+	}
+
+	// Verify the source actually exists on its backend BEFORE we
+	// allocate a task id. Otherwise callers silently get a Completed
+	// task with zero bytes (cross-node DownloadFromFiles, sync->sync
+	// via GetFromSyncFileCount) or a "running -> failed" flicker
+	// (rsync / rclone), neither of which is debuggable from the
+	// client. Whether the failure is "really not there" or
+	// "unreachable for now", the user-facing outcome is identical --
+	// the paste can't proceed -- so we collapse to a single 500 with
+	// a stable, FE-friendly message and keep the raw Go error in the
+	// log for ops.
+	if err = precheck.SourceExists(pasteParam); err != nil {
+		klog.Warningf("[paste] source precheck failed: %v, owner: %s, action: %s, src: %s",
+			err, owner, req.Action, req.Source)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
+			"code": 1,
+			"msg":  common.ErrorMessagePasteSrcNotExists,
+		})
+		return
 	}
 
 	handler := drivers.Adaptor.NewFileHandler(pasteParam.Src.FileType, &base.HandlerParam{})

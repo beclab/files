@@ -447,8 +447,30 @@ func UrlEncode(sharePath string) string {
 	return strings.Join(result, "/")
 }
 
-func TrimShareId(str string) string {
-	if len(str) > 36 {
+// TrimShareId strips the "_<node>" suffix that
+// CreateSharePath / ListSharePath append to external/cache
+// share ids before handing them to the client (see the
+// fmt.Sprintf("%s_%s", id, node) decorations in
+// pkg/hertz/biz/handler/api/share/share_service.go). Stripping
+// is intentionally narrow: the input must be exactly a 36-char
+// share UUID followed by '_' and a name that isKnownNode
+// recognises as a cluster node. Anything else -- a bare UUID,
+// trailing garbage, or an unknown node name -- is returned
+// untouched so downstream "id = ?" queries either match the
+// real row or return an empty set.
+//
+// Background: an earlier implementation just truncated to 36
+// chars whenever len(str) > 36, which let "<uuid>asdasd" silently
+// normalise back to "<uuid>" and hit the legitimate row. The
+// caller-supplied isKnownNode lookup (typically
+// global.GlobalNode.CheckNodeExists) is what makes this trim
+// safe for both api.query/api.body PathId fields and the
+// FileType==share Extend segment in incoming URLs.
+//
+// isKnownNode must be non-nil; pass a stub that returns false
+// in tests that don't care about the cluster view.
+func TrimShareId(str string, isKnownNode func(string) bool) string {
+	if len(str) > 37 && str[36] == '_' && isKnownNode != nil && isKnownNode(str[37:]) {
 		return str[:36]
 	}
 	return str

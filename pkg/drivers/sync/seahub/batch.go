@@ -135,7 +135,26 @@ type CopyMoveReq struct {
 	Destination string `json:"destination"`
 }
 
-func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string) ([]byte, error) {
+// resolveDstDirents returns the slice of names to use for the destination
+// side of a batch copy/move. When dstDirents is nil/empty (the historical
+// "paste with original name" case) it falls back to srcDirents, preserving
+// the prior behavior. When provided, it must be 1:1 with srcDirents.
+func resolveDstDirents(srcDirents, dstDirents []string) ([]string, error) {
+	if len(dstDirents) == 0 {
+		return srcDirents, nil
+	}
+	if len(dstDirents) != len(srcDirents) {
+		return nil, fmt.Errorf("dstDirents length (%d) does not match srcDirents length (%d)", len(dstDirents), len(srcDirents))
+	}
+	return dstDirents, nil
+}
+
+// HandleBatchCopy copies srcDirents from srcParentDir into dstParentDir.
+//
+// When dstDirents is non-empty it must be the same length as srcDirents and
+// supplies the per-item target name (enabling rename-on-copy). When nil/empty
+// the destination name equals the source name (existing behavior).
+func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string, dstDirents []string) ([]byte, error) {
 	srcRepo, err := seaserv.GlobalSeafileAPI.GetRepo(srcRepoId)
 	if err != nil {
 		return nil, err
@@ -191,9 +210,14 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 		klog.Infof("dstPerm: %s", dstPerm)
 	}
 
+	finalDstDirents, err := resolveDstDirents(srcDirents, dstDirents)
+	if err != nil {
+		return nil, err
+	}
+
 	_, err = seaserv.GlobalSeafileAPI.CopyFile(
 		srcRepoId, srcParentDir, string(common.ToBytes(srcDirents)),
-		dstRepoId, dstParentDir, string(common.ToBytes(srcDirents)),
+		dstRepoId, dstParentDir, string(common.ToBytes(finalDstDirents)),
 		username, 0, 1,
 	)
 
@@ -208,7 +232,12 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 	return common.ToBytes(response), nil
 }
 
-func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string) ([]byte, error) {
+// HandleBatchMove moves srcDirents from srcParentDir into dstParentDir.
+//
+// When dstDirents is non-empty it must be the same length as srcDirents and
+// supplies the per-item target name (enabling rename-on-move). When nil/empty
+// the destination name equals the source name (existing behavior).
+func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string, dstRepoId, dstParentDir string, dstDirents []string) ([]byte, error) {
 	srcRepo, err := seaserv.GlobalSeafileAPI.GetRepo(srcRepoId)
 	if err != nil {
 		return nil, err
@@ -279,9 +308,14 @@ func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string,
 		}
 	}
 
+	finalDstDirents, err := resolveDstDirents(srcDirents, dstDirents)
+	if err != nil {
+		return nil, err
+	}
+
 	_, err = seaserv.GlobalSeafileAPI.MoveFile(
 		srcRepoId, srcParentDir, string(common.ToBytes(srcDirents)),
-		dstRepoId, dstParentDir, string(common.ToBytes(srcDirents)),
+		dstRepoId, dstParentDir, string(common.ToBytes(finalDstDirents)),
 		false, username, 0, 1,
 	)
 	if err != nil {
