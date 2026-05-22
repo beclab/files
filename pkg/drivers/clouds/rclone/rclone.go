@@ -281,6 +281,10 @@ func (r *rclone) GetFilesSize(fileParam *models.FileParam) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	// rclone returns {"item": null} when remote does not resolve to a file.
+	if resp == nil || resp.Item == nil {
+		return 0, fmt.Errorf("rclone stat: file not found: fs=%s remote=%s", fs, remote)
+	}
 
 	return resp.Item.Size, nil
 
