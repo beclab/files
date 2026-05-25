@@ -634,6 +634,22 @@ func (r *rclone) Delete(param *models.FileParam, dirents []string) ([]string, er
 			fs = fsPrefix + param.Path
 			remote = strings.Trim(dp, "/")
 
+			// operations.Purge swallows "directory not found" for internal
+			// idempotent cleanup; pre-stat here to surface it to the user.
+			statResp, statErr := r.GetOperation().Stat(fs, remote, &operations.OperationsOpt{
+				DirsOnly: true,
+			})
+			if statErr != nil {
+				klog.Errorf("[rclone] delete, stat dir error: %v, user: %s, fs: %s, remote: %s", statErr, user, fs, remote)
+				deleteFailedPaths = append(deleteFailedPaths, dp)
+				continue
+			}
+			if statResp == nil || statResp.Item == nil {
+				klog.Errorf("[rclone] delete, dir not found, user: %s, fs: %s, remote: %s", user, fs, remote)
+				deleteFailedPaths = append(deleteFailedPaths, dp)
+				continue
+			}
+
 			if err = r.GetOperation().Purge(fs, remote); err != nil {
 				// if err = r.DeleteDir(fs, remote); err != nil { // todo replace purge, google drive
 				deleteFailedPaths = append(deleteFailedPaths, dp)

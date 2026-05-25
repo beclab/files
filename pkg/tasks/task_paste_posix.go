@@ -40,11 +40,8 @@ func (t *Task) Rsync() error {
 
 	srcPath := srcUri + src.Path
 
-	if dst.FileType == common.External {
-		if err = t.checkDstPathPermission(); err != nil {
-			return fmt.Errorf("check dst permission error: %v", err)
-		}
-	}
+	// Dst writability is now checked by precheck.DestinationWritable in
+	// the paste HTTP handler; the old in-task external-only probe is gone.
 
 	pathMeta, err := files.GetFileInfo(srcPath)
 	if err != nil {
@@ -249,12 +246,3 @@ func (t *Task) generateNewName(srcFileInfo *files.PathMeta) (string, string, err
 
 }
 
-func (t *Task) checkDstPathPermission() error {
-	var dst, _ = t.param.Dst.GetResourceUri()
-	var dstPath = dst + t.param.Dst.Path
-	var tmp = strings.TrimSuffix(dstPath, "/")
-	var pos = strings.LastIndex(tmp, "/")
-	dstPath = tmp[:pos] + "/"
-
-	return files.WriteTempFile(dstPath)
-}

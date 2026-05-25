@@ -541,5 +541,20 @@ func (t *Task) formatJobStatusError(s string) error {
 		return errors.New("Storage space is full.")
 	}
 
+	// Cloud-side write rejections that precheck's list-root probe
+	// can't catch (prefix-level ACL, scope-limited tokens, expired
+	// creds). Reuse the same FE message as the precheck path.
+	lower := strings.ToLower(s)
+	if strings.Contains(lower, "accessdenied") ||
+		strings.Contains(lower, "access denied") ||
+		strings.Contains(lower, "403 forbidden") ||
+		strings.Contains(lower, "insufficient_scope") ||
+		strings.Contains(lower, "insufficientfilepermissions") ||
+		strings.Contains(lower, "invalid_grant") ||
+		strings.Contains(lower, "expired_access_token") ||
+		strings.Contains(lower, "permission denied") {
+		return errors.New(common.ErrorMessagePermissionDenied)
+	}
+
 	return errors.New(s)
 }

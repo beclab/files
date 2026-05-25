@@ -360,11 +360,9 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 
 	var invalidPaths []string
 
-	var errmsg = make(map[string]string)
-
 	for _, dirent := range dirents {
-		dirent = strings.TrimSpace(dirent)
-		if dirent == "" || dirent == "/" || !strings.HasPrefix(dirent, "/") {
+		d := strings.TrimSpace(dirent)
+		if d == "" || d == "/" || !strings.HasPrefix(d, "/") {
 			invalidPaths = append(invalidPaths, dirent)
 			break
 		}
@@ -375,22 +373,34 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 	}
 
 	for _, dirent := range dirents {
-		dirent = strings.TrimSpace(dirent)
-		direntPath := fileData.Path + strings.TrimLeft(dirent, "/")
+		d := strings.TrimSpace(dirent)
+		direntPath := fileData.Path + strings.TrimLeft(d, "/")
+
+		// Pre-stat so missing dirents surface as errors instead of
+		// RemoveAll's silent success. Lstat keeps dangling symlinks deletable.
+		var statErr error
+		if lstater, ok := fileData.Fs.(afero.Lstater); ok {
+			_, _, statErr = lstater.LstatIfPossible(direntPath)
+		} else {
+			_, statErr = fileData.Fs.Stat(direntPath)
+		}
+		if statErr != nil {
+			klog.Errorf("Posix delete, stat dirent error: %v, user: %s, path: %s", statErr, user, direntPath)
+			deleteFailedPaths = append(deleteFailedPaths, dirent)
+			continue
+		}
+
 		klog.Infof("Posix delete, remove dirent path: %s", direntPath)
 		if err = fileData.Fs.RemoveAll(direntPath); err != nil {
 			klog.Errorf("Posix delete, remove path error: %v, user: %s, path: %s", err, user, direntPath)
-			e := extractErrMsg(err)
-			_, ok := errmsg[e]
-			if !ok {
-				errmsg[e] = e
-				deleteFailedPaths = append(deleteFailedPaths, e)
-			}
+			deleteFailedPaths = append(deleteFailedPaths, dirent)
 		}
 	}
 
+	// data shape matches sync/cloud: list of failed dirents + fixed message.
+	// Per-item reasons stay in klog above.
 	if len(deleteFailedPaths) > 0 {
-		return nil, fmt.Errorf("%s", strings.Join(deleteFailedPaths, ";"))
+		return common.ToBytes(deleteFailedPaths), fmt.Errorf("delete failed paths")
 	}
 
 	return nil, nil

@@ -114,10 +114,18 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	if err = precheck.SourceExists(pasteParam); err != nil {
 		klog.Warningf("[paste] source precheck failed: %v, owner: %s, action: %s, src: %s",
 			err, owner, req.Action, req.Source)
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
-			"code": 1,
-			"msg":  common.ErrorMessagePasteSrcNotExists,
-		})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": common.ErrorMessagePasteSrcNotExists})
+		return
+	}
+
+	// Dst-side counterpart to SourceExists: catches no-write-permission
+	// before a task is allocated so the failure surfaces in this HTTP
+	// response instead of an async task status. 403 + the shared
+	// Permission denied message mirror other no-permission paths.
+	if err = precheck.DestinationWritable(pasteParam); err != nil {
+		klog.Warningf("[paste] destination precheck failed: %v, owner: %s, action: %s, dst: %s",
+			err, owner, req.Action, req.Destination)
+		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
 		return
 	}
 

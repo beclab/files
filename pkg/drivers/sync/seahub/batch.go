@@ -12,6 +12,20 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// ErrEntryNotFound marks a dirent missing from its parent listing.
+// HandleDelete swallows it for idempotent internal cleanup; SyncStorage.Delete
+// surfaces it as "file not found" / "folder not found".
+type ErrEntryNotFound struct {
+	IsDir bool
+}
+
+func (e *ErrEntryNotFound) Error() string {
+	if e.IsDir {
+		return "folder not found"
+	}
+	return "file not found"
+}
+
 func HandleDelete(fileParam *models.FileParam) error {
 	parentDir, filename := filepath.Split(strings.TrimSuffix(fileParam.Path, "/"))
 	if filename == "" {
@@ -26,6 +40,11 @@ func HandleDelete(fileParam *models.FileParam) error {
 	dirents := []string{filename}
 	_, err := HandleBatchDelete(newFileParam, dirents)
 	if err != nil {
+		var nfe *ErrEntryNotFound
+		if errors.As(err, &nfe) {
+			klog.Infof("HandleDelete: target already absent, treating as success: %s", fileParam.Path)
+			return nil
+		}
 		return err
 	}
 	return nil
@@ -75,17 +94,44 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 		return nil, errors.New("permission denied")
 	}
 
-	folderPerms, err := GetSubFolderPermissionByDir(username, repoId, parentDir)
+	// One listing serves both existence (del_file is silently idempotent
+	// for missing entries) and sub-folder perm checks.
+	entries, err := seaserv.GlobalSeafileAPI.ListDirWithPerm(repoId, parentDir, dirId, username, -1, -1)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list directory: %v", err)
 	}
-	for _, dirent := range dirents {
-		if perm, exists := folderPerms[dirent]; exists && perm != "rw" {
-			return nil, errors.New(fmt.Sprintf("Can't delete folder %s, please check its permission", dirent))
+	existing := make(map[string]bool, len(entries))
+	folderPerms := make(map[string]string, len(entries))
+	for _, e := range entries {
+		existing[e["obj_name"]] = true
+		isDir, dErr := IsDirectory(e["mode"])
+		if dErr != nil {
+			return nil, fmt.Errorf("failed to check dir permission: %v", dErr)
+		}
+		if isDir {
+			folderPerms[e["obj_name"]] = e["permission"]
 		}
 	}
 
-	resultCode, err := seaserv.GlobalSeafileAPI.DelFile(repoId, parentDir, string(common.ToBytes(dirents)), username)
+	for _, dirent := range dirents {
+		name := strings.TrimRight(dirent, "/")
+		if !existing[name] {
+			return nil, &ErrEntryNotFound{IsDir: strings.HasSuffix(dirent, "/")}
+		}
+	}
+
+	for _, dirent := range dirents {
+		name := strings.TrimRight(dirent, "/")
+		if perm, ok := folderPerms[name]; ok && perm != "rw" {
+			return nil, fmt.Errorf("Can't delete folder %s, please check its permission", name)
+		}
+	}
+
+	cleanDirents := make([]string, len(dirents))
+	for i, d := range dirents {
+		cleanDirents[i] = strings.TrimRight(d, "/")
+	}
+	resultCode, err := seaserv.GlobalSeafileAPI.DelFile(repoId, parentDir, string(common.ToBytes(cleanDirents)), username)
 	if err != nil {
 		klog.Errorf("Failed to delete: %v", err)
 		return nil, err
@@ -202,12 +248,16 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 		return nil, errors.New("permission denied")
 	}
 
+	// Require "rw" on dst, mirroring HandleBatchMove. Previously a
+	// successful lookup of "r" / "" / "cloud-edit" fell through to
+	// CopyFile and relied on seafile to reject it.
 	dstPerm, err := CheckFolderPermission(username, dstRepoId, dstParentDir)
 	if err != nil {
-		klog.Errorf("Permission denied. err: %s, dstPerm: %s", err, dstPerm)
-		return nil, fmt.Errorf("permission denied. err: %s, dstPerm: %s", err, dstPerm)
-	} else {
-		klog.Infof("dstPerm: %s", dstPerm)
+		return nil, err
+	}
+	if dstPerm != "rw" {
+		klog.Error("Permission denied.")
+		return nil, errors.New("permission denied")
 	}
 
 	finalDstDirents, err := resolveDstDirents(srcDirents, dstDirents)
