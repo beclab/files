@@ -32,8 +32,11 @@ type QueryParam struct {
 	SharePath               string          `json:"sharePath,omitempty"`
 	SharePermission         string          `json:"sharePermission,omitempty"`
 	ShareByType             string          `json:"shareByType,omitempty"`
-	Header                  http.Header     `json:"-"`
-	Body                    io.ReadCloser   `json:"-"`
+	// Probe is internal-only; "write" turns the GET into a writability probe
+	// used by paste precheck on a peer node. Anything else falls through.
+	Probe  string        `json:"-"`
+	Header http.Header   `json:"-"`
+	Body   io.ReadCloser `json:"-"`
 }
 
 func CreateQueryParam(owner string, ctx context.Context, c *app.RequestContext, enableThumbnails bool, resizePreview bool) *QueryParam {
@@ -72,6 +75,7 @@ func CreateQueryParam(owner string, ctx context.Context, c *app.RequestContext, 
 		SharePath:               strings.TrimSpace(c.Query("sharepath")),
 		SharePermission:         strings.TrimSpace(c.Query("sharepermission")),
 		ShareByType:             strings.TrimSpace(c.Query("sharetype")),
+		Probe:                   strings.TrimSpace(c.Query("probe")),
 		Header:                  header,
 		Body:                    io.NopCloser(bytes.NewReader(c.Request.Body())),
 	}

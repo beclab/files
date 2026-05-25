@@ -565,7 +565,8 @@ func (s *SyncStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, erro
 	klog.Infof("Sync delete, user: %s, param: %s, dirents: %v", owner, fileParam.Json(), dirents)
 
 	for _, dirent := range dirents {
-		res, err := seahub.HandleBatchDelete(fileParam, []string{strings.Trim(dirent, "/")})
+		// Keep trailing slash so HandleBatchDelete can tell folder vs file on miss.
+		res, err := seahub.HandleBatchDelete(fileParam, []string{strings.TrimLeft(dirent, "/")})
 		if err != nil {
 			klog.Errorf("Sync delete, delete files error: %v, user: %s", err, owner)
 			deleteFailedPaths = append(deleteFailedPaths, dirent)

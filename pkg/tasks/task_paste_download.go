@@ -2,6 +2,8 @@ package tasks
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
@@ -266,7 +268,84 @@ func (t *Task) DownloadFromFiles() error {
 		return err
 	}
 
+	// Cross-node move: src lives on a different node, so forward a DELETE
+	// to the src files-pod. Log-only matches the rclone/seahub clear
+	// convention -- copy already succeeded, don't fail the task.
+	if t.param.Action == common.ActionMove {
+		if e := t.clearRemoteSrc(); e != nil {
+			klog.Errorf("[Task] Id: %s, clear remote src error: %v", t.id, e)
+		}
+	}
+
 	klog.Infof("[Task] Id: %s done! phase: %d", t.id, t.snapshot().CurrentPhase)
 
 	return err
+}
+
+// clearRemoteSrc issues DELETE /api/resources/<fsType>/<extend><parent>
+// on the src node so cross-node move actually drops the source after the
+// copy completes. Used by DownloadFromFiles, which is the only phase
+// where src and the running task live on different nodes.
+func (t *Task) clearRemoteSrc() error {
+	src := t.param.Src
+	if src == nil || src.Path == "" {
+		return errors.New("src invalid")
+	}
+
+	pod, err := integration.IntegrationManager().GetFilesPod(src.Extend)
+	if err != nil {
+		return fmt.Errorf("locate src pod: %w", err)
+	}
+	if pod.Status.PodIP == "" {
+		return errors.New("src pod has no IP")
+	}
+
+	// Split src.Path into <parent>/<basename>. parent goes into the URL,
+	// basename into the body (with leading "/" -- required by the DELETE
+	// handler's dirent validation, see posix.Delete).
+	trimmed := strings.TrimSuffix(src.Path, "/")
+	parentPath := "/"
+	basename := trimmed
+	if pos := strings.LastIndex(trimmed, "/"); pos >= 0 {
+		parentPath = trimmed[:pos+1]
+		basename = trimmed[pos+1:]
+	}
+	if basename == "" {
+		return fmt.Errorf("empty src basename: %s", src.Path)
+	}
+	if strings.HasSuffix(src.Path, "/") {
+		basename += "/"
+	}
+
+	body, err := json.Marshal(map[string]any{"dirents": []string{"/" + basename}})
+	if err != nil {
+		return err
+	}
+	deleteURL := fmt.Sprintf("http://%s/api/resources/%s/%s%s",
+		pod.Status.PodIP, src.FileType, src.Extend, parentPath)
+
+	// context.Background, not t.ctx: cmd.Clear (the equivalent for cloud
+	// src) ignores task ctx so a pause right after copy doesn't leave
+	// the src half-dropped. streamHTTPClient's ResponseHeaderTimeout
+	// caps a stuck peer.
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, deleteURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(common.REQUEST_HEADER_OWNER, src.Owner)
+
+	resp, err := streamHTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return fmt.Errorf("delete %s status %d", deleteURL, resp.StatusCode)
 }

@@ -244,15 +244,25 @@ func (t *Task) UploadToSync() error {
 	}
 
 	if t.param.Action == common.ActionMove {
-		srcUri := ""
-		srcUri, err = t.param.Src.GetResourceUri()
-		if err != nil {
-			return err
-		}
-		srcFullPath := srcUri + t.param.Src.Path
-		err = os.RemoveAll(srcFullPath)
-		if err != nil {
-			return err
+		if t.param.Src.IsCloud() {
+			// Phase 1 deferred clearing the cloud src (still needed
+			// for this upload). os.RemoveAll on /awss3/... silently
+			// no-ops, so use rclone. Log-only matches other cmd.Clear
+			// move sites: copy already succeeded.
+			if e := cmd.Clear(t.param.Src); e != nil {
+				klog.Errorf("[Task] Id: %s, clear cloud src error: %v", t.id, e)
+			}
+		} else {
+			srcUri := ""
+			srcUri, err = t.param.Src.GetResourceUri()
+			if err != nil {
+				return err
+			}
+			srcFullPath := srcUri + t.param.Src.Path
+			err = os.RemoveAll(srcFullPath)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
