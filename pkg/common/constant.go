@@ -10,6 +10,7 @@ const (
 	ROOT_PREFIX     = "/data"
 	CACHE_PREFIX    = "/appcache"
 	CACHE_ALIAS     = "/AppData"
+	COMMON_PREFIX   = "/appcommon"
 	EXTERNAL_PREFIX = "/data/External"
 
 	SERVER_HOST = "127.0.0.1:8080"
@@ -41,6 +42,7 @@ const (
 	Drive       = "drive"
 	Home        = "Home"
 	Data        = "Data"
+	Common      = "Common"
 	Cache       = "cache"
 	External    = "external"
 	Internal    = "internal"
