@@ -760,6 +760,9 @@ func (s *SyncStorage) getFiles(fileParam *models.FileParam) (*Files, error) {
 	if err != nil {
 		return nil, err
 	}
+	if res == nil {
+		return nil, nil
+	}
 	klog.Infof("res=%s", string(res))
 
 	var data *Files

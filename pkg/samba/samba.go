@@ -10,6 +10,7 @@ import (
 	"files/pkg/client"
 	k8sclient "files/pkg/client"
 	"files/pkg/common"
+	"files/pkg/drivers/precheck"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/model/api/share"
 	"files/pkg/models"
@@ -605,6 +606,16 @@ func (s *samba) recoverSharedOwner(sharedPaths []string) {
 func (s *samba) CreateSambaSharePath(owner string, smbSharePublicLevel int32, users []*share.CreateSmbSharePathMembers, fileParam *models.FileParam, reqExpireIn int64, reqExpireTime string) (*share.SharePath, error) {
 	s.Lock()
 	defer s.Unlock()
+
+	// Real backend verification for CLI / direct callers.
+	if err := precheck.VerifyShareTargetIsDir(fileParam); err != nil {
+		if errors.Is(err, precheck.ErrShareTargetIsFile) {
+			klog.Errorf("[samba] CreateSambaSharePath, target is a file, not a folder, owner: %s, path: %s", owner, fileParam.Path)
+			return nil, errors.New(common.ErrorMessageFileShareNotSupport)
+		}
+		klog.Errorf("[samba] CreateSambaSharePath, share target verify failed, owner: %s, path: %s, err: %v", owner, fileParam.Path, err)
+		return nil, errors.New(common.ErrorMessageDirNotExists)
+	}
 
 	var smbSharePathExists bool
 	var err error
