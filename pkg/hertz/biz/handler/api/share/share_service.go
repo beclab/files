@@ -84,6 +84,14 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// drive/Common (cluster-wide RWX volume) only supports external
+	// share in V1. Internal/SMB are explicitly rejected here so the
+	// caller sees a clear error instead of a half-working state.
+	if fileParam.IsDriveCommon() && req.ShareType != common.ShareTypeExternal {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "drive/Common only supports external share for now"})
+		return
+	}
+
 	if req.ShareType == common.ShareTypeSMB { // ~ create samba
 		createSambaShare(c, owner, &req, fileParam)
 		return
