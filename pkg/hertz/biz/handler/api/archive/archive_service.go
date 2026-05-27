@@ -152,7 +152,7 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := archmodel.CompressResp{Code: 0, Msg: "success", TaskId: task.Id()}
+	resp := archmodel.CompressResp{Code: 0, Msg: "success", TaskID: task.Id()}
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -222,7 +222,7 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := archmodel.ExtractResp{Code: 0, Msg: "success", TaskId: task.Id()}
+	resp := archmodel.ExtractResp{Code: 0, Msg: "success", TaskID: task.Id()}
 	c.JSON(consts.StatusOK, resp)
 }
 
