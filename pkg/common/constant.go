@@ -42,7 +42,7 @@ const (
 	Drive       = "drive"
 	Home        = "Home"
 	Data        = "Data"
-	DriveCommon = "Common"
+	Common      = "Common"
 	Cache       = "cache"
 	External    = "external"
 	Internal    = "internal"

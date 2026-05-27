@@ -56,7 +56,7 @@ func (p *FileParam) convert(url string) (err error) {
 
 	if fileType == common.Drive {
 
-		if extend != common.Home && extend != common.Data && extend != common.DriveCommon {
+		if extend != common.Home && extend != common.Data && extend != common.Common {
 			return fmt.Errorf("invalid drive type: %s", extend)
 		}
 		p.FileType = common.Drive
@@ -135,7 +135,7 @@ func (r *FileParam) GetResourceUri() (string, error) {
 		// drive/Common is a cluster-wide RWX volume shared across
 		// all users, mounted at COMMON_PREFIX. It does not live
 		// under the per-user userspace_pvc.
-		if r.Extend == common.DriveCommon {
+		if r.Extend == common.Common {
 			return common.COMMON_PREFIX, nil
 		}
 		var pvc = global.GlobalData.GetPvcUser(r.Owner)
@@ -172,7 +172,7 @@ func (r *FileParam) GetFileParam(uri string) error {
 		var p = strings.TrimPrefix(uri, common.COMMON_PREFIX)
 		r.Owner = ""
 		r.FileType = common.Drive
-		r.Extend = common.DriveCommon
+		r.Extend = common.Common
 		if p == "" {
 			r.Path = "/"
 		} else {
@@ -264,7 +264,7 @@ func (r *FileParam) IsCache() bool {
 // AppCommon volume (drive/Common). Used by paste logic to bypass
 // master-only routing that exists for the per-user userspace_pvc.
 func (r *FileParam) IsDriveCommon() bool {
-	return r != nil && r.FileType == common.Drive && r.Extend == common.DriveCommon
+	return r != nil && r.FileType == common.Drive && r.Extend == common.Common
 }
 
 func (r *FileParam) IsSystem() bool {
