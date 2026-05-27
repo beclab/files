@@ -12,11 +12,11 @@ struct MountedInfo {
     9: optional i64 inodesUsed;
     10: optional i64 inodesFree;
     11: optional double inodesUsedPercent;
-    12: optional bool readOnly;
+    12: optional bool read_only;
     13: optional bool invalid;
-    14: optional string idSerial;
-    15: optional string idSerialShort;
-    16: optional string partitionUUID;
+    14: optional string id_serial;
+    15: optional string id_serial_short;
+    16: optional string partition_uuid;
 }
 
 struct MountedResp {

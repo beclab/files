@@ -481,6 +481,21 @@ func ReportMountedStates(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// Keep a single mount truth in GlobalMounted by merging the pushed
+	// payload with the polled snapshot maintained in pkg/global/external.go.
+	reqBytes, err := json.Marshal(req)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+
+	var mounted []*files.DiskInfo
+	if err = json.Unmarshal(reqBytes, &mounted); err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	global.GlobalMounted.UpdateReportedMounted(mounted)
+
 	resp := new(external.MountedStatesResp)
 
 	c.JSON(consts.StatusOK, resp)

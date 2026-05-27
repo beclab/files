@@ -21,7 +21,12 @@ var (
 var externalWatcher *fsnotify.Watcher = nil
 
 type Mount struct {
+	// Mounted is the final merged view exposed to callers.
 	Mounted map[string]*files.DiskInfo
+	// polledMounted keeps the latest snapshot from olaresd pull.
+	polledMounted map[string]*files.DiskInfo
+	// reportedMounted keeps the latest snapshot from ReportMountedStates.
+	reportedMounted map[string]*files.DiskInfo
 	//Usage   float64
 	//Free    uint64
 	mu sync.RWMutex
@@ -35,8 +40,56 @@ type MountedDevice struct {
 
 func init() {
 	GlobalMounted = &Mount{
-		Mounted: make(map[string]*files.DiskInfo),
+		Mounted:         make(map[string]*files.DiskInfo),
+		polledMounted:   make(map[string]*files.DiskInfo),
+		reportedMounted: make(map[string]*files.DiskInfo),
 	}
+}
+
+func cloneDiskInfo(d *files.DiskInfo) *files.DiskInfo {
+	if d == nil {
+		return nil
+	}
+	cloned := *d
+	return &cloned
+}
+
+func buildMountedMap(disks []*files.DiskInfo) map[string]*files.DiskInfo {
+	mounted := make(map[string]*files.DiskInfo, len(disks))
+	for _, d := range disks {
+		if d == nil || d.Path == "" {
+			continue
+		}
+		mounted[d.Path] = cloneDiskInfo(d)
+	}
+	return mounted
+}
+
+func (m *Mount) mergeMountedLocked() {
+	merged := make(map[string]*files.DiskInfo, len(m.polledMounted)+len(m.reportedMounted))
+	for path, disk := range m.polledMounted {
+		merged[path] = cloneDiskInfo(disk)
+	}
+	// Reported data has higher priority on conflict because it is
+	// an explicit external status push.
+	for path, disk := range m.reportedMounted {
+		merged[path] = cloneDiskInfo(disk)
+	}
+	m.Mounted = merged
+}
+
+func (m *Mount) updatePolledMounted(disks []*files.DiskInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.polledMounted = buildMountedMap(disks)
+	m.mergeMountedLocked()
+}
+
+func (m *Mount) UpdateReportedMounted(disks []*files.DiskInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reportedMounted = buildMountedMap(disks)
+	m.mergeMountedLocked()
 }
 
 func InitGlobalMounted() {
@@ -194,9 +247,6 @@ func (m *Mount) watchMounted() {
 }
 
 func (m *Mount) getMounted() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	var host = common.OlaresdHost
 
 	if host == "" {
@@ -224,17 +274,15 @@ func (m *Mount) getMounted() {
 	}
 
 	if result.Code != 200 {
-		klog.Errorf("get mounted invalid, message: %s", *result.Message)
+		if result.Message != nil {
+			klog.Errorf("get mounted invalid, message: %s", *result.Message)
+		} else {
+			klog.Errorf("get mounted invalid, code: %d", result.Code)
+		}
 		return
 	}
 
-	m.Mounted = make(map[string]*files.DiskInfo)
-
-	if result.Data != nil {
-		for _, d := range result.Data {
-			m.Mounted[d.Path] = d
-		}
-	}
+	m.updatePolledMounted(result.Data)
 
 	klog.Infof("mounted device: %s", common.ToJson(result.Data))
 }
