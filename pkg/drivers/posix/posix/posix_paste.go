@@ -25,6 +25,14 @@ func (s *PosixStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 		return s.copyToCommon()
 	}
 
+	// src=drive/Common: any node can read /appcommon. Pulling the
+	// dispatch out so we don't carry master-only assumptions into
+	// copyToCloud / copyToSync. dst=drive/Common is already handled
+	// by the branch above.
+	if pasteParam.Src.IsDriveCommon() {
+		return s.pasteFromCommon()
+	}
+
 	if dstType == common.Drive {
 		return s.copyToDrive()
 
@@ -39,6 +47,51 @@ func (s *PosixStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 
 	} else if dstType == common.AwsS3 || dstType == common.TencentCos || dstType == common.GoogleDrive || dstType == common.DropBox {
 		return s.copyToCloud()
+	}
+
+	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
+}
+
+/**
+ * pasteFromCommon — src is drive/Common, dst is anything except drive/Common
+ * (which is already routed to copyToCommon).
+ *
+ * /appcommon is RWX and visible on every node so reads don't require
+ * master. Where the dst-side legacy logic does its own node routing
+ * (cache/external -> dst node) we reuse it; for cloud/sync we build
+ * the task inline so the existing master-only guards in copyToCloud
+ * and copyToSync don't trip on us.
+ */
+func (s *PosixStorage) pasteFromCommon() (*tasks.Task, error) {
+	var dstType = s.paste.Dst.FileType
+
+	klog.Infof("Posix pasteFromCommon, dst: %s", dstType)
+
+	switch dstType {
+	case common.Drive:
+		// dst is Home/Data (Common was diverted above); writing
+		// userspace_pvc still requires master.
+		return s.copyToDrive()
+	case common.Cache:
+		// Existing path: route to dst node, rsync; dst node has
+		// /appcommon mounted for the read side.
+		return s.copyToCache()
+	case common.External:
+		return s.copyToExternal()
+	case common.Sync:
+		task := tasks.TaskManager.CreateTask(s.paste)
+		if err := task.Execute(task.UploadToSync); err != nil {
+			klog.Errorf("Posix pasteFromCommon (sync) error: %v", err)
+			return task, err
+		}
+		return task, nil
+	case common.AwsS3, common.TencentCos, common.GoogleDrive, common.DropBox:
+		task := tasks.TaskManager.CreateTask(s.paste)
+		if err := task.Execute(task.UploadToCloud); err != nil {
+			klog.Errorf("Posix pasteFromCommon (cloud) error: %v", err)
+			return task, err
+		}
+		return task, nil
 	}
 
 	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
