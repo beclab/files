@@ -18,6 +18,14 @@ func (s *CacheStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 
 	klog.Infof("Cache - Paste, dst: %s, param: %s", dstType, common.ToJson(pasteParam))
 
+	// drive/Common is a cluster-wide RWX volume. Like copyToDrive
+	// we still route to the cache src node (cache itself is node
+	// local), but src-node already has /appcommon mounted so rsync
+	// works directly — no master-only check.
+	if pasteParam.Dst.IsDriveCommon() {
+		return s.copyToCommon()
+	}
+
 	if dstType == common.Drive {
 		return s.copyToDrive()
 
@@ -37,6 +45,28 @@ func (s *CacheStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 
 	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
 
+}
+
+/**
+ * ~ copyToCommon — src=cache (node local), dst=drive/Common (RWX everywhere).
+ * Route to the cache src node and rsync into /appcommon.
+ */
+func (s *CacheStorage) copyToCommon() (task *tasks.Task, err error) {
+	klog.Info("Cache copyToCommon")
+
+	var srcNode = s.paste.Src.Extend
+	if srcNode != global.CurrentNodeName {
+		klog.Errorf("not src node")
+		err = errors.New("Cache copyToCommon, not src node")
+		return
+	}
+
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.Rsync); err != nil {
+		klog.Errorf("Cache copyToCommon error: %v", err)
+	}
+
+	return
 }
 
 /**

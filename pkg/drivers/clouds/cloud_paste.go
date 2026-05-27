@@ -19,6 +19,12 @@ func (s *CloudStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 
 	klog.Infof("Cloud - Paste, dst: %s, param: %s", dstType, common.ToJson(pasteParam))
 
+	// drive/Common is RWX on every node. Cloud src is reachable via
+	// rclone from any node too, so no master-only routing is needed.
+	if pasteParam.Dst.IsDriveCommon() {
+		return s.copyToCommon()
+	}
+
 	if dstType == common.Drive {
 		return s.copyToDrive()
 
@@ -36,6 +42,21 @@ func (s *CloudStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 	}
 
 	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
+}
+
+/**
+ * ~ copyToCommon — src=cloud (rclone), dst=drive/Common (RWX everywhere).
+ * Any node can drive the download; no master-only check.
+ */
+func (s *CloudStorage) copyToCommon() (task *tasks.Task, err error) {
+	klog.Info("Cloud copyToCommon")
+
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.DownloadFromCloud); err != nil {
+		klog.Errorf("Cloud copyToCommon error: %v", err)
+	}
+
+	return
 }
 
 /**
