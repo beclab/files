@@ -1,6 +1,9 @@
 package common
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 var (
 	FreeLimit float64 = 85.00
@@ -80,9 +83,96 @@ const (
 	ActionMove            = "move"
 	ActionUpload          = "upload"
 	ActionUploadFinalize  = "upload_finalize"
+	ActionCompress        = "compress"
+	ActionExtract         = "extract"
 
 	AsyncFinalizeThreshold int64 = 2 * 1024 * 1024 * 1024 // 2GB
 )
+
+const (
+	ArchiveFormatZip    = "zip"
+	ArchiveFormat7z     = "7z"
+	ArchiveFormatTar    = "tar"
+	ArchiveFormatTarGz  = "tar.gz"
+	ArchiveFormatTgz    = "tgz"
+	ArchiveFormatTarBz2 = "tar.bz2"
+	ArchiveFormatTarXz  = "tar.xz"
+	ArchiveFormatGzip   = "gzip"
+	ArchiveFormatBzip2  = "bzip2"
+	ArchiveFormatXz     = "xz"
+
+	ArchiveConflictRename    = "rename"
+	ArchiveConflictOverwrite = "overwrite"
+	ArchiveConflictSkip      = "skip"
+)
+
+var (
+	// ArchiveFormatsWrite lists every format the compress endpoint
+	// accepts; all of them are produced by the 7z CLI backend.
+	ArchiveFormatsWrite = []string{
+		ArchiveFormatZip, ArchiveFormat7z, ArchiveFormatTar,
+		ArchiveFormatTarGz, ArchiveFormatTgz, ArchiveFormatTarBz2, ArchiveFormatTarXz,
+		ArchiveFormatGzip, ArchiveFormatBzip2, ArchiveFormatXz,
+	}
+	// ArchiveFormatsRead lists every format the extract / preview
+	// endpoints accept.
+	ArchiveFormatsRead = []string{
+		ArchiveFormatZip, ArchiveFormat7z, ArchiveFormatTar,
+		ArchiveFormatTarGz, ArchiveFormatTgz, ArchiveFormatTarBz2, ArchiveFormatTarXz,
+		ArchiveFormatGzip, ArchiveFormatBzip2, ArchiveFormatXz,
+	}
+	// ArchiveFormatsWithPassword restricts password-protected archives
+	// to formats that natively support encryption (zip / 7z).
+	ArchiveFormatsWithPassword = []string{ArchiveFormatZip, ArchiveFormat7z}
+	// ArchiveFormatsWithVolume restricts multi-volume archives to
+	// formats that natively support splitting (zip / 7z).
+	ArchiveFormatsWithVolume = []string{ArchiveFormatZip, ArchiveFormat7z}
+	// ArchiveFormatsStdlibRead lists formats that the reader package
+	// can handle without spawning a 7z subprocess.
+	ArchiveFormatsStdlibRead = []string{
+		ArchiveFormatZip, ArchiveFormatTar, ArchiveFormatTarGz, ArchiveFormatTgz,
+	}
+	// PosixFileTypes is the whitelist of storage types on which archive
+	// operations are supported.
+	PosixFileTypes = []string{Drive, Cache, External, Internal, Usb, Hdd, Smb}
+)
+
+// ArchiveFormatFromName infers the archive format from a file name's
+// suffix; returns "" when the name has no known extension.
+func ArchiveFormatFromName(name string) string {
+	lower := strings.ToLower(name)
+	if strings.HasSuffix(lower, ".tar.gz") {
+		return ArchiveFormatTarGz
+	}
+	if strings.HasSuffix(lower, ".tgz") {
+		return ArchiveFormatTgz
+	}
+	if strings.HasSuffix(lower, ".tar.bz2") {
+		return ArchiveFormatTarBz2
+	}
+	if strings.HasSuffix(lower, ".tar.xz") {
+		return ArchiveFormatTarXz
+	}
+	if strings.HasSuffix(lower, ".zip") {
+		return ArchiveFormatZip
+	}
+	if strings.HasSuffix(lower, ".7z") {
+		return ArchiveFormat7z
+	}
+	if strings.HasSuffix(lower, ".tar") {
+		return ArchiveFormatTar
+	}
+	if strings.HasSuffix(lower, ".gz") {
+		return ArchiveFormatGzip
+	}
+	if strings.HasSuffix(lower, ".bz2") {
+		return ArchiveFormatBzip2
+	}
+	if strings.HasSuffix(lower, ".xz") {
+		return ArchiveFormatXz
+	}
+	return ""
+}
 
 var (
 	DefaultLocalRootPath             = "/data/"

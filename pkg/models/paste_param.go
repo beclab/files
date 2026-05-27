@@ -15,4 +15,10 @@ type PasteParam struct {
 	DstOwner                string `json:"dstOwner"`
 	SrcSharePath            *FileParam
 	DstSharePath            *FileParam
+
+	// Srcs is populated for ActionCompress only, carrying the list of
+	// sources to archive together.
+	Srcs []*FileParam `json:"-"`
+	// Archive is populated for ActionCompress / ActionExtract only.
+	Archive *ArchiveOption `json:"-"`
 }
