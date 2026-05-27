@@ -473,28 +473,18 @@ func AccountsMethod(ctx context.Context, c *app.RequestContext) {
 // ReportMountedStates .
 // @router /api/mounted_states/ [POST]
 func ReportMountedStates(ctx context.Context, c *app.RequestContext) {
-	var err error
-	var req []*external.MountedInfo
-	err = c.BindAndValidate(&req)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+	body := c.Request.Body()
+	if len(body) == 0 {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "request body is empty"})
 		return
 	}
 
-	// Keep a single mount truth in GlobalMounted by merging the pushed
-	// payload with the polled snapshot maintained in pkg/global/external.go.
-	reqBytes, err := json.Marshal(req)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+	var patches []*global.MountedPatch
+	if err := json.Unmarshal(body, &patches); err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-
-	var mounted []*files.DiskInfo
-	if err = json.Unmarshal(reqBytes, &mounted); err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
-	}
-	global.GlobalMounted.UpdateReportedMounted(mounted)
+	global.GlobalMounted.UpdateReportedMounted(patches)
 
 	resp := new(external.MountedStatesResp)
 
