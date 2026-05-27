@@ -469,3 +469,19 @@ func AccountsMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	c.JSON(consts.StatusOK, resp)
 }
+
+// ReportMountedStates .
+// @router /api/mounted_states/ [POST]
+func ReportMountedStates(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req []*external.MountedInfo
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp := new(external.MountedStatesResp)
+
+	c.JSON(consts.StatusOK, resp)
+}

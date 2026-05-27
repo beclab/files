@@ -91,6 +91,28 @@ struct AccountsResp {
     3: list<AccountInfo> data
 }
 
+struct MountedStates {
+    1: string type,
+    2: string path,
+    3: string fstype,
+    4: i64 total,
+    5: i64 free,
+    6: i64 used,
+    7: double usedPercent,
+    8: i64 inodesTotal,
+    9: i64 inodesUsed,
+    10: i64 inodesFree,
+    11: double inodesUsedPercent,
+    12: bool read_only,
+    13: bool invalid,
+    14: string id_serial,
+    15: string id_serial_short,
+    16: string partition_uuid
+}
+
+struct MountedStatesResp {
+}
+
 service ExternalService {
     MountedResp MountedMethod() (api.get="/api/mounted/:node/");
     MountResp MountMethod(1: MountReq request) (api.post="/api/mount/:node/");
@@ -99,4 +121,5 @@ service ExternalService {
     string PutSmbHistoryMethod(1: PutSmbHistoryReq request) (api.put="/api/smb_history/:node/");
     string DeleteSmbHistoryMethod(1: DeleteSmbHistoryReq request) (api.delete="/api/smb_history/:node/");
     AccountsResp AccountsMethod() (api.get="/api/accounts");
+    MountedStatesResp ReportMountedStates(1: list<MountedInfo> req) (api.post="/api/mounted_states/");
 }
