@@ -230,6 +230,23 @@ func (m *Mount) GetMountedData() []files.DiskInfo {
 	return res
 }
 
+// GetMountedByPath returns a mounted snapshot by root path name
+// (for example "Samsung-0"). Safe for concurrent callers.
+func (m *Mount) GetMountedByPath(path string) (*files.DiskInfo, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if path == "" {
+		return nil, false
+	}
+	d, ok := m.Mounted[path]
+	if !ok || d == nil {
+		return nil, false
+	}
+	cloned := *d
+	return &cloned, true
+}
+
 // hasMount reports whether the mount map contains base under read lock.
 // watchMounted previously read m.Mounted directly without the lock,
 // racing with getMounted's full-map replacement and the cron-driven

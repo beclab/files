@@ -53,7 +53,15 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 	klog.Infof("Posix list, user: %s, args: %s, shareId: %s, sharePath: %s", owner, fileParam.Json(), shareId, sharePath)
 
-	fileData, err := s.getFiles(fileParam, Expand, Content)
+	var (
+		fileData *files.FileInfo
+		err      error
+	)
+	if s.shouldUseFastExternalRootList(fileParam, shareId) {
+		fileData, err = s.listExternalRootFast(fileParam)
+	} else {
+		fileData, err = s.getFiles(fileParam, Expand, Content)
+	}
 	if err != nil {
 		if strings.Contains(err.Error(), "no such file or directory") {
 			if shareId == "" {
@@ -572,7 +580,109 @@ func (s *PosixStorage) isExternal(fileType string, extend string) bool {
 	return (fileType == common.External || fileType == common.Usb || fileType == common.Hdd || fileType == common.Internal || fileType == common.Smb) && extend != ""
 }
 
+func getExternalMountName(path string) (string, bool) {
+	trimmed := strings.Trim(strings.TrimSpace(path), "/")
+	if trimmed == "" {
+		return "", false
+	}
+	parts := strings.SplitN(trimmed, "/", 2)
+	if parts[0] == "" {
+		return "", false
+	}
+	return parts[0], true
+}
+
+func (s *PosixStorage) shouldUseFastExternalRootList(fileParam *models.FileParam, shareId string) bool {
+	if shareId != "" || fileParam == nil || fileParam.FileType != common.External {
+		return false
+	}
+	_, hasMountName := getExternalMountName(fileParam.Path)
+	return !hasMountName
+}
+
+// listExternalRootFast lists External root directory entries without
+// deep per-entry filesystem inspection, so a stale mountpoint cannot
+// block the whole root listing response.
+func (s *PosixStorage) listExternalRootFast(fileParam *models.FileParam) (*files.FileInfo, error) {
+	resourceURI, err := fileParam.GetResourceUri()
+	if err != nil {
+		return nil, err
+	}
+
+	targetPath := filepath.Join(resourceURI, strings.TrimPrefix(fileParam.Path, "/"))
+	entries, err := os.ReadDir(targetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	rootPath := fileParam.Path
+	if rootPath == "" {
+		rootPath = "/"
+	}
+	root := &files.FileInfo{
+		FsType:   fileParam.FileType,
+		FsExtend: fileParam.Extend,
+		Path:     rootPath,
+		Name:     rootPath,
+		IsDir:    true,
+		Listing: &files.Listing{
+			Items:   make([]*files.FileInfo, 0, len(entries)),
+			Sorting: files.DefaultSorting,
+		},
+	}
+	if rootPath == "/" {
+		root.Name = ""
+	}
+
+	for _, entry := range entries {
+		modeType := entry.Type()
+		// Use dirent type bits only; avoid entry.Info()/Stat on each child.
+		isDir := modeType.IsDir() || modeType == 0
+
+		itemPath := filepath.ToSlash(filepath.Join(rootPath, entry.Name()))
+		if !strings.HasPrefix(itemPath, "/") {
+			itemPath = "/" + itemPath
+		}
+		if isDir && !strings.HasSuffix(itemPath, "/") {
+			itemPath += "/"
+		}
+
+		item := &files.FileInfo{
+			FsType:   fileParam.FileType,
+			FsExtend: fileParam.Extend,
+			Path:     itemPath,
+			Name:     entry.Name(),
+			IsDir:    isDir,
+		}
+		if mounted, ok := global.GlobalMounted.GetMountedByPath(entry.Name()); ok && mounted.Type != "" {
+			item.ExternalType = mounted.Type
+		} else {
+			item.ExternalType = global.GlobalMounted.CheckExternalType(item.Path, item.IsDir)
+		}
+
+		if item.IsDir {
+			root.Listing.NumDirs++
+		} else {
+			root.Listing.NumFiles++
+		}
+		root.Listing.Items = append(root.Listing.Items, item)
+	}
+	root.Listing.NumTotalFiles = len(root.Listing.Items)
+
+	return root, nil
+}
+
 func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content bool) (*files.FileInfo, error) {
+	// If the mount is already marked invalid by monitor state,
+	// fail fast and avoid touching the potentially blocking mountpoint.
+	if fileParam != nil && fileParam.FileType == common.External {
+		if mountName, ok := getExternalMountName(fileParam.Path); ok {
+			if mounted, found := global.GlobalMounted.GetMountedByPath(mountName); found && mounted.Invalid {
+				return nil, fmt.Errorf("external mount %s unavailable", mountName)
+			}
+		}
+	}
+
 	var resourceUri, err = fileParam.GetResourceUri()
 	if err != nil {
 		return nil, err
