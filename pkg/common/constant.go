@@ -105,31 +105,38 @@ const (
 )
 
 var (
-	// ArchiveFormatsWrite 是允许压缩写入的格式集合（7z CLI 全部支持）。
+	// ArchiveFormatsWrite lists every format the compress endpoint
+	// accepts; all of them are produced by the 7z CLI backend.
 	ArchiveFormatsWrite = []string{
 		ArchiveFormatZip, ArchiveFormat7z, ArchiveFormatTar,
 		ArchiveFormatTarGz, ArchiveFormatTgz, ArchiveFormatTarBz2, ArchiveFormatTarXz,
 		ArchiveFormatGzip, ArchiveFormatBzip2, ArchiveFormatXz,
 	}
-	// ArchiveFormatsRead 是允许解压/预览的格式集合。
+	// ArchiveFormatsRead lists every format the extract / preview
+	// endpoints accept.
 	ArchiveFormatsRead = []string{
 		ArchiveFormatZip, ArchiveFormat7z, ArchiveFormatTar,
 		ArchiveFormatTarGz, ArchiveFormatTgz, ArchiveFormatTarBz2, ArchiveFormatTarXz,
 		ArchiveFormatGzip, ArchiveFormatBzip2, ArchiveFormatXz,
 	}
-	// ArchiveFormatsWithPassword 限定仅 zip / 7z 支持密码语义。
+	// ArchiveFormatsWithPassword restricts password-protected archives
+	// to formats that natively support encryption (zip / 7z).
 	ArchiveFormatsWithPassword = []string{ArchiveFormatZip, ArchiveFormat7z}
-	// ArchiveFormatsWithVolume 限定仅 zip / 7z 支持真分卷。
+	// ArchiveFormatsWithVolume restricts multi-volume archives to
+	// formats that natively support splitting (zip / 7z).
 	ArchiveFormatsWithVolume = []string{ArchiveFormatZip, ArchiveFormat7z}
-	// ArchiveFormatsStdlibRead 列出 reader 可不 spawn 进程的格式。
+	// ArchiveFormatsStdlibRead lists formats that the reader package
+	// can handle without spawning a 7z subprocess.
 	ArchiveFormatsStdlibRead = []string{
 		ArchiveFormatZip, ArchiveFormatTar, ArchiveFormatTarGz, ArchiveFormatTgz,
 	}
-	// PosixFileTypes 列出本期归档功能允许的存储类型。
+	// PosixFileTypes is the whitelist of storage types on which archive
+	// operations are supported.
 	PosixFileTypes = []string{Drive, Cache, External, Internal, Usb, Hdd, Smb}
 )
 
-// ArchiveFormatFromName 根据文件名后缀推断归档格式，不识别返回空串。
+// ArchiveFormatFromName infers the archive format from a file name's
+// suffix; returns "" when the name has no known extension.
 func ArchiveFormatFromName(name string) string {
 	lower := strings.ToLower(name)
 	if strings.HasSuffix(lower, ".tar.gz") {

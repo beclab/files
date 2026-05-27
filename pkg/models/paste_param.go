@@ -16,8 +16,9 @@ type PasteParam struct {
 	SrcSharePath            *FileParam
 	DstSharePath            *FileParam
 
-	// Srcs 仅在 Action == ActionCompress 时使用，承载多个待压缩源。
+	// Srcs is populated for ActionCompress only, carrying the list of
+	// sources to archive together.
 	Srcs []*FileParam `json:"-"`
-	// Archive 仅在 Action == ActionCompress / ActionExtract 时使用。
+	// Archive is populated for ActionCompress / ActionExtract only.
 	Archive *ArchiveOption `json:"-"`
 }

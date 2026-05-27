@@ -6,8 +6,10 @@ import (
 	"strings"
 )
 
-// ArchiveOption 描述一次压缩/解压所需的格式参数。
-// Password 字段不应该出现在任何 access log；handler 层从 header 接入。
+// ArchiveOption carries the format-level parameters for one compress /
+// extract job. Password must never end up in an access log; the handler
+// layer reads it from the X-Archive-Password header rather than the
+// request body.
 type ArchiveOption struct {
 	Format           string `json:"format"`
 	Level            int    `json:"level"`
@@ -15,12 +17,15 @@ type ArchiveOption struct {
 	VolumeSizeMB     int64  `json:"volumeSizeMB"`
 	PreserveSymlinks bool   `json:"preserveSymlinks"`
 	Conflict         string `json:"conflict"`
-	// HeaderEncrypt 控制 7z -mhe=on；仅 7z 格式有效，加密时默认 true。
+	// HeaderEncrypt drives 7z's -mhe=on (encrypt the central
+	// directory). Only meaningful for the 7z format; auto-enabled by
+	// NormalizeForCompress when Format == "7z" && Password != "".
 	HeaderEncrypt bool `json:"-"`
 }
 
-// NormalizeForCompress 将 ArchiveOption 在压缩场景下补齐默认值并校验。
-// dstName 用于按后缀推断 Format（当 Format 为空时）。
+// NormalizeForCompress fills in defaults and validates the option set
+// for a compress request. dstName is used to infer Format from its
+// suffix when Format is empty.
 func (o *ArchiveOption) NormalizeForCompress(dstName string) error {
 	if o == nil {
 		return errors.New("archive option is nil")
@@ -58,14 +63,16 @@ func (o *ArchiveOption) NormalizeForCompress(dstName string) error {
 	return nil
 }
 
-// NormalizeForExtract 将 ArchiveOption 在解压场景下补齐默认值并校验。
-// srcName 用于按后缀推断 Format。
+// NormalizeForExtract fills in defaults and validates the option set
+// for an extract request. srcName is used to infer Format from its
+// suffix.
 func (o *ArchiveOption) NormalizeForExtract(srcName string) error {
 	if o == nil {
 		return errors.New("archive option is nil")
 	}
 	if o.Format == "" {
-		// 多卷归档以 .001 结尾时去掉后缀再推断。
+		// Multi-volume archives end with .001; strip it before
+		// inferring the underlying format.
 		base := strings.TrimSuffix(srcName, ".001")
 		o.Format = common.ArchiveFormatFromName(base)
 	}
