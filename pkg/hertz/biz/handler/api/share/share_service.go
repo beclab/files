@@ -5,8 +5,10 @@ package share
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"files/pkg/client"
 	"files/pkg/common"
+	"files/pkg/drivers/precheck"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/files"
@@ -70,6 +72,17 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 	if err != nil {
 		klog.Errorf("[samba] CreateSharePath, file param error: %v, owner: %s", err, owner)
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
+		return
+	}
+	// Backend-verified: trailing-slash spoof on a file is defeated.
+	if err := precheck.VerifyShareTargetIsDir(fileParam); err != nil {
+		if errors.Is(err, precheck.ErrShareTargetIsFile) {
+			klog.Errorf("[share] CreateSharePath, target is a file, not a folder, owner: %s, path: %s", owner, p)
+			handler.RespBadRequest(c, common.ErrorMessageFileShareNotSupport)
+			return
+		}
+		klog.Errorf("[share] CreateSharePath, share target verify failed, owner: %s, path: %s, err: %v", owner, p, err)
+		handler.RespBadRequest(c, common.ErrorMessageDirNotExists)
 		return
 	}
 	if req.Name == "" {
@@ -2572,6 +2585,18 @@ func DeleteSmbUser(ctx context.Context, c *app.RequestContext) {
 // ~ internal func
 func createSambaShare(c *app.RequestContext, owner string, req *share.CreateSharePathReq, fileParam *models.FileParam) {
 	klog.Infof("[samba] CreateSharePath, samba, owner: %s, data: %s", owner, common.ParseString(fileParam))
+
+	// Independent guard; don't rely on caller pre-validation.
+	if err := precheck.VerifyShareTargetIsDir(fileParam); err != nil {
+		if errors.Is(err, precheck.ErrShareTargetIsFile) {
+			klog.Errorf("[samba] createSambaShare, target is a file, not a folder, owner: %s, path: %s", owner, fileParam.Path)
+			handler.RespBadRequest(c, common.ErrorMessageFileShareNotSupport)
+			return
+		}
+		klog.Errorf("[samba] createSambaShare, share target verify failed, owner: %s, path: %s, err: %v", owner, fileParam.Path, err)
+		handler.RespBadRequest(c, common.ErrorMessageDirNotExists)
+		return
+	}
 
 	var isSmbSharePublic int32
 	if req.PublicSmb {

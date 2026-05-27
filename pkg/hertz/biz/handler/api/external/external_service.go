@@ -150,7 +150,8 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		// and trigger `go vet` printf failures.
 		klog.Warningf("%s", res["message"].(string))
 		if strings.Contains(res["message"].(string), "mount error(13)") {
-			res["message"] = "Incorrect username or password"
+			// EACCES covers both bad credentials and share-level ACL denial.
+			res["message"] = "Permission denied. Check the credentials or the user's access."
 		}
 		if strings.Contains(res["message"].(string), "mount error(113)") {
 			res["message"] = "Unable to find suitable address"
