@@ -24,6 +24,14 @@ type Execute interface {
 
 	Paste(pasteParam *models.PasteParam) (*tasks.Task, error)
 
+	// Compress submits an archive-build task. The driver implementation
+	// is responsible for node routing (drive/cache/external) and
+	// returning an error when the storage cannot host the operation.
+	Compress(pasteParam *models.PasteParam) (*tasks.Task, error)
+
+	// Extract submits an archive-extract task.
+	Extract(pasteParam *models.PasteParam) (*tasks.Task, error)
+
 	UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error)
 
 	UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error)
