@@ -165,7 +165,9 @@ func runWithExternalMountGuard[T any](fileParam *models.FileParam, operation str
 
 	mounted, found := global.GlobalMounted.GetMountedByPath(mountName)
 	if !found {
-		return zero, fmt.Errorf("external mount %s unavailable: mount state not found (%s)", mountName, operation)
+		// Only guard paths that are known mount roots in GlobalMounted.
+		// Non-mounted local dirs under External should bypass guard.
+		return fn()
 	}
 
 	var result T
