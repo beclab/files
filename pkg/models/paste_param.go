@@ -15,4 +15,9 @@ type PasteParam struct {
 	DstOwner                string `json:"dstOwner"`
 	SrcSharePath            *FileParam
 	DstSharePath            *FileParam
+
+	// Srcs 仅在 Action == ActionCompress 时使用，承载多个待压缩源。
+	Srcs []*FileParam `json:"-"`
+	// Archive 仅在 Action == ActionCompress / ActionExtract 时使用。
+	Archive *ArchiveOption `json:"-"`
 }
