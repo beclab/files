@@ -605,7 +605,7 @@ func getExternalMountName(path string) (string, bool) {
 }
 
 func (s *PosixStorage) shouldUseFastExternalRootList(fileParam *models.FileParam, shareId string) bool {
-	if fileParam == nil || fileParam.FileType != common.External {
+	if shareId != "" || fileParam == nil || fileParam.FileType != common.External {
 		return false
 	}
 	_, hasMountName := getExternalMountName(fileParam.Path)
