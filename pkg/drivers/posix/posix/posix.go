@@ -94,22 +94,23 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 		fileData.Listing.Sorting = files.DefaultSorting
 		fileData.Listing.ApplySort()
-	}
 
-	if len(fileData.Items) > 0 {
-		if shareId != "" {
-			for _, item := range fileData.Items {
-				item.FsType = common.Share
-				item.FsExtend = shareId
-				item.SharePermission = int32(permission)
-				if item.IsDir {
-					item.Path = filepath.Join(sharePath, item.Name) + "/"
-				} else {
-					item.Path = filepath.Join(sharePath, item.Name)
-				}
+		// Items lives on the embedded *Listing (nil for files).
+		if len(fileData.Items) > 0 {
+			if shareId != "" {
+				for _, item := range fileData.Items {
+					item.FsType = common.Share
+					item.FsExtend = shareId
+					item.SharePermission = int32(permission)
+					if item.IsDir {
+						item.Path = filepath.Join(sharePath, item.Name) + "/"
+					} else {
+						item.Path = filepath.Join(sharePath, item.Name)
+					}
 
-				if shareFileType == common.External || shareFileType == common.Cache {
-					item.FsExtend = fmt.Sprintf("%s_%s", shareId, shareNode)
+					if shareFileType == common.External || shareFileType == common.Cache {
+						item.FsExtend = fmt.Sprintf("%s_%s", shareId, shareNode)
+					}
 				}
 			}
 		}
@@ -604,7 +605,7 @@ func getExternalMountName(path string) (string, bool) {
 }
 
 func (s *PosixStorage) shouldUseFastExternalRootList(fileParam *models.FileParam, shareId string) bool {
-	if shareId != "" || fileParam == nil || fileParam.FileType != common.External {
+	if fileParam == nil || fileParam.FileType != common.External {
 		return false
 	}
 	_, hasMountName := getExternalMountName(fileParam.Path)

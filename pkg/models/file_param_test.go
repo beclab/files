@@ -156,6 +156,7 @@ func initGlobal(owner string) {
 func TestAll(t *testing.T) {
 	TestHome(t)
 	TestData(t)
+	TestCommonDrive(t)
 	TestCache(t)
 	TestSync(t)
 	TestCloud(t)
@@ -230,6 +231,42 @@ func TestData(t *testing.T) {
 	resUri, err = param.GetResourceUri()
 	assert.Equal(t, err, nil)
 	assert.Equal(t, resUri+param.Path, "/data/user-pvc-user1/Data/hello/world/test_pic.jpg")
+}
+
+func TestCommonDrive(t *testing.T) {
+	owner = "user1"
+	initGlobal(owner)
+
+	url = "drive/Common/"
+	param, err = CreateFileParam(owner, url)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, param.FileType, "drive")
+	assert.Equal(t, param.Extend, "Common")
+	assert.Equal(t, param.Path, "/")
+	resUri, err = param.GetResourceUri()
+	assert.Equal(t, err, nil)
+	assert.Equal(t, resUri+param.Path, "/appcommon/")
+
+	url = "drive/Common/myapp/photos/"
+	param, err = CreateFileParam(owner, url)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, param.FileType, "drive")
+	assert.Equal(t, param.Extend, "Common")
+	assert.Equal(t, param.Path, "/myapp/photos/")
+	resUri, err = param.GetResourceUri()
+	assert.Equal(t, err, nil)
+	assert.Equal(t, resUri+param.Path, "/appcommon/myapp/photos/")
+
+	url = "drive/Common/myapp/photos/1.jpg"
+	param, err = CreateFileParam(owner, url)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, param.FileType, "drive")
+	assert.Equal(t, param.Extend, "Common")
+	assert.Equal(t, param.Path, "/myapp/photos/1.jpg")
+	assert.Equal(t, param.IsDriveCommon(), true)
+	resUri, err = param.GetResourceUri()
+	assert.Equal(t, err, nil)
+	assert.Equal(t, resUri+param.Path, "/appcommon/myapp/photos/1.jpg")
 }
 
 func TestCache(t *testing.T) {
@@ -430,6 +467,7 @@ func TestUnsupportedFileType(t *testing.T) {
 func TestAllFileParamFromUri(t *testing.T) {
 	TestHomeFrontUri(t)
 	TestDataFrontUri(t)
+	TestCommonDriveFrontUri(t)
 	TestCacheFrontUri(t)
 	TestSyncFrontUri(t)
 	TestCloudFrontUri(t)
@@ -475,6 +513,32 @@ func TestDataFrontUri(t *testing.T) {
 	err = fp.GetFileParam(uri)
 	assert.Equal(t, err, nil)
 	assert.Equal(t, fp, &FileParam{Owner: owner, FileType: "drive", Extend: "Data", Path: "/hello/Pictures/1.jpg"})
+}
+
+func TestCommonDriveFrontUri(t *testing.T) {
+	owner = "user1"
+	initGlobal(owner)
+	var err error
+	var uri string
+	var fp *FileParam
+
+	uri = "/appcommon"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: "", FileType: "drive", Extend: "Common", Path: "/"})
+
+	uri = "/appcommon/myapp/"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: "", FileType: "drive", Extend: "Common", Path: "/myapp/"})
+
+	uri = "/appcommon/myapp/photos/1.jpg"
+	fp = &FileParam{}
+	err = fp.GetFileParam(uri)
+	assert.Equal(t, err, nil)
+	assert.Equal(t, fp, &FileParam{Owner: "", FileType: "drive", Extend: "Common", Path: "/myapp/photos/1.jpg"})
 }
 
 func TestCacheFrontUri(t *testing.T) {

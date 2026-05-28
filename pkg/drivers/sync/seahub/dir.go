@@ -164,6 +164,10 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 		return nil, err
 	}
 	if dirId == "" {
+		// File target: signal "no listing" so caller returns null (matches cloud).
+		if fid, _ := seaserv.GlobalSeafileAPI.GetFileIdByPath(repoId, parentDir); fid != "" {
+			return nil, nil
+		}
 		return nil, errors.New("folder not found")
 	}
 

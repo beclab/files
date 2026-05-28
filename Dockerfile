@@ -79,6 +79,7 @@ RUN apt-get update \
   inotify-tools \
   mailcap  \
   rsync \
+  p7zip-full \
   ca-certificates \
   gnupg \
   curl \

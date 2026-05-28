@@ -89,6 +89,11 @@ func GetDirectories(ctx context.Context, c *app.RequestContext) {
 			Owner:      owner,
 			Permission: 4,
 		},
+		&search.DirectoryInfo{
+			Path:       "/drive/Common/",
+			Owner:      owner,
+			Permission: 4,
+		},
 	)
 
 	klog.Infof("[search] GetDirectories, owner: %s, result: %v", owner, common.ParseString(result))
