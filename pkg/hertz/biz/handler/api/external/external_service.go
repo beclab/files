@@ -44,6 +44,13 @@ type NfsMountReq struct {
 	MountPath  string `json:"mountPath"`
 }
 
+func stringPtrValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
 func buildNfsMountReq(rawPath string) (*NfsMountReq, error) {
 	parts := strings.SplitN(strings.TrimSpace(rawPath), ":", 2)
 	if len(parts) != 2 {
@@ -106,15 +113,17 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	var urls []string
 	var bodyStruct interface{}
 	if externalType == "smb" {
-		if strings.TrimSpace(req.User) == "" || strings.TrimSpace(req.Password) == "" {
+		user := strings.TrimSpace(stringPtrValue(req.User))
+		password := strings.TrimSpace(stringPtrValue(req.Password))
+		if user == "" || password == "" {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user and password are required for smb"})
 			return
 		}
 		urls = []string{"http://" + files.TerminusdHost + "/command/v2/mount-samba", "http://" + files.TerminusdHost + "/command/mount-samba"}
 		bodyStruct = SmbMountReq{
 			SmbPath:  req.SmbPath,
-			User:     req.User,
-			Password: req.Password,
+			User:     user,
+			Password: password,
 		}
 	} else if externalType == "nfs" {
 		urls = []string{"http://" + files.TerminusdHost + "/command/mount-nfs"}
