@@ -1,12 +1,14 @@
 package posix
 
 import (
+	"errors"
 	"files/pkg/common"
 	"files/pkg/global"
 	"files/pkg/models"
-	"fmt"
 	"sync"
 	"time"
+
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -43,6 +45,11 @@ func newMountGuard(probeTimeout, cooldown, probeLease time.Duration) *mountGuard
 
 var externalMountGuard = newMountGuard(defaultMountProbeTimeout, defaultMountCooldown, defaultMountProbeLease)
 
+func externalMountUnavailableError(mountName, operation, reason string) error {
+	klog.Warningf("external mount unavailable, mount: %s, operation: %s, reason: %s", mountName, operation, reason)
+	return errors.New(common.ErrorMessageExternalMountUnavailable)
+}
+
 func (g *mountGuard) run(mountName string, invalid bool, operation string, probe func() error) error {
 	startProbe, generation, err := g.begin(mountName, invalid, operation)
 	if err != nil {
@@ -63,7 +70,7 @@ func (g *mountGuard) run(mountName string, invalid bool, operation string, probe
 		return probeErr
 	case <-time.After(g.probeTimeout):
 		g.markProbeTimeout(mountName, generation)
-		return fmt.Errorf("external mount %s probe timeout after %s (%s)", mountName, g.probeTimeout, operation)
+		return externalMountUnavailableError(mountName, operation, "probe timeout")
 	}
 }
 
@@ -87,7 +94,7 @@ func (g *mountGuard) begin(mountName string, invalid bool, operation string) (bo
 	}
 
 	if invalid {
-		return false, 0, fmt.Errorf("external mount %s unavailable: invalid=true (%s)", mountName, operation)
+		return false, 0, externalMountUnavailableError(mountName, operation, "invalid=true")
 	}
 
 	if state.probing && now.Sub(state.probeStarted) > g.probeLease {
@@ -100,11 +107,11 @@ func (g *mountGuard) begin(mountName string, invalid bool, operation string) (bo
 	}
 
 	if state.probing {
-		return false, 0, fmt.Errorf("external mount %s is being checked (%s)", mountName, operation)
+		return false, 0, externalMountUnavailableError(mountName, operation, "probe in progress")
 	}
 
 	if now.Before(state.cooldownUntil) {
-		return false, 0, fmt.Errorf("external mount %s temporarily unavailable (%s)", mountName, operation)
+		return false, 0, externalMountUnavailableError(mountName, operation, "cooldown active")
 	}
 
 	state.probing = true

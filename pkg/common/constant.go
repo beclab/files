@@ -74,10 +74,10 @@ const (
 	Paused    = "paused"
 	Resumed   = "resumed"
 
-	ActionCopy            = "copy"
-	ActionMove            = "move"
-	ActionUpload          = "upload"
-	ActionUploadFinalize  = "upload_finalize"
+	ActionCopy           = "copy"
+	ActionMove           = "move"
+	ActionUpload         = "upload"
+	ActionUploadFinalize = "upload_finalize"
 
 	AsyncFinalizeThreshold int64 = 2 * 1024 * 1024 * 1024 // 2GB
 )
@@ -128,6 +128,7 @@ var (
 	ErrorMessageWrongPassword              = "Wrong password. Please check the password and try again."
 	ErrorMessageInternalPathExists         = "Share for a path can be only one at a time."
 	ErrorMessageSyncNotSupport             = "Sync not support."
+	ErrorMessageExternalMountUnavailable   = "Mounted directory is temporarily unavailable. Please try again or remount."
 	ErrorMessageNoSpace                    = "Insufficient space on the disk, usage exceeds 85%."
 
 	CodeLinkExpired  = 559
