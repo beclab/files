@@ -27,8 +27,8 @@ struct MountedResp {
 
 struct MountReq {
     1: required string smbPath (api.body="smbPath");
-    2: required string user (api.body="user");
-    3: required string password (api.body="password");
+    2: optional string user (api.body="user");
+    3: optional string password (api.body="password");
     4: required string externalType (api.query="external_type");
 }
 

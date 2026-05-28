@@ -32,6 +32,46 @@ import (
 // peer that streams gigabytes would otherwise OOM the handler.
 const maxTerminusdResponseBytes = 4 << 20 // 4 MiB
 
+type SmbMountReq struct {
+	SmbPath  string `json:"smbPath"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+type NfsMountReq struct {
+	Server     string `json:"server"`
+	SharedPath string `json:"sharedPath"`
+	MountPath  string `json:"mountPath"`
+}
+
+func buildNfsMountReq(rawPath string) (*NfsMountReq, error) {
+	parts := strings.SplitN(strings.TrimSpace(rawPath), ":", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid nfs path: %s", rawPath)
+	}
+
+	server := strings.TrimSpace(parts[0])
+	sharedPath := strings.TrimSpace(parts[1])
+	if server == "" || sharedPath == "" {
+		return nil, fmt.Errorf("invalid nfs path: %s", rawPath)
+	}
+
+	normalizedPath := strings.Trim(sharedPath, "/")
+	mountPath := normalizedPath
+	if lastSlash := strings.LastIndex(normalizedPath, "/"); lastSlash != -1 {
+		mountPath = normalizedPath[lastSlash+1:]
+	}
+	if mountPath == "" {
+		return nil, fmt.Errorf("invalid nfs shared path: %s", sharedPath)
+	}
+
+	return &NfsMountReq{
+		Server:     server,
+		SharedPath: sharedPath,
+		MountPath:  mountPath,
+	}, nil
+}
+
 // MountedMethod .
 // @router /api/mounted/:node/ [GET]
 func MountedMethod(ctx context.Context, c *app.RequestContext) {
@@ -62,34 +102,42 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	externalType := req.ExternalType
+	externalType := strings.ToLower(strings.TrimSpace(req.ExternalType))
 	var urls []string
+	var bodyStruct interface{}
 	if externalType == "smb" {
+		if strings.TrimSpace(req.User) == "" || strings.TrimSpace(req.Password) == "" {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user and password are required for smb"})
+			return
+		}
 		urls = []string{"http://" + files.TerminusdHost + "/command/v2/mount-samba", "http://" + files.TerminusdHost + "/command/mount-samba"}
+		bodyStruct = SmbMountReq{
+			SmbPath:  req.SmbPath,
+			User:     req.User,
+			Password: req.Password,
+		}
+	} else if externalType == "nfs" {
+		urls = []string{"http://" + files.TerminusdHost + "/command/mount-nfs"}
+		nfsReq, nfsReqErr := buildNfsMountReq(req.SmbPath)
+		if nfsReqErr != nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": nfsReqErr.Error()})
+			return
+		}
+		bodyStruct = nfsReq
 	} else {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("Unsupported external type: %s", externalType)})
+		return
+	}
+
+	bodyBytes, err := json.Marshal(bodyStruct)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
 	var res map[string]interface{}
 	mounted := false
 	for _, url := range urls {
-		bodyStruct := struct {
-			SmbPath  string `json:"smbPath"`
-			User     string `json:"user"`
-			Password string `json:"password"`
-		}{
-			SmbPath:  req.SmbPath,
-			User:     req.User,
-			Password: req.Password,
-		}
-
-		bodyBytes, err := json.Marshal(bodyStruct)
-		if err != nil {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
-			return
-		}
-
 		request, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
 		if err != nil {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
@@ -141,7 +189,11 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	if !mounted {
 		// c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": "failed to mount samba"})
-		klog.Errorf("failed to mount samba")
+		klog.Errorf("failed to mount %s", externalType)
+		if res == nil {
+			c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": fmt.Sprintf("failed to mount %s", externalType)})
+			return
+		}
 	}
 
 	if int(res["code"].(float64)) != consts.StatusOK {
@@ -149,14 +201,16 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		// it as the format string would interpret stray %-directives
 		// and trigger `go vet` printf failures.
 		klog.Warningf("%s", res["message"].(string))
-		if strings.Contains(res["message"].(string), "mount error(13)") {
-			res["message"] = "Incorrect username or password"
-		}
-		if strings.Contains(res["message"].(string), "mount error(113)") {
-			res["message"] = "Unable to find suitable address"
-		}
-		if strings.Contains(res["message"].(string), "mount error(115)") {
-			res["message"] = "Cannot connect to samba server"
+		if externalType == "smb" {
+			if strings.Contains(res["message"].(string), "mount error(13)") {
+				res["message"] = "Incorrect username or password"
+			}
+			if strings.Contains(res["message"].(string), "mount error(113)") {
+				res["message"] = "Unable to find suitable address"
+			}
+			if strings.Contains(res["message"].(string), "mount error(115)") {
+				res["message"] = "Cannot connect to samba server"
+			}
 		}
 	}
 
