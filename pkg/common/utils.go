@@ -56,10 +56,6 @@ func init() {
 }
 
 func Md5File(filepath string) (string, error) {
-	if !strings.HasPrefix(filepath, RootPrefix) {
-		filepath = RootPrefix + filepath
-	}
-
 	file, err := os.Open(filepath)
 	if err != nil {
 		return "", err
