@@ -160,6 +160,12 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
+	if mounted {
+		// Mount/unmount APIs are authoritative user actions. Drop stale
+		// async-reported overlay first so a delayed invalid=true update
+		// cannot continue masking the just-updated polled state.
+		global.GlobalMounted.ClearReportedMounted()
+	}
 	global.GlobalMounted.Updated()
 
 	resp := new(external.MountResp)
@@ -288,6 +294,9 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	klog.Infoln("res:", res)
+	if response.StatusCode < 400 {
+		global.GlobalMounted.ClearReportedMounted()
+	}
 	global.GlobalMounted.Updated()
 
 	resp := new(external.UnmountResp)

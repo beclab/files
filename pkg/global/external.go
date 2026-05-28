@@ -193,6 +193,16 @@ func (m *Mount) UpdateReportedMounted(patches []*MountedPatch) {
 	m.mergeMountedLocked()
 }
 
+// ClearReportedMounted drops all reporter-pushed overlay states so callers can
+// immediately fall back to fresh polled mount data (for example right after an
+// explicit mount/unmount operation).
+func (m *Mount) ClearReportedMounted() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reportedMounted = make(map[string]*files.DiskInfo)
+	m.mergeMountedLocked()
+}
+
 func InitGlobalMounted() {
 	GlobalMounted.getMounted()
 	GlobalMounted.watchMounted()

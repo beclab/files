@@ -96,3 +96,55 @@ func TestUpdateReportedMountedAppliesExplicitZeroAndFalse(t *testing.T) {
 		t.Fatalf("explicit read_only=false should be applied")
 	}
 }
+
+func TestClearReportedMountedDropsOverlayAndKeepsPolledBase(t *testing.T) {
+	m := &Mount{
+		Mounted: make(map[string]*files.DiskInfo),
+		polledMounted: map[string]*files.DiskInfo{
+			"smb": {
+				Path:    "smb",
+				Type:    "smb",
+				Invalid: false,
+				Used:    10,
+			},
+		},
+		reportedMounted: make(map[string]*files.DiskInfo),
+	}
+	m.mergeMountedLocked()
+
+	m.UpdateReportedMounted([]*MountedPatch{
+		{
+			Path:    strPtr("smb"),
+			Invalid: boolPtr(true),
+			Used:    int64Ptr(99),
+		},
+		{
+			Path:    strPtr("stale-only"),
+			Type:    strPtr("smb"),
+			Invalid: boolPtr(true),
+		},
+	})
+
+	if got := m.Mounted["smb"]; got == nil || !got.Invalid || got.Used != 99 {
+		t.Fatalf("reported overlay should take effect before clear, got=%+v", got)
+	}
+	if _, ok := m.Mounted["stale-only"]; !ok {
+		t.Fatalf("expected reported-only entry before clear")
+	}
+
+	m.ClearReportedMounted()
+
+	got, ok := m.Mounted["smb"]
+	if !ok {
+		t.Fatalf("merged mount should still contain polled smb entry after clear")
+	}
+	if got.Invalid {
+		t.Fatalf("clear should drop reported invalid=true overlay")
+	}
+	if got.Used != 10 {
+		t.Fatalf("clear should restore polled used value, got=%d", got.Used)
+	}
+	if _, ok := m.Mounted["stale-only"]; ok {
+		t.Fatalf("clear should remove reported-only stale entry")
+	}
+}
