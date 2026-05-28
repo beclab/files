@@ -56,7 +56,7 @@ func (p *FileParam) convert(url string) (err error) {
 
 	if fileType == common.Drive {
 
-		if extend != "Home" && extend != "Data" {
+		if extend != common.Home && extend != common.Data && extend != common.Common {
 			return fmt.Errorf("invalid drive type: %s", extend)
 		}
 		p.FileType = common.Drive
@@ -132,6 +132,12 @@ func (r *FileParam) PrettyJson() string {
 
 func (r *FileParam) GetResourceUri() (string, error) {
 	if r.FileType == "drive" {
+		// drive/Common is a cluster-wide RWX volume shared across
+		// all users, mounted at COMMON_PREFIX. It does not live
+		// under the per-user userspace_pvc.
+		if r.Extend == common.Common {
+			return common.COMMON_PREFIX, nil
+		}
 		var pvc = global.GlobalData.GetPvcUser(r.Owner)
 		if pvc == "" {
 			return "", errors.New("pvc user not found")
@@ -159,6 +165,22 @@ func (r *FileParam) GetResourceUri() (string, error) {
 }
 
 func (r *FileParam) GetFileParam(uri string) error {
+	// drive/Common's mount point is a single-segment path
+	// (COMMON_PREFIX == "/appcommon"), so it has to be matched
+	// before the generic len<2 guard below.
+	if strings.HasPrefix(uri, common.COMMON_PREFIX+"/") || uri == common.COMMON_PREFIX {
+		var p = strings.TrimPrefix(uri, common.COMMON_PREFIX)
+		r.Owner = ""
+		r.FileType = common.Drive
+		r.Extend = common.Common
+		if p == "" {
+			r.Path = "/"
+		} else {
+			r.Path = p
+		}
+		return nil
+	}
+
 	var u = strings.TrimLeft(uri, "/")
 
 	var s = strings.Split(u, "/")
@@ -236,6 +258,13 @@ func (r *FileParam) IsSync() bool {
 
 func (r *FileParam) IsCache() bool {
 	return r.FileType == common.Cache
+}
+
+// IsDriveCommon reports whether this param points at the cluster-wide
+// AppCommon volume (drive/Common). Used by paste logic to bypass
+// master-only routing that exists for the per-user userspace_pvc.
+func (r *FileParam) IsDriveCommon() bool {
+	return r != nil && r.FileType == common.Drive && r.Extend == common.Common
 }
 
 func (r *FileParam) IsSystem() bool {

@@ -18,6 +18,10 @@ func (s *ExternalStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, err
 
 	klog.Infof("External - Paste, dst: %s, param: %s", dstType, common.ToJson(pasteParam))
 
+	if pasteParam.Dst.IsDriveCommon() {
+		return s.copyToCommon()
+	}
+
 	if dstType == common.Drive {
 		return s.copyToDrive()
 
@@ -36,6 +40,28 @@ func (s *ExternalStorage) Paste(pasteParam *models.PasteParam) (*tasks.Task, err
 	}
 
 	return nil, fmt.Errorf("invalid paste dst fileType: %s", dstType)
+}
+
+/**
+ * ~ copyToCommon — src=external (node local), dst=drive/Common (RWX).
+ * Route to the external src node and rsync into /appcommon.
+ */
+func (s *ExternalStorage) copyToCommon() (task *tasks.Task, err error) {
+	klog.Infof("External copyToCommon, currentnode: %s", global.CurrentNodeName)
+
+	var srcNode = s.paste.Src.Extend
+	if srcNode != global.CurrentNodeName {
+		klog.Error("not src node")
+		err = errors.New("External copyToCommon, not src node")
+		return
+	}
+
+	task = tasks.TaskManager.CreateTask(s.paste)
+	if err = task.Execute(task.Rsync); err != nil {
+		klog.Errorf("External copyToCommon error: %v", err)
+	}
+
+	return
 }
 
 /**
