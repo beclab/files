@@ -220,6 +220,7 @@ var (
 	ErrorMessageWrongPassword              = "Wrong password. Please check the password and try again."
 	ErrorMessageInternalPathExists         = "Share for a path can be only one at a time."
 	ErrorMessageSyncNotSupport             = "Sync not support."
+	ErrorMessageExternalMountUnavailable   = "Mounted directory is temporarily unavailable. Please try again or remount."
 	ErrorMessageFileShareNotSupport        = "Sharing files is not supported yet."
 	ErrorMessageNoSpace                    = "Insufficient space on the disk, usage exceeds 85%."
 

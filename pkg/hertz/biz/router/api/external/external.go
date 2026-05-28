@@ -35,6 +35,10 @@ func Register(r *server.Hertz) {
 			}
 		}
 		{
+			_mounted_states := _api.Group("/mounted_states", _mounted_statesMw()...)
+			_mounted_states.POST("/", append(_reportmountedstatesMw(), external.ReportMountedStates)...)
+		}
+		{
 			_smb_history := _api.Group("/smb_history", _smb_historyMw()...)
 			{
 				_node1 := _smb_history.Group("/:node", _node1Mw()...)

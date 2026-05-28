@@ -85,3 +85,13 @@ func _node1Mw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _mounted_statesMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _reportmountedstatesMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

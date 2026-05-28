@@ -53,7 +53,15 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 
 	klog.Infof("Posix list, user: %s, args: %s, shareId: %s, sharePath: %s", owner, fileParam.Json(), shareId, sharePath)
 
-	fileData, err := s.getFiles(fileParam, Expand, Content)
+	var (
+		fileData *files.FileInfo
+		err      error
+	)
+	if s.shouldUseFastExternalRootList(fileParam, shareId) {
+		fileData, err = s.listExternalRootFast(fileParam)
+	} else {
+		fileData, err = s.getFiles(fileParam, Expand, Content)
+	}
 	if err != nil {
 		if strings.Contains(err.Error(), "no such file or directory") {
 			if shareId == "" {
@@ -242,103 +250,105 @@ func (s *PosixStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan s
 }
 
 func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
-	var user = contextArgs.FileParam.Owner
-	var fileParam = contextArgs.FileParam
+	return runWithExternalMountGuard(contextArgs.FileParam, "create", func() ([]byte, error) {
+		var user = contextArgs.FileParam.Owner
+		var fileParam = contextArgs.FileParam
 
-	klog.Infof("Posix create, user: %s, param: %s", user, common.ToJson(contextArgs))
+		klog.Infof("Posix create, user: %s, param: %s", user, common.ToJson(contextArgs))
 
-	dstFileOrDirName, isFile := files.GetFileNameFromPath(fileParam.Path)
-	dstPrefixPath := files.GetPrefixPath(fileParam.Path)
-	_, dstFileExt := common.SplitNameExt(dstFileOrDirName)
+		dstFileOrDirName, isFile := files.GetFileNameFromPath(fileParam.Path)
+		dstPrefixPath := files.GetPrefixPath(fileParam.Path)
+		_, dstFileExt := common.SplitNameExt(dstFileOrDirName)
 
-	resourceUri, err := contextArgs.FileParam.GetResourceUri()
-	if err != nil {
-		return nil, err
-	}
-
-	mode, err := strconv.ParseUint(contextArgs.QueryParam.FileMode, 8, 32)
-	if err != nil {
-		mode = 0755
-	}
-
-	fileMode := os.FileMode(mode)
-
-	var afs = afero.NewOsFs()
-	entries, err := afero.ReadDir(afs, filepath.Join(resourceUri, dstPrefixPath))
-	if err != nil {
-		klog.Errorf("Posix create read dir error: %v", err)
-		entries = []os.FileInfo{}
-	}
-
-	var dupNames []string
-	for _, entry := range entries {
-		infoName := entry.Name()
-		if isFile {
-			_, infoExt := common.SplitNameExt(infoName)
-			if infoExt != dstFileExt {
-				continue
-			}
-			dupNames = append(dupNames, infoName)
-		} else {
-			if strings.Contains(infoName, dstFileOrDirName) {
-				dupNames = append(dupNames, infoName)
-			}
-		}
-	}
-
-	klog.Infof("Posix create, dupNames %d: %+v", len(dupNames), dupNames)
-
-	newName := files.GenerateDupName(dupNames, dstFileOrDirName, isFile)
-	if newName == "" {
-		newName = dstFileOrDirName
-	}
-
-	createPath := filepath.Join(resourceUri, dstPrefixPath, newName)
-	klog.Infof("Posix create, create path: %s", createPath)
-
-	if isFile {
-		parentDir := filepath.Dir(createPath)
-		if err = files.MkdirAllWithChown(afs, parentDir, fileMode, false, -1, -1); err != nil {
-			klog.Errorf("Parent dir create error: %v", err)
-			return nil, err
-		}
-
-		var file *os.File
-		file, err = os.OpenFile(createPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fileMode)
+		resourceUri, err := contextArgs.FileParam.GetResourceUri()
 		if err != nil {
-			klog.Errorf("File create error: %v", err)
 			return nil, err
 		}
-		defer file.Close()
 
-		if contextArgs.QueryParam.Body != nil {
-			_, err = files.WriteFile(createPath, contextArgs.QueryParam.Body)
+		mode, err := strconv.ParseUint(contextArgs.QueryParam.FileMode, 8, 32)
+		if err != nil {
+			mode = 0755
+		}
+
+		fileMode := os.FileMode(mode)
+
+		var afs = afero.NewOsFs()
+		entries, err := afero.ReadDir(afs, filepath.Join(resourceUri, dstPrefixPath))
+		if err != nil {
+			klog.Errorf("Posix create read dir error: %v", err)
+			entries = []os.FileInfo{}
+		}
+
+		var dupNames []string
+		for _, entry := range entries {
+			infoName := entry.Name()
+			if isFile {
+				_, infoExt := common.SplitNameExt(infoName)
+				if infoExt != dstFileExt {
+					continue
+				}
+				dupNames = append(dupNames, infoName)
+			} else {
+				if strings.Contains(infoName, dstFileOrDirName) {
+					dupNames = append(dupNames, infoName)
+				}
+			}
+		}
+
+		klog.Infof("Posix create, dupNames %d: %+v", len(dupNames), dupNames)
+
+		newName := files.GenerateDupName(dupNames, dstFileOrDirName, isFile)
+		if newName == "" {
+			newName = dstFileOrDirName
+		}
+
+		createPath := filepath.Join(resourceUri, dstPrefixPath, newName)
+		klog.Infof("Posix create, create path: %s", createPath)
+
+		if isFile {
+			parentDir := filepath.Dir(createPath)
+			if err = files.MkdirAllWithChown(afs, parentDir, fileMode, false, -1, -1); err != nil {
+				klog.Errorf("Parent dir create error: %v", err)
+				return nil, err
+			}
+
+			var file *os.File
+			file, err = os.OpenFile(createPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fileMode)
 			if err != nil {
-				klog.Errorf("File write error: %v", err)
+				klog.Errorf("File create error: %v", err)
+				return nil, err
+			}
+			defer file.Close()
+
+			if contextArgs.QueryParam.Body != nil {
+				_, err = files.WriteFile(createPath, contextArgs.QueryParam.Body)
+				if err != nil {
+					klog.Errorf("File write error: %v", err)
+					return nil, err
+				}
+			}
+
+			uid, gid, e := files.GetUidGid(afs, parentDir)
+			if e != nil {
+				klog.Errorf("Get uid gid error: %v", e)
+				return nil, e
+			}
+			if e = files.Chown(afs, createPath, uid, gid); e != nil {
+				klog.Errorf("Chown file error: %v", e)
+				return nil, e
+			}
+		} else {
+			if !strings.HasSuffix(createPath, "/") {
+				createPath += "/"
+			}
+			if err = files.MkdirAllWithChown(afs, createPath, fileMode, false, -1, -1); err != nil {
+				klog.Errorf("Directory create error: %v", err)
 				return nil, err
 			}
 		}
 
-		uid, gid, e := files.GetUidGid(afs, parentDir)
-		if e != nil {
-			klog.Errorf("Get uid gid error: %v", e)
-			return nil, e
-		}
-		if e = files.Chown(afs, createPath, uid, gid); e != nil {
-			klog.Errorf("Chown file error: %v", e)
-			return nil, e
-		}
-	} else {
-		if !strings.HasSuffix(createPath, "/") {
-			createPath += "/"
-		}
-		if err = files.MkdirAllWithChown(afs, createPath, fileMode, false, -1, -1); err != nil {
-			klog.Errorf("Directory create error: %v", err)
-			return nil, err
-		}
-	}
-
-	return nil, nil
+		return nil, nil
+	})
 }
 
 func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, error) {
@@ -373,29 +383,35 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 		return common.ToBytes(invalidPaths), fmt.Errorf("invalid path")
 	}
 
-	for _, dirent := range dirents {
-		d := strings.TrimSpace(dirent)
-		direntPath := fileData.Path + strings.TrimLeft(d, "/")
+	_, err = runWithExternalMountGuard(fileParam, "delete_remove", func() (struct{}, error) {
+		for _, dirent := range dirents {
+			d := strings.TrimSpace(dirent)
+			direntPath := fileData.Path + strings.TrimLeft(d, "/")
 
-		// Pre-stat so missing dirents surface as errors instead of
-		// RemoveAll's silent success. Lstat keeps dangling symlinks deletable.
-		var statErr error
-		if lstater, ok := fileData.Fs.(afero.Lstater); ok {
-			_, _, statErr = lstater.LstatIfPossible(direntPath)
-		} else {
-			_, statErr = fileData.Fs.Stat(direntPath)
-		}
-		if statErr != nil {
-			klog.Errorf("Posix delete, stat dirent error: %v, user: %s, path: %s", statErr, user, direntPath)
-			deleteFailedPaths = append(deleteFailedPaths, dirent)
-			continue
-		}
+			// Pre-stat so missing dirents surface as errors instead of
+			// RemoveAll's silent success. Lstat keeps dangling symlinks deletable.
+			var statErr error
+			if lstater, ok := fileData.Fs.(afero.Lstater); ok {
+				_, _, statErr = lstater.LstatIfPossible(direntPath)
+			} else {
+				_, statErr = fileData.Fs.Stat(direntPath)
+			}
+			if statErr != nil {
+				klog.Errorf("Posix delete, stat dirent error: %v, user: %s, path: %s", statErr, user, direntPath)
+				deleteFailedPaths = append(deleteFailedPaths, dirent)
+				continue
+			}
 
-		klog.Infof("Posix delete, remove dirent path: %s", direntPath)
-		if err = fileData.Fs.RemoveAll(direntPath); err != nil {
-			klog.Errorf("Posix delete, remove path error: %v, user: %s, path: %s", err, user, direntPath)
-			deleteFailedPaths = append(deleteFailedPaths, dirent)
+			klog.Infof("Posix delete, remove dirent path: %s", direntPath)
+			if err = fileData.Fs.RemoveAll(direntPath); err != nil {
+				klog.Errorf("Posix delete, remove path error: %v, user: %s, path: %s", err, user, direntPath)
+				deleteFailedPaths = append(deleteFailedPaths, dirent)
+			}
 		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// data shape matches sync/cloud: list of failed dirents + fixed message.
@@ -408,122 +424,125 @@ func (s *PosixStorage) Delete(fileDeleteArg *models.FileDeleteArgs) ([]byte, err
 }
 
 func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, error) {
+	return runWithExternalMountGuard(contextArgs.FileParam, "rename", func() ([]byte, error) {
+		var fileParam = contextArgs.FileParam
+		var owner = fileParam.Owner
 
-	var fileParam = contextArgs.FileParam
-	var owner = fileParam.Owner
-
-	if fileParam.Path == "/" {
-		return nil, fmt.Errorf("path invalid, path: %s", fileParam.Path)
-	}
-
-	var uri, err = fileParam.GetResourceUri()
-	if err != nil {
-		return nil, err
-	}
-
-	klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, common.ToJson(contextArgs))
-
-	var srcName, isSrcFile = files.GetFileNameFromPath(fileParam.Path)
-	srcName, err = url.PathUnescape(srcName)
-	if err != nil {
-		return nil, err
-	}
-	dstName, err := url.PathUnescape(contextArgs.QueryParam.Destination) // no /
-	if err != nil {
-		return nil, err
-	}
-
-	klog.Infof("Posix rename, user: %s, uri: %s, isFile: %v, src: %s, dst: %s, args: %s", owner, uri, isSrcFile, srcName, dstName, common.ToJson(contextArgs))
-
-	if srcName == dstName {
-		return nil, nil
-	}
-
-	// NOTE: previously this block computed srcFilenamePrefix /
-	// dstFilenamePrefix (name minus extension) for filename
-	// collision handling, but the values were never consumed by
-	// the rest of the function. Removed to keep the lint baseline
-	// clean. If extension-aware collision rename is added later,
-	// reintroduce these locals together with the consumer.
-
-	var afs = afero.NewOsFs()
-	var srcPrefixPath = files.GetPrefixPath(fileParam.Path)
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:       afero.NewBasePathFs(afs, uri),
-		FsType:   fileParam.FileType,
-		FsExtend: fileParam.Extend,
-		Path:     srcPrefixPath,
-		Expand:   Expand,
-		Content:  NoContent,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if file == nil || file.Items == nil || len(file.Items) == 0 {
-		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
-	}
-
-	var existsName bool
-	for _, item := range file.Items {
-		if item.Name == dstName {
-			existsName = true
-			break
+		if fileParam.Path == "/" {
+			return nil, fmt.Errorf("path invalid, path: %s", fileParam.Path)
 		}
-	}
 
-	if existsName {
-		return nil, fmt.Errorf("The name '%s' already exists. Please choose another name.", dstName)
-	}
+		var uri, err = fileParam.GetResourceUri()
+		if err != nil {
+			return nil, err
+		}
 
-	var rSrcPath = uri + fileParam.Path
-	var rDstPath = uri + srcPrefixPath + dstName
+		klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, common.ToJson(contextArgs))
 
-	klog.Infof("Posix rename, src: %s, dst: %s", rSrcPath, rDstPath)
+		var srcName, isSrcFile = files.GetFileNameFromPath(fileParam.Path)
+		srcName, err = url.PathUnescape(srcName)
+		if err != nil {
+			return nil, err
+		}
+		dstName, err := url.PathUnescape(contextArgs.QueryParam.Destination) // no /
+		if err != nil {
+			return nil, err
+		}
 
-	if err = afs.Rename(rSrcPath, rDstPath); err != nil {
-		return nil, common.SanitizeFsError(err)
-	}
+		klog.Infof("Posix rename, user: %s, uri: %s, isFile: %v, src: %s, dst: %s, args: %s", owner, uri, isSrcFile, srcName, dstName, common.ToJson(contextArgs))
 
-	return nil, nil
+		if srcName == dstName {
+			return nil, nil
+		}
+
+		// NOTE: previously this block computed srcFilenamePrefix /
+		// dstFilenamePrefix (name minus extension) for filename
+		// collision handling, but the values were never consumed by
+		// the rest of the function. Removed to keep the lint baseline
+		// clean. If extension-aware collision rename is added later,
+		// reintroduce these locals together with the consumer.
+
+		var afs = afero.NewOsFs()
+		var srcPrefixPath = files.GetPrefixPath(fileParam.Path)
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:       afero.NewBasePathFs(afs, uri),
+			FsType:   fileParam.FileType,
+			FsExtend: fileParam.Extend,
+			Path:     srcPrefixPath,
+			Expand:   Expand,
+			Content:  NoContent,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if file == nil || file.Items == nil || len(file.Items) == 0 {
+			return nil, fmt.Errorf("file %s not exists", fileParam.Path)
+		}
+
+		var existsName bool
+		for _, item := range file.Items {
+			if item.Name == dstName {
+				existsName = true
+				break
+			}
+		}
+
+		if existsName {
+			return nil, fmt.Errorf("The name '%s' already exists. Please choose another name.", dstName)
+		}
+
+		var rSrcPath = uri + fileParam.Path
+		var rDstPath = uri + srcPrefixPath + dstName
+
+		klog.Infof("Posix rename, src: %s, dst: %s", rSrcPath, rDstPath)
+
+		if err = afs.Rename(rSrcPath, rDstPath); err != nil {
+			return nil, common.SanitizeFsError(err)
+		}
+
+		return nil, nil
+	})
 }
 
 func (s *PosixStorage) Edit(contextArgs *models.HttpContextArgs) (*models.EditHandlerResponse, error) {
-	var fileParam = contextArgs.FileParam
-	var user = fileParam.Owner
+	return runWithExternalMountGuard(contextArgs.FileParam, "edit", func() (*models.EditHandlerResponse, error) {
+		var fileParam = contextArgs.FileParam
+		var user = fileParam.Owner
 
-	klog.Infof("Posix edit, user: %s, path: %s, param: %s", user, fileParam.Path, common.ParseString(fileParam))
+		klog.Infof("Posix edit, user: %s, path: %s, param: %s", user, fileParam.Path, common.ParseString(fileParam))
 
-	fileName, isFile := files.GetFileNameFromPath(fileParam.Path)
-	if !isFile {
-		return nil, fmt.Errorf("path %s is not file", fileParam.Path)
-	}
-	_ = fileName
+		fileName, isFile := files.GetFileNameFromPath(fileParam.Path)
+		if !isFile {
+			return nil, fmt.Errorf("path %s is not file", fileParam.Path)
+		}
+		_ = fileName
 
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		return nil, err
-	}
+		uri, err := fileParam.GetResourceUri()
+		if err != nil {
+			return nil, err
+		}
 
-	filePath := uri + fileParam.Path
+		filePath := uri + fileParam.Path
 
-	klog.Infof("Posix edit, user: %s, file path: %s", user, filePath)
+		klog.Infof("Posix edit, user: %s, file path: %s", user, filePath)
 
-	exists := files.FilePathExists(filePath)
-	if !exists {
-		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
-	}
+		exists := files.FilePathExists(filePath)
+		if !exists {
+			return nil, fmt.Errorf("file %s not exists", fileParam.Path)
+		}
 
-	info, err := files.WriteFile(filePath, contextArgs.QueryParam.Body)
-	if err != nil {
-		klog.Errorf("Posix edit, write file %s failed: %v", filePath, err)
-		return nil, err
-	}
-	etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
+		info, err := files.WriteFile(filePath, contextArgs.QueryParam.Body)
+		if err != nil {
+			klog.Errorf("Posix edit, write file %s failed: %v", filePath, err)
+			return nil, err
+		}
+		etag := fmt.Sprintf(`"%x%x"`, info.ModTime().UnixNano(), info.Size())
 
-	return &models.EditHandlerResponse{
-		Etag: etag,
-	}, nil
+		return &models.EditHandlerResponse{
+			Etag: etag,
+		}, nil
+	})
 }
 
 func (s *PosixStorage) generateListingData(fs afero.Fs, fileParam *models.FileParam, listing *files.Listing, stopChan <-chan struct{}, dataChan chan<- string) {
@@ -573,163 +592,262 @@ func (s *PosixStorage) isExternal(fileType string, extend string) bool {
 	return (fileType == common.External || fileType == common.Usb || fileType == common.Hdd || fileType == common.Internal || fileType == common.Smb) && extend != ""
 }
 
-func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content bool) (*files.FileInfo, error) {
-	var resourceUri, err = fileParam.GetResourceUri()
+func getExternalMountName(path string) (string, bool) {
+	trimmed := strings.Trim(strings.TrimSpace(path), "/")
+	if trimmed == "" {
+		return "", false
+	}
+	parts := strings.SplitN(trimmed, "/", 2)
+	if parts[0] == "" {
+		return "", false
+	}
+	return parts[0], true
+}
+
+func (s *PosixStorage) shouldUseFastExternalRootList(fileParam *models.FileParam, shareId string) bool {
+	if shareId != "" || fileParam == nil || fileParam.FileType != common.External {
+		return false
+	}
+	_, hasMountName := getExternalMountName(fileParam.Path)
+	return !hasMountName
+}
+
+// listExternalRootFast lists External root directory entries without
+// deep per-entry filesystem inspection, so a stale mountpoint cannot
+// block the whole root listing response.
+func (s *PosixStorage) listExternalRootFast(fileParam *models.FileParam) (*files.FileInfo, error) {
+	resourceURI, err := fileParam.GetResourceUri()
 	if err != nil {
 		return nil, err
 	}
 
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:       afero.NewBasePathFs(afero.NewOsFs(), resourceUri),
+	targetPath := filepath.Join(resourceURI, strings.TrimPrefix(fileParam.Path, "/"))
+	entries, err := os.ReadDir(targetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	rootPath := fileParam.Path
+	if rootPath == "" {
+		rootPath = "/"
+	}
+	root := &files.FileInfo{
 		FsType:   fileParam.FileType,
 		FsExtend: fileParam.Extend,
-		Path:     fileParam.Path,
-		Expand:   expand,
-		Content:  content,
-	})
-	if err != nil {
-		return nil, err
+		Path:     rootPath,
+		Name:     rootPath,
+		IsDir:    true,
+		Listing: &files.Listing{
+			Items:   make([]*files.FileInfo, 0, len(entries)),
+			Sorting: files.DefaultSorting,
+		},
+	}
+	if rootPath == "/" {
+		root.Name = ""
 	}
 
-	if file == nil {
-		return nil, fmt.Errorf("file %s not exists", fileParam.Path)
-	}
+	for _, entry := range entries {
+		modeType := entry.Type()
+		// Use dirent type bits only; avoid entry.Info()/Stat on each child.
+		isDir := modeType.IsDir() || modeType == 0
 
-	if s.isExternal(fileParam.FileType, fileParam.Extend) {
-		// klog.Infof("getFiles fileType: %s, extend: %s", fileParam.FileType, fileParam.Extend)
-		file.ExternalType = global.GlobalMounted.CheckExternalType(file.Path, file.IsDir)
-		if file.IsDir && file.Listing != nil {
-			for _, f := range file.Items {
-				f.ExternalType = global.GlobalMounted.CheckExternalType(f.Path, f.IsDir)
+		itemPath := filepath.ToSlash(filepath.Join(rootPath, entry.Name()))
+		if !strings.HasPrefix(itemPath, "/") {
+			itemPath = "/" + itemPath
+		}
+		if isDir && !strings.HasSuffix(itemPath, "/") {
+			itemPath += "/"
+		}
+
+		item := &files.FileInfo{
+			FsType:   fileParam.FileType,
+			FsExtend: fileParam.Extend,
+			Path:     itemPath,
+			Name:     entry.Name(),
+			IsDir:    isDir,
+		}
+		if mounted, ok := global.GlobalMounted.GetMountedByPath(entry.Name()); ok && mounted.Type != "" {
+			item.ExternalType = mounted.Type
+		} else {
+			item.ExternalType = global.GlobalMounted.CheckExternalType(item.Path, item.IsDir)
+		}
+
+		if item.IsDir {
+			root.Listing.NumDirs++
+		} else {
+			root.Listing.NumFiles++
+		}
+		root.Listing.Items = append(root.Listing.Items, item)
+	}
+	root.Listing.NumTotalFiles = len(root.Listing.Items)
+
+	return root, nil
+}
+
+func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content bool) (*files.FileInfo, error) {
+	return runWithExternalMountGuard(fileParam, "get_files", func() (*files.FileInfo, error) {
+		var resourceUri, err = fileParam.GetResourceUri()
+		if err != nil {
+			return nil, err
+		}
+
+		file, err := files.NewFileInfo(files.FileOptions{
+			Fs:       afero.NewBasePathFs(afero.NewOsFs(), resourceUri),
+			FsType:   fileParam.FileType,
+			FsExtend: fileParam.Extend,
+			Path:     fileParam.Path,
+			Expand:   expand,
+			Content:  content,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if file == nil {
+			return nil, fmt.Errorf("file %s not exists", fileParam.Path)
+		}
+
+		if s.isExternal(fileParam.FileType, fileParam.Extend) {
+			// klog.Infof("getFiles fileType: %s, extend: %s", fileParam.FileType, fileParam.Extend)
+			file.ExternalType = global.GlobalMounted.CheckExternalType(file.Path, file.IsDir)
+			if file.IsDir && file.Listing != nil {
+				for _, f := range file.Items {
+					f.ExternalType = global.GlobalMounted.CheckExternalType(f.Path, f.IsDir)
+				}
 			}
 		}
-	}
 
-	return file, nil
-
+		return file, nil
+	})
 }
 
 /**
  * UploadLink
  */
 func (s *PosixStorage) UploadLink(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	var user = fileUploadArg.FileParam.Owner
-	var node = fileUploadArg.Node
-	var from = fileUploadArg.From
+	return runWithExternalMountGuard(fileUploadArg.FileParam, "upload_link", func() ([]byte, error) {
+		var user = fileUploadArg.FileParam.Owner
+		var node = fileUploadArg.Node
+		var from = fileUploadArg.From
 
-	klog.Infof("Posix uploadLink, user: %s, node: %s, from: %s, share: %s %s %s, param: %s, totalSize: %dB",
-		user, node, from,
-		fileUploadArg.Share, fileUploadArg.ShareType, fileUploadArg.ShareBy,
-		common.ToJson(fileUploadArg.FileParam), fileUploadArg.TotalSize)
+		klog.Infof("Posix uploadLink, user: %s, node: %s, from: %s, share: %s %s %s, param: %s, totalSize: %dB",
+			user, node, from,
+			fileUploadArg.Share, fileUploadArg.ShareType, fileUploadArg.ShareBy,
+			common.ToJson(fileUploadArg.FileParam), fileUploadArg.TotalSize)
 
-	if fileUploadArg.TotalSize != 0 {
-		if fileUploadArg.FileParam.IsSystem() {
-			_, err := common.CheckDiskSpace(common.RootPrefix, fileUploadArg.TotalSize, true)
-			if err != nil {
-				return nil, err
-			}
-		} else if fileUploadArg.FileParam.FileType == common.External {
-			diskCheckPath, err := fileUploadArg.FileParam.GetDiskCheckPath()
-			if err != nil {
-				return nil, fmt.Errorf("get disk check path error: %v", err)
-			}
-			_, err = common.CheckDiskSpace(diskCheckPath, fileUploadArg.TotalSize, false)
-			if err != nil {
-				return nil, err
+		if fileUploadArg.TotalSize != 0 {
+			if fileUploadArg.FileParam.IsSystem() {
+				_, err := common.CheckDiskSpace(common.RootPrefix, fileUploadArg.TotalSize, true)
+				if err != nil {
+					return nil, err
+				}
+			} else if fileUploadArg.FileParam.FileType == common.External {
+				diskCheckPath, err := fileUploadArg.FileParam.GetDiskCheckPath()
+				if err != nil {
+					return nil, fmt.Errorf("get disk check path error: %v", err)
+				}
+				_, err = common.CheckDiskSpace(diskCheckPath, fileUploadArg.TotalSize, false)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
-	}
 
-	data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
+		data, err := upload.HandleUploadLink(fileUploadArg.FileParam, fileUploadArg.From)
 
-	klog.Infof("Posix uploadLink, done! data: %s", string(data))
+		klog.Infof("Posix uploadLink, done! data: %s", string(data))
 
-	return data, err
+		return data, err
+	})
 }
 
 /**
  * UploadedBytes
  */
 func (s *PosixStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	var node = fileUploadArg.Node
-	var user = fileUploadArg.FileParam.Owner
-	var identy = fileUploadArg.Identy
-	var ua = fileUploadArg.UserAgentHash
+	return runWithExternalMountGuard(fileUploadArg.FileParam, "uploaded_bytes", func() ([]byte, error) {
+		var node = fileUploadArg.Node
+		var user = fileUploadArg.FileParam.Owner
+		var identy = fileUploadArg.Identy
+		var ua = fileUploadArg.UserAgentHash
 
-	klog.Infof("Posix uploadBytes, user: %s, node: %s, identy: %s, ua: %s, share: %s %s, param: %s", user, node, identy, ua, fileUploadArg.Share, fileUploadArg.ShareType, common.ToJson(fileUploadArg.FileParam))
+		klog.Infof("Posix uploadBytes, user: %s, node: %s, identy: %s, ua: %s, share: %s %s, param: %s", user, node, identy, ua, fileUploadArg.Share, fileUploadArg.ShareType, common.ToJson(fileUploadArg.FileParam))
 
-	data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName, identy, ua)
+		data, err := upload.HandleUploadedBytes(fileUploadArg.FileParam, fileUploadArg.FileName, identy, ua)
 
-	klog.Infof("Posix uploadBytes, done! data: %s", string(data))
+		klog.Infof("Posix uploadBytes, done! data: %s", string(data))
 
-	return data, err
+		return data, err
+	})
 }
 
 /**
  * UploadChunks
  */
 func (s *PosixStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
-	var user = fileUploadArg.FileParam.Owner
-	var chunkInfo = fileUploadArg.ChunkInfo
-	var uploadId = fileUploadArg.UploadId
-	var identy = chunkInfo.ResumableIdenty
-	var ua = fileUploadArg.UserAgentHash
+	return runWithExternalMountGuard(fileUploadArg.FileParam, "upload_chunks", func() ([]byte, error) {
+		var user = fileUploadArg.FileParam.Owner
+		var chunkInfo = fileUploadArg.ChunkInfo
+		var uploadId = fileUploadArg.UploadId
+		var identy = chunkInfo.ResumableIdenty
+		var ua = fileUploadArg.UserAgentHash
 
-	klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby)
-	//klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s, disk usage: %f", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby, global.GlobalMounted.Usage)
-	//
-	//if global.GlobalMounted.Usage >= common.FreeLimit {
-	//	return nil, errors.New(common.ErrorMessageNoSpace)
-	//}
+		klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby)
+		//klog.Infof("Posix uploadChunks, user: %s, uploadId: %s, identy: %s, ua: %s, param: %s, parentDir: %s, share: %s %s, disk usage: %f", user, uploadId, identy, ua, common.ToJson(fileUploadArg.FileParam), chunkInfo.ParentDir, chunkInfo.Share, chunkInfo.Shareby, global.GlobalMounted.Usage)
+		//
+		//if global.GlobalMounted.Usage >= common.FreeLimit {
+		//	return nil, errors.New(common.ErrorMessageNoSpace)
+		//}
 
-	_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
+		_, fileInfo, err := upload.HandleUploadChunks(fileUploadArg.FileParam, fileUploadArg.UploadId, *chunkInfo, ua, fileUploadArg.Ranges)
 
-	if err != nil {
-		return nil, err
-	}
-
-	if fileInfo == nil {
-		return common.ToBytes(&upload.FileUploadSucced{Success: true}), nil
-	}
-
-	// Large file: run MoveFileByInfo asynchronously via a task so the
-	// HTTP response is sent before the platform proxy timeout fires.
-	if fileInfo.FileInfo != nil && fileInfo.FileInfo.FileSize >= common.AsyncFinalizeThreshold {
-		taskFileParam := &models.FileParam{
-			Owner:    fileUploadArg.FileParam.Owner,
-			FileType: fileUploadArg.FileParam.FileType,
-			Extend:   fileUploadArg.FileParam.Extend,
-			Path:     fileUploadArg.FileParam.Path + chunkInfo.ResumableRelativePath,
+		if err != nil {
+			return nil, err
 		}
-		taskDisplayParam := taskFileParam
-		if chunkInfo.Share != "" && chunkInfo.SharebyPath != "" {
-			if sp, err := models.CreateFileParam(user, chunkInfo.SharebyPath+chunkInfo.ResumableRelativePath); err == nil {
-				taskDisplayParam = sp
+
+		if fileInfo == nil {
+			return common.ToBytes(&upload.FileUploadSucced{Success: true}), nil
+		}
+
+		// Large file: run MoveFileByInfo asynchronously via a task so the
+		// HTTP response is sent before the platform proxy timeout fires.
+		if fileInfo.FileInfo != nil && fileInfo.FileInfo.FileSize >= common.AsyncFinalizeThreshold {
+			taskFileParam := &models.FileParam{
+				Owner:    fileUploadArg.FileParam.Owner,
+				FileType: fileUploadArg.FileParam.FileType,
+				Extend:   fileUploadArg.FileParam.Extend,
+				Path:     fileUploadArg.FileParam.Path + chunkInfo.ResumableRelativePath,
 			}
+			taskDisplayParam := taskFileParam
+			if chunkInfo.Share != "" && chunkInfo.SharebyPath != "" {
+				if sp, err := models.CreateFileParam(user, chunkInfo.SharebyPath+chunkInfo.ResumableRelativePath); err == nil {
+					taskDisplayParam = sp
+				}
+			}
+			uploadParam := &models.PasteParam{
+				Owner:  user,
+				Action: common.ActionUploadFinalize,
+				Src:    taskDisplayParam,
+				Dst:    taskDisplayParam,
+			}
+			task := tasks.TaskManager.CreateTask(uploadParam)
+			task.SetTotalSize(fileInfo.FileInfo.FileSize)
+			task.ExecuteAsync(task.UploadFinalizePosix(&tasks.PosixFinalizeParams{
+				Info:            *fileInfo.FileInfo,
+				UploadTempPath:  fileInfo.UploadTempPath,
+				InnerIdentifier: fileInfo.Id,
+				FileParam:       fileUploadArg.FileParam,
+				ResumableInfo:   chunkInfo,
+			}))
+			fileInfo.TaskId = task.Id()
+			klog.Infof("Posix uploadChunks, large file, async finalize task: %s", fileInfo.TaskId)
 		}
-		uploadParam := &models.PasteParam{
-			Owner:  user,
-			Action: common.ActionUploadFinalize,
-			Src:    taskDisplayParam,
-			Dst:    taskDisplayParam,
-		}
-		task := tasks.TaskManager.CreateTask(uploadParam)
-		task.SetTotalSize(fileInfo.FileInfo.FileSize)
-		task.ExecuteAsync(task.UploadFinalizePosix(&tasks.PosixFinalizeParams{
-			Info:            *fileInfo.FileInfo,
-			UploadTempPath:  fileInfo.UploadTempPath,
-			InnerIdentifier: fileInfo.Id,
-			FileParam:       fileUploadArg.FileParam,
-			ResumableInfo:   chunkInfo,
-		}))
-		fileInfo.TaskId = task.Id()
-		klog.Infof("Posix uploadChunks, large file, async finalize task: %s", fileInfo.TaskId)
-	}
 
-	klog.Infof("Posix uploadChunks, done! data: %s", common.ToJson(fileInfo))
+		klog.Infof("Posix uploadChunks, done! data: %s", common.ToJson(fileInfo))
 
-	var result []*upload.FileUploadState
-	result = append(result, fileInfo)
+		var result []*upload.FileUploadState
+		result = append(result, fileInfo)
 
-	return common.ToBytes(result), err
+		return common.ToBytes(result), err
+	})
 }

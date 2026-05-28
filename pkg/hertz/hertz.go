@@ -32,7 +32,7 @@ const hertzExitWait = 20 * time.Second
 // transport has stopped accepting new work. This sequencing matters: it
 // keeps redis/db reachable while the last in-flight requests finish.
 func HertzServer(cfg *common.Server, coord *lifecycle.Coordinator) {
-	addr := "127.0.0.1"
+	addr := "0.0.0.0"
 	port := "8080"
 	if cfg != nil {
 		if cfg.Address != "" {

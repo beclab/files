@@ -21,7 +21,12 @@ var (
 var externalWatcher *fsnotify.Watcher = nil
 
 type Mount struct {
+	// Mounted is the final merged view exposed to callers.
 	Mounted map[string]*files.DiskInfo
+	// polledMounted keeps the latest snapshot from olaresd pull.
+	polledMounted map[string]*files.DiskInfo
+	// reportedMounted keeps the latest snapshot from ReportMountedStates.
+	reportedMounted map[string]*files.DiskInfo
 	//Usage   float64
 	//Free    uint64
 	mu sync.RWMutex
@@ -33,10 +38,169 @@ type MountedDevice struct {
 	Message *string           `json:"message,omitempty"`
 }
 
+// MountedPatch preserves field presence from /api/mounted_states payload.
+// A nil pointer means the field was not provided by reporter.
+type MountedPatch struct {
+	Type              *string  `json:"type"`
+	Path              *string  `json:"path"`
+	Fstype            *string  `json:"fstype"`
+	Total             *int64   `json:"total"`
+	Free              *int64   `json:"free"`
+	Used              *int64   `json:"used"`
+	UsedPercent       *float64 `json:"usedPercent"`
+	InodesTotal       *int64   `json:"inodesTotal"`
+	InodesUsed        *int64   `json:"inodesUsed"`
+	InodesFree        *int64   `json:"inodesFree"`
+	InodesUsedPercent *float64 `json:"inodesUsedPercent"`
+	ReadOnly          *bool    `json:"read_only"`
+	Invalid           *bool    `json:"invalid"`
+	IDSerial          *string  `json:"id_serial"`
+	IDSerialShort     *string  `json:"id_serial_short"`
+	PartitionUUID     *string  `json:"partition_uuid"`
+}
+
+func (p *MountedPatch) key() (string, bool) {
+	if p == nil || p.Path == nil {
+		return "", false
+	}
+	path := strings.TrimSpace(*p.Path)
+	if path == "" {
+		return "", false
+	}
+	return path, true
+}
+
+func (p *MountedPatch) applyTo(dst *files.DiskInfo) {
+	if p == nil || dst == nil {
+		return
+	}
+	if p.Type != nil {
+		dst.Type = *p.Type
+	}
+	if p.Path != nil {
+		dst.Path = *p.Path
+	}
+	if p.Fstype != nil {
+		dst.Fstype = *p.Fstype
+	}
+	if p.Total != nil {
+		dst.Total = *p.Total
+	}
+	if p.Free != nil {
+		dst.Free = *p.Free
+	}
+	if p.Used != nil {
+		dst.Used = *p.Used
+	}
+	if p.UsedPercent != nil {
+		dst.UsedPercent = *p.UsedPercent
+	}
+	if p.InodesTotal != nil {
+		dst.InodesTotal = *p.InodesTotal
+	}
+	if p.InodesUsed != nil {
+		dst.InodesUsed = *p.InodesUsed
+	}
+	if p.InodesFree != nil {
+		dst.InodesFree = *p.InodesFree
+	}
+	if p.InodesUsedPercent != nil {
+		dst.InodesUsedPercent = *p.InodesUsedPercent
+	}
+	if p.ReadOnly != nil {
+		readOnly := *p.ReadOnly
+		dst.ReadOnly = &readOnly
+	}
+	if p.Invalid != nil {
+		dst.Invalid = *p.Invalid
+	}
+	if p.IDSerial != nil {
+		dst.IDSerial = *p.IDSerial
+	}
+	if p.IDSerialShort != nil {
+		dst.IDSerialShort = *p.IDSerialShort
+	}
+	if p.PartitionUUID != nil {
+		dst.PartitionUUID = *p.PartitionUUID
+	}
+}
+
 func init() {
 	GlobalMounted = &Mount{
-		Mounted: make(map[string]*files.DiskInfo),
+		Mounted:         make(map[string]*files.DiskInfo),
+		polledMounted:   make(map[string]*files.DiskInfo),
+		reportedMounted: make(map[string]*files.DiskInfo),
 	}
+}
+
+func cloneDiskInfo(d *files.DiskInfo) *files.DiskInfo {
+	if d == nil {
+		return nil
+	}
+	cloned := *d
+	return &cloned
+}
+
+func buildMountedMap(disks []*files.DiskInfo) map[string]*files.DiskInfo {
+	mounted := make(map[string]*files.DiskInfo, len(disks))
+	for _, d := range disks {
+		if d == nil || d.Path == "" {
+			continue
+		}
+		mounted[d.Path] = cloneDiskInfo(d)
+	}
+	return mounted
+}
+
+func (m *Mount) mergeMountedLocked() {
+	merged := make(map[string]*files.DiskInfo, len(m.polledMounted)+len(m.reportedMounted))
+	for path, disk := range m.polledMounted {
+		merged[path] = cloneDiskInfo(disk)
+	}
+	// Reported data has higher priority on conflict because it is
+	// an explicit external status push.
+	for path, disk := range m.reportedMounted {
+		merged[path] = cloneDiskInfo(disk)
+	}
+	m.Mounted = merged
+}
+
+func (m *Mount) updatePolledMounted(disks []*files.DiskInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.polledMounted = buildMountedMap(disks)
+	m.mergeMountedLocked()
+}
+
+func (m *Mount) UpdateReportedMounted(patches []*MountedPatch) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	reported := make(map[string]*files.DiskInfo, len(patches))
+	for _, patch := range patches {
+		path, ok := patch.key()
+		if !ok {
+			continue
+		}
+		var merged files.DiskInfo
+		if base, exists := m.polledMounted[path]; exists && base != nil {
+			merged = *base
+		}
+		patch.applyTo(&merged)
+		merged.Path = path
+		reported[path] = cloneDiskInfo(&merged)
+	}
+	m.reportedMounted = reported
+	m.mergeMountedLocked()
+}
+
+// ClearReportedMounted drops all reporter-pushed overlay states so callers can
+// immediately fall back to fresh polled mount data (for example right after an
+// explicit mount/unmount operation).
+func (m *Mount) ClearReportedMounted() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reportedMounted = make(map[string]*files.DiskInfo)
+	m.mergeMountedLocked()
 }
 
 func InitGlobalMounted() {
@@ -74,6 +238,23 @@ func (m *Mount) GetMountedData() []files.DiskInfo {
 	}
 
 	return res
+}
+
+// GetMountedByPath returns a mounted snapshot by root path name
+// (for example "Samsung-0"). Safe for concurrent callers.
+func (m *Mount) GetMountedByPath(path string) (*files.DiskInfo, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if path == "" {
+		return nil, false
+	}
+	d, ok := m.Mounted[path]
+	if !ok || d == nil {
+		return nil, false
+	}
+	cloned := *d
+	return &cloned, true
 }
 
 // hasMount reports whether the mount map contains base under read lock.
@@ -194,9 +375,6 @@ func (m *Mount) watchMounted() {
 }
 
 func (m *Mount) getMounted() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	var host = common.OlaresdHost
 
 	if host == "" {
@@ -224,17 +402,15 @@ func (m *Mount) getMounted() {
 	}
 
 	if result.Code != 200 {
-		klog.Errorf("get mounted invalid, message: %s", *result.Message)
+		if result.Message != nil {
+			klog.Errorf("get mounted invalid, message: %s", *result.Message)
+		} else {
+			klog.Errorf("get mounted invalid, code: %d", result.Code)
+		}
 		return
 	}
 
-	m.Mounted = make(map[string]*files.DiskInfo)
-
-	if result.Data != nil {
-		for _, d := range result.Data {
-			m.Mounted[d.Path] = d
-		}
-	}
+	m.updatePolledMounted(result.Data)
 
 	klog.Infof("mounted device: %s", common.ToJson(result.Data))
 }

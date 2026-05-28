@@ -49,6 +49,7 @@ var (
 		"/api/mounted",
 		"/api/mount",
 		"/api/unmount",
+		"/api/mounted_states",
 		"/api/smb_history",
 		"/api/search",
 		"/videos/",
