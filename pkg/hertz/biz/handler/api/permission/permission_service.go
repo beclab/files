@@ -15,7 +15,6 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
-	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 )
 
@@ -46,21 +45,18 @@ func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	urlPath := uri + fileParam.Path
-	dealUrlPath := strings.TrimPrefix(urlPath, common.RootPrefix)
-
-	exists, err := afero.Exists(files.DefaultFs, dealUrlPath)
+	absPath, err := files.CleanResourcePath(uri, uri+fileParam.Path)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	if !exists {
+	if !files.FilePathExists(absPath) {
 		c.AbortWithStatusJSON(consts.StatusNotFound, utils.H{"error": "file not found"})
 		return
 	}
 
 	res := make(map[string]interface{})
-	res["uid"], _, err = files.GetUidGid(files.DefaultFs, dealUrlPath)
+	res["uid"], _, err = files.GetUidGid(nil, absPath)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
@@ -108,15 +104,12 @@ func PutPermissionMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	urlPath := uri + fileParam.Path
-	dealUrlPath := strings.TrimPrefix(urlPath, common.RootPrefix)
-
-	exists, err := afero.Exists(files.DefaultFs, dealUrlPath)
+	absPath, err := files.CleanResourcePath(uri, uri+fileParam.Path)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	if !exists {
+	if !files.FilePathExists(absPath) {
 		c.AbortWithStatusJSON(consts.StatusNotFound, utils.H{"error": "file not found"})
 		return
 	}
@@ -127,9 +120,9 @@ func PutPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	recursive := req.Recursive
 
 	if recursive == nil || *recursive == 0 {
-		err = files.Chown(files.DefaultFs, dealUrlPath, uid, gid)
+		err = files.Chown(nil, absPath, uid, gid)
 	} else {
-		err = files.ChownRecursive(urlPath, uid, gid)
+		err = files.ChownRecursive(absPath, uid, gid)
 	}
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})

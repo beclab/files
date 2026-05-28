@@ -9,10 +9,12 @@ import (
 	"files/pkg/hertz/biz/handler"
 	"files/pkg/models"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
-	"strings"
 
 	md5 "files/pkg/hertz/biz/model/api/md5"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -47,26 +49,23 @@ func Md5Method(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	urlPath := uri + fileParam.Path
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs,
-		Path:       strings.TrimPrefix(urlPath, common.RootPrefix),
-		Modify:     true,
-		Expand:     false,
-		ReadHeader: true,
-	})
+	absPath, err := files.CleanResourcePath(uri, uri+fileParam.Path)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-
-	if file.IsDir {
+	info, err := os.Stat(absPath)
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+	if info.IsDir() {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "only support md5 for file"})
 		return
 	}
 
 	res := make(map[string]interface{})
-	res["md5"], err = common.Md5File(file.Path)
+	res["md5"], err = common.Md5File(absPath)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
