@@ -287,6 +287,8 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 		url = "http://" + files.TerminusdHost + "/command/umount-usb-incluster"
 	} else if externalType == "smb" {
 		url = "http://" + files.TerminusdHost + "/command/umount-samba-incluster"
+	} else if externalType == "nfs" {
+		url = "http://" + files.TerminusdHost + "/command/umount-nfs-incluster"
 	} else {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("Unsupported external type: %s", externalType)})
 		return
