@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"math/big"
 	"net/url"
@@ -53,32 +52,6 @@ func init() {
 	if RootPrefix == "" {
 		RootPrefix = "/data"
 	}
-}
-
-func Md5File(filepath string) (string, error) {
-	file, err := os.Open(filepath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	hash := md5.New()
-	buf := make([]byte, 8192)
-
-	for {
-		n, err := file.Read(buf)
-		if n > 0 {
-			hash.Write(buf[:n])
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-	}
-
-	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
 func Md5String(s string) string {

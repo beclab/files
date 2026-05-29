@@ -18,6 +18,7 @@ import (
 
 	md5 "files/pkg/hertz/biz/model/api/md5"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/spf13/afero"
 )
 
 // Md5Method .
@@ -43,33 +44,47 @@ func Md5Method(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
 		return
 	}
+	if !common.ListContains(common.PosixFileTypes, fileParam.FileType) {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "md5 only supported on local storages"})
+		return
+	}
 
 	uri, err := fileParam.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	absPath, err := files.CleanResourcePath(uri, uri+fileParam.Path)
+
+	file, err := files.NewFileInfo(files.FileOptions{
+		Fs:         afero.NewBasePathFs(afero.NewOsFs(), uri),
+		FsType:     fileParam.FileType,
+		FsExtend:   fileParam.Extend,
+		Path:       fileParam.Path,
+		Modify:     true,
+		Expand:     false,
+		ReadHeader: true,
+	})
 	if err != nil {
+		if os.IsNotExist(err) {
+			c.AbortWithStatusJSON(consts.StatusNotFound, utils.H{"error": "file not found"})
+			return
+		}
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	info, err := os.Stat(absPath)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
-		return
-	}
-	if info.IsDir() {
+
+	if file.IsDir {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "only support md5 for file"})
 		return
 	}
 
-	res := make(map[string]interface{})
-	res["md5"], err = common.Md5File(absPath)
-	if err != nil {
+	if err = file.Checksum("md5"); err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
+
+	res := make(map[string]interface{})
+	res["md5"] = file.Checksums["md5"]
 
 	resp := new(md5.Md5Resp)
 	if !handler.DecodeResponse(c, common.ToBytes(res), resp) {

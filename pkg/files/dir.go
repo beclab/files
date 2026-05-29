@@ -10,14 +10,10 @@ import (
 func FindExistingDir(targetDir string) string {
 	currentDir := filepath.Clean(targetDir)
 
-	// Stop walking up the chain at "/", at the configurable
-	// data root (RootPrefix, default "/data"), or at the External
-	// mount point under that root. Previously the comparison was
-	// against the literal "/data" / "/data/External", which
-	// silently never triggered when ROOT_PREFIX was set to
-	// anything else and the loop would walk all the way up.
 	rootStop := common.RootPrefix
-	externalStop := filepath.Join(common.RootPrefix, "External")
+	if rootStop == "" {
+		rootStop = common.ROOT_PREFIX
+	}
 
 	for {
 		if dirExists(currentDir) {
@@ -26,7 +22,12 @@ func FindExistingDir(targetDir string) string {
 
 		parentDir := filepath.Dir(currentDir)
 
-		if parentDir == currentDir || parentDir == "/" || parentDir == rootStop || parentDir == externalStop {
+		if parentDir == currentDir ||
+			parentDir == "/" ||
+			parentDir == rootStop ||
+			parentDir == common.EXTERNAL_PREFIX ||
+			parentDir == common.COMMON_PREFIX ||
+			parentDir == common.CACHE_PREFIX {
 			break
 		}
 

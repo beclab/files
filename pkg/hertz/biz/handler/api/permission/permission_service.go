@@ -10,11 +10,13 @@ import (
 	permission "files/pkg/hertz/biz/model/api/permission"
 	"files/pkg/models"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 )
 
@@ -39,24 +41,30 @@ func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
 		return
 	}
+	if !common.ListContains(common.PosixFileTypes, fileParam.FileType) {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "permission only supported on local storages"})
+		return
+	}
 
 	uri, err := fileParam.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	absPath, err := files.CleanResourcePath(uri, uri+fileParam.Path)
+	fs := afero.NewBasePathFs(afero.NewOsFs(), uri)
+
+	exists, err := afero.Exists(fs, fileParam.Path)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	if !files.FilePathExists(absPath) {
+	if !exists {
 		c.AbortWithStatusJSON(consts.StatusNotFound, utils.H{"error": "file not found"})
 		return
 	}
 
 	res := make(map[string]interface{})
-	res["uid"], _, err = files.GetUidGid(nil, absPath)
+	res["uid"], _, err = files.GetUidGid(fs, fileParam.Path)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
@@ -98,27 +106,33 @@ func PutPermissionMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
 		return
 	}
+	if !common.ListContains(common.PosixFileTypes, fileParam.FileType) {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "permission only supported on local storages"})
+		return
+	}
 
 	uri, err := fileParam.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	absPath, err := files.CleanResourcePath(uri, uri+fileParam.Path)
+	fs := afero.NewBasePathFs(afero.NewOsFs(), uri)
+
+	exists, err := afero.Exists(fs, fileParam.Path)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
-	if !files.FilePathExists(absPath) {
+	if !exists {
 		c.AbortWithStatusJSON(consts.StatusNotFound, utils.H{"error": "file not found"})
 		return
 	}
 
 	uid := int(req.Uid)
 	gid := uid
+	absPath := filepath.Join(uri, strings.TrimPrefix(filepath.Clean(fileParam.Path), "/"))
 
 	recursive := req.Recursive
-
 	if recursive == nil || *recursive == 0 {
 		err = files.Chown(nil, absPath, uid, gid)
 	} else {
