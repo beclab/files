@@ -1,9 +1,4 @@
 // Package archive registers the /api/archive/:node/... routes.
-//
-// Unlike the auto-generated routers in sibling packages, this one is
-// hand-written: archive's preview endpoints stream NDJSON / raw bytes
-// which the thrift IDL cannot express directly, so we register all
-// four handlers (compress / extract / entries / entry) explicitly.
 package archive
 
 import (

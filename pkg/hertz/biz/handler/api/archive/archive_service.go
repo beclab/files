@@ -39,21 +39,6 @@ import (
 // in access logs or replay buffers.
 const HeaderPassword = "X-Archive-Password"
 
-// EntriesReq and EntryReq are NOT in the thrift IDL (the preview
-// endpoints stream NDJSON / octet-stream which thrift can't model
-// directly), so we declare them inline here. CompressReq / ExtractReq
-// live in pkg/hertz/biz/model/api/archive and are produced from
-// pkg/hertz/idl/archive.thrift by `scripts/generate-hertz.sh`.
-
-type EntriesReq struct {
-	Source string `form:"source" query:"source" vd:"len($)>0"`
-}
-
-type EntryReq struct {
-	Source string `form:"source" query:"source" vd:"len($)>0"`
-	Path   string `form:"path" query:"path" vd:"len($)>0"`
-}
-
 // CompressMethod handles POST /api/archive/:node/compress.
 //
 // Body shape (JSON):
@@ -236,7 +221,7 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 // {"_done":true,"total":N} line. Errors mid-stream are surfaced as
 // {"_error":"...","code":"<code>"} on a line of their own.
 func EntriesMethod(ctx context.Context, c *app.RequestContext) {
-	var req EntriesReq
+	var req archmodel.EntriesReq
 	if err := c.BindAndValidate(&req); err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
@@ -303,7 +288,7 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 // EntryMethod handles GET /api/archive/:node/entry?source=<uri>&path=<inner>.
 // Streams the single archived entry as application/octet-stream.
 func EntryMethod(ctx context.Context, c *app.RequestContext) {
-	var req EntryReq
+	var req archmodel.EntryReq
 	if err := c.BindAndValidate(&req); err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
