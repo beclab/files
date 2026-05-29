@@ -23,6 +23,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/go-redis/redis"
+	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 )
 
@@ -270,17 +271,22 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
 		return
 	}
+	if fileParam.FileType != common.External {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "unmount only supported on external storage"})
+		return
+	}
 
 	uri, err := fileParam.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	urlPath := uri + fileParam.Path
 
 	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         files.DefaultFs,
-		Path:       strings.TrimPrefix(urlPath, common.RootPrefix),
+		Fs:         afero.NewBasePathFs(afero.NewOsFs(), uri),
+		FsType:     fileParam.FileType,
+		FsExtend:   fileParam.Extend,
+		Path:       fileParam.Path,
 		Modify:     true,
 		Expand:     false,
 		ReadHeader: true,
@@ -303,7 +309,7 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	klog.Infoln("path:", file.Path)
-	klog.Infoln("externalTYpe:", externalType)
+	klog.Infoln("externalType:", externalType)
 	klog.Infoln("url:", url)
 
 	mountPath := strings.TrimPrefix(strings.TrimSuffix(file.Path, "/"), "/")
