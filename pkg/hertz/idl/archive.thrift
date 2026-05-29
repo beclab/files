@@ -1,10 +1,5 @@
 namespace go api.archive
 
-// Archive write endpoints. Streaming preview (entries / entry) is NOT
-// expressed in thrift because its response is NDJSON / octet-stream;
-// it is registered as a bare handler in
-// pkg/hertz/biz/router/api/archive.
-
 struct CompressReq {
     1: required list<string> Sources       (api.body="sources");
     2: required string Destination         (api.body="destination");
@@ -37,7 +32,24 @@ struct ExtractResp {
     3: string task_id
 }
 
+struct EntriesReq {
+    1: required string Source (api.query="source");
+}
+
+struct EntriesResp {
+}
+
+struct EntryReq {
+    1: required string Source (api.query="source");
+    2: required string Path   (api.query="path");
+}
+
+struct EntryResp {
+}
+
 service ArchiveService {
     CompressResp CompressMethod (1: CompressReq r) (api.post="/api/archive/:node/compress");
     ExtractResp  ExtractMethod  (1: ExtractReq  r) (api.post="/api/archive/:node/extract");
+    EntriesResp  EntriesMethod  (1: EntriesReq  r) (api.get="/api/archive/:node/entries");
+    EntryResp    EntryMethod    (1: EntryReq    r) (api.get="/api/archive/:node/entry");
 }
