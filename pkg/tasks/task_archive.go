@@ -189,15 +189,13 @@ func (t *Task) Extract() error {
 		return e
 	}
 
-	// Conflict handling: if dst already exists, rename to dst (1), ...
-	// Use the same dup-name helper paste uses to keep semantics
-	// consistent.
+	// out/ exists -> out (1)/, out (2)/, ...
 	if !t.pausedSnap().WasPaused {
-		if pathMeta, e := files.GetFileInfo(srcPath); e == nil {
-			if newName, newPath, e := t.generateNewName(pathMeta); e == nil && newName != "" {
-				dst.Path = newPath
-				dstPath = dstUri + dst.Path
-			}
+		if newPath, e := t.generateExtractDstDir(dstPath, dstUri); e != nil {
+			return e
+		} else if newPath != "" {
+			dst.Path = newPath
+			dstPath = dstUri + dst.Path
 		}
 	}
 
@@ -291,6 +289,27 @@ func (t *Task) generateArchiveDstName(dstPath, dstUri string, isVolume bool) (st
 	}
 	newPath := strings.TrimPrefix(dir+"/"+newName, dstUri)
 	return newName, newPath, nil
+}
+
+// generateExtractDstDir returns "" when dstPath is free, else a renamed
+// sibling path (out -> out (1) -> out (2)).
+func (t *Task) generateExtractDstDir(dstPath, dstUri string) (string, error) {
+	if _, err := os.Stat(dstPath); errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	} else if err != nil {
+		return "", err
+	}
+	name := filepath.Base(dstPath)
+	dir := filepath.Dir(dstPath)
+	siblings, err := files.CollectDupNames(dir, name, "", true)
+	if err != nil {
+		return "", err
+	}
+	newName := files.GenerateDupName(siblings, name, false)
+	if newName == name {
+		return "", nil
+	}
+	return strings.TrimPrefix(dir+"/"+newName, dstUri), nil
 }
 
 // archiveOutputPaths returns all on-disk files that compose the

@@ -173,6 +173,9 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// out.zip -> out/
+	dst.Path = extractDirPath(dst.Path)
+
 	opt := &models.ArchiveOption{
 		Format:           req.Format,
 		Password:         string(c.GetHeader(HeaderPassword)),
@@ -346,6 +349,28 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 // ----------------------------------------------------------------------
 // helpers
 // ----------------------------------------------------------------------
+
+// extractDirPath strips a recognised archive suffix from the extract
+// destination ("/Documents/out.zip" -> "/Documents/out").
+func extractDirPath(p string) string {
+	base := filepath.Base(p)
+	if common.ArchiveFormatFromName(base) == "" {
+		return p
+	}
+	name, _ := common.SplitNameExt(base)
+	if name == "" || name == base {
+		return p
+	}
+	dir := filepath.Dir(p)
+	switch dir {
+	case ".":
+		return name
+	case "/":
+		return "/" + name
+	default:
+		return dir + "/" + name
+	}
+}
 
 // classifyStreamError maps sevenz typed errors to FE-stable codes.
 func classifyStreamError(err error) string {
