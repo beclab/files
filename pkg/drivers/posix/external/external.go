@@ -61,3 +61,7 @@ func (s *ExternalStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([
 func (s *ExternalStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	return s.posix.UploadChunks(fileUploadArg)
 }
+
+func (s *ExternalStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
+	return s.posix.CheckPermission(p, owner)
+}

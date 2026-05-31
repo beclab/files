@@ -61,3 +61,7 @@ func (s *CacheStorage) UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]by
 func (s *CacheStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error) {
 	return s.posix.UploadChunks(fileUploadArg)
 }
+
+func (s *CacheStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
+	return s.posix.CheckPermission(p, owner)
+}
