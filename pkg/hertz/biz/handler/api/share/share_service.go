@@ -2234,7 +2234,7 @@ func GetToken(ctx context.Context, c *app.RequestContext) {
 
 	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
-	sharePath, err := database.QueryShareById(req.PathId)
+	sharePath, err := database.GetSharePath(req.PathId)
 	if err != nil {
 		klog.Errorf("GetToken, query share failed, shareId: %s, error: %v", req.PathId, err)
 		handler.RespError(c, fmt.Sprintf("GetToken Error, %v", err))
@@ -2401,7 +2401,7 @@ func ResetPassword(ctx context.Context, c *app.RequestContext) {
 
 	req.PathId = common.TrimShareId(req.PathId, global.GlobalNode.CheckNodeExists)
 
-	sharePath, err := database.QueryShareById(req.PathId)
+	sharePath, err := database.GetSharePath(req.PathId)
 	if err != nil {
 		klog.Errorf("ResetPassword, querySharePath error: %v", err)
 		handler.RespError(c, fmt.Sprintf("ResetPassword Error: %v", err))
