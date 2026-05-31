@@ -81,12 +81,8 @@ func GetThumbnail(fileParam *models.FileParam, previewSize string) ([]byte, erro
 
 	username := fileParam.Owner + "@auth.local"
 
-	permission, err := CheckFolderPermission(username, repoId, path)
-	if err != nil {
+	if err := EnsureSyncPermission(username, repoId, SyncParentDir(path), models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if permission != "rw" {
-		return nil, errors.New("permission denied")
 	}
 
 	success, statusCode := generateThumbnail(username, repoId, strconv.Itoa(size), path)

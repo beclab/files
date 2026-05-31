@@ -28,27 +28,6 @@ var (
 	CUSTOM_PERMISSION_PREFIX = "custom"
 )
 
-func CheckFolderPermission(username, repoId, path string) (string, error) {
-	if !strings.HasSuffix(path, "/") {
-		path += "/"
-	}
-	klog.Infof("[sync] username: %s, repoId: %s, path: %s", username, repoId, path)
-	repoStatus, err := seaserv.GlobalSeafileAPI.GetRepoStatus(repoId)
-	if err != nil {
-		return "", err
-	}
-	if repoStatus == 1 {
-		return PERMISSION_READ, nil
-	}
-	result, err := seaserv.GlobalSeafileAPI.CheckPermissionByPath(repoId, path, username)
-	if err != nil {
-		return "", err
-	}
-	result = strings.Trim(result, " ")
-	klog.Infof("[sync] %s!!", result)
-	return result, nil
-}
-
 func repoHasBeenSharedOut(repoId string) (bool, error) {
 	shared, err := seaserv.GlobalSeafileAPI.RepoHasBeenShared(repoId, true)
 	if err != nil {
@@ -81,8 +60,8 @@ func RepoGetHandler(w http.ResponseWriter, r *http.Request) (int, error) {
 	if err != nil {
 		return http.StatusForbidden, err
 	}
-	if permission == "" {
-		return http.StatusForbidden, errors.New("permission denied")
+	if !models.LevelFromSyncPermission(permission).Allow(models.ActionRead) {
+		return http.StatusForbidden, ErrSyncPermissionDenied
 	}
 
 	libNeedDecrypt := false
@@ -177,8 +156,8 @@ func HandleGetRepoDir(fileParam *models.FileParam) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if permission == "" {
-		return nil, errors.New("permission denied")
+	if !models.LevelFromSyncPermission(permission).Allow(models.ActionRead) {
+		return nil, ErrSyncPermissionDenied
 	}
 
 	parentDirs := generateParentDirs(parentDir, false)
@@ -503,12 +482,8 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 			return nil, errors.New("folder not found")
 		}
 
-		permission, err := CheckFolderPermission(username, repoId, parentDir)
-		if err != nil {
+		if err := EnsureSyncPermission(username, repoId, parentDir, models.ActionWrite); err != nil {
 			return nil, err
-		}
-		if permission != "rw" {
-			return nil, errors.New("permission denied")
 		}
 
 		newDirName := path.Base(pathParam)
@@ -550,12 +525,8 @@ func HandleDirOperation(owner, repoId, pathParam, destName, operation string, fo
 			return nil, errors.New("folder not found")
 		}
 
-		permission, err := CheckFolderPermission(username, repoId, parentDir)
-		if err != nil {
+		if err := EnsureSyncPermission(username, repoId, parentDir, models.ActionWrite); err != nil {
 			return nil, err
-		}
-		if permission != "rw" {
-			return nil, errors.New("permission denied")
 		}
 
 		oldDirName := path.Base(pathParam)

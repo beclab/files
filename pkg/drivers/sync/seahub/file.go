@@ -94,12 +94,8 @@ func handleCreate(repoId, pathParam, owner string) ([]byte, error) {
 	}
 
 	// permission check
-	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil {
+	if err := EnsureSyncPermission(username, repoId, parentDir, models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if permission != "rw" {
-		return nil, errors.New("permission denied")
 	}
 
 	validName, err := isValidDirentName(filename)
@@ -160,12 +156,8 @@ func handleRename(repoId, pathParam, owner, newName string) ([]byte, error) {
 		return nil, errors.New("file not found")
 	}
 
-	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil {
+	if err := EnsureSyncPermission(username, repoId, parentDir, models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if permission != "rw" {
-		return nil, errors.New("permission denied")
 	}
 
 	newName = CheckFilenameWithRename(repoId, parentDir, newName)
@@ -184,20 +176,15 @@ func handleRename(repoId, pathParam, owner, newName string) ([]byte, error) {
 
 func GetFileInfo(repoId, filePath string) map[string]interface{} {
 	fileInfo := make(map[string]interface{})
-	repo, err := seaserv.GlobalSeafileAPI.GetRepo(repoId)
-	if err != nil {
-		klog.Error(err)
-		return nil
-	}
-	if repo == nil {
-		klog.Errorf("repo %s not found", repoId)
-		return nil
-	}
 
+	// Best-effort metadata: GetFileInfo is called to decorate the response of
+	// an already-succeeded create/rename, so a transient dirent RPC failure
+	// must degrade to path-derived info rather than return nil (which would
+	// serialize the whole response body as null).
 	fileObj, err := seaserv.GlobalSeafileAPI.GetDirentByPath(repoId, filePath)
 	if err != nil {
-		klog.Error(err)
-		return nil
+		klog.Errorf("GetFileInfo GetDirentByPath failed repo=%s path=%s: %v", repoId, filePath, err)
+		fileObj = nil
 	}
 
 	var fileName string
@@ -262,12 +249,8 @@ func HandleUpdateLink(fileParam *models.FileParam, from string) ([]byte, error) 
 
 	username := fileParam.Owner + "@auth.local"
 
-	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil {
+	if err := EnsureSyncPermission(username, repoId, parentDir, models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if permission != "rw" {
-		return nil, errors.New("permission denied")
 	}
 
 	quota, err := seaserv.GlobalSeafileAPI.CheckQuota(repoId, 0)
@@ -344,8 +327,8 @@ func ViewLibFile(fileParam *models.FileParam, op string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if permission != "rw" {
-		return nil, errors.New("permission denied")
+	if !models.LevelFromSyncPermission(permission).Allow(models.ActionWrite) {
+		return nil, ErrSyncPermissionDenied
 	}
 
 	if op == "dl" {
@@ -521,7 +504,7 @@ func handleTextFile(fileSize int64, returnDict map[string]interface{}) {
 		return
 	}
 
-	canEditFile := returnDict["file_perm"].(string) == "rw"
+	canEditFile := models.LevelFromSyncPermission(returnDict["file_perm"].(string)).Allow(models.ActionWrite)
 
 	returnDict["file_content"] = content
 	returnDict["file_enc"] = encoding

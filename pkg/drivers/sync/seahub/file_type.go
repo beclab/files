@@ -5,6 +5,8 @@ import (
 	"path"
 	"strings"
 
+	"files/pkg/models"
+
 	"k8s.io/klog/v2"
 )
 
@@ -88,26 +90,19 @@ func getFileTypeAndExt(filename string) (FileType, string) {
 	return UNKNOWN, ext
 }
 
+// SyncPermToMode maps a Seafile user_perm string to the local dir mode used
+// when materializing a paste target. It routes through the unified
+// LevelFromSyncPermission so preview/cloud-edit/admin (which the old
+// rwx-string matching did not recognize, yielding an unusable mode 0) get a
+// sensible readable/writable mode.
 func SyncPermToMode(permStr string) os.FileMode {
-	perm := os.FileMode(0)
-	if permStr == "r" {
-		perm = perm | 0555
-	} else if permStr == "w" {
-		perm = perm | 0311
-	} else if permStr == "x" {
-		perm = perm | 0111
-	} else if permStr == "rw" {
-		perm = perm | 0755
-	} else if permStr == "rx" {
-		perm = perm | 0555
-	} else if permStr == "wx" {
-		perm = perm | 0311
-	} else if permStr == "rwx" {
-		perm = perm | 0755
-	} else {
-		klog.Infoln("invalid permission string")
+	switch models.LevelFromSyncPermission(strings.TrimSpace(permStr)) {
+	case models.LevelRead:
+		return 0555
+	case models.LevelWrite, models.LevelAdmin:
+		return 0755
+	default:
+		klog.Infof("[sync] unrecognized permission string for mode: %q", permStr)
 		return 0
 	}
-
-	return perm
 }
