@@ -4,6 +4,7 @@ package paste
 
 import (
 	"context"
+	"files/pkg/access"
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
@@ -61,11 +62,7 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	// just setting Share=1 with crafted owner fields. The proxy attaches
 	// HeaderInternalShareToken to mark the forward as trusted.
 	if req.Share == 1 {
-		got := string(c.GetHeader(common.HeaderInternalShareToken))
-		if !common.EqualInternalShareToken(got) {
-			klog.Warningf("[paste] reject Share=1 request from %s without valid internal token (owner=%s)",
-				c.RemoteAddr(), owner)
-			c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": "share paste must go through the share proxy"})
+		if !bizhandler.RequireInternalShareToken(c, "paste") {
 			return
 		}
 	}
@@ -99,6 +96,39 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		}
 		pasteParam.DstSharePath = dstShareParam
 
+	}
+
+	// Unified permission gate: the requester must be able to read the
+	// source and write the destination. For share=1 the effective
+	// identity is the grantor (SrcOwner/DstOwner) whose access the
+	// proxy already vetted; CheckAccess then resolves against that
+	// owner's own backend, matching the precheck probes below. This is
+	// an authorization gate; the existence/capability probes that
+	// follow are separate.
+	srcOwner, dstOwner := owner, owner
+	if pasteParam.Share == 1 {
+		if req.SrcOwner != "" {
+			srcOwner = req.SrcOwner
+		}
+		if req.DstOwner != "" {
+			dstOwner = req.DstOwner
+		}
+	}
+	// A move deletes the source after copying, so it needs write/delete
+	// on the source, not just read.
+	srcAction := models.ActionRead
+	if req.Action == common.ActionMove {
+		srcAction = models.ActionDelete
+	}
+	if lvl, aerr := access.CheckAccess(ctx, srcOwner, req.Source); aerr != nil || !lvl.Allow(srcAction) {
+		klog.Warningf("[paste] source permission denied: owner=%s, src=%s, action=%s, level=%v, err=%v", srcOwner, req.Source, req.Action, lvl, aerr)
+		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
+		return
+	}
+	if lvl, aerr := access.CheckAccess(ctx, dstOwner, req.Destination); aerr != nil || !lvl.Allow(models.ActionWrite) {
+		klog.Warningf("[paste] destination permission denied: owner=%s, dst=%s, level=%v, err=%v", dstOwner, req.Destination, lvl, aerr)
+		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
+		return
 	}
 
 	// Verify the source actually exists on its backend BEFORE we
