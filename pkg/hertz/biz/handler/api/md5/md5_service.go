@@ -49,6 +49,10 @@ func Md5Method(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	if !handler.Gate(ctx, c, fileParam, models.ActionRead, true, "md5") {
+		return
+	}
+
 	uri, err := fileParam.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})

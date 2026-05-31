@@ -25,6 +25,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	bizhandler "files/pkg/hertz/biz/handler"
 	archmodel "files/pkg/hertz/biz/model/api/archive"
 	"files/pkg/models"
 
@@ -97,6 +98,16 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	if !common.ListContains(common.PosixFileTypes, dst.FileType) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive only supported on local storages"})
+		return
+	}
+
+	// Read every source, write the destination archive.
+	for _, fp := range srcs {
+		if !gateAccess(ctx, c, fp, models.ActionRead) {
+			return
+		}
+	}
+	if !gateAccess(ctx, c, dst, models.ActionWrite) {
 		return
 	}
 
@@ -176,6 +187,14 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 	// out.zip -> out/
 	dst.Path = extractDirPath(dst.Path)
 
+	// Read the source archive, write the extracted tree.
+	if !gateAccess(ctx, c, src, models.ActionRead) {
+		return
+	}
+	if !gateAccess(ctx, c, dst, models.ActionWrite) {
+		return
+	}
+
 	opt := &models.ArchiveOption{
 		Format:           req.Format,
 		Password:         string(c.GetHeader(HeaderPassword)),
@@ -242,6 +261,9 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	if !common.ListContains(common.PosixFileTypes, src.FileType) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive only supported on local storages"})
+		return
+	}
+	if !gateAccess(ctx, c, src, models.ActionRead) {
 		return
 	}
 	uri, err := src.GetResourceUri()
@@ -311,6 +333,9 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive only supported on local storages"})
 		return
 	}
+	if !gateAccess(ctx, c, src, models.ActionRead) {
+		return
+	}
 	uri, err := src.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -349,6 +374,14 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 // ----------------------------------------------------------------------
 // helpers
 // ----------------------------------------------------------------------
+
+// gateAccess is the authorization check for the writable archive
+// endpoints. Archive is posix-only and never on the share reverse-proxy
+// path, so it delegates to bizhandler.Gate with skipShare=false. Returns
+// true if the request may proceed; on denial Gate writes a 403.
+func gateAccess(ctx context.Context, c *app.RequestContext, fp *models.FileParam, action models.Action) bool {
+	return bizhandler.Gate(ctx, c, fp, action, false, "archive")
+}
 
 // extractDirPath strips a recognised archive suffix from the extract
 // destination ("/Documents/out.zip" -> "/Documents/out").

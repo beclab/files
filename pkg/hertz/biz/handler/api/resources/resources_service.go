@@ -34,9 +34,18 @@ func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	// probe=write: internal cross-node hook for paste precheck. Runs a
 	// 1-byte write probe on this node instead of listing. sync/cloud are
-	// reachable from any node via RPC and never come through here.
+	// reachable from any node via RPC and never come through here. Gate it
+	// as an upload so a probe cannot bypass the Level check; the precheck
+	// forward carries owner=grantor, who is admin on their own backend.
 	if contextArg.QueryParam.Probe == "write" {
+		if !gatePermission(ctx, c, contextArg.FileParam, models.ActionUpload) {
+			return
+		}
 		handleProbeWrite(c, contextArg.FileParam)
+		return
+	}
+
+	if !gatePermission(ctx, c, contextArg.FileParam, models.ActionList) {
 		return
 	}
 
@@ -74,6 +83,10 @@ func PostResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
 
+	if !gatePermission(ctx, c, contextArg.FileParam, models.ActionWrite) {
+		return
+	}
+
 	_, err = handler.Create(contextArg)
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
@@ -104,6 +117,10 @@ func PatchResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	if !gatePermission(ctx, c, contextArg.FileParam, models.ActionWrite) {
+		return
+	}
 
 	_, err = handler.Rename(contextArg)
 	if err != nil {
@@ -144,6 +161,10 @@ func PutResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	if !gatePermission(ctx, c, contextArg.FileParam, models.ActionWrite) {
+		return
+	}
 
 	res, err := handler.Edit(contextArg)
 	if err != nil {
@@ -196,6 +217,10 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", deleteArg.FileParam.Owner, deleteArg.FileParam.FileType, c.Method(), common.ToJson(deleteArg))
 
+	if !gatePermission(ctx, c, deleteArg.FileParam, models.ActionDelete) {
+		return
+	}
+
 	// sync relative must be done before real delete, or else dir or repo will not be found
 	err = share.DeleteRelativeAdjustShare(deleteArg.FileParam, deleteArg.Dirents, nil)
 	if err != nil {
@@ -232,6 +257,19 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	resp := new(resources.DeleteResourcesResp)
 	c.JSON(consts.StatusOK, resp)
+}
+
+// gatePermission is the authorization check for the writable resources
+// endpoints. It delegates to bizhandler.Gate with skipShare=true:
+// share-proxied requests (share=1, set by ShareMiddleware when it
+// rewrites to the grantor's path) are let through because the middleware
+// has already vetted the share member's permission and share access is
+// intentionally not routed through CheckAccess. Everything else is
+// resolved against the request owner's own backend, so owner-owned
+// drive/cache/external/cloud stays admin while read-only drive/Common
+// and read-only sync are correctly denied.
+func gatePermission(ctx context.Context, c *app.RequestContext, fp *models.FileParam, action models.Action) bool {
+	return bizhandler.Gate(ctx, c, fp, action, true, "resources")
 }
 
 // handleProbeWrite resolves fp's on-disk path and tries a 1-byte write

@@ -8,6 +8,7 @@ import (
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	"files/pkg/files"
+	bizhandler "files/pkg/hertz/biz/handler"
 	raw "files/pkg/hertz/biz/model/api/raw"
 	"files/pkg/models"
 	"fmt"
@@ -62,6 +63,10 @@ func RawMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	klog.Infof("[Incoming] raw, user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	if !bizhandler.Gate(ctx, c, contextArg.FileParam, models.ActionDownload, true, "raw") {
+		return
+	}
 
 	var handlerParam = &base.HandlerParam{
 		Ctx:   ctx,
