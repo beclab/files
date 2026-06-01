@@ -27,10 +27,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var peerClient = &http.Client{Timeout: 10 * time.Second}
+var remoteClient = &http.Client{Timeout: 10 * time.Second}
 
-// peerLookupPodIP is a test seam over IntegrationManager().GetFilesPod.
-var peerLookupPodIP = func(node string) (string, error) {
+// remoteLookupPodIP is a test seam over IntegrationManager().GetFilesPod.
+var remoteLookupPodIP = func(node string) (string, error) {
 	pod, err := integration.IntegrationManager().GetFilesPod(node)
 	if err != nil {
 		return "", fmt.Errorf("locate files pod for node %s: %w", node, err)
@@ -152,54 +152,73 @@ func probeParentDir(full string) string {
 	return tmp[:pos] + "/"
 }
 
-// PeerStatusError marks a non-2xx peer response so callers can wrap it
-// with their own prefix; lookup / transport errors flow through unwrapped.
-type PeerStatusError struct {
+// RemoteStatusError marks a non-2xx remote response so callers can wrap
+// it with their own prefix; lookup / transport errors flow through
+// unwrapped.
+type RemoteStatusError struct {
 	Code int
 }
 
-func (e *PeerStatusError) Error() string { return fmt.Sprintf("remote status %d", e.Code) }
+func (e *RemoteStatusError) Error() string { return fmt.Sprintf("remote status %d", e.Code) }
 
-// PeerStat: GET /api/resources/<fsType>/<extend><path>. 2xx -> nil;
-// non-2xx -> *PeerStatusError. probeIsDir decodes body.isDir.
-func PeerStat(p *models.FileParam, owner string, probeIsDir bool) (isDir bool, err error) {
+// remoteRequest dispatches a GET to the peer files-pod's /api/resources
+// endpoint. logName ("stat"/"probe") parameterizes error wrapping so
+// callers preserve their original klog/error text.
+func remoteRequest(p *models.FileParam, owner, query, logName string) (*http.Response, string, error) {
 	if p == nil {
-		return false, errors.New("file param is nil")
+		return nil, "", errors.New("file param is nil")
 	}
-	ip, err := peerLookupPodIP(p.Extend)
+	ip, err := remoteLookupPodIP(p.Extend)
 	if err != nil {
-		return false, err
+		return nil, "", err
 	}
-
-	url := fmt.Sprintf("http://%s/api/resources/%s/%s%s", ip, p.FileType, p.Extend, p.Path)
-
+	url := fmt.Sprintf("http://%s/api/resources/%s/%s%s%s",
+		ip, p.FileType, p.Extend, p.Path, query)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return false, fmt.Errorf("build remote stat request: %w", err)
+		return nil, url, fmt.Errorf("build remote %s request: %w", logName, err)
 	}
 	if owner != "" {
 		req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
 	}
 	req.Header.Set("Cache-Control", "no-cache")
-
-	resp, err := peerClient.Do(req)
+	resp, err := remoteClient.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("remote stat %s: %w", url, err)
+		return nil, url, fmt.Errorf("remote %s %s: %w", logName, url, err)
 	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}()
+	return resp, url, nil
+}
 
+func drainRemote(resp *http.Response) {
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+}
+
+// RemoteExists: 2xx -> nil; non-2xx -> *RemoteStatusError.
+func RemoteExists(p *models.FileParam, owner string) error {
+	resp, url, err := remoteRequest(p, owner, "", "stat")
+	if err != nil {
+		return err
+	}
+	defer drainRemote(resp)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		klog.Warningf("[probe] remote stat %s returned %d", url, resp.StatusCode)
-		return false, &PeerStatusError{Code: resp.StatusCode}
+		return &RemoteStatusError{Code: resp.StatusCode}
 	}
+	return nil
+}
 
-	if !probeIsDir {
-		return false, nil
+// RemoteIsDir: like RemoteExists, plus decodes body.isDir on 2xx.
+func RemoteIsDir(p *models.FileParam, owner string) (bool, error) {
+	resp, url, err := remoteRequest(p, owner, "", "stat")
+	if err != nil {
+		return false, err
 	}
-
+	defer drainRemote(resp)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		klog.Warningf("[probe] remote stat %s returned %d", url, resp.StatusCode)
+		return false, &RemoteStatusError{Code: resp.StatusCode}
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 	if err != nil {
 		return false, fmt.Errorf("read remote stat response: %w", err)
@@ -213,36 +232,13 @@ func PeerStat(p *models.FileParam, owner string, probeIsDir bool) (isDir bool, e
 	return probe.IsDir, nil
 }
 
-// PeerProbeWrite: GET /api/resources/...?probe=write.
-func PeerProbeWrite(dst *models.FileParam) error {
-	if dst == nil {
-		return errors.New("file param is nil")
-	}
-	ip, err := peerLookupPodIP(dst.Extend)
+// RemoteProbeWrite: GET /api/resources/...?probe=write.
+func RemoteProbeWrite(dst *models.FileParam) error {
+	resp, url, err := remoteRequest(dst, dst.Owner, "?probe=write", "probe")
 	if err != nil {
 		return err
 	}
-
-	url := fmt.Sprintf("http://%s/api/resources/%s/%s%s?probe=write", ip, dst.FileType, dst.Extend, dst.Path)
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("build remote probe request: %w", err)
-	}
-	if dst.Owner != "" {
-		req.Header.Set(common.REQUEST_HEADER_OWNER, dst.Owner)
-	}
-	req.Header.Set("Cache-Control", "no-cache")
-
-	resp, err := peerClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("remote probe %s: %w", url, err)
-	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}()
-
+	defer drainRemote(resp)
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}

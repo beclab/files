@@ -72,11 +72,11 @@ func (s *ExternalStorage) ProbeExists(p *models.FileParam) error {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeExists(p)
 	}
-	_, err := posix.PeerStat(p, p.Owner, false)
+	err := posix.RemoteExists(p, p.Owner)
 	if err == nil {
 		return nil
 	}
-	var statusErr *posix.PeerStatusError
+	var statusErr *posix.RemoteStatusError
 	if errors.As(err, &statusErr) {
 		return fmt.Errorf("remote source not found: %s/%s%s (remote status %d)",
 			p.FileType, p.Extend, p.Path, statusErr.Code)
@@ -88,11 +88,11 @@ func (s *ExternalStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeIsDir(p)
 	}
-	isDir, err := posix.PeerStat(p, p.Owner, true)
+	isDir, err := posix.RemoteIsDir(p, p.Owner)
 	if err == nil {
 		return isDir, nil
 	}
-	var statusErr *posix.PeerStatusError
+	var statusErr *posix.RemoteStatusError
 	if errors.As(err, &statusErr) {
 		return false, fmt.Errorf("remote share target not found: %s/%s%s (remote status %d)",
 			p.FileType, p.Extend, p.Path, statusErr.Code)
@@ -104,5 +104,5 @@ func (s *ExternalStorage) ProbeWrite(dst *models.FileParam) error {
 	if dst == nil || dst.Extend == "" || dst.Extend == global.CurrentNodeName {
 		return s.posix.ProbeWrite(dst)
 	}
-	return posix.PeerProbeWrite(dst)
+	return posix.RemoteProbeWrite(dst)
 }

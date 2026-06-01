@@ -120,9 +120,9 @@ func TestProbeParentDir(t *testing.T) {
 	}
 }
 
-func TestPeerStatStatusCodes(t *testing.T) {
-	saved := peerLookupPodIP
-	t.Cleanup(func() { peerLookupPodIP = saved })
+func TestRemoteIsDirStatusCodes(t *testing.T) {
+	saved := remoteLookupPodIP
+	t.Cleanup(func() { remoteLookupPodIP = saved })
 
 	cases := []struct {
 		name    string
@@ -151,10 +151,10 @@ func TestPeerStatStatusCodes(t *testing.T) {
 			t.Cleanup(srv.Close)
 
 			u, _ := url.Parse(srv.URL)
-			peerLookupPodIP = func(string) (string, error) { return u.Host, nil }
+			remoteLookupPodIP = func(string) (string, error) { return u.Host, nil }
 
 			fp := &models.FileParam{FileType: "external", Extend: "node-x", Path: "/x"}
-			isDir, err := PeerStat(fp, "alice", true)
+			isDir, err := RemoteIsDir(fp, "alice")
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err mismatch: got %v want %v", err, tc.wantErr)
 			}
@@ -165,9 +165,48 @@ func TestPeerStatStatusCodes(t *testing.T) {
 	}
 }
 
-func TestPeerProbeWriteStatusCodes(t *testing.T) {
-	saved := peerLookupPodIP
-	t.Cleanup(func() { peerLookupPodIP = saved })
+func TestRemoteExistsStatusCodes(t *testing.T) {
+	saved := remoteLookupPodIP
+	t.Cleanup(func() { remoteLookupPodIP = saved })
+
+	cases := []struct {
+		name    string
+		status  int
+		wantErr bool
+	}{
+		{name: "200", status: 200, wantErr: false},
+		{name: "404", status: 404, wantErr: true},
+		{name: "500", status: 500, wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+			}))
+			t.Cleanup(srv.Close)
+
+			u, _ := url.Parse(srv.URL)
+			remoteLookupPodIP = func(string) (string, error) { return u.Host, nil }
+
+			fp := &models.FileParam{FileType: "external", Extend: "node-x", Path: "/x"}
+			err := RemoteExists(fp, "alice")
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err mismatch: got %v want %v", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				var statusErr *RemoteStatusError
+				if !errors.As(err, &statusErr) {
+					t.Fatalf("expected *RemoteStatusError, got %T: %v", err, err)
+				}
+			}
+		})
+	}
+}
+
+func TestRemoteProbeWriteStatusCodes(t *testing.T) {
+	saved := remoteLookupPodIP
+	t.Cleanup(func() { remoteLookupPodIP = saved })
 
 	cases := []struct {
 		name    string
@@ -190,10 +229,10 @@ func TestPeerProbeWriteStatusCodes(t *testing.T) {
 			t.Cleanup(srv.Close)
 
 			u, _ := url.Parse(srv.URL)
-			peerLookupPodIP = func(string) (string, error) { return u.Host, nil }
+			remoteLookupPodIP = func(string) (string, error) { return u.Host, nil }
 
 			fp := &models.FileParam{FileType: "external", Extend: "node-x", Path: "/x", Owner: "alice"}
-			err := PeerProbeWrite(fp)
+			err := RemoteProbeWrite(fp)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err mismatch: got %v want %v", err, tc.wantErr)
 			}
@@ -204,15 +243,18 @@ func TestPeerProbeWriteStatusCodes(t *testing.T) {
 	}
 }
 
-func TestPeerStatLookupFailure(t *testing.T) {
-	saved := peerLookupPodIP
-	t.Cleanup(func() { peerLookupPodIP = saved })
-	peerLookupPodIP = func(string) (string, error) { return "", errors.New("no pod") }
+func TestRemoteLookupFailure(t *testing.T) {
+	saved := remoteLookupPodIP
+	t.Cleanup(func() { remoteLookupPodIP = saved })
+	remoteLookupPodIP = func(string) (string, error) { return "", errors.New("no pod") }
 
-	if _, err := PeerStat(&models.FileParam{Extend: "node-x"}, "alice", false); err == nil {
+	if err := RemoteExists(&models.FileParam{Extend: "node-x"}, "alice"); err == nil {
 		t.Fatalf("expected lookup error")
 	}
-	if err := PeerProbeWrite(&models.FileParam{Extend: "node-x"}); err == nil {
+	if _, err := RemoteIsDir(&models.FileParam{Extend: "node-x"}, "alice"); err == nil {
+		t.Fatalf("expected lookup error")
+	}
+	if err := RemoteProbeWrite(&models.FileParam{Extend: "node-x"}); err == nil {
 		t.Fatalf("expected lookup error")
 	}
 }
