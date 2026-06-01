@@ -564,6 +564,9 @@ func ReportMountedStates(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+
+	klog.Infof("notify mounted: %s", common.ToJson(patches))
+
 	global.GlobalMounted.UpdateReportedMounted(patches)
 
 	resp := new(external.MountedStatesResp)
