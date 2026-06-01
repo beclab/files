@@ -152,18 +152,16 @@ func probeParentDir(full string) string {
 	return tmp[:pos] + "/"
 }
 
-// RemoteStatusError marks a non-2xx remote response so callers can wrap
-// it with their own prefix; lookup / transport errors flow through
-// unwrapped.
+// RemoteStatusError lets callers wrap a non-2xx remote response with
+// their own prefix; lookup / transport errors flow through unwrapped.
 type RemoteStatusError struct {
 	Code int
 }
 
 func (e *RemoteStatusError) Error() string { return fmt.Sprintf("remote status %d", e.Code) }
 
-// remoteRequest dispatches a GET to the peer files-pod's /api/resources
-// endpoint. logName ("stat"/"probe") parameterizes error wrapping so
-// callers preserve their original klog/error text.
+// logName ("stat" / "probe") is woven into error wrapping so callers
+// keep the same klog/error text as before the helper was extracted.
 func remoteRequest(p *models.FileParam, owner, query, logName string) (*http.Response, string, error) {
 	if p == nil {
 		return nil, "", errors.New("file param is nil")
@@ -194,7 +192,6 @@ func drainRemote(resp *http.Response) {
 	_ = resp.Body.Close()
 }
 
-// RemoteExists: 2xx -> nil; non-2xx -> *RemoteStatusError.
 func RemoteExists(p *models.FileParam, owner string) error {
 	resp, url, err := remoteRequest(p, owner, "", "stat")
 	if err != nil {
@@ -208,7 +205,6 @@ func RemoteExists(p *models.FileParam, owner string) error {
 	return nil
 }
 
-// RemoteIsDir: like RemoteExists, plus decodes body.isDir on 2xx.
 func RemoteIsDir(p *models.FileParam, owner string) (bool, error) {
 	resp, url, err := remoteRequest(p, owner, "", "stat")
 	if err != nil {
@@ -232,7 +228,6 @@ func RemoteIsDir(p *models.FileParam, owner string) (bool, error) {
 	return probe.IsDir, nil
 }
 
-// RemoteProbeWrite: GET /api/resources/...?probe=write.
 func RemoteProbeWrite(dst *models.FileParam) error {
 	resp, url, err := remoteRequest(dst, dst.Owner, "?probe=write", "probe")
 	if err != nil {
