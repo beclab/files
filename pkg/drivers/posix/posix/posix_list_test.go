@@ -2,8 +2,11 @@ package posix
 
 import (
 	"files/pkg/common"
+	"files/pkg/files"
 	"files/pkg/models"
+	"os"
 	"testing"
+	"time"
 )
 
 func TestGetExternalMountName(t *testing.T) {
@@ -51,7 +54,97 @@ func TestShouldUseFastExternalRootList(t *testing.T) {
 		t.Fatalf("did not expect fast list inside mount path")
 	}
 
-	if s.shouldUseFastExternalRootList(rootExternal, "share-id") {
-		t.Fatalf("did not expect fast list for share listing")
+	if !s.shouldUseFastExternalRootList(rootExternal, "share-id") {
+		t.Fatalf("expected fast list for share listing")
+	}
+}
+
+func TestHydrateExternalRootItemMetadataNonMounted(t *testing.T) {
+	dir := t.TempDir()
+	fullPath := dir + "/local.txt"
+	if err := os.WriteFile(fullPath, []byte("content"), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	modTime := time.Date(2026, 6, 1, 7, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(fullPath, modTime, modTime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	item := &files.FileInfo{
+		Name:  "local.txt",
+		Path:  "/local.txt",
+		IsDir: false,
+	}
+
+	hydrateExternalRootItemMetadata(item, fullPath, "/", nil, false)
+
+	if !item.ModTime.Equal(modTime) {
+		t.Fatalf("mod time mismatch: got=%s expected=%s", item.ModTime, modTime)
+	}
+	if item.Size != int64(len("content")) {
+		t.Fatalf("size mismatch: got=%d", item.Size)
+	}
+	if item.Path != "/local.txt" {
+		t.Fatalf("path mismatch: got=%q", item.Path)
+	}
+}
+
+func TestHydrateExternalRootItemMetadataMountedValid(t *testing.T) {
+	dir := t.TempDir()
+	fullPath := dir + "/mounted"
+	if err := os.Mkdir(fullPath, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	modTime := time.Date(2026, 6, 1, 7, 1, 0, 0, time.UTC)
+	if err := os.Chtimes(fullPath, modTime, modTime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	item := &files.FileInfo{
+		Name:  "mounted",
+		Path:  "/mounted/",
+		IsDir: true,
+	}
+	mounted := &files.DiskInfo{
+		Path:    "mounted-valid-test",
+		Type:    "usb",
+		Invalid: false,
+	}
+
+	hydrateExternalRootItemMetadata(item, fullPath, "/", mounted, true)
+
+	if !item.ModTime.Equal(modTime) {
+		t.Fatalf("mod time mismatch: got=%s expected=%s", item.ModTime, modTime)
+	}
+	if !item.IsDir {
+		t.Fatalf("expected item to remain a directory")
+	}
+	if item.Path != "/mounted/" {
+		t.Fatalf("path mismatch: got=%q", item.Path)
+	}
+}
+
+func TestHydrateExternalRootItemMetadataMountedInvalidSkipsStat(t *testing.T) {
+	dir := t.TempDir()
+	fullPath := dir + "/invalid"
+	if err := os.Mkdir(fullPath, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	item := &files.FileInfo{
+		Name:  "invalid",
+		Path:  "/invalid/",
+		IsDir: true,
+	}
+	mounted := &files.DiskInfo{
+		Path:    "mounted-invalid-test",
+		Type:    "smb",
+		Invalid: true,
+	}
+
+	hydrateExternalRootItemMetadata(item, fullPath, "/", mounted, true)
+
+	if !item.ModTime.IsZero() {
+		t.Fatalf("invalid mounted item should not be statted, got mod time %s", item.ModTime)
 	}
 }

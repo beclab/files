@@ -612,9 +612,9 @@ func (s *PosixStorage) shouldUseFastExternalRootList(fileParam *models.FileParam
 	return !hasMountName
 }
 
-// listExternalRootFast lists External root directory entries without
-// deep per-entry filesystem inspection, so a stale mountpoint cannot
-// block the whole root listing response.
+// listExternalRootFast lists External root directory entries from dirents first,
+// then fills metadata best-effort based on mount state. Invalid mounted entries
+// are not statted so stale mountpoints cannot block the whole root listing.
 func (s *PosixStorage) listExternalRootFast(fileParam *models.FileParam) (*files.FileInfo, error) {
 	resourceURI, err := fileParam.GetResourceUri()
 	if err != nil {
@@ -648,7 +648,8 @@ func (s *PosixStorage) listExternalRootFast(fileParam *models.FileParam) (*files
 
 	for _, entry := range entries {
 		modeType := entry.Type()
-		// Use dirent type bits only; avoid entry.Info()/Stat on each child.
+		// Use dirent type bits for the initial item shape; metadata hydration
+		// below may correct unknown types when it is safe to stat.
 		isDir := modeType.IsDir() || modeType == 0
 
 		itemPath := filepath.ToSlash(filepath.Join(rootPath, entry.Name()))
