@@ -604,8 +604,8 @@ func getExternalMountName(path string) (string, bool) {
 	return parts[0], true
 }
 
-func (s *PosixStorage) shouldUseFastExternalRootList(fileParam *models.FileParam, shareId string) bool {
-	if shareId != "" || fileParam == nil || fileParam.FileType != common.External {
+func (s *PosixStorage) shouldUseFastExternalRootList(fileParam *models.FileParam, _ string) bool {
+	if fileParam == nil || fileParam.FileType != common.External {
 		return false
 	}
 	_, hasMountName := getExternalMountName(fileParam.Path)
@@ -645,6 +645,13 @@ func (s *PosixStorage) listExternalRootFast(fileParam *models.FileParam) (*files
 	if rootPath == "/" {
 		root.Name = ""
 	}
+	if info, statErr := os.Lstat(targetPath); statErr == nil {
+		root.ModTime = info.ModTime()
+		root.Mode = info.Mode()
+		root.Size = info.Size()
+	} else {
+		klog.Warningf("Posix external root metadata stat failed, path: %s, error: %v", targetPath, statErr)
+	}
 
 	for _, entry := range entries {
 		modeType := entry.Type()
@@ -652,37 +659,95 @@ func (s *PosixStorage) listExternalRootFast(fileParam *models.FileParam) (*files
 		// below may correct unknown types when it is safe to stat.
 		isDir := modeType.IsDir() || modeType == 0
 
-		itemPath := filepath.ToSlash(filepath.Join(rootPath, entry.Name()))
-		if !strings.HasPrefix(itemPath, "/") {
-			itemPath = "/" + itemPath
-		}
-		if isDir && !strings.HasSuffix(itemPath, "/") {
-			itemPath += "/"
-		}
-
 		item := &files.FileInfo{
 			FsType:   fileParam.FileType,
 			FsExtend: fileParam.Extend,
-			Path:     itemPath,
+			Path:     externalRootItemPath(rootPath, entry.Name(), isDir),
 			Name:     entry.Name(),
 			IsDir:    isDir,
 		}
-		if mounted, ok := global.GlobalMounted.GetMountedByPath(entry.Name()); ok && mounted.Type != "" {
+		mounted, mountedOK := global.GlobalMounted.GetMountedByPath(entry.Name())
+		if mountedOK && mounted.Type != "" {
 			item.ExternalType = mounted.Type
 		} else {
 			item.ExternalType = global.GlobalMounted.CheckExternalType(item.Path, item.IsDir)
 		}
 
+		hydrateExternalRootItemMetadata(item, filepath.Join(targetPath, entry.Name()), rootPath, mounted, mountedOK)
+
 		if item.IsDir {
 			root.Listing.NumDirs++
 		} else {
 			root.Listing.NumFiles++
+			root.Listing.Size += item.Size
+			root.Listing.FileSize += item.Size
 		}
 		root.Listing.Items = append(root.Listing.Items, item)
 	}
 	root.Listing.NumTotalFiles = len(root.Listing.Items)
 
 	return root, nil
+}
+
+func externalRootItemPath(rootPath, name string, isDir bool) string {
+	itemPath := filepath.ToSlash(filepath.Join(rootPath, name))
+	if !strings.HasPrefix(itemPath, "/") {
+		itemPath = "/" + itemPath
+	}
+	if isDir && !strings.HasSuffix(itemPath, "/") {
+		itemPath += "/"
+	}
+	return itemPath
+}
+
+func hydrateExternalRootItemMetadata(item *files.FileInfo, fullPath, rootPath string, mounted *files.DiskInfo, mountedOK bool) {
+	if item == nil {
+		return
+	}
+
+	var (
+		info os.FileInfo
+		err  error
+	)
+	if mountedOK {
+		if mounted == nil || mounted.Invalid {
+			return
+		}
+		info, err = statMountedExternalRootItem(fullPath, mounted)
+	} else {
+		info, err = os.Lstat(fullPath)
+	}
+	if err != nil {
+		klog.Warningf("Posix external root metadata stat failed, path: %s, error: %v", fullPath, err)
+		return
+	}
+
+	item.ModTime = info.ModTime()
+	item.Mode = info.Mode()
+	item.Size = info.Size()
+	item.IsDir = info.IsDir()
+	item.IsSymlink = files.IsSymlink(info.Mode())
+	item.Path = externalRootItemPath(rootPath, item.Name, item.IsDir)
+}
+
+func statMountedExternalRootItem(fullPath string, mounted *files.DiskInfo) (os.FileInfo, error) {
+	if mounted == nil {
+		return os.Lstat(fullPath)
+	}
+
+	resultCh := make(chan os.FileInfo, 1)
+	err := externalMountGuard.run(mounted.Path, mounted.Invalid, "external_root_metadata", func() error {
+		info, statErr := os.Lstat(fullPath)
+		if statErr == nil {
+			resultCh <- info
+		}
+		return statErr
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return <-resultCh, nil
 }
 
 func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content bool) (*files.FileInfo, error) {
