@@ -130,14 +130,11 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// share=1: src.Owner is left as the requester (local stat uses it);
-	// grantor only goes to the peer header via handler.Owner.
 	srcFP := *pasteParam.Src
-	srcHeaderOwner := srcFP.Owner
 	if pasteParam.Share == 1 && req.SrcOwner != "" {
-		srcHeaderOwner = req.SrcOwner
+		srcFP.Owner = req.SrcOwner
 	}
-	srcHandler := drivers.Adaptor.NewFileHandler(srcFP.FileType, &base.HandlerParam{Ctx: ctx, Owner: srcHeaderOwner})
+	srcHandler := drivers.Adaptor.NewFileHandler(srcFP.FileType, &base.HandlerParam{Ctx: ctx, Owner: srcFP.Owner})
 	if srcHandler == nil {
 		klog.Warningf("[paste] source precheck failed: handler not found for fileType %s, owner: %s, action: %s, src: %s",
 			srcFP.FileType, owner, req.Action, req.Source)
@@ -151,7 +148,6 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// share=1: dst.Owner is mutated to grantor (every dst path runs as it).
 	dstFP := *pasteParam.Dst
 	if pasteParam.Share == 1 && req.DstOwner != "" {
 		dstFP.Owner = req.DstOwner
