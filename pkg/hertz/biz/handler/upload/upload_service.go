@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"files/pkg/access"
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
@@ -30,6 +32,14 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
 )
+
+// newFileHandler is a seam over the global driver adaptor so the upload
+// handlers' error mapping (e.g. ErrSyncPermissionDenied -> 403) can be
+// unit-tested without a live backend. Tests override it and restore in
+// t.Cleanup.
+var newFileHandler = func(fileType string, hp *base.HandlerParam) base.Execute {
+	return drivers.Adaptor.NewFileHandler(fileType, hp)
+}
 
 // UploadLinkMethod .
 // @router /upload/upload_link [GET]
@@ -74,17 +84,40 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 
 	uploadArg.FileParam = fileParam
 
+	// Authorize once per upload session here: the chunk POSTs that
+	// follow carry the uid issued by this link, so a single gate at the
+	// session-creation point covers the whole upload without re-checking
+	// (which for sync would mean a seahub RPC per chunk). Share uploads
+	// (share=1) are vetted by ShareMiddleware / ShareUpload; we still
+	// require the internal token so a forged share=1 cannot skip the gate.
+	if req.Share == "1" {
+		if !handler.RequireInternalShareToken(c, "upload") {
+			return
+		}
+	} else {
+		if lvl, aerr := access.CheckAccessParam(ctx, fileParam.Owner, fileParam); aerr != nil || !lvl.Allow(models.ActionUpload) {
+			klog.Warningf("[upload] permission denied: owner=%s, type=%s, path=%s, level=%v, err=%v",
+				fileParam.Owner, fileParam.FileType, fileParam.Path, lvl, aerr)
+			c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
+			return
+		}
+	}
+
 	var handlerParam = &base.HandlerParam{
 		Ctx:   ctx,
 		Owner: uploadArg.FileParam.Owner,
 	}
-	var fileHandler = drivers.Adaptor.NewFileHandler(uploadArg.FileParam.FileType, handlerParam)
+	var fileHandler = newFileHandler(uploadArg.FileParam.FileType, handlerParam)
 	if fileHandler == nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", uploadArg.FileParam.FileType)})
 		return
 	}
 	resp, err := fileHandler.UploadLink(uploadArg)
 	if err != nil {
+		if errors.Is(err, seahub.ErrSyncPermissionDenied) {
+			handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
+			return
+		}
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,
 			"message": err.Error(),
@@ -125,6 +158,14 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// Mirror UploadLinkMethod: a share=1 request is trusted only when it
+	// carries the internal token set by the share proxy.
+	if req.Share == "1" {
+		if !handler.RequireInternalShareToken(c, "upload") {
+			return
+		}
+	}
+
 	uploadArg.FileParam, err = models.CreateFileParam(owner, p)
 	if err != nil {
 		klog.Errorf("file param error: %v, owner: %s", err, owner)
@@ -136,13 +177,17 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 		Ctx:   ctx,
 		Owner: uploadArg.FileParam.Owner,
 	}
-	var fileHandler = drivers.Adaptor.NewFileHandler(uploadArg.FileParam.FileType, handlerParam)
+	var fileHandler = newFileHandler(uploadArg.FileParam.FileType, handlerParam)
 	if fileHandler == nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", uploadArg.FileParam.FileType)})
 		return
 	}
 	respBytes, err := fileHandler.UploadedBytes(uploadArg)
 	if err != nil {
+		if errors.Is(err, seahub.ErrSyncPermissionDenied) {
+			handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
+			return
+		}
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
@@ -226,7 +271,7 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 		Ctx:   ctx,
 		Owner: uploadArg.FileParam.Owner,
 	}
-	var fileHandler = drivers.Adaptor.NewFileHandler(uploadArg.FileParam.FileType, handlerParam)
+	var fileHandler = newFileHandler(uploadArg.FileParam.FileType, handlerParam)
 	if fileHandler == nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("handler not found, type: %s", uploadArg.FileParam.FileType)})
 		return

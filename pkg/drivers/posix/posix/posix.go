@@ -9,6 +9,7 @@ import (
 	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
 	"files/pkg/global"
+	"files/pkg/integration"
 	"files/pkg/models"
 	"files/pkg/preview"
 	"files/pkg/tasks"
@@ -39,6 +40,36 @@ func NewPosixStorage(handler *base.HandlerParam) *PosixStorage {
 	return &PosixStorage{
 		handler: handler,
 	}
+}
+
+// CheckPermission resolves the permission level for a POSIX-backed
+// resource (drive Home/Data, cache, external).
+//
+// drive Home/Data and cache are owner-scoped: GetResourceUri builds
+// their path from the owner's own PVC (GetPvcUser / GetPvcCache(owner)),
+// so the owner is correctly admin over them. drive/Common is a
+// cluster-wide shared volume gated by the owner's platform role.
+//
+// external (and internal/smb/usb/hdd) instead resolve to the shared
+// EXTERNAL_PREFIX, which is NOT keyed by owner. Returning admin here
+// assumes external-mount access is already gated upstream by node /
+// device ownership. That assumption must be verified before CheckAccess
+// is wired into a real call site for external resources.
+// isPlatformAdmin is a seam over the global IntegrationService so the
+// drive/Common role branch can be unit-tested without a live integration
+// manager. Tests override it and restore in t.Cleanup.
+var isPlatformAdmin = func(owner string) bool {
+	return integration.IntegrationService != nil && integration.IntegrationService.IsPlatformAdmin(owner)
+}
+
+func (s *PosixStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
+	if p.IsDriveCommon() {
+		if isPlatformAdmin(owner) {
+			return models.LevelAdmin, nil
+		}
+		return models.LevelRead, nil
+	}
+	return models.LevelAdmin, nil
 }
 
 func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {

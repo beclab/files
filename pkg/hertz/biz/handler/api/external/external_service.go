@@ -382,7 +382,7 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 // GetSmbHistoryMethod .
 // @router /api/smb_history/:node/ [GET]
 func GetSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
-	bflName := string(c.GetHeader("X-Bfl-User"))
+	bflName := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 	if bflName == "" {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
 		return
@@ -440,7 +440,7 @@ func PutSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	bflName := string(c.GetHeader("X-Bfl-User"))
+	bflName := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 	if bflName == "" {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
 		return
@@ -487,7 +487,7 @@ func DeleteSmbHistoryMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	bflName := string(c.GetHeader("X-Bfl-User"))
+	bflName := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 	if bflName == "" {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
 		return

@@ -192,7 +192,7 @@ func isValidUsername(username string) bool {
 	return isValidEmail(username)
 }
 
-func UpdateUserDirPermission(repoID, path, owner, shareTo, permission string) {
+func UpdateUserDirPermission(repoID, path, owner, shareTo, permission string) error {
 	if permission == PERMISSION_ADMIN {
 		permission = PERMISSION_READ_WRITE
 	}
@@ -200,12 +200,15 @@ func UpdateUserDirPermission(repoID, path, owner, shareTo, permission string) {
 	if path == "/" {
 		if _, err := seaserv.GlobalSeafileAPI.SetSharePermission(repoID, owner, shareTo, permission); err != nil {
 			klog.Warningf("UpdateUserDirPermission SetSharePermission failed repo=%s shareTo=%s perm=%s: %v", repoID, shareTo, permission, err)
+			return err
 		}
 	} else {
 		if _, err := seaserv.GlobalSeafileAPI.UpdateShareSubdirPermForUser(repoID, path, owner, shareTo, permission); err != nil {
 			klog.Warningf("UpdateUserDirPermission UpdateShareSubdirPermForUser failed repo=%s path=%s shareTo=%s perm=%s: %v", repoID, path, shareTo, permission, err)
+			return err
 		}
 	}
+	return nil
 }
 
 // HandlePostDirSharedItems update permission
@@ -267,7 +270,9 @@ func HandlePostDirSharedItems(sharePath *share.SharePath, shareMember *share.Sha
 			return nil, fmt.Errorf("user not found")
 		}
 
-		UpdateUserDirPermission(repoId, path, repoOwner, sharedTo, permission)
+		if err := UpdateUserDirPermission(repoId, path, repoOwner, sharedTo, permission); err != nil {
+			return nil, err
+		}
 	}
 
 	return common.ToBytes(map[string]interface{}{"success": true}), nil

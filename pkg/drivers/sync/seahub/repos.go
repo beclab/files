@@ -6,6 +6,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/searpc"
 	"files/pkg/drivers/sync/seahub/seaserv"
+	"files/pkg/models"
 	"fmt"
 	"html/template"
 	"math"
@@ -706,8 +707,8 @@ func HandleGetReposDownloadInfo(owner, repoId string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if perm == "" {
-		return nil, fmt.Errorf("you do not have permission to access this library")
+	if !models.LevelFromSyncPermission(perm).Allow(models.ActionRead) {
+		return nil, fmt.Errorf("you do not have permission to access this library: %w", ErrSyncPermissionDenied)
 	}
 
 	if !seaserv.GlobalSeafileAPI.IsRepoSyncable(repoId, username, perm) {

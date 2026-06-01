@@ -390,29 +390,6 @@ func QueryShareSmbUser(params *QueryParams, page, pageSize int64, orderBy, order
 	return res, total, nil
 }
 
-func QueryShareById(shareId string) (*share.SharePath, error) {
-	var res *share.SharePath
-	if err := DB.Table("share_paths").Where("id = ?", shareId).First(&res).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			return nil, err
-		}
-		return nil, nil
-	}
-
-	return res, nil
-}
-
-func QueryShareMemberById(member string, shareId string) (*share.ShareMember, error) {
-	var res *share.ShareMember
-	if err := DB.Table("share_members").Where("path_id = ? AND share_member = ?", shareId, member).First(&res).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			return nil, err
-		}
-		return nil, nil
-	}
-	return res, nil
-}
-
 func QueryShareExternalById(shareId string, token string) (*share.ShareToken, error) {
 	var res *share.ShareToken
 	if err := DB.Table("share_tokens").Where("path_id = ? and token = ?", shareId, token).First(&res).Error; err != nil {

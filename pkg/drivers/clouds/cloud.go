@@ -37,6 +37,14 @@ func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
 	}
 }
 
+// CheckPermission resolves the permission level for a cloud resource.
+// Cloud remotes are bound to the owner's own integration account, so
+// the owner has admin level; any finer-grained access is enforced by
+// the remote provider via the rclone credentials.
+func (s *CloudStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
+	return models.LevelAdmin, nil
+}
+
 /**
  * ~ List
  */

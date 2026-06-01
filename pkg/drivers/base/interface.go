@@ -37,4 +37,6 @@ type Execute interface {
 	UploadedBytes(fileUploadArg *models.FileUploadArgs) ([]byte, error)
 
 	UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error)
+
+	CheckPermission(p *models.FileParam, owner string) (models.Level, error)
 }

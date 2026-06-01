@@ -111,8 +111,8 @@ func GetUploadLink(fileParam *models.FileParam, reqFrom string, replace bool, on
 	if err != nil {
 		return "", err
 	}
-	if permission != "rw" {
-		return "", errors.New("permission denied")
+	if !models.LevelFromSyncPermission(permission).Allow(models.ActionWrite) {
+		return "", ErrSyncPermissionDenied
 	}
 
 	quota, err := seaserv.GlobalSeafileAPI.CheckQuota(repoId, 0)

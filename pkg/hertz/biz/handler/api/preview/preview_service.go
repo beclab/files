@@ -8,6 +8,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	bizhandler "files/pkg/hertz/biz/handler"
 	preview "files/pkg/hertz/biz/model/api/preview"
 	"files/pkg/models"
 	"fmt"
@@ -41,6 +42,10 @@ func PreviewMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	klog.Infof("[Incoming] preview, user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
+
+	if !bizhandler.Gate(ctx, c, contextArg.FileParam, models.ActionPreview, true, "preview") {
+		return
+	}
 
 	var handlerParam = &base.HandlerParam{
 		Ctx:   ctx,

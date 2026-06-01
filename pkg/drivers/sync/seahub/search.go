@@ -5,6 +5,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/hertz/biz/dal/database"
+	"files/pkg/models"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -19,7 +20,7 @@ func HandleSearch(owner, q string) ([]byte, error) {
 	ownedRepos, err := seaserv.GlobalSeafileAPI.GetOwnedRepoList(username, false, -1, -1)
 	if err != nil {
 		klog.Errorln(err)
-		return nil, nil
+		return nil, err
 	}
 	for _, repo := range ownedRepos {
 		repoId := repo["id"]
@@ -33,7 +34,7 @@ func HandleSearch(owner, q string) ([]byte, error) {
 	sharedRepos, err := seaserv.GlobalSeafileAPI.GetShareInRepoList(username, -1, -1)
 	if err != nil {
 		klog.Errorln(err)
-		return nil, nil
+		return nil, err
 	}
 	for _, repo := range sharedRepos {
 		repoId := repo["id"]
@@ -56,12 +57,8 @@ func HandleSearchFile(username, repoId, q string, shared bool) ([]map[string]str
 		return nil, errors.New("repo not found")
 	}
 
-	perm, err := CheckFolderPermission(username, repoId, "/")
-	if err != nil {
+	if err := EnsureSyncPermission(username, repoId, "/", models.ActionRead); err != nil {
 		return nil, err
-	}
-	if perm == "" {
-		return nil, errors.New("permission denied")
 	}
 
 	shareId := ""

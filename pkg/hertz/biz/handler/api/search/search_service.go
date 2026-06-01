@@ -8,6 +8,7 @@ import (
 	"files/pkg/drivers/sync/seahub"
 	"fmt"
 	"strings"
+	"time"
 
 	"files/pkg/common"
 	"files/pkg/global"
@@ -137,6 +138,13 @@ func CheckDirectory(ctx context.Context, c *app.RequestContext) {
 
 		if shared.FileType == common.Sync {
 			handler.RespError(c, common.ErrorMessageSyncNotSupport)
+			return
+		}
+
+		expired, ok := common.ParseRFC3339Nano(shared.ExpireTime)
+		if !ok || time.Now().After(expired) {
+			klog.Errorf("[search] CheckDirectory, share expired or unparseable, owner: %s, expireTime: %s", owner, shared.ExpireTime)
+			handler.RespError(c, common.ErrorMessageLinkExpired)
 			return
 		}
 

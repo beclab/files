@@ -42,6 +42,16 @@ type SyncStorage struct {
 	paste   *models.PasteParam
 }
 
+// CheckPermission resolves the permission level for a sync (Seafile)
+// resource by querying Seafile's per-path permission and mapping the
+// returned string to a unified Level. Seafile grants are per-folder, so
+// we resolve the parent directory of p.Path before querying, matching
+// the seahub call sites.
+func (s *SyncStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
+	username := owner + "@auth.local"
+	return seahub.ResolveSyncLevel(username, p.Extend, seahub.SyncParentDir(p.Path))
+}
+
 type Files struct {
 	DirId      string  `json:"dir_id"`
 	Items      []*File `json:"dirent_list"`
@@ -335,12 +345,8 @@ func (s *SyncStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Prev
 
 	username := fileParam.Owner + "@auth.local"
 
-	permission, err := seahub.CheckFolderPermission(username, repoId, path)
-	if err != nil {
+	if err := seahub.EnsureSyncPermission(username, repoId, seahub.SyncParentDir(path), models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if permission != "rw" {
-		return nil, errors.New("permission denied")
 	}
 
 	tmpFile, err := os.OpenFile(imageFilePath, os.O_RDWR|os.O_CREATE, 0666)

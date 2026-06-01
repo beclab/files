@@ -4,9 +4,10 @@ package permission
 
 import (
 	"context"
+	"files/pkg/access"
 	"files/pkg/common"
 	"files/pkg/files"
-	"files/pkg/hertz/biz/handler"
+	"files/pkg/integration"
 	permission "files/pkg/hertz/biz/model/api/permission"
 	"files/pkg/models"
 	"fmt"
@@ -20,7 +21,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// GetPermissionMethod .
+// GetPermissionMethod resolves the permission Level that a user has on a
+// directory. The directory is the wildcard path (a frontend URL like
+// /drive/Home/docs); the user defaults to the X-Bfl-User header but can be
+// overridden with ?user= so callers can query on behalf of another user.
+//
+// The response carries the unified Level (level + can_* booleans) for any
+// storage type (drive/cache/external/cloud/sync) and does not require the
+// target to exist. The POSIX owner uid is returned best-effort, only for
+// local storages whose file currently exists.
 // @router /api/permission/*path [GET]
 func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	var p = string(c.Path())
@@ -35,46 +44,60 @@ func GetPermissionMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
 		return
 	}
-	var fileParam, err = models.CreateFileParam(owner, path)
+	var user = string(c.Query("user"))
+	if user == "" {
+		user = owner
+	}
+
+	// Introspecting another user's capabilities is restricted to platform
+	// admins; everyone else may only query their own permission.
+	if user != owner {
+		if integration.IntegrationService == nil || !integration.IntegrationService.IsPlatformAdmin(owner) {
+			klog.Warningf("[permission] cross-user query denied: caller=%s, target=%s", owner, user)
+			c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
+			return
+		}
+	}
+
+	fileParam, err := models.CreateFileParam(user, path)
 	if err != nil {
-		klog.Errorf("file param error: %v, owner: %s", err, owner)
+		klog.Errorf("file param error: %v, user: %s", err, user)
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("file param error: %v", err)})
 		return
 	}
-	if !common.ListContains(common.PosixFileTypes, fileParam.FileType) {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "permission only supported on local storages"})
+
+	// The resolved Level is action-independent; callers derive the
+	// per-action verdict from the can_* booleans below.
+	lvl, aerr := access.CheckAccessParam(ctx, user, fileParam)
+	if aerr != nil {
+		klog.Warningf("[permission] level resolve failed: user=%s, type=%s, path=%s, err=%v",
+			user, fileParam.FileType, fileParam.Path, aerr)
+		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
 		return
 	}
 
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
-		return
-	}
-	fs := afero.NewBasePathFs(afero.NewOsFs(), uri)
-
-	exists, err := afero.Exists(fs, fileParam.Path)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
-	}
-	if !exists {
-		c.AbortWithStatusJSON(consts.StatusNotFound, utils.H{"error": "file not found"})
-		return
+	res := utils.H{
+		"level":      lvl.String(),
+		"can_read":   lvl.Allow(models.ActionRead),
+		"can_write":  lvl.Allow(models.ActionWrite),
+		"can_delete": lvl.Allow(models.ActionDelete),
+		"can_upload": lvl.Allow(models.ActionUpload),
 	}
 
-	res := make(map[string]interface{})
-	res["uid"], _, err = files.GetUidGid(fs, fileParam.Path)
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
+	// uid is best-effort: only local storages expose a POSIX owner, and only
+	// when the file actually exists. Failures here must not fail the request.
+	if common.ListContains(common.PosixFileTypes, fileParam.FileType) {
+		if uri, uerr := fileParam.GetResourceUri(); uerr == nil {
+			fs := afero.NewBasePathFs(afero.NewOsFs(), uri)
+			if exists, _ := afero.Exists(fs, fileParam.Path); exists {
+				if uid, _, gerr := files.GetUidGid(fs, fileParam.Path); gerr == nil {
+					res["uid"] = uid
+				}
+			}
+		}
 	}
 
-	resp := new(permission.GetPermissionResp)
-	if !handler.DecodeResponse(c, common.ToBytes(res), resp) {
-		return
-	}
-	c.JSON(consts.StatusOK, resp)
+	c.JSON(consts.StatusOK, res)
 }
 
 // PutPermissionMethod .
@@ -108,6 +131,15 @@ func PutPermissionMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	if !common.ListContains(common.PosixFileTypes, fileParam.FileType) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "permission only supported on local storages"})
+		return
+	}
+
+	// chown is a write-class operation; deny it to users who only have
+	// read access (e.g. a normal user on the shared drive/Common volume).
+	if lvl, aerr := access.CheckAccessParam(ctx, fileParam.Owner, fileParam); aerr != nil || !lvl.Allow(models.ActionWrite) {
+		klog.Warningf("[permission] chown denied: owner=%s, type=%s, path=%s, level=%v, err=%v",
+			fileParam.Owner, fileParam.FileType, fileParam.Path, lvl, aerr)
+		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
 		return
 	}
 

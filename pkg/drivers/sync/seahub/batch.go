@@ -86,12 +86,8 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 
 	username := fileParam.Owner + "@auth.local"
 
-	permission, err := CheckFolderPermission(username, repoId, parentDir)
-	if err != nil {
+	if err := EnsureSyncPermission(username, repoId, parentDir, models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if permission != "rw" {
-		return nil, errors.New("permission denied")
 	}
 
 	// One listing serves both existence (del_file is silently idempotent
@@ -122,7 +118,7 @@ func HandleBatchDelete(fileParam *models.FileParam, dirents []string) ([]byte, e
 
 	for _, dirent := range dirents {
 		name := strings.TrimRight(dirent, "/")
-		if perm, ok := folderPerms[name]; ok && perm != "rw" {
+		if perm, ok := folderPerms[name]; ok && !models.LevelFromSyncPermission(perm).Allow(models.ActionWrite) {
 			return nil, fmt.Errorf("Can't delete folder %s, please check its permission", name)
 		}
 	}
@@ -239,25 +235,15 @@ func HandleBatchCopy(owner, srcRepoId, srcParentDir string, srcDirents []string,
 
 	username := owner + "@auth.local"
 
-	srcPerm, err := CheckFolderPermission(username, srcRepoId, srcParentDir)
-	if err != nil {
+	if err := EnsureSyncPermission(username, srcRepoId, srcParentDir, models.ActionRead); err != nil {
 		return nil, err
-	}
-	if !strings.Contains(srcPerm, "r") {
-		klog.Error("Permission denied.")
-		return nil, errors.New("permission denied")
 	}
 
 	// Require "rw" on dst, mirroring HandleBatchMove. Previously a
 	// successful lookup of "r" / "" / "cloud-edit" fell through to
 	// CopyFile and relied on seafile to reject it.
-	dstPerm, err := CheckFolderPermission(username, dstRepoId, dstParentDir)
-	if err != nil {
+	if err := EnsureSyncPermission(username, dstRepoId, dstParentDir, models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if dstPerm != "rw" {
-		klog.Error("Permission denied.")
-		return nil, errors.New("permission denied")
 	}
 
 	finalDstDirents, err := resolveDstDirents(srcDirents, dstDirents)
@@ -326,22 +312,12 @@ func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string,
 
 	username := owner + "@auth.local"
 
-	srcPerm, err := CheckFolderPermission(username, srcRepoId, srcParentDir)
-	if err != nil {
+	if err := EnsureSyncPermission(username, srcRepoId, srcParentDir, models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if srcPerm != "rw" {
-		klog.Error("Permission denied.")
-		return nil, errors.New("permission denied")
 	}
 
-	dstPerm, err := CheckFolderPermission(username, dstRepoId, dstParentDir)
-	if err != nil {
+	if err := EnsureSyncPermission(username, dstRepoId, dstParentDir, models.ActionWrite); err != nil {
 		return nil, err
-	}
-	if dstPerm != "rw" {
-		klog.Error("Permission denied.")
-		return nil, errors.New("permission denied")
 	}
 
 	folderPerms, err := GetSubFolderPermissionByDir(username, srcRepoId, srcParentDir)
@@ -351,7 +327,7 @@ func HandleBatchMove(owner, srcRepoId, srcParentDir string, srcDirents []string,
 	}
 	for _, dirent := range srcDirents {
 		if perm, exists := folderPerms[dirent]; exists {
-			if perm != "rw" {
+			if !models.LevelFromSyncPermission(perm).Allow(models.ActionWrite) {
 				klog.Errorf("Can't move folder %s, please check its permission.", dirent)
 				return nil, fmt.Errorf("cant move folder %s", dirent)
 			}

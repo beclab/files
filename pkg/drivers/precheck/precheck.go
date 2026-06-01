@@ -23,7 +23,6 @@ import (
 	"errors"
 	"files/pkg/common"
 	"files/pkg/drivers/clouds/rclone"
-	"files/pkg/drivers/sync/seahub"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/files"
 	"files/pkg/global"
@@ -316,8 +315,13 @@ func checkLocalWritable(dst *models.FileParam) error {
 	return nil
 }
 
-// checkSyncWritable: only "rw" on the dst parent passes. "" / "r" /
-// "cloud-edit" / etc. all fail.
+// checkSyncWritable verifies the destination repo exists. Write
+// permission is no longer probed here: the paste handler's CheckAccess
+// gate already resolves the sync dst's write permission (via the same
+// seahub.CheckFolderPermission on the parent dir) before precheck runs,
+// so a second RPC here would be redundant. This keeps only the
+// repo-existence check, whose error is distinct from a permission
+// denial.
 func checkSyncWritable(dst *models.FileParam) error {
 	if dst.Extend == "" {
 		return errors.New("sync destination invalid: repo id is empty")
@@ -328,27 +332,6 @@ func checkSyncWritable(dst *models.FileParam) error {
 	}
 	if repo == nil {
 		return fmt.Errorf("sync destination not found: repo %s", dst.Extend)
-	}
-
-	// dst.Path is the final entry's path; strip the basename to get
-	// the dir we actually need to write into. Mirrors task_paste_sync.go.
-	parent := strings.TrimSuffix(dst.Path, "/")
-	if parent == "" {
-		parent = "/"
-	} else if pos := strings.LastIndex(parent, "/"); pos >= 0 {
-		parent = parent[:pos+1]
-	} else {
-		parent = "/"
-	}
-
-	username := dst.Owner + "@auth.local"
-	perm, err := seahub.CheckFolderPermission(username, dst.Extend, parent)
-	if err != nil {
-		return fmt.Errorf("sync permission lookup: %w", err)
-	}
-	if perm != "rw" {
-		return fmt.Errorf("destination not writable: sync/%s%s (perm: %q)",
-			dst.Extend, dst.Path, perm)
 	}
 	return nil
 }

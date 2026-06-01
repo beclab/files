@@ -5,9 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"files/pkg/access"
 	"files/pkg/common"
 	"files/pkg/global"
-	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/handler"
 	"files/pkg/hertz/biz/model/api/paste"
 	"files/pkg/hertz/biz/model/api/share"
@@ -27,17 +27,6 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"k8s.io/klog/v2"
 )
-
-type ShareAccess struct {
-	Method    string `json:"method"`
-	Resource  bool   `json:"resource"`
-	Preview   bool   `json:"preview"`
-	Raw       bool   `json:"raw"`
-	Download  bool   `json:"download"`
-	Paste     bool   `json:"paste"`
-	Upload    bool   `json:"upload"`
-	FromShare bool   `json:"fromShare"`
-}
 
 var (
 	nonSharePath = []string{
@@ -150,7 +139,7 @@ func TimingMiddleware() app.HandlerFunc {
 
 func CookieMiddleware() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
-		bflName := string(c.GetHeader("X-Bfl-User"))
+		bflName := string(c.GetHeader(common.REQUEST_HEADER_OWNER))
 		newCookie := string(c.GetHeader("Cookie"))
 
 		if bflName != "" {
@@ -169,8 +158,7 @@ func CookieMiddleware() app.HandlerFunc {
 func ShareMiddleware() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var err error
-		var bflName = string(c.GetHeader("X-Bfl-User")) // todo if sharing externally, you may use the name from the host here.
-		var cookie = string(c.GetHeader("Cookie"))      // todo for external sharing, this field may be empty unless it contains the sharer's cookie.
+		var bflName = string(c.GetHeader(common.REQUEST_HEADER_OWNER)) // todo if sharing externally, you may use the name from the host here.
 		var host = string(c.GetHeader("X-Forwarded-Host"))
 		var method = string(c.Request.Method())
 		var path = string(c.Request.Path())
@@ -182,7 +170,7 @@ func ShareMiddleware() app.HandlerFunc {
 
 		// if Paste, is's Source
 		var paramPath string
-		var shareAccess = &ShareAccess{
+		var shareAccess = &access.ShareAccess{
 			Method: method,
 		}
 
@@ -251,7 +239,10 @@ func ShareMiddleware() app.HandlerFunc {
 
 		// if Paste, it's Source
 		var shareParam *models.FileParam
-		shareParam, _ = models.CreateFileParam(bflName, paramPath)
+		shareParam, err = models.CreateFileParam(bflName, paramPath)
+		if err != nil {
+			klog.Errorf("[share] CreateFileParam error: %v, path: %s", err, paramPath)
+		}
 
 		if shareParam == nil || (shareParam.FileType != common.Share && ((pasteDstParam != nil && pasteDstParam.FileType != common.Share) || pasteDstParam == nil)) {
 			c.Next(ctx)
@@ -267,7 +258,7 @@ func ShareMiddleware() app.HandlerFunc {
 			shareParam.Extend = common.TrimShareId(shareParam.Extend, global.GlobalNode.CheckNodeExists)
 		}
 
-		shared, expires, err := checkSharePath(bflName, shareParam.Extend, shareAccess.FromShare)
+		shared, expires, err := access.ShareResolvePath(bflName, shareParam.Extend, shareAccess.FromShare)
 		if err != nil {
 			klog.Errorf("[share] check sharePath error: %v", err)
 			if expires == 0 {
@@ -293,38 +284,16 @@ func ShareMiddleware() app.HandlerFunc {
 			shareNode = global.GlobalNode.GetMasterNode()
 		}
 
-		switch shareType {
-		case common.ShareTypeInternal:
-			if bflName != shared.Owner {
-				shareMember, err = checkInternal(bflName, shared, shareAccess)
-				if err != nil {
-					klog.Errorf("[share] check internal error: %v", err)
-					handler.RespError(c, common.ErrorMessagePermissionDenied)
-					return
-				}
-			}
-		case common.ShareTypeExternal:
-			klog.Infof("[share] external share, cookie: %v", len(cookie))
-			var token = c.Query("token")
-			var expires int64
-			var permit bool
-
-			expires, permit, err = checkExternal(bflName, token, shared, shareAccess)
-			if err != nil {
-				klog.Errorf("[share] check external error: %v, expires: %d", err, expires)
+		shareMember, expires, err = access.ShareAuthorize(bflName, c.Query("token"), shared, shareAccess)
+		if err != nil {
+			if expires > 0 {
+				klog.Errorf("[share] authorize error: %v, expires: %d", err, expires)
 				handler.RespErrorExpired(c, common.CodeTokenExpired, common.ErrorMessageTokenExpired, expires)
-				return
 			} else {
-				klog.Infof("[share] check external, permit: %v, expires: %d, shareOwner: %s, shareType: %s, sharePermit: %d", permit, expires, shared.Owner, shared.ShareType, shared.Permission)
-				if !permit {
-					if shared.Permission == 2 {
-						handler.RespSuccess(c, nil)
-						return
-					}
-					handler.RespError(c, common.ErrorMessagePermissionDenied)
-					return
-				}
+				klog.Errorf("[share] authorize denied: %v", err)
+				handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
 			}
+			return
 		}
 
 		var masterNodeName = global.GlobalNode.GetMasterNode()
@@ -431,6 +400,10 @@ func ShareMiddleware() app.HandlerFunc {
 		} else {
 			req.Header.Set(common.REQUEST_HEADER_OWNER, accessOwner) // external, bflName maybe is owner in host
 		}
+		// Mark this as a server-side share-resolved forward so the
+		// downstream handler's Gate trusts the share=1 query. See
+		// pkg/common/internal_auth.go.
+		req.Header.Set(common.HeaderInternalShareToken, common.InternalShareToken())
 
 		body := c.Request.Body()
 		req.Body = io.NopCloser(bytes.NewReader(body))
@@ -464,127 +437,6 @@ func ShareMiddleware() app.HandlerFunc {
 			_, _ = c.Write(bodyRes)
 		}
 		c.Abort()
-	}
-}
-
-func checkSharePath(currentUser string, shareId string, fromShare bool) (*share.SharePath, int64, error) {
-	sharePath, err := database.QueryShareById(shareId)
-	if err != nil {
-		klog.Errorf("postgres.QueryShareById error: %v", err)
-		return nil, 0, errors.New(common.ErrorMessageWrongShare)
-	}
-
-	if sharePath == nil {
-		klog.Errorf("sharePath not found, shareId: %s", shareId)
-		return nil, 0, errors.New(common.ErrorMessageWrongShare)
-	}
-
-	if !fromShare && currentUser == sharePath.Owner {
-		return sharePath, 0, nil
-	}
-
-	expired, ok := common.ParseRFC3339Nano(sharePath.ExpireTime)
-	if !ok {
-		// Unparseable expire string -> treat as expired and surface
-		// a sane Unix timestamp (now) rather than the year-1 default.
-		return nil, time.Now().Unix(), errors.New(common.ErrorMessageLinkExpired)
-	}
-
-	if time.Now().After(expired) {
-		klog.Errorf("sharePath expired, expireTime: %s", sharePath.ExpireTime)
-		return nil, expired.Unix(), errors.New(common.ErrorMessageLinkExpired)
-	}
-
-	return sharePath, 0, nil
-}
-
-func checkInternal(currentOwner string, sharePaths *share.SharePath, shareAccess *ShareAccess) (*share.ShareMember, error) {
-	shareMember, err := database.QueryShareMemberById(currentOwner, sharePaths.ID)
-	if err != nil {
-		return nil, fmt.Errorf("postgres.QueryShareMemberById error: %v", err)
-	}
-
-	if shareMember == nil {
-		return nil, errors.New("shareMember not found")
-	}
-
-	if shareMember.ShareMember == "" {
-		return nil, errors.New("shareMember not found")
-	}
-
-	// permission is shareMember.Permission
-	if permit := checkPermission(currentOwner, sharePaths.Owner, sharePaths.ShareType, shareMember.Permission, shareAccess); !permit {
-		return nil, errors.New("authorization check failed")
-	}
-	return shareMember, nil
-}
-
-func checkExternal(currentUser string, token string, sharePaths *share.SharePath, shareAccess *ShareAccess) (int64, bool, error) {
-	if !shareAccess.FromShare && currentUser == sharePaths.Owner {
-		return 0, true, nil
-	}
-	var defaultExpired = time.Now().Unix()
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return defaultExpired, false, errors.New("token is nil")
-	}
-
-	shareToken, err := database.QueryShareExternalById(sharePaths.ID, token)
-	if err != nil {
-		return defaultExpired, false, fmt.Errorf("postgres.QueryShareExternalById error: %v", err)
-	}
-
-	if shareToken == nil {
-		return defaultExpired, false, errors.New("shareToken not found")
-	}
-
-	klog.V(2).Infof("share token validated, shareId: %s, expireAt: %s", sharePaths.ID, shareToken.ExpireAt)
-
-	expired, ok := common.ParseRFC3339Nano(shareToken.ExpireAt)
-	if !ok {
-		// Unparseable token expire -> fail closed: report current time
-		// as the expiry boundary instead of leaking a year-1 timestamp.
-		return time.Now().Unix(), false, fmt.Errorf("shareToken expireAt unparseable: %q", shareToken.ExpireAt)
-	}
-	if time.Now().After(expired) {
-		klog.Errorf("[share] shareToken expired, expireAt: %s", shareToken.ExpireAt)
-		return expired.Unix(), false, fmt.Errorf("shareToken expired, shareToken.ExpireAt: %s", shareToken.ExpireAt)
-	}
-
-	permit := checkPermission(currentUser, sharePaths.Owner, sharePaths.ShareType, sharePaths.Permission, shareAccess)
-	return 0, permit, nil
-}
-
-// method string, preview, raw bool, download, upload bool
-func checkPermission(currentUser string, shareBy string, shareType string, permission int32, shareAccess *ShareAccess) bool {
-	/**
-	 * permission
-	 * 0 - no permit
-	 * 1 - view, download
-	 * 2 - upload only (external only)
-	 * 3 - upload, download
-	 * 4 - admin
-	 */
-
-	if shareType == common.ShareTypeInternal && currentUser == shareBy {
-		return true
-	}
-
-	switch permission {
-	case 1:
-		return shareAccess.Method == http.MethodGet && !shareAccess.Upload
-	case 2: // only upload
-		if shareType == common.ShareTypeExternal {
-			return shareAccess.Upload || (shareAccess.Method == http.MethodGet && shareAccess.Upload)
-		}
-		return false
-	case 3:
-		return true
-		// return ((shareAccess.Resource || shareAccess.Preview || shareAccess.Raw) && shareAccess.Method == http.MethodGet) || shareAccess.Upload || shareAccess.Download
-	case 4:
-		return true
-	default:
-		return false
 	}
 }
 
@@ -631,43 +483,21 @@ func proxySharePaste(ctx context.Context, c *app.RequestContext, owner string, a
 	var srcShareType, dstShareType string
 
 	if isSrcShare {
-		shared, err := database.GetSharePath(src.Extend)
+		shared, err := access.ShareCheckPaste(owner, src.Extend, false)
 		if err != nil {
-			handler.RespError(c, fmt.Sprintf("Get Share Source Error: %v", err))
-			return
-		}
-
-		if shared == nil {
-			handler.RespError(c, common.ErrorMessagePasteWrongSourceShare)
-			return
-		}
-
-		// check expire
-		if checkExpired(shared.ExpireTime) {
-			handler.RespError(c, common.ErrorMessagePasteSourceExpired)
-			return
-		}
-
-		// check member
-		if owner != shared.Owner {
-			member, err := database.GetShareMember(shared.ID, owner)
-			if err != nil {
-				handler.RespError(c, fmt.Sprintf("Get Share Source Member Error: %v", err))
-				return
-			}
-			if member == nil {
+			switch {
+			case errors.Is(err, access.ErrShareNotFound):
 				handler.RespError(c, common.ErrorMessagePasteWrongSourceShare)
-				return
-			}
-
-			// check permission
-			if member.Permission < 1 {
+			case errors.Is(err, access.ErrShareExpired):
+				handler.RespError(c, common.ErrorMessagePasteSourceExpired)
+			case errors.Is(err, access.ErrShareDenied):
 				handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
-				return
+			default:
+				handler.RespError(c, fmt.Sprintf("Get Share Source Error: %v", err))
 			}
+			return
 		}
 
-		//
 		srcShareType = shared.ShareType
 		srcDriveParam = &models.FileParam{
 			Owner:    shared.Owner,
@@ -685,44 +515,21 @@ func proxySharePaste(ctx context.Context, c *app.RequestContext, owner string, a
 	}
 
 	if isDstShare {
-		shared, err := database.GetSharePath(dst.Extend)
+		shared, err := access.ShareCheckPaste(owner, dst.Extend, true)
 		if err != nil {
-			handler.RespError(c, fmt.Sprintf("Get Share Destination Error: %v", err))
-			return
-		}
-
-		if shared == nil {
-			handler.RespError(c, common.ErrorMessagePasteWrongDestinationShare)
-			return
-		}
-
-		// check expire
-		if checkExpired(shared.ExpireTime) {
-			handler.RespError(c, common.ErrorMessagePasteDestinationExpired)
-			return
-		}
-
-		// check member
-		if owner != shared.Owner {
-			member, err := database.GetShareMember(shared.ID, owner)
-			if err != nil {
-				handler.RespError(c, fmt.Sprintf("Get Share Destination Member Error: %v", err))
-				return
-			}
-
-			if member == nil {
+			switch {
+			case errors.Is(err, access.ErrShareNotFound):
 				handler.RespError(c, common.ErrorMessagePasteWrongDestinationShare)
-				return
-			}
-
-			// check permission, view, edit, admin
-			if owner != shared.Owner && member.Permission < 2 {
+			case errors.Is(err, access.ErrShareExpired):
+				handler.RespError(c, common.ErrorMessagePasteDestinationExpired)
+			case errors.Is(err, access.ErrShareDenied):
 				handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
-				return
+			default:
+				handler.RespError(c, fmt.Sprintf("Get Share Destination Error: %v", err))
 			}
+			return
 		}
 
-		//
 		dstShareType = shared.ShareType
 		dstDriveParam = &models.FileParam{
 			Owner:    shared.Owner,
@@ -806,16 +613,6 @@ func proxySharePaste(ctx context.Context, c *app.RequestContext, owner string, a
 	c.Abort()
 }
 
-func checkExpired(expireAt string) bool {
-	expired, ok := common.ParseRFC3339Nano(expireAt)
-	if !ok {
-		// Unparseable -> treat as expired (fail closed). Logging
-		// already happens inside ParseRFC3339Nano.
-		return true
-	}
-	return time.Now().After(expired)
-}
-
 func ShareUpload() app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var err error
@@ -847,19 +644,46 @@ func ShareUpload() app.HandlerFunc {
 			return
 		}
 
-		fp, _ := models.CreateFileParam(owner, uploadReq.ParentDir)
+		fp, err := models.CreateFileParam(owner, uploadReq.ParentDir)
+		if err != nil || fp == nil {
+			klog.Errorf("Sync uploadChunks, file param error: %v, parentDir: %s", err, uploadReq.ParentDir)
+			handler.RespBadRequest(ctx, common.ErrorMessageWrongShare)
+			return
+		}
 		if fp.FileType == common.Share {
 			fp.Extend = common.TrimShareId(fp.Extend, global.GlobalNode.CheckNodeExists)
 		}
 
-		shared, err := database.GetSharePath(fp.Extend)
+		// Resolve the share with the same expiry enforcement as the read
+		// path (ShareMiddleware): GetSharePath alone skips share_paths
+		// expiry, so an expired internal share could still receive chunks.
+		fromShare := strings.HasPrefix(host, "share.")
+		shared, expires, err := access.ShareResolvePath(owner, fp.Extend, fromShare)
 		if err != nil {
-			klog.Errorf("Sync uploadChunks, share get error: %v", err)
-			handler.RespBadRequest(ctx, err.Error())
+			klog.Errorf("Sync uploadChunks, share resolve error: %v, expires: %d", err, expires)
+			if expires > 0 {
+				handler.RespErrorExpired(ctx, common.CodeLinkExpired, common.ErrorMessageLinkExpired, expires)
+			} else {
+				handler.RespError(ctx, common.ErrorMessageWrongShare)
+			}
 			return
 		}
-		if shared == nil {
-			handler.RespBadRequest(ctx, common.ErrorMessageWrongShare)
+
+		// Gate chunk uploads through the same share permission matrix
+		// as the non-chunk upload-link path; ShareMiddleware skips chunk
+		// POSTs, so without this a read-only member could push chunks.
+		uploadAccess := &access.ShareAccess{
+			Method:    http.MethodPost,
+			Upload:    true,
+			FromShare: fromShare,
+		}
+		if _, exp, err := access.ShareAuthorize(owner, string(ctx.Query("token")), shared, uploadAccess); err != nil {
+			klog.Errorf("[share] uploadChunks authorize error: %v, expires: %d", err, exp)
+			if exp > 0 {
+				handler.RespErrorExpired(ctx, common.CodeTokenExpired, common.ErrorMessageTokenExpired, exp)
+			} else {
+				handler.RespForbidden(ctx, common.ErrorMessagePermissionDenied)
+			}
 			return
 		}
 
