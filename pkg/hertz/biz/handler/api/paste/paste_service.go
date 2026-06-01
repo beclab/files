@@ -130,9 +130,8 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Pre-task probes. src.Owner stays the requester (local stat uses
-	// it); grantor is forwarded via handler.Owner for cross-node header
-	// only, matching the old checkRemote(src, owner) split.
+	// share=1: src.Owner is left as the requester (local stat uses it);
+	// grantor only goes to the peer header via handler.Owner.
 	srcFP := *pasteParam.Src
 	srcHeaderOwner := srcFP.Owner
 	if pasteParam.Share == 1 && req.SrcOwner != "" {
@@ -152,8 +151,7 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// dst.Owner is swapped to the grantor for share=1 (matches the
-	// old DestinationWritable, where every dst path ran as grantor).
+	// share=1: dst.Owner is mutated to grantor (every dst path runs as it).
 	dstFP := *pasteParam.Dst
 	if pasteParam.Share == 1 && req.DstOwner != "" {
 		dstFP.Owner = req.DstOwner

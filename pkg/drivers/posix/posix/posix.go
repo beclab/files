@@ -152,20 +152,16 @@ func probeParentDir(full string) string {
 	return tmp[:pos] + "/"
 }
 
-// PeerStatusError is returned by PeerStat / PeerProbeWrite when the
-// peer responded with a non-2xx status. Callers wrap it with their
-// own backend-specific "not found" / "share target" prefix; lookup
-// and transport failures are returned unwrapped, matching the old
-// precheck.checkRemote split.
+// PeerStatusError marks a non-2xx peer response so callers can wrap it
+// with their own prefix; lookup / transport errors flow through unwrapped.
 type PeerStatusError struct {
 	Code int
 }
 
 func (e *PeerStatusError) Error() string { return fmt.Sprintf("remote status %d", e.Code) }
 
-// PeerStat forwards GET /api/resources/<fsType>/<extend><path> to the
-// owning node's files-pod. 2xx -> nil; non-2xx -> *PeerStatusError.
-// When probeIsDir is true the body's isDir field is decoded.
+// PeerStat: GET /api/resources/<fsType>/<extend><path>. 2xx -> nil;
+// non-2xx -> *PeerStatusError. probeIsDir decodes body.isDir.
 func PeerStat(p *models.FileParam, owner string, probeIsDir bool) (isDir bool, err error) {
 	if p == nil {
 		return false, errors.New("file param is nil")
@@ -217,8 +213,7 @@ func PeerStat(p *models.FileParam, owner string, probeIsDir bool) (isDir bool, e
 	return probe.IsDir, nil
 }
 
-// PeerProbeWrite forwards GET /api/resources/...?probe=write to the
-// owning node's files-pod.
+// PeerProbeWrite: GET /api/resources/...?probe=write.
 func PeerProbeWrite(dst *models.FileParam) error {
 	if dst == nil {
 		return errors.New("file param is nil")

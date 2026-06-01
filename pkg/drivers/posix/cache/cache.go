@@ -23,9 +23,8 @@ func NewCacheStorage(handler *base.HandlerParam) *CacheStorage {
 	}
 }
 
-// peerHeaderOwner picks the X-Bfl-User for a cross-node probe:
-// handler.Owner (set by the caller, e.g. share grantor) wins over
-// p.Owner so the request FileParam stays untouched.
+// peerHeaderOwner: handler.Owner (e.g. share grantor) overrides p.Owner
+// for the cross-node X-Bfl-User header.
 func (s *CacheStorage) peerHeaderOwner(p *models.FileParam) string {
 	if s.handler != nil && s.handler.Owner != "" {
 		return s.handler.Owner
