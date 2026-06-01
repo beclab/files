@@ -37,6 +37,13 @@ var syncEditHTTPClient = &http.Client{
 	Timeout: 60 * time.Second,
 }
 
+// Test seams over GlobalSeafileAPI for the Probe* methods.
+var (
+	probeGetRepo         = func(repoId string) (map[string]string, error) { return seaserv.GlobalSeafileAPI.GetRepo(repoId) }
+	probeGetDirIdByPath  = func(repoId, path string, retry bool) (string, error) { return seaserv.GlobalSeafileAPI.GetDirIdByPath(repoId, path, retry) }
+	probeGetFileIdByPath = func(repoId, path string) (string, error) { return seaserv.GlobalSeafileAPI.GetFileIdByPath(repoId, path) }
+)
+
 type SyncStorage struct {
 	handler *base.HandlerParam
 	paste   *models.PasteParam
@@ -50,6 +57,97 @@ type SyncStorage struct {
 func (s *SyncStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
 	username := owner + "@auth.local"
 	return seahub.ResolveSyncLevel(username, p.Extend, seahub.SyncParentDir(p.Path))
+}
+
+func (s *SyncStorage) ProbeExists(p *models.FileParam) error {
+	if p == nil {
+		return errors.New("file param is nil")
+	}
+	if p.Extend == "" {
+		return errors.New("sync source not found: repo id is empty")
+	}
+	repo, err := probeGetRepo(p.Extend)
+	if err != nil {
+		return fmt.Errorf("sync repo lookup: %w", err)
+	}
+	if repo == nil {
+		return fmt.Errorf("sync source not found: repo %s", p.Extend)
+	}
+	if p.Path == "" || p.Path == "/" {
+		return nil
+	}
+	isDir := strings.HasSuffix(p.Path, "/")
+	path := strings.TrimRight(p.Path, "/")
+	if isDir {
+		did, e := probeGetDirIdByPath(p.Extend, path, false)
+		if e != nil {
+			return fmt.Errorf("sync dir lookup: %w", e)
+		}
+		if did == "" {
+			return fmt.Errorf("sync source not found: sync/%s%s", p.Extend, p.Path)
+		}
+		return nil
+	}
+	fid, e := probeGetFileIdByPath(p.Extend, path)
+	if e != nil {
+		return fmt.Errorf("sync file lookup: %w", e)
+	}
+	if fid == "" {
+		return fmt.Errorf("sync source not found: sync/%s%s", p.Extend, p.Path)
+	}
+	return nil
+}
+
+func (s *SyncStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
+	if p == nil {
+		return false, errors.New("file param is nil")
+	}
+	if p.Extend == "" {
+		return false, errors.New("sync share target invalid: repo id is empty")
+	}
+	repo, err := probeGetRepo(p.Extend)
+	if err != nil {
+		return false, fmt.Errorf("sync repo lookup: %w", err)
+	}
+	if repo == nil {
+		return false, fmt.Errorf("sync share target not found: repo %s", p.Extend)
+	}
+	path := strings.TrimRight(p.Path, "/")
+	if path == "" {
+		return true, nil
+	}
+	dirID, dErr := probeGetDirIdByPath(p.Extend, path, false)
+	if dErr == nil && dirID != "" {
+		return true, nil
+	}
+	fileID, fErr := probeGetFileIdByPath(p.Extend, path)
+	if fErr == nil && fileID != "" {
+		return false, nil
+	}
+	if dErr != nil {
+		return false, fmt.Errorf("sync dir lookup: %w", dErr)
+	}
+	if fErr != nil {
+		return false, fmt.Errorf("sync file lookup: %w", fErr)
+	}
+	return false, fmt.Errorf("sync share target not found: sync/%s%s", p.Extend, p.Path)
+}
+
+func (s *SyncStorage) ProbeWrite(dst *models.FileParam) error {
+	if dst == nil {
+		return errors.New("file param is nil")
+	}
+	if dst.Extend == "" {
+		return errors.New("sync destination invalid: repo id is empty")
+	}
+	repo, err := probeGetRepo(dst.Extend)
+	if err != nil {
+		return fmt.Errorf("sync repo lookup: %w", err)
+	}
+	if repo == nil {
+		return fmt.Errorf("sync destination not found: repo %s", dst.Extend)
+	}
+	return nil
 }
 
 type Files struct {

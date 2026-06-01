@@ -32,10 +32,10 @@ func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
 
-	// probe=write: internal cross-node hook for paste precheck. Runs a
-	// 1-byte write probe on this node instead of listing. sync/cloud are
-	// reachable from any node via RPC and never come through here. Gate it
-	// as an upload so a probe cannot bypass the Level check; the precheck
+	// probe=write: internal cross-node hook for paste's ProbeWrite. Runs
+	// a 1-byte write probe on this node instead of listing. sync/cloud
+	// are reachable from any node via RPC and never come through here.
+	// Gate it as an upload so a probe cannot bypass the Level check; the
 	// forward carries owner=grantor, who is admin on their own backend.
 	if contextArg.QueryParam.Probe == "write" {
 		if !gatePermission(ctx, c, contextArg.FileParam, models.ActionUpload) {

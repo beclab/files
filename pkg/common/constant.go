@@ -135,6 +135,9 @@ var (
 	// PosixFileTypes is the whitelist of storage types on which archive
 	// operations are supported.
 	PosixFileTypes = []string{Drive, Cache, External, Internal, Usb, Hdd, Smb}
+	// ShareableFileTypes is the whitelist of storage types whose paths
+	// can be shared (drive + sync + posix-on-disk family).
+	ShareableFileTypes = []string{Sync, Drive, Cache, External, Internal, Smb, Usb, Hdd}
 )
 
 // ArchiveFormatFromName infers the archive format from a file name's

@@ -8,7 +8,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
-	"files/pkg/drivers/precheck"
 	bizhandler "files/pkg/hertz/biz/handler"
 	"files/pkg/models"
 	"files/pkg/tasks"
@@ -102,7 +101,7 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	// source and write the destination. For share=1 the effective
 	// identity is the grantor (SrcOwner/DstOwner) whose access the
 	// proxy already vetted; CheckAccess then resolves against that
-	// owner's own backend, matching the precheck probes below. This is
+	// owner's own backend, matching the Probe* calls below. This is
 	// an authorization gate; the existence/capability probes that
 	// follow are separate.
 	srcOwner, dstOwner := owner, owner
@@ -131,28 +130,37 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Verify the source actually exists on its backend BEFORE we
-	// allocate a task id. Otherwise callers silently get a Completed
-	// task with zero bytes (cross-node DownloadFromFiles, sync->sync
-	// via GetFromSyncFileCount) or a "running -> failed" flicker
-	// (rsync / rclone), neither of which is debuggable from the
-	// client. Whether the failure is "really not there" or
-	// "unreachable for now", the user-facing outcome is identical --
-	// the paste can't proceed -- so we collapse to a single 500 with
-	// a stable, FE-friendly message and keep the raw Go error in the
-	// log for ops.
-	if err = precheck.SourceExists(pasteParam); err != nil {
+	// Pre-task probes; collapse real-vs-unreachable into one response.
+	srcFP := *pasteParam.Src
+	if pasteParam.Share == 1 && req.SrcOwner != "" {
+		srcFP.Owner = req.SrcOwner
+	}
+	srcHandler := drivers.Adaptor.NewFileHandler(srcFP.FileType, &base.HandlerParam{Ctx: ctx, Owner: srcFP.Owner})
+	if srcHandler == nil {
+		klog.Warningf("[paste] source precheck failed: handler not found for fileType %s, owner: %s, action: %s, src: %s",
+			srcFP.FileType, owner, req.Action, req.Source)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": common.ErrorMessagePasteSrcNotExists})
+		return
+	}
+	if err = srcHandler.ProbeExists(&srcFP); err != nil {
 		klog.Warningf("[paste] source precheck failed: %v, owner: %s, action: %s, src: %s",
 			err, owner, req.Action, req.Source)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": common.ErrorMessagePasteSrcNotExists})
 		return
 	}
 
-	// Dst-side counterpart to SourceExists: catches no-write-permission
-	// before a task is allocated so the failure surfaces in this HTTP
-	// response instead of an async task status. 403 + the shared
-	// Permission denied message mirror other no-permission paths.
-	if err = precheck.DestinationWritable(pasteParam); err != nil {
+	dstFP := *pasteParam.Dst
+	if pasteParam.Share == 1 && req.DstOwner != "" {
+		dstFP.Owner = req.DstOwner
+	}
+	dstHandler := drivers.Adaptor.NewFileHandler(dstFP.FileType, &base.HandlerParam{Ctx: ctx, Owner: dstFP.Owner})
+	if dstHandler == nil {
+		klog.Warningf("[paste] destination precheck failed: handler not found for fileType %s, owner: %s, action: %s, dst: %s",
+			dstFP.FileType, owner, req.Action, req.Destination)
+		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
+		return
+	}
+	if err = dstHandler.ProbeWrite(&dstFP); err != nil {
 		klog.Warningf("[paste] destination precheck failed: %v, owner: %s, action: %s, dst: %s",
 			err, owner, req.Action, req.Destination)
 		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})

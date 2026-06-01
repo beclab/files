@@ -39,4 +39,10 @@ type Execute interface {
 	UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error)
 
 	CheckPermission(p *models.FileParam, owner string) (models.Level, error)
+
+	ProbeExists(p *models.FileParam) error
+	// ProbeIsDir returns (true, nil) for a directory, (false, nil) for a
+	// file; non-nil err means the path could not be resolved.
+	ProbeIsDir(p *models.FileParam) (bool, error)
+	ProbeWrite(dst *models.FileParam) error
 }

@@ -14,15 +14,32 @@ import (
 	"files/pkg/preview"
 	"files/pkg/tasks"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 )
+
+var peerClient = &http.Client{Timeout: 10 * time.Second}
+
+// peerLookupPodIP is a test seam over IntegrationManager().GetFilesPod.
+var peerLookupPodIP = func(node string) (string, error) {
+	pod, err := integration.IntegrationManager().GetFilesPod(node)
+	if err != nil {
+		return "", fmt.Errorf("locate files pod for node %s: %w", node, err)
+	}
+	if pod.Status.PodIP == "" {
+		return "", fmt.Errorf("files pod for node %s has no IP yet", node)
+	}
+	return pod.Status.PodIP, nil
+}
 
 var (
 	Expand    = true
@@ -70,6 +87,162 @@ func (s *PosixStorage) CheckPermission(p *models.FileParam, owner string) (model
 		return models.LevelRead, nil
 	}
 	return models.LevelAdmin, nil
+}
+
+func (s *PosixStorage) ProbeExists(p *models.FileParam) error {
+	if p == nil {
+		return errors.New("file param is nil")
+	}
+	uri, err := p.GetResourceUri()
+	if err != nil {
+		return fmt.Errorf("resolve src uri: %w", err)
+	}
+	if !files.FilePathExists(uri + p.Path) {
+		return fmt.Errorf("source not found: %s/%s%s", p.FileType, p.Extend, p.Path)
+	}
+	return nil
+}
+
+func (s *PosixStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
+	if p == nil {
+		return false, errors.New("file param is nil")
+	}
+	uri, err := p.GetResourceUri()
+	if err != nil {
+		return false, fmt.Errorf("resolve uri: %w", err)
+	}
+	full := uri + p.Path
+	info, err := os.Stat(full)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, fmt.Errorf("share target not found: %s/%s%s", p.FileType, p.Extend, p.Path)
+		}
+		return false, fmt.Errorf("stat share target %s: %w", full, err)
+	}
+	return info.IsDir(), nil
+}
+
+func (s *PosixStorage) ProbeWrite(dst *models.FileParam) error {
+	if dst == nil {
+		return errors.New("file param is nil")
+	}
+	uri, err := dst.GetResourceUri()
+	if err != nil {
+		return fmt.Errorf("resolve dst uri: %w", err)
+	}
+	full := uri + dst.Path
+	if err := files.WriteTempFile(probeParentDir(full)); err != nil {
+		return fmt.Errorf("destination not writable: %s/%s%s (%v)",
+			dst.FileType, dst.Extend, dst.Path, err)
+	}
+	return nil
+}
+
+// probeParentDir returns full's parent with a trailing slash;
+// WriteTempFile walks up from there to the deepest existing ancestor.
+func probeParentDir(full string) string {
+	tmp := strings.TrimSuffix(full, "/")
+	if tmp == "" {
+		return "/"
+	}
+	pos := strings.LastIndex(tmp, "/")
+	if pos < 0 {
+		return "/"
+	}
+	return tmp[:pos] + "/"
+}
+
+// PeerStat forwards GET /api/resources/<fsType>/<extend><path> to the
+// owning node's files-pod. 2xx -> nil; non-2xx -> error. When
+// probeIsDir is true the body's isDir field is decoded.
+func PeerStat(p *models.FileParam, owner string, probeIsDir bool) (isDir bool, err error) {
+	if p == nil {
+		return false, errors.New("file param is nil")
+	}
+	ip, err := peerLookupPodIP(p.Extend)
+	if err != nil {
+		return false, err
+	}
+
+	url := fmt.Sprintf("http://%s/api/resources/%s/%s%s", ip, p.FileType, p.Extend, p.Path)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("build remote stat request: %w", err)
+	}
+	if owner != "" {
+		req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
+	}
+	req.Header.Set("Cache-Control", "no-cache")
+
+	resp, err := peerClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("remote stat %s: %w", url, err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		klog.Warningf("[probe] remote stat %s returned %d", url, resp.StatusCode)
+		return false, fmt.Errorf("remote status %d", resp.StatusCode)
+	}
+
+	if !probeIsDir {
+		return false, nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if err != nil {
+		return false, fmt.Errorf("read remote stat response: %w", err)
+	}
+	var probe struct {
+		IsDir bool `json:"isDir"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return false, fmt.Errorf("parse remote stat response: %w", err)
+	}
+	return probe.IsDir, nil
+}
+
+// PeerProbeWrite forwards GET /api/resources/...?probe=write to the
+// owning node's files-pod.
+func PeerProbeWrite(dst *models.FileParam) error {
+	if dst == nil {
+		return errors.New("file param is nil")
+	}
+	ip, err := peerLookupPodIP(dst.Extend)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("http://%s/api/resources/%s/%s%s?probe=write", ip, dst.FileType, dst.Extend, dst.Path)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("build remote probe request: %w", err)
+	}
+	if dst.Owner != "" {
+		req.Header.Set(common.REQUEST_HEADER_OWNER, dst.Owner)
+	}
+	req.Header.Set("Cache-Control", "no-cache")
+
+	resp, err := peerClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("remote probe %s: %w", url, err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	klog.Warningf("[probe] remote probe %s returned %d", url, resp.StatusCode)
+	return fmt.Errorf("destination not writable: %s/%s%s (remote status %d)",
+		dst.FileType, dst.Extend, dst.Path, resp.StatusCode)
 }
 
 func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {

@@ -3,7 +3,9 @@ package cache
 import (
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/posix/posix"
+	"files/pkg/global"
 	"files/pkg/models"
+	"fmt"
 )
 
 type CacheStorage struct {
@@ -64,4 +66,32 @@ func (s *CacheStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 
 func (s *CacheStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
 	return s.posix.CheckPermission(p, owner)
+}
+
+func (s *CacheStorage) ProbeExists(p *models.FileParam) error {
+	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
+		return s.posix.ProbeExists(p)
+	}
+	if _, err := posix.PeerStat(p, p.Owner, false); err != nil {
+		return fmt.Errorf("remote source not found: %s/%s%s (%v)", p.FileType, p.Extend, p.Path, err)
+	}
+	return nil
+}
+
+func (s *CacheStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
+	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
+		return s.posix.ProbeIsDir(p)
+	}
+	isDir, err := posix.PeerStat(p, p.Owner, true)
+	if err != nil {
+		return false, fmt.Errorf("remote share target not found: %s/%s%s (%v)", p.FileType, p.Extend, p.Path, err)
+	}
+	return isDir, nil
+}
+
+func (s *CacheStorage) ProbeWrite(dst *models.FileParam) error {
+	if dst == nil || dst.Extend == "" || dst.Extend == global.CurrentNodeName {
+		return s.posix.ProbeWrite(dst)
+	}
+	return posix.PeerProbeWrite(dst)
 }

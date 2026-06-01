@@ -6,6 +6,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/diskcache"
 	"files/pkg/drivers/base"
+	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
@@ -43,6 +44,37 @@ func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
 // the remote provider via the rclone credentials.
 func (s *CloudStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
 	return models.LevelAdmin, nil
+}
+
+func (s *CloudStorage) ProbeExists(p *models.FileParam) error {
+	if p == nil {
+		return errors.New("file param is nil")
+	}
+	if _, err := rclone.Command.GetFilesSize(p); err != nil {
+		return fmt.Errorf("cloud source not found: %s/%s%s (rclone: %v)",
+			p.FileType, p.Extend, p.Path, err)
+	}
+	return nil
+}
+
+func (s *CloudStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
+	return false, fmt.Errorf("ProbeIsDir not supported for cloud: %s", p.FileType)
+}
+
+func (s *CloudStorage) ProbeWrite(dst *models.FileParam) error {
+	if dst == nil {
+		return errors.New("file param is nil")
+	}
+	if _, err := rclone.Command.GetFilesList(&models.FileParam{
+		Owner:    dst.Owner,
+		FileType: dst.FileType,
+		Extend:   dst.Extend,
+		Path:     "/",
+	}, false); err != nil {
+		return fmt.Errorf("cloud destination not reachable: %s/%s%s (rclone: %v)",
+			dst.FileType, dst.Extend, dst.Path, err)
+	}
+	return nil
 }
 
 /**

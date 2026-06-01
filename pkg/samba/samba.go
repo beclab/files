@@ -10,7 +10,8 @@ import (
 	"files/pkg/client"
 	k8sclient "files/pkg/client"
 	"files/pkg/common"
-	"files/pkg/drivers/precheck"
+	"files/pkg/drivers"
+	"files/pkg/drivers/base"
 	"files/pkg/hertz/biz/dal/database"
 	"files/pkg/hertz/biz/model/api/share"
 	"files/pkg/models"
@@ -608,13 +609,21 @@ func (s *samba) CreateSambaSharePath(owner string, smbSharePublicLevel int32, us
 	defer s.Unlock()
 
 	// Real backend verification for CLI / direct callers.
-	if err := precheck.VerifyShareTargetIsDir(fileParam); err != nil {
-		if errors.Is(err, precheck.ErrShareTargetIsFile) {
-			klog.Errorf("[samba] CreateSambaSharePath, target is a file, not a folder, owner: %s, path: %s", owner, fileParam.Path)
-			return nil, errors.New(common.ErrorMessageFileShareNotSupport)
-		}
+	if !common.ListContains(common.ShareableFileTypes, fileParam.FileType) {
+		klog.Errorf("[samba] CreateSambaSharePath, share target type not supported: %s, owner: %s, path: %s", fileParam.FileType, owner, fileParam.Path)
+		return nil, errors.New(common.ErrorMessageDirNotExists)
+	}
+	shareHandler := drivers.Adaptor.NewFileHandler(fileParam.FileType, &base.HandlerParam{Owner: owner})
+	if shareHandler == nil {
+		klog.Errorf("[samba] CreateSambaSharePath, no handler for fileType: %s, owner: %s, path: %s", fileParam.FileType, owner, fileParam.Path)
+		return nil, errors.New(common.ErrorMessageDirNotExists)
+	}
+	if isDir, err := shareHandler.ProbeIsDir(fileParam); err != nil {
 		klog.Errorf("[samba] CreateSambaSharePath, share target verify failed, owner: %s, path: %s, err: %v", owner, fileParam.Path, err)
 		return nil, errors.New(common.ErrorMessageDirNotExists)
+	} else if !isDir {
+		klog.Errorf("[samba] CreateSambaSharePath, target is a file, not a folder, owner: %s, path: %s", owner, fileParam.Path)
+		return nil, errors.New(common.ErrorMessageFileShareNotSupport)
 	}
 
 	var smbSharePathExists bool

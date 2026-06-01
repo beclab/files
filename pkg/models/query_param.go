@@ -32,8 +32,9 @@ type QueryParam struct {
 	SharePath               string          `json:"sharePath,omitempty"`
 	SharePermission         string          `json:"sharePermission,omitempty"`
 	ShareByType             string          `json:"shareByType,omitempty"`
-	// Probe is internal-only; "write" turns the GET into a writability probe
-	// used by paste precheck on a peer node. Anything else falls through.
+	// Probe is internal-only; "write" turns the GET into a writability
+	// probe used by paste's ProbeWrite on a peer node. Anything else
+	// falls through.
 	Probe  string        `json:"-"`
 	Header http.Header   `json:"-"`
 	Body   io.ReadCloser `json:"-"`
