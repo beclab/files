@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"errors"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/posix/posix"
 	"files/pkg/global"
@@ -87,10 +88,16 @@ func (s *CacheStorage) ProbeExists(p *models.FileParam) error {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeExists(p)
 	}
-	if _, err := posix.PeerStat(p, s.peerHeaderOwner(p), false); err != nil {
-		return fmt.Errorf("remote source not found: %s/%s%s (%v)", p.FileType, p.Extend, p.Path, err)
+	_, err := posix.PeerStat(p, s.peerHeaderOwner(p), false)
+	if err == nil {
+		return nil
 	}
-	return nil
+	var statusErr *posix.PeerStatusError
+	if errors.As(err, &statusErr) {
+		return fmt.Errorf("remote source not found: %s/%s%s (remote status %d)",
+			p.FileType, p.Extend, p.Path, statusErr.Code)
+	}
+	return err
 }
 
 func (s *CacheStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
@@ -98,10 +105,15 @@ func (s *CacheStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
 		return s.posix.ProbeIsDir(p)
 	}
 	isDir, err := posix.PeerStat(p, s.peerHeaderOwner(p), true)
-	if err != nil {
-		return false, fmt.Errorf("remote share target not found: %s/%s%s (%v)", p.FileType, p.Extend, p.Path, err)
+	if err == nil {
+		return isDir, nil
 	}
-	return isDir, nil
+	var statusErr *posix.PeerStatusError
+	if errors.As(err, &statusErr) {
+		return false, fmt.Errorf("remote share target not found: %s/%s%s (remote status %d)",
+			p.FileType, p.Extend, p.Path, statusErr.Code)
+	}
+	return false, err
 }
 
 func (s *CacheStorage) ProbeWrite(dst *models.FileParam) error {

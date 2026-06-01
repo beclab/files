@@ -152,9 +152,20 @@ func probeParentDir(full string) string {
 	return tmp[:pos] + "/"
 }
 
+// PeerStatusError is returned by PeerStat / PeerProbeWrite when the
+// peer responded with a non-2xx status. Callers wrap it with their
+// own backend-specific "not found" / "share target" prefix; lookup
+// and transport failures are returned unwrapped, matching the old
+// precheck.checkRemote split.
+type PeerStatusError struct {
+	Code int
+}
+
+func (e *PeerStatusError) Error() string { return fmt.Sprintf("remote status %d", e.Code) }
+
 // PeerStat forwards GET /api/resources/<fsType>/<extend><path> to the
-// owning node's files-pod. 2xx -> nil; non-2xx -> error. When
-// probeIsDir is true the body's isDir field is decoded.
+// owning node's files-pod. 2xx -> nil; non-2xx -> *PeerStatusError.
+// When probeIsDir is true the body's isDir field is decoded.
 func PeerStat(p *models.FileParam, owner string, probeIsDir bool) (isDir bool, err error) {
 	if p == nil {
 		return false, errors.New("file param is nil")
@@ -186,7 +197,7 @@ func PeerStat(p *models.FileParam, owner string, probeIsDir bool) (isDir bool, e
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		klog.Warningf("[probe] remote stat %s returned %d", url, resp.StatusCode)
-		return false, fmt.Errorf("remote status %d", resp.StatusCode)
+		return false, &PeerStatusError{Code: resp.StatusCode}
 	}
 
 	if !probeIsDir {
