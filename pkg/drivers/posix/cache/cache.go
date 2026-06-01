@@ -10,29 +10,14 @@ import (
 )
 
 type CacheStorage struct {
-	posix   *posix.PosixStorage
-	handler *base.HandlerParam
-	paste   *models.PasteParam
+	posix *posix.PosixStorage
+	paste *models.PasteParam
 }
 
 func NewCacheStorage(handler *base.HandlerParam) *CacheStorage {
-	var posix = posix.NewPosixStorage(handler)
 	return &CacheStorage{
-		posix:   posix,
-		handler: handler,
+		posix: posix.NewPosixStorage(handler),
 	}
-}
-
-// peerHeaderOwner: handler.Owner (e.g. share grantor) overrides p.Owner
-// for the cross-node X-Bfl-User header.
-func (s *CacheStorage) peerHeaderOwner(p *models.FileParam) string {
-	if s.handler != nil && s.handler.Owner != "" {
-		return s.handler.Owner
-	}
-	if p != nil {
-		return p.Owner
-	}
-	return ""
 }
 
 func (s *CacheStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
@@ -87,7 +72,7 @@ func (s *CacheStorage) ProbeExists(p *models.FileParam) error {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeExists(p)
 	}
-	_, err := posix.PeerStat(p, s.peerHeaderOwner(p), false)
+	_, err := posix.PeerStat(p, p.Owner, false)
 	if err == nil {
 		return nil
 	}
@@ -103,7 +88,7 @@ func (s *CacheStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeIsDir(p)
 	}
-	isDir, err := posix.PeerStat(p, s.peerHeaderOwner(p), true)
+	isDir, err := posix.PeerStat(p, p.Owner, true)
 	if err == nil {
 		return isDir, nil
 	}

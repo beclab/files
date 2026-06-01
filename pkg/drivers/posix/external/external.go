@@ -10,28 +10,14 @@ import (
 )
 
 type ExternalStorage struct {
-	posix   *posix.PosixStorage
-	handler *base.HandlerParam
-	paste   *models.PasteParam
+	posix *posix.PosixStorage
+	paste *models.PasteParam
 }
 
 func NewExternalStorage(handler *base.HandlerParam) *ExternalStorage {
-	var posix = posix.NewPosixStorage(handler)
 	return &ExternalStorage{
-		posix:   posix,
-		handler: handler,
+		posix: posix.NewPosixStorage(handler),
 	}
-}
-
-// peerHeaderOwner: see CacheStorage.peerHeaderOwner.
-func (s *ExternalStorage) peerHeaderOwner(p *models.FileParam) string {
-	if s.handler != nil && s.handler.Owner != "" {
-		return s.handler.Owner
-	}
-	if p != nil {
-		return p.Owner
-	}
-	return ""
 }
 
 func (s *ExternalStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
@@ -86,7 +72,7 @@ func (s *ExternalStorage) ProbeExists(p *models.FileParam) error {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeExists(p)
 	}
-	_, err := posix.PeerStat(p, s.peerHeaderOwner(p), false)
+	_, err := posix.PeerStat(p, p.Owner, false)
 	if err == nil {
 		return nil
 	}
@@ -102,7 +88,7 @@ func (s *ExternalStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeIsDir(p)
 	}
-	isDir, err := posix.PeerStat(p, s.peerHeaderOwner(p), true)
+	isDir, err := posix.PeerStat(p, p.Owner, true)
 	if err == nil {
 		return isDir, nil
 	}
