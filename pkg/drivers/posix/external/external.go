@@ -9,15 +9,28 @@ import (
 )
 
 type ExternalStorage struct {
-	posix *posix.PosixStorage
-	paste *models.PasteParam
+	posix   *posix.PosixStorage
+	handler *base.HandlerParam
+	paste   *models.PasteParam
 }
 
 func NewExternalStorage(handler *base.HandlerParam) *ExternalStorage {
 	var posix = posix.NewPosixStorage(handler)
 	return &ExternalStorage{
-		posix: posix,
+		posix:   posix,
+		handler: handler,
 	}
+}
+
+// peerHeaderOwner: see CacheStorage.peerHeaderOwner.
+func (s *ExternalStorage) peerHeaderOwner(p *models.FileParam) string {
+	if s.handler != nil && s.handler.Owner != "" {
+		return s.handler.Owner
+	}
+	if p != nil {
+		return p.Owner
+	}
+	return ""
 }
 
 func (s *ExternalStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
@@ -72,7 +85,7 @@ func (s *ExternalStorage) ProbeExists(p *models.FileParam) error {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeExists(p)
 	}
-	if _, err := posix.PeerStat(p, p.Owner, false); err != nil {
+	if _, err := posix.PeerStat(p, s.peerHeaderOwner(p), false); err != nil {
 		return fmt.Errorf("remote source not found: %s/%s%s (%v)", p.FileType, p.Extend, p.Path, err)
 	}
 	return nil
@@ -82,7 +95,7 @@ func (s *ExternalStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeIsDir(p)
 	}
-	isDir, err := posix.PeerStat(p, p.Owner, true)
+	isDir, err := posix.PeerStat(p, s.peerHeaderOwner(p), true)
 	if err != nil {
 		return false, fmt.Errorf("remote share target not found: %s/%s%s (%v)", p.FileType, p.Extend, p.Path, err)
 	}

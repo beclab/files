@@ -9,15 +9,30 @@ import (
 )
 
 type CacheStorage struct {
-	posix *posix.PosixStorage
-	paste *models.PasteParam
+	posix   *posix.PosixStorage
+	handler *base.HandlerParam
+	paste   *models.PasteParam
 }
 
 func NewCacheStorage(handler *base.HandlerParam) *CacheStorage {
 	var posix = posix.NewPosixStorage(handler)
 	return &CacheStorage{
-		posix: posix,
+		posix:   posix,
+		handler: handler,
 	}
+}
+
+// peerHeaderOwner picks the X-Bfl-User for a cross-node probe:
+// handler.Owner (set by the caller, e.g. share grantor) wins over
+// p.Owner so the request FileParam stays untouched.
+func (s *CacheStorage) peerHeaderOwner(p *models.FileParam) string {
+	if s.handler != nil && s.handler.Owner != "" {
+		return s.handler.Owner
+	}
+	if p != nil {
+		return p.Owner
+	}
+	return ""
 }
 
 func (s *CacheStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {
@@ -72,7 +87,7 @@ func (s *CacheStorage) ProbeExists(p *models.FileParam) error {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeExists(p)
 	}
-	if _, err := posix.PeerStat(p, p.Owner, false); err != nil {
+	if _, err := posix.PeerStat(p, s.peerHeaderOwner(p), false); err != nil {
 		return fmt.Errorf("remote source not found: %s/%s%s (%v)", p.FileType, p.Extend, p.Path, err)
 	}
 	return nil
@@ -82,7 +97,7 @@ func (s *CacheStorage) ProbeIsDir(p *models.FileParam) (bool, error) {
 	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
 		return s.posix.ProbeIsDir(p)
 	}
-	isDir, err := posix.PeerStat(p, p.Owner, true)
+	isDir, err := posix.PeerStat(p, s.peerHeaderOwner(p), true)
 	if err != nil {
 		return false, fmt.Errorf("remote share target not found: %s/%s%s (%v)", p.FileType, p.Extend, p.Path, err)
 	}

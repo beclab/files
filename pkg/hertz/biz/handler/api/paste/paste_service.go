@@ -130,12 +130,15 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Pre-task probes; collapse real-vs-unreachable into one response.
+	// Pre-task probes. src.Owner stays the requester (local stat uses
+	// it); grantor is forwarded via handler.Owner for cross-node header
+	// only, matching the old checkRemote(src, owner) split.
 	srcFP := *pasteParam.Src
+	srcHeaderOwner := srcFP.Owner
 	if pasteParam.Share == 1 && req.SrcOwner != "" {
-		srcFP.Owner = req.SrcOwner
+		srcHeaderOwner = req.SrcOwner
 	}
-	srcHandler := drivers.Adaptor.NewFileHandler(srcFP.FileType, &base.HandlerParam{Ctx: ctx, Owner: srcFP.Owner})
+	srcHandler := drivers.Adaptor.NewFileHandler(srcFP.FileType, &base.HandlerParam{Ctx: ctx, Owner: srcHeaderOwner})
 	if srcHandler == nil {
 		klog.Warningf("[paste] source precheck failed: handler not found for fileType %s, owner: %s, action: %s, src: %s",
 			srcFP.FileType, owner, req.Action, req.Source)
@@ -149,6 +152,8 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// dst.Owner is swapped to the grantor for share=1 (matches the
+	// old DestinationWritable, where every dst path ran as grantor).
 	dstFP := *pasteParam.Dst
 	if pasteParam.Share == 1 && req.DstOwner != "" {
 		dstFP.Owner = req.DstOwner
