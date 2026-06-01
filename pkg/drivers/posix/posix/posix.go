@@ -57,7 +57,9 @@ func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error)
 		fileData *files.FileInfo
 		err      error
 	)
+
 	if s.shouldUseFastExternalRootList(fileParam, shareId) {
+		klog.Infof("Posix list, fast list, user: %s, path: %s, shareId: %s, sharePath: %s", owner, fileParam.Path, shareId, sharePath)
 		fileData, err = s.listExternalRootFast(fileParam)
 	} else {
 		fileData, err = s.getFiles(fileParam, Expand, Content)
