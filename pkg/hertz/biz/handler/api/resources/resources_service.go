@@ -8,7 +8,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
-	"files/pkg/files"
 	bizhandler "files/pkg/hertz/biz/handler"
 	"files/pkg/hertz/biz/handler/api/share"
 	resources "files/pkg/hertz/biz/model/api/resources"
@@ -31,19 +30,6 @@ func GetResourcesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	klog.Infof("[Incoming-Resource] user: %s, fsType: %s, method: %s, args: %s", contextArg.FileParam.Owner, contextArg.FileParam.FileType, c.Method(), common.ToJson(contextArg))
-
-	// probe=write: internal cross-node hook for paste precheck. Runs a
-	// 1-byte write probe on this node instead of listing. sync/cloud are
-	// reachable from any node via RPC and never come through here. Gate it
-	// as an upload so a probe cannot bypass the Level check; the precheck
-	// forward carries owner=grantor, who is admin on their own backend.
-	if contextArg.QueryParam.Probe == "write" {
-		if !gatePermission(ctx, c, contextArg.FileParam, models.ActionUpload) {
-			return
-		}
-		handleProbeWrite(c, contextArg.FileParam)
-		return
-	}
 
 	if !gatePermission(ctx, c, contextArg.FileParam, models.ActionList) {
 		return
@@ -270,44 +256,4 @@ func DeleteResourcesMethod(ctx context.Context, c *app.RequestContext) {
 // and read-only sync are correctly denied.
 func gatePermission(ctx context.Context, c *app.RequestContext, fp *models.FileParam, action models.Action) bool {
 	return bizhandler.Gate(ctx, c, fp, action, true, "resources")
-}
-
-// handleProbeWrite resolves fp's on-disk path and tries a 1-byte write
-// probe in its deepest existing ancestor. 2xx = writable. Posix family
-// only; other types get 400.
-func handleProbeWrite(c *app.RequestContext, fp *models.FileParam) {
-	switch fp.FileType {
-	case common.Drive, common.Cache, common.External, common.Internal, common.Smb, common.Usb, common.Hdd:
-	default:
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{
-			"error": fmt.Sprintf("probe=write not supported for fileType: %s", fp.FileType),
-		})
-		return
-	}
-
-	uri, err := fp.GetResourceUri()
-	if err != nil {
-		klog.Errorf("[probe-write] resolve uri error: %v, fp: %s", err, common.ToJson(fp))
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
-		return
-	}
-
-	// Probe the parent dir; WriteTempFile walks up to the deepest existing
-	// ancestor from there. Per-leaf ACL drift slips through, same as the
-	// in-task probe this replaces.
-	full := uri + fp.Path
-	probeDir := full
-	if tmp := strings.TrimSuffix(full, "/"); tmp != "" {
-		if pos := strings.LastIndex(tmp, "/"); pos >= 0 {
-			probeDir = tmp[:pos] + "/"
-		}
-	}
-
-	if err := files.WriteTempFile(probeDir); err != nil {
-		klog.Warningf("[probe-write] not writable: %v, fp: %s, probeDir: %s", err, common.ToJson(fp), probeDir)
-		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(consts.StatusOK, utils.H{"writable": true})
 }

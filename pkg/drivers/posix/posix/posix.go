@@ -14,11 +14,14 @@ import (
 	"files/pkg/preview"
 	"files/pkg/tasks"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
@@ -70,6 +73,75 @@ func (s *PosixStorage) CheckPermission(p *models.FileParam, owner string) (model
 		return models.LevelRead, nil
 	}
 	return models.LevelAdmin, nil
+}
+
+func (s *PosixStorage) CheckPathExists(p *models.FileParam) (exists, isDir bool, err error) {
+	if p == nil {
+		return false, false, errors.New("file param is nil")
+	}
+	uri, uerr := p.GetResourceUri()
+	if uerr != nil {
+		return false, false, fmt.Errorf("resolve uri: %w", uerr)
+	}
+	info, statErr := os.Stat(uri + p.Path)
+	if statErr == nil {
+		return true, info.IsDir(), nil
+	}
+	if os.IsNotExist(statErr) {
+		return false, false, nil
+	}
+	return true, false, nil
+}
+
+type RemoteStatusError struct {
+	Code int
+}
+
+func (e *RemoteStatusError) Error() string { return fmt.Sprintf("remote status %d", e.Code) }
+
+func RemotePathExists(p *models.FileParam, owner string) (exists, isDir bool, err error) {
+	if p == nil {
+		return false, false, errors.New("file param is nil")
+	}
+	pod, perr := integration.IntegrationManager().GetFilesPod(p.Extend)
+	if perr != nil {
+		return false, false, fmt.Errorf("locate files pod for node %s: %w", p.Extend, perr)
+	}
+	if pod.Status.PodIP == "" {
+		return false, false, fmt.Errorf("files pod for node %s has no IP yet", p.Extend)
+	}
+	url := fmt.Sprintf("http://%s/api/resources/%s/%s%s", pod.Status.PodIP, p.FileType, p.Extend, p.Path)
+	req, rerr := http.NewRequest(http.MethodGet, url, nil)
+	if rerr != nil {
+		return false, false, fmt.Errorf("build remote stat request: %w", rerr)
+	}
+	if owner != "" {
+		req.Header.Set(common.REQUEST_HEADER_OWNER, owner)
+	}
+	req.Header.Set("Cache-Control", "no-cache")
+	resp, derr := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if derr != nil {
+		return false, false, fmt.Errorf("remote stat %s: %w", url, derr)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		klog.Warningf("[unified-permission] remote stat %s returned %d", url, resp.StatusCode)
+		return false, false, &RemoteStatusError{Code: resp.StatusCode}
+	}
+	body, berr := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if berr != nil {
+		return false, false, fmt.Errorf("read remote stat response: %w", berr)
+	}
+	var meta struct {
+		IsDir bool `json:"isDir"`
+	}
+	if jerr := json.Unmarshal(body, &meta); jerr != nil {
+		return false, false, fmt.Errorf("parse remote stat response: %w", jerr)
+	}
+	return true, meta.IsDir, nil
 }
 
 func (s *PosixStorage) List(contextArgs *models.HttpContextArgs) ([]byte, error) {

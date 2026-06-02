@@ -8,7 +8,6 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
-	"files/pkg/drivers/precheck"
 	bizhandler "files/pkg/hertz/biz/handler"
 	"files/pkg/models"
 	"files/pkg/tasks"
@@ -125,11 +124,6 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
 		return
 	}
-	if lvl, aerr := access.CheckAccess(ctx, dstOwner, req.Destination); aerr != nil || !lvl.Allow(models.ActionWrite) {
-		klog.Warningf("[paste] destination permission denied: owner=%s, dst=%s, level=%v, err=%v", dstOwner, req.Destination, lvl, aerr)
-		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
-		return
-	}
 
 	// Verify the source actually exists on its backend BEFORE we
 	// allocate a task id. Otherwise callers silently get a Completed
@@ -141,20 +135,26 @@ func PasteMethod(ctx context.Context, c *app.RequestContext) {
 	// the paste can't proceed -- so we collapse to a single 500 with
 	// a stable, FE-friendly message and keep the raw Go error in the
 	// log for ops.
-	if err = precheck.SourceExists(pasteParam); err != nil {
-		klog.Warningf("[paste] source precheck failed: %v, owner: %s, action: %s, src: %s",
-			err, owner, req.Action, req.Source)
+	srcFP := *pasteParam.Src
+	if pasteParam.Share == 1 && req.SrcOwner != "" {
+		srcFP.Owner = req.SrcOwner
+	}
+	srcHandler := drivers.Adaptor.NewFileHandler(srcFP.FileType, &base.HandlerParam{Ctx: ctx, Owner: srcFP.Owner})
+	if srcHandler == nil {
+		klog.Warningf("[paste] source precheck failed: handler not found for fileType %s, owner: %s, action: %s, src: %s",
+			srcFP.FileType, owner, req.Action, req.Source)
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": common.ErrorMessagePasteSrcNotExists})
+		return
+	}
+	if exists, _, lerr := srcHandler.CheckPathExists(&srcFP); lerr != nil || !exists {
+		klog.Warningf("[paste] source precheck failed: exists=%v, err=%v, owner: %s, action: %s, src: %s",
+			exists, lerr, owner, req.Action, req.Source)
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": common.ErrorMessagePasteSrcNotExists})
 		return
 	}
 
-	// Dst-side counterpart to SourceExists: catches no-write-permission
-	// before a task is allocated so the failure surfaces in this HTTP
-	// response instead of an async task status. 403 + the shared
-	// Permission denied message mirror other no-permission paths.
-	if err = precheck.DestinationWritable(pasteParam); err != nil {
-		klog.Warningf("[paste] destination precheck failed: %v, owner: %s, action: %s, dst: %s",
-			err, owner, req.Action, req.Destination)
+	if lvl, aerr := access.CheckAccess(ctx, dstOwner, req.Destination); aerr != nil || !lvl.Allow(models.ActionWrite) {
+		klog.Warningf("[paste] destination permission denied: owner=%s, dst=%s, level=%v, err=%v", dstOwner, req.Destination, lvl, aerr)
 		c.AbortWithStatusJSON(consts.StatusForbidden, utils.H{"error": common.ErrorMessagePermissionDenied})
 		return
 	}

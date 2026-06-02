@@ -6,6 +6,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/diskcache"
 	"files/pkg/drivers/base"
+	"files/pkg/drivers/clouds/rclone"
 	"files/pkg/drivers/clouds/rclone/operations"
 	"files/pkg/drivers/posix/upload"
 	"files/pkg/files"
@@ -43,6 +44,16 @@ func NewCloudStorage(handlerParam *base.HandlerParam) *CloudStorage {
 // the remote provider via the rclone credentials.
 func (s *CloudStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
 	return models.LevelAdmin, nil
+}
+
+func (s *CloudStorage) CheckPathExists(p *models.FileParam) (exists, isDir bool, err error) {
+	if p == nil {
+		return false, false, errors.New("file param is nil")
+	}
+	if _, e := rclone.Command.GetFilesSize(p); e != nil {
+		return false, false, e
+	}
+	return true, p.Path == "" || strings.HasSuffix(p.Path, "/"), nil
 }
 
 /**
