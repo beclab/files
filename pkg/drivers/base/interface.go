@@ -39,4 +39,6 @@ type Execute interface {
 	UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byte, error)
 
 	CheckPermission(p *models.FileParam, owner string) (models.Level, error)
+
+	CheckPathExists(p *models.FileParam) (exists, isDir bool, err error)
 }

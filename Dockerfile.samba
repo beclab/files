@@ -13,7 +13,9 @@ COPY scripts/generate-hertz.sh ./scripts/generate-hertz.sh
 
 RUN bash scripts/generate-hertz.sh
 
-RUN CGO_ENABLED=0 go build -ldflags "-w -s" -o samba_share cmd/samba/main.go
+# `-tags nodynamic`: avif/heic switch from purego/dlopen (glibc) to embedded
+# wasm; needed for a static binary that exec's on Alpine (musl).
+RUN CGO_ENABLED=0 go build -tags nodynamic -ldflags "-w -s" -o samba_share cmd/samba/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

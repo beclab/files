@@ -48,8 +48,60 @@ type SyncStorage struct {
 // we resolve the parent directory of p.Path before querying, matching
 // the seahub call sites.
 func (s *SyncStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
+	// Repo-existence guard for the paste authorization gate; surfaces a clear error before task allocation.
+	if p == nil {
+		return models.LevelNone, errors.New("file param is nil")
+	}
+	if p.Extend == "" {
+		return models.LevelNone, errors.New("sync repo id is empty")
+	}
+	repo, rerr := seaserv.GlobalSeafileAPI.GetRepo(p.Extend)
+	if rerr != nil {
+		return models.LevelNone, fmt.Errorf("sync repo lookup: %w", rerr)
+	}
+	if repo == nil {
+		return models.LevelNone, fmt.Errorf("sync repo not found: %s", p.Extend)
+	}
 	username := owner + "@auth.local"
 	return seahub.ResolveSyncLevel(username, p.Extend, seahub.SyncParentDir(p.Path))
+}
+
+func (s *SyncStorage) CheckPathExists(p *models.FileParam) (exists, isDir bool, err error) {
+	if p == nil {
+		return false, false, errors.New("file param is nil")
+	}
+	if p.Extend == "" {
+		return false, false, errors.New("sync source not found: repo id is empty")
+	}
+	repo, rerr := seaserv.GlobalSeafileAPI.GetRepo(p.Extend)
+	if rerr != nil {
+		return false, false, fmt.Errorf("sync repo lookup: %w", rerr)
+	}
+	if repo == nil {
+		return false, false, nil
+	}
+	if p.Path == "" || p.Path == "/" {
+		return true, true, nil
+	}
+	path := strings.TrimRight(p.Path, "/")
+	if strings.HasSuffix(p.Path, "/") {
+		did, dErr := seaserv.GlobalSeafileAPI.GetDirIdByPath(p.Extend, path, false)
+		if dErr != nil {
+			return false, false, fmt.Errorf("sync dir lookup: %w", dErr)
+		}
+		if did == "" {
+			return false, false, nil
+		}
+		return true, true, nil
+	}
+	fid, fErr := seaserv.GlobalSeafileAPI.GetFileIdByPath(p.Extend, p.Path)
+	if fErr != nil {
+		return false, false, fmt.Errorf("sync file lookup: %w", fErr)
+	}
+	if fid == "" {
+		return false, false, nil
+	}
+	return true, false, nil
 }
 
 type Files struct {

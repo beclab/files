@@ -5,10 +5,10 @@ package share
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"files/pkg/client"
 	"files/pkg/common"
-	"files/pkg/drivers/precheck"
+	"files/pkg/drivers"
+	"files/pkg/drivers/base"
 	"files/pkg/drivers/sync/seahub"
 	"files/pkg/drivers/sync/seahub/seaserv"
 	"files/pkg/files"
@@ -75,14 +75,24 @@ func CreateSharePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	// Backend-verified: trailing-slash spoof on a file is defeated.
-	if err := precheck.VerifyShareTargetIsDir(fileParam); err != nil {
-		if errors.Is(err, precheck.ErrShareTargetIsFile) {
-			klog.Errorf("[share] CreateSharePath, target is a file, not a folder, owner: %s, path: %s", owner, p)
-			handler.RespBadRequest(c, common.ErrorMessageFileShareNotSupport)
-			return
-		}
-		klog.Errorf("[share] CreateSharePath, share target verify failed, owner: %s, path: %s, err: %v", owner, p, err)
+	if !common.ListContains(common.ShareableFileTypes, fileParam.FileType) {
+		klog.Errorf("[share] CreateSharePath, share target type not supported: %s, owner: %s, path: %s", fileParam.FileType, owner, p)
 		handler.RespBadRequest(c, common.ErrorMessageDirNotExists)
+		return
+	}
+	shareHandler := drivers.Adaptor.NewFileHandler(fileParam.FileType, &base.HandlerParam{Owner: owner})
+	if shareHandler == nil {
+		klog.Errorf("[share] CreateSharePath, no handler for fileType: %s, owner: %s, path: %s", fileParam.FileType, owner, p)
+		handler.RespBadRequest(c, common.ErrorMessageDirNotExists)
+		return
+	}
+	if exists, isDir, err := shareHandler.CheckPathExists(fileParam); err != nil || !exists {
+		klog.Errorf("[share] CreateSharePath, share target verify failed, owner: %s, path: %s, exists: %v, err: %v", owner, p, exists, err)
+		handler.RespBadRequest(c, common.ErrorMessageDirNotExists)
+		return
+	} else if !isDir {
+		klog.Errorf("[share] CreateSharePath, target is a file, not a folder, owner: %s, path: %s", owner, p)
+		handler.RespBadRequest(c, common.ErrorMessageFileShareNotSupport)
 		return
 	}
 	if req.Name == "" {
@@ -2587,14 +2597,24 @@ func createSambaShare(c *app.RequestContext, owner string, req *share.CreateShar
 	klog.Infof("[samba] CreateSharePath, samba, owner: %s, data: %s", owner, common.ParseString(fileParam))
 
 	// Independent guard; don't rely on caller pre-validation.
-	if err := precheck.VerifyShareTargetIsDir(fileParam); err != nil {
-		if errors.Is(err, precheck.ErrShareTargetIsFile) {
-			klog.Errorf("[samba] createSambaShare, target is a file, not a folder, owner: %s, path: %s", owner, fileParam.Path)
-			handler.RespBadRequest(c, common.ErrorMessageFileShareNotSupport)
-			return
-		}
-		klog.Errorf("[samba] createSambaShare, share target verify failed, owner: %s, path: %s, err: %v", owner, fileParam.Path, err)
+	if !common.ListContains(common.ShareableFileTypes, fileParam.FileType) {
+		klog.Errorf("[samba] createSambaShare, share target type not supported: %s, owner: %s, path: %s", fileParam.FileType, owner, fileParam.Path)
 		handler.RespBadRequest(c, common.ErrorMessageDirNotExists)
+		return
+	}
+	shareHandler := drivers.Adaptor.NewFileHandler(fileParam.FileType, &base.HandlerParam{Owner: owner})
+	if shareHandler == nil {
+		klog.Errorf("[samba] createSambaShare, no handler for fileType: %s, owner: %s, path: %s", fileParam.FileType, owner, fileParam.Path)
+		handler.RespBadRequest(c, common.ErrorMessageDirNotExists)
+		return
+	}
+	if exists, isDir, err := shareHandler.CheckPathExists(fileParam); err != nil || !exists {
+		klog.Errorf("[samba] createSambaShare, share target verify failed, owner: %s, path: %s, exists: %v, err: %v", owner, fileParam.Path, exists, err)
+		handler.RespBadRequest(c, common.ErrorMessageDirNotExists)
+		return
+	} else if !isDir {
+		klog.Errorf("[samba] createSambaShare, target is a file, not a folder, owner: %s, path: %s", owner, fileParam.Path)
+		handler.RespBadRequest(c, common.ErrorMessageFileShareNotSupport)
 		return
 	}
 

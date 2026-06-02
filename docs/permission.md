@@ -2,7 +2,7 @@
 
 统一入口 `access.CheckAccess(ctx, owner, rawURL)`：把前端 URL 映射到具体存储类型，做输入校验后分发到各存储的 `CheckPermission`，返回与 action 无关的统一 `Level`。调用方用 `level.Allow(action)` 判断是否放行；HTTP 处理器一般通过 `Gate` 辅助（见「Gate 加闸辅助」）调用，无需直接接触 `CheckAccess`。
 
-非 share 的 posix 读写面均经此加闸：写面 paste、resources（POST/PATCH/PUT/DELETE、`probe=write`）、permission PUT(chown)、archive（compress/extract）、upload（会话创建 `UploadLinkMethod`）；读面 resources GET(List)、preview、raw、md5、archive（entries/entry）。各 driver 的 `CheckPermission`（drive/cache/external/cloud/sync）即经此生效。
+非 share 的 posix 读写面均经此加闸：写面 paste、resources（POST/PATCH/PUT/DELETE）、permission PUT(chown)、archive（compress/extract）、upload（会话创建 `UploadLinkMethod`）；读面 resources GET(List)、preview、raw、md5、archive（entries/entry）。各 driver 的 `CheckPermission`（drive/cache/external/cloud/sync）即经此生效。
 
 **share URL 不走 `CheckAccess`**：share 权限还需 resolved 的分享记录/成员供中间件做反代重写，故由 share 中间件复用本包的 `ShareResolvePath` + `ShareAuthorize`（paste 走 `ShareCheckPaste`，底层矩阵为 `SharePermitted`）决定。
 
@@ -63,8 +63,8 @@
 
 各处理器以何种 action 加闸：
 
-- **paste 处理器**（`pkg/hertz/biz/handler/api/paste/paste_service.go`）：分配任务前先过 `CheckAccess` 授权闸口——src 需读权限、dst 需写权限；`move` 会删源，故 src 改为需写/删权限。`share=1` 时以授权者（`SrcOwner`/`DstOwner`）身份判定，与 precheck 探测一致；接收方的分享权限仍由 share 代理/中间件把关。precheck 的存在性/能力探测（`WriteTempFile`、listing 等）保留。
-- **resources 处理器**（`pkg/hertz/biz/handler/api/resources/resources_service.go`）：`GET`(List) 需读、`POST`(create)/`PATCH`(rename)/`PUT`(edit) 需写、`DELETE` 需删；`probe=write`（跨节点 paste 探测钩子）在执行 1 字节写探测前按 `ActionUpload` 加闸（探测转发携带 `owner=grantor`，其对自身后端恒 Admin，合法 precheck 不受影响）。share 反代请求（`share=1`）跳过 `CheckAccess`——但前提是携带有效内部令牌（见「内部令牌信任边界」），其权限已由 share 中间件按成员权限鉴权。
+- **paste 处理器**（`pkg/hertz/biz/handler/api/paste/paste_service.go`）：分配任务前先过 `CheckAccess` 授权闸口——src 需读权限、dst 需写权限；`move` 会删源，故 src 改为需写/删权限。`share=1` 时以授权者（`SrcOwner`/`DstOwner`）身份判定；接收方的分享权限仍由 share 代理/中间件把关。src 存在性走 `srcHandler.CheckPathExists`。
+- **resources 处理器**（`pkg/hertz/biz/handler/api/resources/resources_service.go`）：`GET`(List) 需读、`POST`(create)/`PATCH`(rename)/`PUT`(edit) 需写、`DELETE` 需删。share 反代请求（`share=1`）跳过 `CheckAccess`——但前提是携带有效内部令牌（见「内部令牌信任边界」），其权限已由 share 中间件按成员权限鉴权。
 - **读取处理器**（`preview`/`raw`/`md5`）：分别按 `ActionPreview`/`ActionDownload`/`ActionRead` 加闸，`skipShare=true`（share 反代经内部令牌放行）。
 - **permission 处理器**（`pkg/hertz/biz/handler/api/permission/permission_service.go`）：`PUT`(chown/ChownRecursive) 改属主属写类，需写权限；`GET` 见下方「查询接口」。
 - **archive 处理器**（`pkg/hertz/biz/handler/api/archive/archive_service.go`）：`entries`/`entry` 需读，`Compress`/`Extract` 对各 source 需读、对 destination 需写（均 posix-only，`skipShare=false`，不在 share 反代路径）。
@@ -78,7 +78,7 @@
   - **统一拒绝哨兵**：纯闸口用 `EnsureSyncPermission`；仍需原始权限串的站点（dir/file/repos/upload 的响应或自定义 URL 逻辑需要 `permission`/`user_perm`/`file_perm`/`IsRepoSyncable`）保留单次 `CheckFolderPermission`，但拒绝统一返 `ErrSyncPermissionDenied` 哨兵，便于边界 `errors.Is` 映射 403。
   - **父目录解析统一**：`seahub.SyncParentDir` 单一实现（`sync.go` 委托之），file→parent 的转换在调用点（`Preview`/`thumbnail`）完成，不在 `CheckFolderPermission` 内做（多数调用点已传目录）。
   - **fail-closed**：库枚举失败、目录共享权限更新失败均上抛 error，不静默成功；`SyncPermToMode` 经 `LevelFromSyncPermission` 推导（None→0、Read→0555、Write/Admin→0755）。
-- **precheck**（`pkg/drivers/precheck`）：sync 目标可写性的权限 RPC 已移除——paste 闸口已在分配任务前对 sync dst 解析过写权限，`checkSyncWritable` 仅保留 repo 存在性校验。posix 的 `WriteTempFile`、cloud 的 listing 属「真实能力探测」（磁盘满/只读挂载/凭据失效），与用户权限无关，保留不变。
+- **driver 接口**：`base.Execute` 暴露 `CheckPermission(p, owner)` 与 `CheckPathExists(p) (exists, isDir, err)`。前者纯逻辑权限判定，后者用于 paste 源存在性 / share 目标 isDir 校验，失败由 err 上抛。Sync 的 `CheckPermission` 在算 Level 前先 `GetRepo`，repo 不存在直接给出明确错误。
 
 ### sync 行为变化
 

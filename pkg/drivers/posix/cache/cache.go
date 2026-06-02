@@ -1,9 +1,12 @@
 package cache
 
 import (
+	"errors"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/posix/posix"
+	"files/pkg/global"
 	"files/pkg/models"
+	"fmt"
 )
 
 type CacheStorage struct {
@@ -64,4 +67,20 @@ func (s *CacheStorage) UploadChunks(fileUploadArg *models.FileUploadArgs) ([]byt
 
 func (s *CacheStorage) CheckPermission(p *models.FileParam, owner string) (models.Level, error) {
 	return s.posix.CheckPermission(p, owner)
+}
+
+func (s *CacheStorage) CheckPathExists(p *models.FileParam) (exists, isDir bool, err error) {
+	if p == nil || p.Extend == "" || p.Extend == global.CurrentNodeName {
+		return s.posix.CheckPathExists(p)
+	}
+	e, d, rerr := posix.RemotePathExists(p, p.Owner)
+	if rerr == nil {
+		return e, d, nil
+	}
+	var statusErr *posix.RemoteStatusError
+	if errors.As(rerr, &statusErr) {
+		return false, false, fmt.Errorf("remote source not found: %s/%s%s (remote status %d)",
+			p.FileType, p.Extend, p.Path, statusErr.Code)
+	}
+	return false, false, rerr
 }

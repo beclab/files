@@ -40,9 +40,6 @@ func (t *Task) Rsync() error {
 
 	srcPath := srcUri + src.Path
 
-	// Dst writability is now checked by precheck.DestinationWritable in
-	// the paste HTTP handler; the old in-task external-only probe is gone.
-
 	pathMeta, err := files.GetFileInfo(srcPath)
 	if err != nil {
 		return fmt.Errorf("get src meta info error: %v", err)
