@@ -14,7 +14,7 @@ struct CompressReq {
 
 struct CompressResp {
     1: required i32    code,
-    2: string msg,
+    2: string message,
     3: string task_id
 }
 
@@ -28,7 +28,7 @@ struct ExtractReq {
 
 struct ExtractResp {
     1: required i32    code,
-    2: string msg,
+    2: string message,
     3: string task_id
 }
 
