@@ -40,6 +40,12 @@ func (t *Task) Rsync() error {
 
 	srcPath := srcUri + src.Path
 
+	if dst.FileType == common.External {
+		if err = t.checkExternalDstMountAlive(); err != nil {
+			return fmt.Errorf("check external dst mount alive error: %v", err)
+		}
+	}
+
 	pathMeta, err := files.GetFileInfo(srcPath)
 	if err != nil {
 		return fmt.Errorf("get src meta info error: %v", err)
@@ -241,5 +247,15 @@ func (t *Task) generateNewName(srcFileInfo *files.PathMeta) (string, string, err
 
 	return newName, newDstPath, nil
 
+}
+
+func (t *Task) checkExternalDstMountAlive() error {
+	var dst, _ = t.param.Dst.GetResourceUri()
+	var dstPath = dst + t.param.Dst.Path
+	var tmp = strings.TrimSuffix(dstPath, "/")
+	var pos = strings.LastIndex(tmp, "/")
+	dstPath = tmp[:pos] + "/"
+
+	return files.WriteTempFile(dstPath)
 }
 
