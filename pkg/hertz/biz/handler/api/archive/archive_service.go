@@ -11,12 +11,14 @@
 package archive
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -106,6 +108,12 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 		if !gateAccess(ctx, c, fp, models.ActionRead) {
 			return
 		}
+		h := drivers.Adaptor.NewFileHandler(fp.FileType, &base.HandlerParam{Owner: owner})
+		if exists, _, lerr := h.CheckPathExists(fp); lerr != nil || !exists {
+			klog.Warningf("[archive] source not exists: owner=%s, src=%s, err=%v", owner, fp.Path, lerr)
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive source not exists"})
+			return
+		}
 	}
 	if !gateAccess(ctx, c, dst, models.ActionWrite) {
 		return
@@ -148,7 +156,7 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := archmodel.CompressResp{Code: 0, Msg: "success", TaskID: task.Id()}
+	resp := archmodel.CompressResp{Code: 0, Message: "success", TaskID: task.Id()}
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -191,13 +199,30 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 	if !gateAccess(ctx, c, src, models.ActionRead) {
 		return
 	}
+	srcHandler := drivers.Adaptor.NewFileHandler(src.FileType, &base.HandlerParam{Owner: owner})
+	if exists, _, lerr := srcHandler.CheckPathExists(src); lerr != nil || !exists {
+		klog.Warningf("[archive] source not exists: owner=%s, src=%s, err=%v", owner, req.Source, lerr)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive source not exists"})
+		return
+	}
 	if !gateAccess(ctx, c, dst, models.ActionWrite) {
+		return
+	}
+
+	password := string(c.GetHeader(HeaderPassword))
+	srcUri, err := src.GetResourceUri()
+	if err != nil {
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	if status, body, hit := archivePasswordPreflight(ctx, srcUri+src.Path, password); hit {
+		c.AbortWithStatusJSON(status, body)
 		return
 	}
 
 	opt := &models.ArchiveOption{
 		Format:           req.Format,
-		Password:         string(c.GetHeader(HeaderPassword)),
+		Password:         password,
 		PreserveSymlinks: req.PreserveSymlinks,
 		Conflict:         req.Conflict,
 	}
@@ -229,7 +254,7 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := archmodel.ExtractResp{Code: 0, Msg: "success", TaskID: task.Id()}
+	resp := archmodel.ExtractResp{Code: 0, Message: "success", TaskID: task.Id()}
 	c.JSON(consts.StatusOK, resp)
 }
 
@@ -266,6 +291,12 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 	if !gateAccess(ctx, c, src, models.ActionRead) {
 		return
 	}
+	srcHandler := drivers.Adaptor.NewFileHandler(src.FileType, &base.HandlerParam{Owner: owner})
+	if exists, _, lerr := srcHandler.CheckPathExists(src); lerr != nil || !exists {
+		klog.Warningf("[archive] source not exists: owner=%s, src=%s, err=%v", owner, req.Source, lerr)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive source not exists"})
+		return
+	}
 	uri, err := src.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -274,6 +305,11 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 	absPath := uri + src.Path
 
 	password := string(c.GetHeader(HeaderPassword))
+
+	if status, body, hit := archivePasswordPreflight(ctx, absPath, password); hit {
+		c.AbortWithStatusJSON(status, body)
+		return
+	}
 
 	rd, err := reader.Open(absPath, password)
 	if err != nil {
@@ -336,6 +372,12 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 	if !gateAccess(ctx, c, src, models.ActionRead) {
 		return
 	}
+	srcHandler := drivers.Adaptor.NewFileHandler(src.FileType, &base.HandlerParam{Owner: owner})
+	if exists, _, lerr := srcHandler.CheckPathExists(src); lerr != nil || !exists {
+		klog.Warningf("[archive] source not exists: owner=%s, src=%s, err=%v", owner, req.Source, lerr)
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive source not exists"})
+		return
+	}
 	uri, err := src.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -344,6 +386,11 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 	absPath := uri + src.Path
 
 	password := string(c.GetHeader(HeaderPassword))
+
+	if status, body, hit := archivePasswordPreflight(ctx, absPath, password); hit {
+		c.AbortWithStatusJSON(status, body)
+		return
+	}
 
 	rd, err := reader.Open(absPath, password)
 	if err != nil {
@@ -423,6 +470,92 @@ func classifyStreamError(err error) string {
 		return "not_found"
 	}
 	return "internal"
+}
+
+// archivePasswordPreflight returns hit=true with the response when the request mismatches the archive's password requirement.
+func archivePasswordPreflight(ctx context.Context, absPath, password string) (int, utils.H, bool) {
+	encrypted, sample, derr := archiveDetectEncrypted(ctx, absPath)
+	if derr != nil {
+		return consts.StatusInternalServerError, utils.H{"error": derr.Error()}, true
+	}
+	switch {
+	case !encrypted && password == "":
+		return 0, nil, false
+	case !encrypted && password != "":
+		return consts.StatusBadRequest, utils.H{"code": 30003, "message": "archive does not require password"}, true
+	case encrypted && password == "":
+		return consts.StatusBadRequest, utils.H{"code": 30001, "message": "archive password required"}, true
+	}
+	if verr := archiveVerifyPassword(ctx, absPath, password, sample); verr != nil {
+		if errors.Is(verr, sevenz.ErrPasswordInvalid) || errors.Is(verr, sevenz.ErrPasswordRequired) {
+			return consts.StatusBadRequest, utils.H{"code": 30002, "message": "archive password is incorrect"}, true
+		}
+		return consts.StatusInternalServerError, utils.H{"error": verr.Error()}, true
+	}
+	return 0, nil, false
+}
+
+// archiveDetectEncrypted reports whether absPath needs a password and (best-effort) one encrypted entry path for verification.
+func archiveDetectEncrypted(ctx context.Context, absPath string) (bool, string, error) {
+	if strings.EqualFold(filepath.Ext(absPath), ".zip") {
+		if zr, zerr := zip.OpenReader(absPath); zerr == nil {
+			var inner string
+			for _, f := range zr.File {
+				if f.Flags&0x1 != 0 && !f.FileInfo().IsDir() {
+					inner = f.Name
+					break
+				}
+			}
+			zr.Close()
+			return inner != "", inner, nil
+		}
+	}
+	var seen string
+	werr := sevenz.Walk(ctx, sevenz.ListOpts{Src: absPath, Password: ""}, func(e sevenz.Entry) error {
+		if e.Encrypted && !e.IsDir && seen == "" {
+			seen = e.Path
+			return io.EOF
+		}
+		return nil
+	})
+	if werr == nil || errors.Is(werr, io.EOF) {
+		return seen != "", seen, nil
+	}
+	if errors.Is(werr, sevenz.ErrPasswordRequired) || errors.Is(werr, sevenz.ErrPasswordInvalid) {
+		return true, "", nil
+	}
+	return false, "", werr
+}
+
+// archiveVerifyPassword runs `7z` with password to confirm decryption; sample (when non-empty) skips a full re-walk.
+func archiveVerifyPassword(ctx context.Context, absPath, password, sample string) error {
+	if sample == "" {
+		werr := sevenz.Walk(ctx, sevenz.ListOpts{Src: absPath, Password: password}, func(e sevenz.Entry) error {
+			if !e.IsDir && e.Size > 0 && sample == "" {
+				sample = e.Path
+				return io.EOF
+			}
+			return nil
+		})
+		if werr != nil && !errors.Is(werr, io.EOF) {
+			return werr
+		}
+		if sample == "" {
+			return nil
+		}
+	}
+	bin, err := exec.LookPath(sevenz.Binary)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, bin, "e", "-so", "-bso0", "-bse2", "-bb0", "-y", "-p"+password, "--", absPath, sample)
+	cmd.Stdout = io.Discard
+	var stderrBuf strings.Builder
+	cmd.Stderr = &stderrBuf
+	if err := cmd.Run(); err != nil {
+		return sevenz.Classify(err, stderrBuf.String())
+	}
+	return nil
 }
 
 // classifyEntryError returns a stable error code + the HTTP status to

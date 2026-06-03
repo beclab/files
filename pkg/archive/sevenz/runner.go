@@ -678,7 +678,7 @@ func scanCRLines(data []byte, atEOF bool) (advance int, token []byte, err error)
 		return 0, nil, nil
 	}
 	for i, b := range data {
-		if b == '\n' || b == '\r' {
+		if b == '\n' || b == '\r' || b == '\b' {
 			return i + 1, data[:i], nil
 		}
 	}

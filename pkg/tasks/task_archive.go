@@ -36,6 +36,12 @@ func (t *Task) Compress() error {
 	dstPath := dstUri + dst.Path
 	dstDir := filepath.Dir(dstPath)
 
+	if dst.FileType == common.External {
+		if err = t.checkExternalDstMountAlive(); err != nil {
+			return fmt.Errorf("check external dst mount alive error: %v", err)
+		}
+	}
+
 	klog.Infof("[Task] Id: %s, compress, user: %s, format: %s, dst: %s, srcs: %d",
 		t.id, owner, opt.Format, dstPath, len(srcs))
 
@@ -69,16 +75,43 @@ func (t *Task) Compress() error {
 		return e
 	}
 
-	// Conflict handling: if dst already exists, fall through to the
-	// existing dup-name generator (matches paste behaviour). Multi-
-	// volume outputs check the .001 sibling.
+	// Conflict handling for an existing archive at dst (overwrite backups restored by defer below on cancel/failure).
+	var overwriteBackups [][2]string
 	if !t.pausedSnap().WasPaused {
 		isVolume := opt.VolumeSizeMB > 0
-		if newName, newPath, e := t.generateArchiveDstName(dstPath, dstUri, isVolume); e != nil {
-			return e
-		} else if newName != "" {
-			dst.Path = newPath
-			dstPath = dstUri + dst.Path
+		switch opt.Conflict {
+		case common.ArchiveConflictOverwrite:
+			for _, p := range archiveOutputPaths(dstPath) {
+				bak := p + ".bak." + t.id
+				if e := os.Rename(p, bak); e != nil {
+					if os.IsNotExist(e) {
+						continue
+					}
+					for _, b := range overwriteBackups {
+						_ = os.Rename(b[1], b[0])
+					}
+					return fmt.Errorf("backup %s: %w", p, e)
+				}
+				overwriteBackups = append(overwriteBackups, [2]string{p, bak})
+			}
+		case common.ArchiveConflictSkip:
+			existing := dstPath
+			if isVolume {
+				existing = dstPath + ".001"
+			}
+			if _, e := os.Stat(existing); e == nil {
+				klog.Infof("[Task] Id: %s, compress, skip existing archive: %s", t.id, existing)
+				return nil
+			} else if !errors.Is(e, os.ErrNotExist) {
+				return e
+			}
+		default: // rename or unset
+			if newName, newPath, e := t.generateArchiveDstName(dstPath, dstUri, isVolume); e != nil {
+				return e
+			} else if newName != "" {
+				dst.Path = newPath
+				dstPath = dstUri + dst.Path
+			}
 		}
 	}
 
@@ -110,6 +143,13 @@ func (t *Task) Compress() error {
 		state := t.getState()
 		if state == common.Canceled || state == common.Failed {
 			cleanupArchiveOutputs(dstPath)
+			for _, b := range overwriteBackups {
+				_ = os.Rename(b[1], b[0])
+			}
+		} else {
+			for _, b := range overwriteBackups {
+				_ = os.Remove(b[1])
+			}
 		}
 	}()
 
@@ -167,6 +207,12 @@ func (t *Task) Extract() error {
 	}
 	dstPath := dstUri + dst.Path
 
+	if dst.FileType == common.External {
+		if err = t.checkExternalDstMountAlive(); err != nil {
+			return fmt.Errorf("check external dst mount alive error: %v", err)
+		}
+	}
+
 	klog.Infof("[Task] Id: %s, extract, user: %s, src: %s, dst: %s, format: %s",
 		t.id, owner, srcPath, dstPath, opt.Format)
 
@@ -174,9 +220,21 @@ func (t *Task) Extract() error {
 	// once. This second pass costs little (just headers) and gives us
 	// an honest progress denominator plus a real disk-space precheck.
 	var totalSize int64
+	topIsDir := map[string]bool{}
 	if err := sevenz.Walk(t.ctx, sevenz.ListOpts{Src: srcPath, Password: opt.Password}, func(e sevenz.Entry) error {
 		if !e.IsDir {
 			totalSize += e.Size
+		}
+		n := strings.TrimPrefix(filepath.ToSlash(e.Path), "/")
+		if n == "" || n == "." {
+			return nil
+		}
+		parts := strings.SplitN(n, "/", 2)
+		seg := parts[0]
+		if len(parts) > 1 {
+			topIsDir[seg] = true
+		} else if _, ok := topIsDir[seg]; !ok {
+			topIsDir[seg] = e.IsDir
 		}
 		return nil
 	}); err != nil {
@@ -189,24 +247,70 @@ func (t *Task) Extract() error {
 		return e
 	}
 
-	// out/ exists -> out (1)/, out (2)/, ...
-	if !t.pausedSnap().WasPaused {
-		if newPath, e := t.generateExtractDstDir(dstPath, dstUri); e != nil {
-			return e
-		} else if newPath != "" {
-			dst.Path = newPath
-			dstPath = dstUri + dst.Path
+	var renamePlan map[string]string
+	if opt.Conflict == "" || opt.Conflict == common.ArchiveConflictRename {
+		plan := map[string]string{}
+		for top, isDir := range topIsDir {
+			if _, e := os.Stat(filepath.Join(dstPath, top)); e != nil {
+				continue
+			}
+			var newTop string
+			if isDir {
+				siblings, _ := files.CollectDupNames(dstPath, top, "", true)
+				n := files.GenerateDupName(siblings, top, false)
+				if n != "" && n != top {
+					newTop = n
+				}
+			} else {
+				_, ext := common.SplitNameExt(top)
+				base := strings.TrimSuffix(top, ext)
+				siblings, _ := files.CollectDupNames(dstPath, base, ext, false)
+				n := files.GenerateDupName(siblings, base, true)
+				if n != "" && n != base {
+					newTop = n + ext
+				}
+			}
+			if newTop != "" {
+				plan[top] = newTop
+			}
+		}
+		if len(plan) > 0 {
+			renamePlan = plan
 		}
 	}
 
-	if err := os.MkdirAll(dstPath, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", dstPath, err)
+	extractRoot := dstPath
+	var stagingDir string
+	if renamePlan == nil {
+		// out/ exists -> out (1)/, out (2)/, ...
+		if !t.pausedSnap().WasPaused {
+			if newPath, e := t.generateExtractDstDir(dstPath, dstUri); e != nil {
+				return e
+			} else if newPath != "" {
+				dst.Path = newPath
+				dstPath = dstUri + dst.Path
+				extractRoot = dstPath
+			}
+		}
+		if err := os.MkdirAll(dstPath, 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", dstPath, err)
+		}
+	} else {
+		stagingDir = filepath.Join(dstPath, fmt.Sprintf(".archive_extract.%s", t.id))
+		if e := os.MkdirAll(stagingDir, 0o755); e != nil {
+			return fmt.Errorf("mkdir staging %s: %w", stagingDir, e)
+		}
+		extractRoot = stagingDir
 	}
 
 	defer func() {
 		state := t.getState()
 		if state == common.Canceled || state == common.Failed {
-			_ = os.RemoveAll(dstPath)
+			if stagingDir != "" {
+				_ = os.RemoveAll(stagingDir)
+			} else {
+				_ = os.RemoveAll(dstPath)
+			}
 		}
 	}()
 
@@ -220,7 +324,7 @@ func (t *Task) Extract() error {
 
 	extOpts := sevenz.ExtractOpts{
 		Src:              srcPath,
-		Dst:              dstPath,
+		Dst:              extractRoot,
 		Password:         opt.Password,
 		PreserveSymlinks: opt.PreserveSymlinks,
 		Overwrite:        opt.Conflict,
@@ -232,8 +336,33 @@ func (t *Task) Extract() error {
 		return err
 	}
 
-	if err := files.ChownRecursive(dstPath, 1000, 1000); err != nil {
-		klog.Warningf("[Task] Id: %s, chown %s: %v", t.id, dstPath, err)
+	var chownRoots []string
+	if stagingDir != "" {
+		entries, err := os.ReadDir(stagingDir)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			name := e.Name()
+			target := name
+			if newName, ok := renamePlan[name]; ok {
+				target = newName
+			}
+			to := filepath.Join(dstPath, target)
+			if err := os.Rename(filepath.Join(stagingDir, name), to); err != nil {
+				return fmt.Errorf("merge %s -> %s: %w", name, target, err)
+			}
+			chownRoots = append(chownRoots, to)
+		}
+		_ = os.Remove(stagingDir)
+	} else {
+		chownRoots = []string{dstPath}
+	}
+
+	for _, p := range chownRoots {
+		if err := files.ChownRecursive(p, 1000, 1000); err != nil {
+			klog.Warningf("[Task] Id: %s, chown %s: %v", t.id, p, err)
+		}
 	}
 
 	klog.Infof("[Task] Id: %s, extract done!", t.id)
@@ -283,10 +412,11 @@ func (t *Task) generateArchiveDstName(dstPath, dstUri string, isVolume bool) (st
 	if err != nil {
 		return "", "", err
 	}
-	newName := files.GenerateDupName(siblings, base, true)
-	if newName == base {
+	newPrefix := files.GenerateDupName(siblings, name, true)
+	if newPrefix == name {
 		return "", "", nil
 	}
+	newName := newPrefix + ext
 	newPath := strings.TrimPrefix(dir+"/"+newName, dstUri)
 	return newName, newPath, nil
 }
