@@ -45,6 +45,10 @@ type NfsMountReq struct {
 	MountPath  string `json:"mountPath"`
 }
 
+type NfsListReq struct {
+	Server string `json:"server"`
+}
+
 func stringPtrValue(v *string) string {
 	if v == nil {
 		return ""
@@ -111,9 +115,21 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	externalType := strings.ToLower(strings.TrimSpace(req.ExternalType))
+	operate := strings.TrimSpace(stringPtrValue(req.Operate))
+	isNfsListOperation := externalType == "nfs" && operate != ""
 	var urls []string
 	var bodyStruct interface{}
-	if externalType == "smb" {
+	if isNfsListOperation {
+		server := strings.TrimSpace(stringPtrValue(req.URL))
+		if server == "" {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "url is required for nfs list operation"})
+			return
+		}
+		urls = []string{"http://" + files.TerminusdHost + "/command/list-nfs"}
+		bodyStruct = NfsListReq{
+			Server: server,
+		}
+	} else if externalType == "smb" {
 		user := strings.TrimSpace(stringPtrValue(req.User))
 		password := strings.TrimSpace(stringPtrValue(req.Password))
 		if user == "" || password == "" {
@@ -122,13 +138,13 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		}
 		urls = []string{"http://" + files.TerminusdHost + "/command/v2/mount-samba", "http://" + files.TerminusdHost + "/command/mount-samba"}
 		bodyStruct = SmbMountReq{
-			SmbPath:  req.SmbPath,
+			SmbPath:  strings.TrimSpace(stringPtrValue(req.SmbPath)),
 			User:     user,
 			Password: password,
 		}
 	} else if externalType == "nfs" {
 		urls = []string{"http://" + files.TerminusdHost + "/command/mount-nfs"}
-		nfsReq, nfsReqErr := buildNfsMountReq(req.SmbPath)
+		nfsReq, nfsReqErr := buildNfsMountReq(strings.TrimSpace(stringPtrValue(req.SmbPath)))
 		if nfsReqErr != nil {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": nfsReqErr.Error()})
 			return
@@ -224,13 +240,15 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	if mounted {
+	if mounted && !isNfsListOperation {
 		// Mount/unmount APIs are authoritative user actions. Drop stale
 		// async-reported overlay first so a delayed invalid=true update
 		// cannot continue masking the just-updated polled state.
 		global.GlobalMounted.ClearReportedMounted()
 	}
-	global.GlobalMounted.Updated()
+	if !isNfsListOperation {
+		global.GlobalMounted.Updated()
+	}
 
 	resp := new(external.MountResp)
 	if err := json.Unmarshal(common.ToBytes(res), &resp); err != nil {
