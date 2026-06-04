@@ -355,6 +355,10 @@ func Extract(ctx context.Context, opts ExtractOpts, prog ProgressFn) error {
 		return errors.New("sevenz.Extract: src and dst required")
 	}
 
+	if IsCompoundTar(opts.Src) {
+		return extractTarCompound(ctx, bin, opts, prog)
+	}
+
 	args := []string{"x", "-mmt=" + archiveThreads, "-o" + opts.Dst}
 	if opts.Password != "" {
 		args = append(args, "-p"+opts.Password)
@@ -374,6 +378,108 @@ func Extract(ctx context.Context, opts ExtractOpts, prog ProgressFn) error {
 	return runWithProgress(ctx, bin, args, "", prog)
 }
 
+// IsCompoundTar reports whether src is a stream-compressed tar (.tar.gz / .tgz / .tar.bz2 / .tar.xz).
+func IsCompoundTar(src string) bool {
+	s := strings.ToLower(src)
+	return strings.HasSuffix(s, ".tar.gz") ||
+		strings.HasSuffix(s, ".tgz") ||
+		strings.HasSuffix(s, ".tar.bz2") ||
+		strings.HasSuffix(s, ".tar.xz")
+}
+
+// extractTarCompound pipes `7z e -so` into `7z x -si -ttar` so a compound tar fully unwraps without an intermediate .tar.
+func extractTarCompound(ctx context.Context, bin string, opts ExtractOpts, prog ProgressFn) error {
+	args1 := []string{"e", "-so", "-mmt=" + archiveThreads, "-bsp2", "-bso0", "-bse2", "-bb0", "-y"}
+	if opts.Password != "" {
+		args1 = append(args1, "-p"+opts.Password)
+	} else {
+		args1 = append(args1, "-p")
+	}
+	args1 = append(args1, "--", opts.Src)
+
+	args2 := []string{"x", "-si", "-ttar", "-mmt=" + archiveThreads,
+		overwriteFlag(opts.Overwrite),
+		"-bsp0", "-bso0", "-bse2", "-bb0", "-y", "-o" + opts.Dst}
+	if opts.PreserveSymlinks {
+		args2 = append(args2, "-snl")
+	}
+
+	klog.V(2).Infof("[sevenz] tar-compound: %s %s | %s %s",
+		bin, strings.Join(redactArgs(args1), " "),
+		bin, strings.Join(redactArgs(args2), " "))
+
+	cmd1 := exec.CommandContext(ctx, bin, args1...)
+	cmd2 := exec.CommandContext(ctx, bin, args2...)
+	cmd1.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd2.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	pipe, err := cmd1.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+	cmd2.Stdin = pipe
+
+	cmd1Stderr, err := cmd1.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("stderr pipe outer: %w", err)
+	}
+	var cmd2StderrBuf strings.Builder
+	cmd2.Stderr = &cmd2StderrBuf
+
+	if startErr := cmd1.Start(); startErr != nil {
+		return fmt.Errorf("start outer 7z: %w", startErr)
+	}
+	if startErr := cmd2.Start(); startErr != nil {
+		if cmd1.Process != nil {
+			_ = cmd1.Process.Kill()
+		}
+		return fmt.Errorf("start inner 7z: %w", startErr)
+	}
+
+	var cmd1StderrBuf strings.Builder
+	var wg sync.WaitGroup
+	wg.Add(1)
+	lastPercent := -1
+	go func() {
+		defer wg.Done()
+		sc := bufio.NewScanner(cmd1Stderr)
+		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		sc.Split(scanCRLines)
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line == "" {
+				continue
+			}
+			if p, ok := parsePercent(line); ok {
+				if p != lastPercent {
+					lastPercent = p
+					if prog != nil {
+						prog(p, 0)
+					}
+				}
+				continue
+			}
+			cmd1StderrBuf.WriteString(line)
+			cmd1StderrBuf.WriteByte('\n')
+		}
+	}()
+
+	waitErr1 := cmd1.Wait()
+	waitErr2 := cmd2.Wait()
+	wg.Wait()
+
+	if waitErr1 != nil {
+		return Classify(waitErr1, cmd1StderrBuf.String())
+	}
+	if waitErr2 != nil {
+		return Classify(waitErr2, cmd2StderrBuf.String())
+	}
+	if prog != nil && lastPercent != 100 {
+		prog(100, 0)
+	}
+	return nil
+}
+
 // ----------------------------------------------------------------------
 // Walk (streaming list)
 // ----------------------------------------------------------------------
@@ -391,6 +497,96 @@ func Walk(ctx context.Context, opts ListOpts, fn WalkFn) error {
 		return errors.New("sevenz.Walk: src required")
 	}
 
+	cmds, stdout, stderrBufs, stderrWg, err := startWalk(ctx, bin, opts)
+	if err != nil {
+		return err
+	}
+
+	walkErr := walkParseSlt(stdout, fn)
+
+	if walkErr != nil {
+		for _, c := range cmds {
+			if c.Process != nil {
+				_ = c.Process.Kill()
+			}
+		}
+	}
+
+	var firstWaitErr error
+	for _, c := range cmds {
+		if e := c.Wait(); e != nil && firstWaitErr == nil {
+			firstWaitErr = e
+		}
+	}
+	stderrWg.Wait()
+
+	if walkErr != nil {
+		return walkErr
+	}
+	if firstWaitErr != nil {
+		var combined strings.Builder
+		for _, b := range stderrBufs {
+			combined.WriteString(b.String())
+		}
+		return Classify(firstWaitErr, combined.String())
+	}
+	return nil
+}
+
+// startWalk launches one or two 7z processes and returns stdout/stderr handles ready for Walk to consume.
+func startWalk(ctx context.Context, bin string, opts ListOpts) ([]*exec.Cmd, io.ReadCloser, []*strings.Builder, *sync.WaitGroup, error) {
+	if IsCompoundTar(opts.Src) {
+		args1 := []string{"e", "-so", "-mmt=" + archiveThreads, "-bsp0", "-bso0", "-bse2", "-bb0", "-y"}
+		if opts.Password != "" {
+			args1 = append(args1, "-p"+opts.Password)
+		} else {
+			args1 = append(args1, "-p")
+		}
+		args1 = append(args1, "--", opts.Src)
+		args2 := []string{"l", "-slt", "-ttar", "-si", "-bso1", "-bse2", "-bb0", "-y"}
+
+		klog.V(4).Infof("[sevenz] Walk compound: %s %s | %s %s",
+			bin, strings.Join(redactArgs(args1), " "),
+			bin, strings.Join(redactArgs(args2), " "))
+
+		cmd1 := exec.CommandContext(ctx, bin, args1...)
+		cmd2 := exec.CommandContext(ctx, bin, args2...)
+		cmd1.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd2.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+		pipe, err := cmd1.StdoutPipe()
+		if err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("stdout pipe: %w", err)
+		}
+		cmd2.Stdin = pipe
+		s1, err := cmd1.StderrPipe()
+		if err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("stderr pipe outer: %w", err)
+		}
+		s2, err := cmd2.StderrPipe()
+		if err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("stderr pipe inner: %w", err)
+		}
+		stdout, err := cmd2.StdoutPipe()
+		if err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("stdout pipe inner: %w", err)
+		}
+		if startErr := cmd1.Start(); startErr != nil {
+			return nil, nil, nil, nil, fmt.Errorf("start outer 7z: %w", startErr)
+		}
+		if startErr := cmd2.Start(); startErr != nil {
+			_ = cmd1.Process.Kill()
+			return nil, nil, nil, nil, fmt.Errorf("start inner 7z: %w", startErr)
+		}
+
+		var buf1, buf2 strings.Builder
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); _, _ = io.Copy(&buf1, s1) }()
+		go func() { defer wg.Done(); _, _ = io.Copy(&buf2, s2) }()
+		return []*exec.Cmd{cmd1, cmd2}, stdout, []*strings.Builder{&buf1, &buf2}, &wg, nil
+	}
+
 	args := []string{"l", "-slt", "-bso1", "-bse2", "-bb0", "-y"}
 	if opts.Password != "" {
 		args = append(args, "-p"+opts.Password)
@@ -406,31 +602,26 @@ func Walk(ctx context.Context, opts ListOpts, fn WalkFn) error {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("stdout pipe: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("stderr pipe: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("stderr pipe: %w", err)
 	}
-
 	if startErr := cmd.Start(); startErr != nil {
-		return fmt.Errorf("start 7z: %w", startErr)
+		return nil, nil, nil, nil, fmt.Errorf("start 7z: %w", startErr)
 	}
 
-	// Collect stderr in full so Classify can map password / corrupt
-	// errors. 7z's structured stderr is small (a few lines on error).
-	var stderrBuf strings.Builder
-	var stderrWg sync.WaitGroup
-	stderrWg.Add(1)
-	go func() {
-		defer stderrWg.Done()
-		_, _ = io.Copy(&stderrBuf, stderr)
-	}()
+	var buf strings.Builder
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); _, _ = io.Copy(&buf, stderr) }()
+	return []*exec.Cmd{cmd}, stdout, []*strings.Builder{&buf}, &wg, nil
+}
 
-	// Parser state machine: lines are key=value; entries are separated
-	// by blank lines; the first separator line is "----------" after
-	// which entries begin.
-	scanner := bufio.NewScanner(stdout)
+// walkParseSlt reads -slt key=value blocks from r and emits one Entry per block via fn.
+func walkParseSlt(r io.Reader, fn WalkFn) error {
+	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	inEntries := false
@@ -468,34 +659,13 @@ func Walk(ctx context.Context, opts ListOpts, fn WalkFn) error {
 			cur[k] = v
 		}
 	}
-	// Drain the final entry if no trailing blank line.
 	if walkErr == nil && len(cur) > 0 {
 		walkErr = emit()
 	}
 	if walkErr == nil {
 		walkErr = scanner.Err()
 	}
-
-	if walkErr != nil {
-		// Kill the subprocess so it doesn't keep writing into a closed
-		// pipe; cmd.Wait below will then return promptly.
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-	}
-
-	waitErr := cmd.Wait()
-	stderrWg.Wait()
-
-	// Prefer the walk error (caller-driven cancellation) over the wait
-	// error (process killed/exited).
-	if walkErr != nil {
-		return walkErr
-	}
-	if waitErr != nil {
-		return Classify(waitErr, stderrBuf.String())
-	}
-	return nil
+	return walkErr
 }
 
 // parseEntry converts a key/value map (one 7z -slt entry) into an Entry.
