@@ -104,15 +104,20 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	// Read every source, write the destination archive.
+	var anySrcIsDir bool
 	for _, fp := range srcs {
 		if !gateAccess(ctx, c, fp, models.ActionRead) {
 			return
 		}
 		h := drivers.Adaptor.NewFileHandler(fp.FileType, &base.HandlerParam{Owner: owner})
-		if exists, _, lerr := h.CheckPathExists(fp); lerr != nil || !exists {
+		exists, isDir, lerr := h.CheckPathExists(fp)
+		if lerr != nil || !exists {
 			klog.Warningf("[archive] source not exists: owner=%s, src=%s, err=%v", owner, fp.Path, lerr)
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive source not exists"})
 			return
+		}
+		if isDir {
+			anySrcIsDir = true
 		}
 	}
 	if !gateAccess(ctx, c, dst, models.ActionWrite) {
@@ -131,10 +136,10 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-	if len(srcs) > 1 {
+	if len(srcs) > 1 || anySrcIsDir {
 		switch opt.Format {
 		case common.ArchiveFormatGzip, common.ArchiveFormatBzip2, common.ArchiveFormatXz:
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "gzip/bzip2/xz can only compress a single source; use tar.gz/tar.bz2/tar.xz for multiple sources"})
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "gzip/bzip2/xz can only compress a single regular file; use tar.gz/tar.bz2/tar.xz for multiple files or any folder"})
 			return
 		}
 	}
