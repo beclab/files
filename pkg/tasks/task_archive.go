@@ -352,68 +352,96 @@ func (t *Task) Extract() error {
 
 	var chownRoots []string
 	if stagingDir != "" {
-		entries, err := os.ReadDir(stagingDir)
-		if err != nil {
-			return err
-		}
-		// Compound tar: now that the real top-level entries exist on disk, decide rename / overwrite / skip per entry.
-		if isCompound && (opt.Conflict == "" || opt.Conflict == common.ArchiveConflictRename) {
-			plan := map[string]string{}
-			for _, e := range entries {
-				top := e.Name()
-				if _, st := os.Stat(filepath.Join(dstPath, top)); st != nil {
-					continue
+		// Compound tar overwrite / skip merge per file so dst files outside the archive's tree stay untouched.
+		if isCompound && (opt.Conflict == common.ArchiveConflictOverwrite || opt.Conflict == common.ArchiveConflictSkip) {
+			walkErr := filepath.Walk(stagingDir, func(srcPath string, info os.FileInfo, werr error) error {
+				if werr != nil {
+					return werr
 				}
-				var newTop string
-				if e.IsDir() {
-					siblings, _ := files.CollectDupNames(dstPath, top, "", true)
-					n := files.GenerateDupName(siblings, top, false)
-					if n != "" && n != top {
-						newTop = n
+				if srcPath == stagingDir {
+					return nil
+				}
+				rel, _ := filepath.Rel(stagingDir, srcPath)
+				dstFile := filepath.Join(dstPath, rel)
+				if info.IsDir() {
+					if err := os.MkdirAll(dstFile, info.Mode()); err != nil {
+						return err
 					}
-				} else {
-					_, ext := common.SplitNameExt(top)
-					base := strings.TrimSuffix(top, ext)
-					siblings, _ := files.CollectDupNames(dstPath, base, ext, false)
-					n := files.GenerateDupName(siblings, base, true)
-					if n != "" && n != base {
-						newTop = n + ext
+					return nil
+				}
+				if _, st := os.Stat(dstFile); st == nil {
+					if opt.Conflict == common.ArchiveConflictSkip {
+						_ = os.Remove(srcPath)
+						return nil
+					}
+					if err := os.RemoveAll(dstFile); err != nil {
+						return err
 					}
 				}
-				if newTop != "" {
-					plan[top] = newTop
+				if err := os.MkdirAll(filepath.Dir(dstFile), 0o755); err != nil {
+					return err
 				}
+				if err := os.Rename(srcPath, dstFile); err != nil {
+					return err
+				}
+				chownRoots = append(chownRoots, dstFile)
+				return nil
+			})
+			if walkErr != nil {
+				return fmt.Errorf("merge: %w", walkErr)
 			}
-			if len(plan) > 0 {
-				renamePlan = plan
+			_ = os.RemoveAll(stagingDir)
+		} else {
+			entries, err := os.ReadDir(stagingDir)
+			if err != nil {
+				return err
 			}
-		}
-		for _, e := range entries {
-			name := e.Name()
-			target := name
-			if newName, ok := renamePlan[name]; ok {
-				target = newName
-			}
-			to := filepath.Join(dstPath, target)
-			if isCompound {
-				if _, st := os.Stat(to); st == nil {
-					switch opt.Conflict {
-					case common.ArchiveConflictOverwrite:
-						if rerr := os.RemoveAll(to); rerr != nil {
-							return fmt.Errorf("overwrite %s: %w", to, rerr)
-						}
-					case common.ArchiveConflictSkip:
-						_ = os.RemoveAll(filepath.Join(stagingDir, name))
+			// Compound tar: now that the real top-level entries exist on disk, decide rename per entry.
+			if isCompound && (opt.Conflict == "" || opt.Conflict == common.ArchiveConflictRename) {
+				plan := map[string]string{}
+				for _, e := range entries {
+					top := e.Name()
+					if _, st := os.Stat(filepath.Join(dstPath, top)); st != nil {
 						continue
 					}
+					var newTop string
+					if e.IsDir() {
+						siblings, _ := files.CollectDupNames(dstPath, top, "", true)
+						n := files.GenerateDupName(siblings, top, false)
+						if n != "" && n != top {
+							newTop = n
+						}
+					} else {
+						_, ext := common.SplitNameExt(top)
+						base := strings.TrimSuffix(top, ext)
+						siblings, _ := files.CollectDupNames(dstPath, base, ext, false)
+						n := files.GenerateDupName(siblings, base, true)
+						if n != "" && n != base {
+							newTop = n + ext
+						}
+					}
+					if newTop != "" {
+						plan[top] = newTop
+					}
+				}
+				if len(plan) > 0 {
+					renamePlan = plan
 				}
 			}
-			if err := os.Rename(filepath.Join(stagingDir, name), to); err != nil {
-				return fmt.Errorf("merge %s -> %s: %w", name, target, err)
+			for _, e := range entries {
+				name := e.Name()
+				target := name
+				if newName, ok := renamePlan[name]; ok {
+					target = newName
+				}
+				to := filepath.Join(dstPath, target)
+				if err := os.Rename(filepath.Join(stagingDir, name), to); err != nil {
+					return fmt.Errorf("merge %s -> %s: %w", name, target, err)
+				}
+				chownRoots = append(chownRoots, to)
 			}
-			chownRoots = append(chownRoots, to)
+			_ = os.Remove(stagingDir)
 		}
-		_ = os.Remove(stagingDir)
 	} else {
 		chownRoots = []string{dstPath}
 	}
