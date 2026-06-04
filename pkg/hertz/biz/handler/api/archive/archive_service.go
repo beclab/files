@@ -131,6 +131,13 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
+	if len(srcs) > 1 {
+		switch opt.Format {
+		case common.ArchiveFormatGzip, common.ArchiveFormatBzip2, common.ArchiveFormatXz:
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "gzip/bzip2/xz can only compress a single source; use tar.gz/tar.bz2/tar.xz for multiple sources"})
+			return
+		}
+	}
 
 	pasteParam := &models.PasteParam{
 		Owner:   owner,
