@@ -51,31 +51,25 @@ func TestParseEntry(t *testing.T) {
 		"Size":     "100",
 		"Modified": "2024-05-01 12:30:00",
 	}
-	e, ok := parseEntry(m, "")
+	e, ok := parseEntry(m)
 	if !ok || e.Path != "dir/file.txt" || e.Size != 100 || e.IsDir {
 		t.Errorf("parseEntry file: %+v ok=%v", e, ok)
 	}
 
 	mDir := map[string]string{"Path": "dir", "Folder": "+", "Modified": "2024-05-01 12:30:00"}
-	eD, ok := parseEntry(mDir, "")
+	eD, ok := parseEntry(mDir)
 	if !ok || !eD.IsDir {
 		t.Errorf("parseEntry dir: %+v ok=%v", eD, ok)
 	}
 
 	mEnc := map[string]string{"Path": "secret.txt", "Encrypted": "+"}
-	eE, _ := parseEntry(mEnc, "")
+	eE, _ := parseEntry(mEnc)
 	if !eE.Encrypted {
 		t.Errorf("parseEntry encrypted flag missed")
 	}
 
-	if _, ok := parseEntry(map[string]string{}, ""); ok {
+	if _, ok := parseEntry(map[string]string{}); ok {
 		t.Errorf("empty map should not produce entry")
-	}
-
-	mNoPath := map[string]string{"Size": "1234", "Method": "LZMA2:25"}
-	eF, ok := parseEntry(mNoPath, "3X")
-	if !ok || eF.Path != "3X" || eF.Size != 1234 {
-		t.Errorf("parseEntry single-stream fallback: %+v ok=%v", eF, ok)
 	}
 }
 

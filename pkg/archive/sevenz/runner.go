@@ -19,7 +19,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -503,13 +502,7 @@ func Walk(ctx context.Context, opts ListOpts, fn WalkFn) error {
 		return err
 	}
 
-	// Single-stream bzip2 / xz omit Path; derive one from the archive's basename minus its extension.
-	base := filepath.Base(opts.Src)
-	fallback := strings.TrimSuffix(base, filepath.Ext(base))
-	if fallback == "" {
-		fallback = base
-	}
-	walkErr := walkParseSlt(stdout, fallback, fn)
+	walkErr := walkParseSlt(stdout, fn)
 
 	if walkErr != nil {
 		for _, c := range cmds {
@@ -627,7 +620,7 @@ func startWalk(ctx context.Context, bin string, opts ListOpts) ([]*exec.Cmd, io.
 }
 
 // walkParseSlt reads -slt key=value blocks from r and emits one Entry per block via fn.
-func walkParseSlt(r io.Reader, fallbackPath string, fn WalkFn) error {
+func walkParseSlt(r io.Reader, fn WalkFn) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
@@ -637,7 +630,7 @@ func walkParseSlt(r io.Reader, fallbackPath string, fn WalkFn) error {
 		if len(cur) == 0 {
 			return nil
 		}
-		e, ok := parseEntry(cur, fallbackPath)
+		e, ok := parseEntry(cur)
 		cur = map[string]string{}
 		if !ok {
 			return nil
@@ -676,15 +669,11 @@ func walkParseSlt(r io.Reader, fallbackPath string, fn WalkFn) error {
 }
 
 // parseEntry converts a key/value map (one 7z -slt entry) into an Entry.
-// Returns ok=false for header records (no Path) when no fallback is supplied.
-func parseEntry(m map[string]string, fallbackPath string) (Entry, bool) {
+// Returns ok=false for header records (no Path).
+func parseEntry(m map[string]string) (Entry, bool) {
 	path, ok := m["Path"]
 	if !ok || path == "" {
-		// Single-stream bzip2 / xz omit Path; the data block has Size, so use it as the discriminator.
-		if _, hasSize := m["Size"]; !hasSize || fallbackPath == "" {
-			return Entry{}, false
-		}
-		path = fallbackPath
+		return Entry{}, false
 	}
 	e := Entry{Path: path}
 	if s, ok := m["Size"]; ok {
