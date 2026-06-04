@@ -251,7 +251,7 @@ func Compress(ctx context.Context, opts CompressOpts, prog ProgressFn) error {
 		return compressTarThenCompress(ctx, bin, opts, prog)
 	}
 
-	args := []string{"a", "-t" + t, fmt.Sprintf("-mx=%d", opts.Level)}
+	args := []string{"a", "-t" + t, "-mmt=2", fmt.Sprintf("-mx=%d", opts.Level)}
 	if opts.Password != "" {
 		args = append(args, "-p"+opts.Password)
 		if opts.HeaderEncrypt && opts.Format == common.ArchiveFormat7z {
@@ -319,7 +319,7 @@ func compressTarThenCompress(ctx context.Context, bin string, opts CompressOpts,
 		return fmt.Errorf("unexpected compound format: %s", opts.Format)
 	}
 
-	args := []string{"a", "-t" + compType, fmt.Sprintf("-mx=%d", opts.Level),
+	args := []string{"a", "-t" + compType, "-mmt=2", fmt.Sprintf("-mx=%d", opts.Level),
 		"-bsp1", "-bso1", "-bse2", "-bb0", "-y", "--", opts.Dst, tarPath}
 
 	wrapped2 := func(p int, t int64) {
