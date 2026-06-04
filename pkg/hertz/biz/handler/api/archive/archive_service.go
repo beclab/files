@@ -474,8 +474,15 @@ func classifyStreamError(err error) string {
 
 // archivePasswordPreflight returns hit=true with the response when the request mismatches the archive's password requirement.
 func archivePasswordPreflight(ctx context.Context, absPath, password string) (int, utils.H, bool) {
-	// .zip per-entry encryption is invisible to `7z l`; detect via stdlib zip.
-	if strings.EqualFold(filepath.Ext(absPath), ".zip") {
+	// Only zip and 7z accept passwords in this codebase; for other formats the only mismatch is a spurious password.
+	ext := strings.ToLower(filepath.Ext(absPath))
+	if ext != ".zip" && ext != ".7z" {
+		if password != "" {
+			return consts.StatusBadRequest, utils.H{"code": 30003, "message": "archive does not require password"}, true
+		}
+		return 0, nil, false
+	}
+	if ext == ".zip" {
 		if zr, zerr := zip.OpenReader(absPath); zerr == nil {
 			var encryptedEntry string
 			for _, f := range zr.File {
