@@ -163,10 +163,10 @@ func ArchiveFormatFromName(name string) string {
 	if strings.HasSuffix(lower, ".tar") {
 		return ArchiveFormatTar
 	}
-	if strings.HasSuffix(lower, ".gz") {
+	if strings.HasSuffix(lower, ".gz") || strings.HasSuffix(lower, ".gzip") {
 		return ArchiveFormatGzip
 	}
-	if strings.HasSuffix(lower, ".bz2") {
+	if strings.HasSuffix(lower, ".bz2") || strings.HasSuffix(lower, ".bzip2") {
 		return ArchiveFormatBzip2
 	}
 	if strings.HasSuffix(lower, ".xz") {

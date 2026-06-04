@@ -104,15 +104,20 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	// Read every source, write the destination archive.
+	var anySrcIsDir bool
 	for _, fp := range srcs {
 		if !gateAccess(ctx, c, fp, models.ActionRead) {
 			return
 		}
 		h := drivers.Adaptor.NewFileHandler(fp.FileType, &base.HandlerParam{Owner: owner})
-		if exists, _, lerr := h.CheckPathExists(fp); lerr != nil || !exists {
+		exists, isDir, lerr := h.CheckPathExists(fp)
+		if lerr != nil || !exists {
 			klog.Warningf("[archive] source not exists: owner=%s, src=%s, err=%v", owner, fp.Path, lerr)
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive source not exists"})
 			return
+		}
+		if isDir {
+			anySrcIsDir = true
 		}
 	}
 	if !gateAccess(ctx, c, dst, models.ActionWrite) {
@@ -130,6 +135,13 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 	if err := opt.NormalizeForCompress(filepath.Base(req.Destination)); err != nil {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
+	}
+	if len(srcs) > 1 || anySrcIsDir {
+		switch opt.Format {
+		case common.ArchiveFormatGzip, common.ArchiveFormatBzip2, common.ArchiveFormatXz:
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "gzip/bzip2/xz can only compress a single regular file; use tar.gz/tar.bz2/tar.xz for multiple files or any folder"})
+			return
+		}
 	}
 
 	pasteParam := &models.PasteParam{
@@ -474,8 +486,15 @@ func classifyStreamError(err error) string {
 
 // archivePasswordPreflight returns hit=true with the response when the request mismatches the archive's password requirement.
 func archivePasswordPreflight(ctx context.Context, absPath, password string) (int, utils.H, bool) {
-	// .zip per-entry encryption is invisible to `7z l`; detect via stdlib zip.
-	if strings.EqualFold(filepath.Ext(absPath), ".zip") {
+	// Only zip and 7z accept passwords in this codebase; for other formats the only mismatch is a spurious password.
+	ext := strings.ToLower(filepath.Ext(absPath))
+	if ext != ".zip" && ext != ".7z" {
+		if password != "" {
+			return consts.StatusBadRequest, utils.H{"code": 30003, "message": "archive does not require password"}, true
+		}
+		return 0, nil, false
+	}
+	if ext == ".zip" {
 		if zr, zerr := zip.OpenReader(absPath); zerr == nil {
 			var encryptedEntry string
 			for _, f := range zr.File {
@@ -518,7 +537,7 @@ func archivePasswordPreflight(ctx context.Context, absPath, password string) (in
 		if password != "" {
 			return consts.StatusBadRequest, utils.H{"code": 30003, "message": "archive does not require password"}, true
 		}
-	case errors.Is(err, sevenz.ErrPasswordRequired):
+	case errors.Is(err, sevenz.ErrPasswordRequired) || errors.Is(err, sevenz.ErrPasswordInvalid):
 		if password == "" {
 			return consts.StatusBadRequest, utils.H{"code": 30001, "message": "archive password required"}, true
 		}
