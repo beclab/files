@@ -241,6 +241,12 @@ func (t *Task) Extract() error {
 		// Walk errors are already Classify'd by sevenz.
 		return err
 	}
+	// xz / bzip2 / tar.xz / tar.bz2 stream formats don't expose unpacked size; fall back to packed src size.
+	if totalSize == 0 {
+		if fi, err := os.Stat(srcPath); err == nil {
+			totalSize = fi.Size()
+		}
+	}
 	t.updateTotalSize(totalSize)
 
 	if _, e := common.CheckDiskSpace(dstPath, totalSize, dst.IsSystem()); e != nil {
