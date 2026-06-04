@@ -518,7 +518,7 @@ func archivePasswordPreflight(ctx context.Context, absPath, password string) (in
 		if password != "" {
 			return consts.StatusBadRequest, utils.H{"code": 30003, "message": "archive does not require password"}, true
 		}
-	case errors.Is(err, sevenz.ErrPasswordRequired):
+	case errors.Is(err, sevenz.ErrPasswordRequired) || errors.Is(err, sevenz.ErrPasswordInvalid):
 		if password == "" {
 			return consts.StatusBadRequest, utils.H{"code": 30001, "message": "archive password required"}, true
 		}
