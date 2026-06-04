@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -33,6 +34,15 @@ import (
 // time so that an unavailable binary surfaces a clean error instead of
 // a panic at init.
 const Binary = "7z"
+
+// archiveThreads is the `-mmt` value passed to 7z on Compress / Extract;
+// capped to keep peak memory bounded. Override at runtime via ARCHIVE_THREADS.
+var archiveThreads = func() string {
+	if v := os.Getenv("ARCHIVE_THREADS"); v != "" {
+		return v
+	}
+	return "4"
+}()
 
 // CompressOpts is the input to Compress.
 type CompressOpts struct {
@@ -251,7 +261,7 @@ func Compress(ctx context.Context, opts CompressOpts, prog ProgressFn) error {
 		return compressTarThenCompress(ctx, bin, opts, prog)
 	}
 
-	args := []string{"a", "-t" + t, "-mmt=2", fmt.Sprintf("-mx=%d", opts.Level)}
+	args := []string{"a", "-t" + t, "-mmt=" + archiveThreads, fmt.Sprintf("-mx=%d", opts.Level)}
 	if opts.Password != "" {
 		args = append(args, "-p"+opts.Password)
 		if opts.HeaderEncrypt && opts.Format == common.ArchiveFormat7z {
@@ -319,7 +329,7 @@ func compressTarThenCompress(ctx context.Context, bin string, opts CompressOpts,
 		return fmt.Errorf("unexpected compound format: %s", opts.Format)
 	}
 
-	args := []string{"a", "-t" + compType, "-mmt=2", fmt.Sprintf("-mx=%d", opts.Level),
+	args := []string{"a", "-t" + compType, "-mmt=" + archiveThreads, fmt.Sprintf("-mx=%d", opts.Level),
 		"-bsp1", "-bso1", "-bse2", "-bb0", "-y", "--", opts.Dst, tarPath}
 
 	wrapped2 := func(p int, t int64) {
@@ -345,7 +355,7 @@ func Extract(ctx context.Context, opts ExtractOpts, prog ProgressFn) error {
 		return errors.New("sevenz.Extract: src and dst required")
 	}
 
-	args := []string{"x", "-o" + opts.Dst}
+	args := []string{"x", "-mmt=" + archiveThreads, "-o" + opts.Dst}
 	if opts.Password != "" {
 		args = append(args, "-p"+opts.Password)
 	} else {
