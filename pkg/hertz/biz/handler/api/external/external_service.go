@@ -23,7 +23,6 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/go-redis/redis"
-	"github.com/spf13/afero"
 	"k8s.io/klog/v2"
 )
 
@@ -43,6 +42,10 @@ type NfsMountReq struct {
 	Server     string `json:"server"`
 	SharedPath string `json:"sharedPath"`
 	MountPath  string `json:"mountPath"`
+}
+
+type NfsListReq struct {
+	Server string `json:"server"`
 }
 
 func stringPtrValue(v *string) string {
@@ -111,9 +114,21 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 	}
 
 	externalType := strings.ToLower(strings.TrimSpace(req.ExternalType))
+	operate := strings.TrimSpace(stringPtrValue(req.Operate))
+	isNfsListOperation := externalType == "nfs" && operate != ""
 	var urls []string
 	var bodyStruct interface{}
-	if externalType == "smb" {
+	if isNfsListOperation {
+		server := strings.TrimSpace(stringPtrValue(req.URL))
+		if server == "" {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "url is required for nfs list operation"})
+			return
+		}
+		urls = []string{"http://" + files.TerminusdHost + "/command/list-nfs"}
+		bodyStruct = NfsListReq{
+			Server: server,
+		}
+	} else if externalType == "smb" {
 		user := strings.TrimSpace(stringPtrValue(req.User))
 		password := strings.TrimSpace(stringPtrValue(req.Password))
 		if user == "" || password == "" {
@@ -122,13 +137,13 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		}
 		urls = []string{"http://" + files.TerminusdHost + "/command/v2/mount-samba", "http://" + files.TerminusdHost + "/command/mount-samba"}
 		bodyStruct = SmbMountReq{
-			SmbPath:  req.SmbPath,
+			SmbPath:  strings.TrimSpace(stringPtrValue(req.SmbPath)),
 			User:     user,
 			Password: password,
 		}
 	} else if externalType == "nfs" {
 		urls = []string{"http://" + files.TerminusdHost + "/command/mount-nfs"}
-		nfsReq, nfsReqErr := buildNfsMountReq(req.SmbPath)
+		nfsReq, nfsReqErr := buildNfsMountReq(strings.TrimSpace(stringPtrValue(req.URL)))
 		if nfsReqErr != nil {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": nfsReqErr.Error()})
 			return
@@ -224,13 +239,15 @@ func MountMethod(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	if mounted {
+	if mounted && !isNfsListOperation {
 		// Mount/unmount APIs are authoritative user actions. Drop stale
 		// async-reported overlay first so a delayed invalid=true update
 		// cannot continue masking the just-updated polled state.
 		global.GlobalMounted.ClearReportedMounted()
 	}
-	global.GlobalMounted.Updated()
+	if !isNfsListOperation {
+		global.GlobalMounted.Updated()
+	}
 
 	resp := new(external.MountResp)
 	if err := json.Unmarshal(common.ToBytes(res), &resp); err != nil {
@@ -276,23 +293,9 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	uri, err := fileParam.GetResourceUri()
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
-		return
-	}
-
-	file, err := files.NewFileInfo(files.FileOptions{
-		Fs:         afero.NewBasePathFs(afero.NewOsFs(), uri),
-		FsType:     fileParam.FileType,
-		FsExtend:   fileParam.Extend,
-		Path:       fileParam.Path,
-		Modify:     true,
-		Expand:     false,
-		ReadHeader: true,
-	})
-	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+	targetPath := strings.TrimSpace(fileParam.Path)
+	if targetPath == "" || targetPath == "/" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
 		return
 	}
 
@@ -308,14 +311,22 @@ func UnmountMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("Unsupported external type: %s", externalType)})
 		return
 	}
-	klog.Infoln("path:", file.Path)
+	klog.Infoln("path:", targetPath)
 	klog.Infoln("externalType:", externalType)
 	klog.Infoln("url:", url)
 
-	mountPath := strings.TrimPrefix(strings.TrimSuffix(file.Path, "/"), "/")
+	mountPath := strings.Trim(targetPath, "/")
+	if mountPath == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
+	}
 	lastSlashIndex := strings.LastIndex(mountPath, "/")
 	if lastSlashIndex != -1 {
 		mountPath = mountPath[lastSlashIndex+1:]
+	}
+	if mountPath == "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "path invalid"})
+		return
 	}
 	klog.Infoln("mountPath:", mountPath)
 
