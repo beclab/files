@@ -20,6 +20,13 @@ var (
 
 var externalWatcher *fsnotify.Watcher = nil
 
+type MountedChangeListener func([]files.DiskInfo)
+
+var (
+	mountedChangeListenersMu sync.RWMutex
+	mountedChangeListeners   []MountedChangeListener
+)
+
 type Mount struct {
 	// Mounted is the final merged view exposed to callers.
 	Mounted map[string]*files.DiskInfo
@@ -152,6 +159,21 @@ func buildMountedMap(disks []*files.DiskInfo) map[string]*files.DiskInfo {
 	return mounted
 }
 
+func mountedDataFromMap(mounted map[string]*files.DiskInfo) []files.DiskInfo {
+	if len(mounted) == 0 {
+		return []files.DiskInfo{}
+	}
+
+	res := make([]files.DiskInfo, 0, len(mounted))
+	for _, v := range mounted {
+		if v == nil {
+			continue
+		}
+		res = append(res, *v)
+	}
+	return res
+}
+
 func (m *Mount) mergeMountedLocked() {
 	merged := make(map[string]*files.DiskInfo, len(m.polledMounted)+len(m.reportedMounted))
 	for path, disk := range m.polledMounted {
@@ -165,16 +187,42 @@ func (m *Mount) mergeMountedLocked() {
 	m.Mounted = merged
 }
 
+func RegisterMountedChangeListener(listener MountedChangeListener) {
+	if listener == nil {
+		return
+	}
+
+	mountedChangeListenersMu.Lock()
+	mountedChangeListeners = append(mountedChangeListeners, listener)
+	mountedChangeListenersMu.Unlock()
+
+	if GlobalMounted != nil {
+		listener(GlobalMounted.GetMountedData())
+	}
+}
+
+func notifyMountedChangeListeners(snapshot []files.DiskInfo) {
+	mountedChangeListenersMu.RLock()
+	listeners := append([]MountedChangeListener(nil), mountedChangeListeners...)
+	mountedChangeListenersMu.RUnlock()
+
+	for _, listener := range listeners {
+		listener(append([]files.DiskInfo(nil), snapshot...))
+	}
+}
+
 func (m *Mount) updatePolledMounted(disks []*files.DiskInfo) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.polledMounted = buildMountedMap(disks)
 	m.mergeMountedLocked()
+	snapshot := mountedDataFromMap(m.Mounted)
+	m.mu.Unlock()
+
+	notifyMountedChangeListeners(snapshot)
 }
 
 func (m *Mount) UpdateReportedMounted(patches []*MountedPatch) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	reported := make(map[string]*files.DiskInfo, len(patches))
 	for _, patch := range patches {
 		path, ok := patch.key()
@@ -191,6 +239,10 @@ func (m *Mount) UpdateReportedMounted(patches []*MountedPatch) {
 	}
 	m.reportedMounted = reported
 	m.mergeMountedLocked()
+	snapshot := mountedDataFromMap(m.Mounted)
+	m.mu.Unlock()
+
+	notifyMountedChangeListeners(snapshot)
 }
 
 // ClearReportedMounted drops all reporter-pushed overlay states so callers can
@@ -198,9 +250,12 @@ func (m *Mount) UpdateReportedMounted(patches []*MountedPatch) {
 // explicit mount/unmount operation).
 func (m *Mount) ClearReportedMounted() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.reportedMounted = make(map[string]*files.DiskInfo)
 	m.mergeMountedLocked()
+	snapshot := mountedDataFromMap(m.Mounted)
+	m.mu.Unlock()
+
+	notifyMountedChangeListeners(snapshot)
 }
 
 func InitGlobalMounted() {
@@ -228,16 +283,7 @@ func (m *Mount) GetMountedData() []files.DiskInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if len(m.Mounted) == 0 {
-		return []files.DiskInfo{}
-	}
-
-	var res []files.DiskInfo
-	for _, v := range m.Mounted {
-		res = append(res, *v)
-	}
-
-	return res
+	return mountedDataFromMap(m.Mounted)
 }
 
 // GetMountedByPath returns a mounted snapshot by root path name

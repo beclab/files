@@ -41,6 +41,10 @@ var newFileHandler = func(fileType string, hp *base.HandlerParam) base.Execute {
 	return drivers.Adaptor.NewFileHandler(fileType, hp)
 }
 
+func isExternalMountUnavailable(err error) bool {
+	return err != nil && err.Error() == common.ErrorMessageExternalMountUnavailable
+}
+
 // UploadLinkMethod .
 // @router /upload/upload_link [GET]
 func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
@@ -118,6 +122,13 @@ func UploadLinkMethod(ctx context.Context, c *app.RequestContext) {
 			handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
 			return
 		}
+		if isExternalMountUnavailable(err) {
+			c.AbortWithStatusJSON(consts.StatusServiceUnavailable, utils.H{
+				"code":    1,
+				"message": err.Error(),
+			})
+			return
+		}
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{
 			"code":    1,
 			"message": err.Error(),
@@ -186,6 +197,10 @@ func UploadedBytesMethod(ctx context.Context, c *app.RequestContext) {
 	if err != nil {
 		if errors.Is(err, seahub.ErrSyncPermissionDenied) {
 			handler.RespForbidden(c, common.ErrorMessagePermissionDenied)
+			return
+		}
+		if isExternalMountUnavailable(err) {
+			c.AbortWithStatusJSON(consts.StatusServiceUnavailable, utils.H{"error": err.Error()})
 			return
 		}
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
@@ -278,6 +293,10 @@ func UploadChunksMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	respBytes, err := fileHandler.UploadChunks(uploadArg)
 	if err != nil {
+		if isExternalMountUnavailable(err) {
+			c.AbortWithStatusJSON(consts.StatusServiceUnavailable, utils.H{"error": err.Error()})
+			return
+		}
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}

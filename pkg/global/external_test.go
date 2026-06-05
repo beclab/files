@@ -3,6 +3,7 @@ package global
 import (
 	"files/pkg/files"
 	"testing"
+	"time"
 )
 
 func strPtr(v string) *string       { return &v }
@@ -146,5 +147,41 @@ func TestClearReportedMountedDropsOverlayAndKeepsPolledBase(t *testing.T) {
 	}
 	if _, ok := m.Mounted["stale-only"]; ok {
 		t.Fatalf("clear should remove reported-only stale entry")
+	}
+}
+
+func TestRegisterMountedChangeListenerReceivesMergedSnapshot(t *testing.T) {
+	updates := make(chan []files.DiskInfo, 4)
+	RegisterMountedChangeListener(func(disks []files.DiskInfo) {
+		select {
+		case updates <- disks:
+		default:
+		}
+	})
+	for {
+		select {
+		case <-updates:
+		default:
+			goto drained
+		}
+	}
+
+drained:
+	m := &Mount{
+		Mounted:         make(map[string]*files.DiskInfo),
+		polledMounted:   make(map[string]*files.DiskInfo),
+		reportedMounted: make(map[string]*files.DiskInfo),
+	}
+	m.updatePolledMounted([]*files.DiskInfo{
+		{Path: "listener-disk", Type: "nfs", Invalid: false},
+	})
+
+	select {
+	case got := <-updates:
+		if len(got) != 1 || got[0].Path != "listener-disk" {
+			t.Fatalf("unexpected listener snapshot: %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for listener update")
 	}
 }
