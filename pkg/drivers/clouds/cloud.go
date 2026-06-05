@@ -1,6 +1,7 @@
 package clouds
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
@@ -269,6 +270,21 @@ func (s *CloudStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan s
 	go s.generateListingData(fileParam, fileData, driveId, stopChan, dataChan)
 
 	return nil
+}
+
+// DirUsage reports recursive file count and total size for a cloud path.
+// rclone's operations/size recurses server-side in a single blocking
+// call, so there are no intermediate progress emits; emit is part of the
+// shared interface but unused here.
+func (s *CloudStorage) DirUsage(ctx context.Context, contextArgs *models.HttpContextArgs, emit func(count, size int64) error) (int64, int64, error) {
+	var fileParam = contextArgs.FileParam
+	klog.Infof("Cloud dir usage, user: %s, param: %s", fileParam.Owner, fileParam.Json())
+
+	count, size, err := rclone.Command.GetFilesUsage(fileParam)
+	if err != nil {
+		return 0, 0, err
+	}
+	return count, size, nil
 }
 
 /**

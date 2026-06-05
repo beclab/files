@@ -1,6 +1,7 @@
 package posix
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
@@ -352,6 +353,89 @@ func (s *PosixStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan s
 	}
 
 	return nil
+}
+
+type dirUsage struct {
+	count int64
+	size  int64
+}
+
+// DirUsage recursively walks fileParam's path summing regular-file count
+// and size. A regular file short-circuits to (1, size). Progress is
+// emitted every emitEveryNFiles files or emitEveryInterval, whichever
+// comes first; emit returning an error (client gone) stops the walk.
+func (s *PosixStorage) DirUsage(ctx context.Context, contextArgs *models.HttpContextArgs, emit func(count, size int64) error) (int64, int64, error) {
+	fileParam := contextArgs.FileParam
+	klog.Infof("Posix dir usage, user: %s, args: %s", fileParam.Owner, fileParam.Json())
+
+	res, err := runWithExternalMountGuard(fileParam, "dir_usage", func() (dirUsage, error) {
+		return walkDirUsage(ctx, fileParam, emit)
+	})
+	return res.count, res.size, err
+}
+
+const (
+	emitEveryNFiles   = 512
+	emitEveryInterval = 300 * time.Millisecond
+)
+
+func walkDirUsage(ctx context.Context, fileParam *models.FileParam, emit func(count, size int64) error) (dirUsage, error) {
+	var u dirUsage
+
+	resourceUri, err := fileParam.GetResourceUri()
+	if err != nil {
+		return u, err
+	}
+	root := resourceUri + fileParam.Path
+
+	info, err := os.Stat(root)
+	if err != nil {
+		return u, err
+	}
+	if !info.IsDir() {
+		u.count = 1
+		u.size = info.Size()
+		return u, nil
+	}
+
+	lastEmit := time.Now()
+	var sinceEmit int64
+	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, entryErr error) error {
+		if entryErr != nil {
+			// Skip unreadable entries rather than aborting the whole walk.
+			klog.Warningf("Posix dir usage, skip %s: %v", path, entryErr)
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
+		if d.IsDir() || !d.Type().IsRegular() {
+			return nil
+		}
+		fi, ierr := d.Info()
+		if ierr != nil {
+			klog.Warningf("Posix dir usage, stat %s: %v", path, ierr)
+			return nil
+		}
+		u.count++
+		u.size += fi.Size()
+		sinceEmit++
+		if sinceEmit >= emitEveryNFiles || time.Since(lastEmit) >= emitEveryInterval {
+			if eerr := emit(u.count, u.size); eerr != nil {
+				return eerr
+			}
+			sinceEmit = 0
+			lastEmit = time.Now()
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return u, walkErr
+	}
+	return u, nil
 }
 
 func (s *PosixStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {

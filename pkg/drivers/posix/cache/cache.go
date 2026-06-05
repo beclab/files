@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"files/pkg/drivers/base"
 	"files/pkg/drivers/posix/posix"
@@ -31,6 +32,10 @@ func (s *CacheStorage) Preview(contextArgs *models.HttpContextArgs) (*models.Pre
 
 func (s *CacheStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan struct{}, dataChan chan string) error {
 	return s.posix.Tree(contextArgs, stopChan, dataChan)
+}
+
+func (s *CacheStorage) DirUsage(ctx context.Context, contextArgs *models.HttpContextArgs, emit func(count, size int64) error) (int64, int64, error) {
+	return s.posix.DirUsage(ctx, contextArgs, emit)
 }
 
 func (s *CacheStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {

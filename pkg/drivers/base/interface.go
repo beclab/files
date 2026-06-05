@@ -1,6 +1,8 @@
 package base
 
 import (
+	"context"
+
 	"files/pkg/models"
 	"files/pkg/tasks"
 )
@@ -11,6 +13,14 @@ type Execute interface {
 	Preview(contextArgs *models.HttpContextArgs) (*models.PreviewHandlerResponse, error)
 
 	Tree(contextArgs *models.HttpContextArgs, stopChan chan struct{}, dataChan chan string) error
+
+	// DirUsage recursively sums the file count and total byte size under
+	// contextArgs.FileParam. For a regular file it reports (1, size). It
+	// calls emit with running totals as it goes (throttled by the driver)
+	// so the caller can stream progress; emit returning an error (e.g. the
+	// client disconnected) aborts the walk and is returned as-is. The final
+	// totals are returned on success.
+	DirUsage(ctx context.Context, contextArgs *models.HttpContextArgs, emit func(count, size int64) error) (count, size int64, err error)
 
 	Create(contextArgs *models.HttpContextArgs) ([]byte, error)
 
