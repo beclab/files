@@ -19,7 +19,7 @@ import (
 //
 // Progress is mapped to the existing t.updateProgressRsync sink so the FE
 // shares one progress UI for copy / move / compress.
-func (t *Task) Compress() error {
+func (t *Task) Compress() (retErr error) {
 	if err := t.validateArchiveCompress(); err != nil {
 		return err
 	}
@@ -140,8 +140,8 @@ func (t *Task) Compress() error {
 	// rclone / sync backends; mixing posix cleanup there would broaden
 	// the blast radius.
 	defer func() {
-		state := t.getState()
-		if state == common.Canceled || state == common.Failed {
+		// state lags behind retErr (Execute sets Canceled/Failed only after we return), so trust retErr.
+		if retErr != nil {
 			cleanupArchiveOutputs(dstPath)
 			for _, b := range overwriteBackups {
 				_ = os.Rename(b[1], b[0])
@@ -185,7 +185,7 @@ func (t *Task) Compress() error {
 // Extract is the Task phase function used by Archive extract requests.
 // It expects t.param.Src (archive file) / t.param.Dst (target dir) /
 // t.param.Archive to be set.
-func (t *Task) Extract() error {
+func (t *Task) Extract() (retErr error) {
 	if err := t.validateArchiveExtract(); err != nil {
 		return err
 	}
@@ -318,8 +318,8 @@ func (t *Task) Extract() error {
 	}
 
 	defer func() {
-		state := t.getState()
-		if state == common.Canceled || state == common.Failed {
+		// state lags behind retErr (Execute sets Canceled/Failed only after we return), so trust retErr.
+		if retErr != nil {
 			if stagingDir != "" {
 				_ = os.RemoveAll(stagingDir)
 			} else {
@@ -548,6 +548,14 @@ func cleanupArchiveOutputs(dstPath string) {
 	for _, p := range archiveOutputPaths(dstPath) {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			klog.Warningf("[Task] cleanup archive %s: %v", p, err)
+		}
+	}
+	// Sweep multi-volume 7z leftovers: dstPath.tmp / dstPath.NNN.tmp / dstPath.NNN.<hash>.tmp.
+	if matches, _ := filepath.Glob(dstPath + "*.tmp"); matches != nil {
+		for _, p := range matches {
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				klog.Warningf("[Task] cleanup archive tmp %s: %v", p, err)
+			}
 		}
 	}
 }

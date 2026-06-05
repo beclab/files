@@ -143,6 +143,9 @@ func (t *taskManager) PauseTask(owner, taskId string) error {
 
 	var task = val.(*Task)
 
+	if task.param.Action == common.ActionCompress || task.param.Action == common.ActionExtract {
+		return fmt.Errorf("archive tasks do not support pause")
+	}
 	task.mu.Lock()
 	if task.state != common.Pending && task.state != common.Running {
 		task.mu.Unlock()
@@ -220,6 +223,9 @@ func (t *taskManager) GetTask(owner string, taskId string, status string) []*Tas
 		pauseAble = false
 	}
 	if task.param.Action == common.ActionUploadFinalize {
+		pauseAble = false
+	}
+	if task.param.Action == common.ActionCompress || task.param.Action == common.ActionExtract {
 		pauseAble = false
 	}
 
