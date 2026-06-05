@@ -290,6 +290,42 @@ func (r *rclone) GetFilesSize(fileParam *models.FileParam) (int64, error) {
 
 }
 
+// GetFilesUsage returns the recursive file count and total byte size for
+// a cloud path. For a directory it uses rclone's operations/size (server
+// -side recursion in a single call); for a regular file it reports
+// (1, size) via Stat.
+func (r *rclone) GetFilesUsage(fileParam *models.FileParam) (int64, int64, error) {
+	var fsPrefix, err = r.GetFsPrefix(fileParam)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	filesName, isFile := files.GetFileNameFromPath(fileParam.Path)
+	prefixPath := files.GetPrefixPath(fileParam.Path)
+
+	if !isFile {
+		var fs = fsPrefix + fileParam.Path
+		resp, e := r.GetOperation().Size(fs)
+		if e != nil {
+			return 0, 0, e
+		}
+		return resp.Count, resp.Bytes, nil
+	}
+
+	var fs = fsPrefix + prefixPath
+	var opts = &operations.OperationsOpt{
+		FilesOnly: true,
+	}
+	resp, err := r.GetOperation().Stat(fs, filesName, opts)
+	if err != nil {
+		return 0, 0, err
+	}
+	if resp == nil || resp.Item == nil {
+		return 0, 0, fmt.Errorf("rclone stat: file not found: fs=%s remote=%s", fs, filesName)
+	}
+	return 1, resp.Item.Size, nil
+}
+
 func (r *rclone) GetFilesList(param *models.FileParam, getPrefix bool) (*operations.OperationsList, error) {
 
 	var fsPrefix, err = r.GetFsPrefix(param)

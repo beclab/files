@@ -20,6 +20,7 @@ type Interface interface {
 	GetJob() job.Interface
 
 	GetFilesSize(fileParam *models.FileParam) (int64, error)
+	GetFilesUsage(fileParam *models.FileParam) (count, bytes int64, err error)
 	GetFilesList(param *models.FileParam, getPrefix bool) (*operations.OperationsList, error)
 	CreateEmptyDirectory(param *models.FileParam) error
 	CreateEmptyDirectories(src, target *models.FileParam) error

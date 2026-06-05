@@ -2,6 +2,7 @@ package sync
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"files/pkg/common"
@@ -549,6 +550,114 @@ func (s *SyncStorage) Tree(contextArgs *models.HttpContextArgs, stopChan chan st
 	go s.generateDirentsData(fileParam, filesData, stopChan, dataChan)
 
 	return nil
+}
+
+const (
+	syncUsageEmitEveryNFiles   = 512
+	syncUsageEmitEveryInterval = 300 * time.Millisecond
+)
+
+// DirUsage reports recursive file count and total size for a sync path.
+// The repo root uses Seafile's authoritative repo size / file_count
+// (fast path). A regular file resolves its size from the parent listing.
+// Subdirectories are walked level-by-level via getFiles, accumulating
+// totals and emitting throttled progress; emit returning an error stops
+// the walk.
+func (s *SyncStorage) DirUsage(ctx context.Context, contextArgs *models.HttpContextArgs, emit func(count, size int64) error) (int64, int64, error) {
+	fileParam := contextArgs.FileParam
+	klog.Infof("Sync dir usage, owner: %s, param: %s", fileParam.Owner, fileParam.Json())
+
+	path := fileParam.Path
+	if path == "" {
+		path = "/"
+	}
+
+	if path == "/" {
+		repo, err := seaserv.GlobalSeafileAPI.GetRepo(fileParam.Extend)
+		if err != nil {
+			return 0, 0, err
+		}
+		if repo == nil {
+			return 0, 0, fmt.Errorf("sync repo not found: %s", fileParam.Extend)
+		}
+		size, _ := strconv.ParseInt(repo["size"], 10, 64)
+		count, _ := strconv.ParseInt(repo["file_count"], 10, 64)
+		return count, size, nil
+	}
+
+	if !strings.HasSuffix(path, "/") {
+		prefix := files.GetPrefixPath(path)
+		name, _ := files.GetFileNameFromPath(path)
+		parent := &models.FileParam{
+			Owner:    fileParam.Owner,
+			FileType: fileParam.FileType,
+			Extend:   fileParam.Extend,
+			Path:     prefix,
+		}
+		fd, err := s.getFiles(parent)
+		if err != nil {
+			return 0, 0, err
+		}
+		if fd != nil {
+			for _, it := range fd.Items {
+				if it.Name == name && it.Type != "dir" {
+					return 1, it.Size, nil
+				}
+			}
+		}
+		return 0, 0, fmt.Errorf("sync file not found: %s", path)
+	}
+
+	return s.dirUsageRecursive(ctx, fileParam, path, emit)
+}
+
+func (s *SyncStorage) dirUsageRecursive(ctx context.Context, fileParam *models.FileParam, root string, emit func(count, size int64) error) (int64, int64, error) {
+	var count, size int64
+	lastEmit := time.Now()
+	var sinceEmit int64
+
+	queue := []string{root}
+	for len(queue) > 0 {
+		if cerr := ctx.Err(); cerr != nil {
+			return count, size, cerr
+		}
+		dir := queue[0]
+		queue = queue[1:]
+
+		fd, err := s.getFiles(&models.FileParam{
+			Owner:    fileParam.Owner,
+			FileType: fileParam.FileType,
+			Extend:   fileParam.Extend,
+			Path:     dir,
+		})
+		if err != nil {
+			return count, size, err
+		}
+		if fd == nil {
+			continue
+		}
+		for _, it := range fd.Items {
+			if it.Type == "dir" {
+				child := it.Path
+				if child != "/" && !strings.HasSuffix(child, "/") {
+					child += "/"
+				}
+				queue = append(queue, child)
+				continue
+			}
+			count++
+			size += it.Size
+			sinceEmit++
+			if sinceEmit >= syncUsageEmitEveryNFiles || time.Since(lastEmit) >= syncUsageEmitEveryInterval {
+				if eerr := emit(count, size); eerr != nil {
+					return count, size, eerr
+				}
+				sinceEmit = 0
+				lastEmit = time.Now()
+			}
+		}
+	}
+	return count, size, nil
 }
 
 func (s *SyncStorage) Create(contextArgs *models.HttpContextArgs) ([]byte, error) {
