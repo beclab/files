@@ -278,9 +278,15 @@ func PauseResumeTaskMethod(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	if req.Op == "pause" {
-		tasks.TaskManager.PauseTask(owner, req.TaskId)
+		if err := tasks.TaskManager.PauseTask(owner, req.TaskId); err != nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+			return
+		}
 	} else {
-		tasks.TaskManager.ResumeTask(owner, req.TaskId)
+		if err := tasks.TaskManager.ResumeTask(owner, req.TaskId); err != nil {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+			return
+		}
 	}
 
 	var res = map[string]interface{}{
