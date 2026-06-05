@@ -17,6 +17,7 @@ import (
 	api_search "files/pkg/hertz/biz/router/api/search"
 	api_share "files/pkg/hertz/biz/router/api/share"
 	api_tree "files/pkg/hertz/biz/router/api/tree"
+	api_usage "files/pkg/hertz/biz/router/api/usage"
 	api_users "files/pkg/hertz/biz/router/api/users"
 	callback "files/pkg/hertz/biz/router/callback"
 	upload "files/pkg/hertz/biz/router/upload"
@@ -52,6 +53,8 @@ func GeneratedRegister(r *server.Hertz) {
 	api_preview.Register(r)
 
 	api_tree.Register(r)
+
+	api_usage.Register(r)
 
 	api_resources.Register(r)
 
