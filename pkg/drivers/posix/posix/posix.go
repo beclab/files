@@ -840,19 +840,11 @@ func statMountedExternalRootItem(fullPath string, mounted *files.DiskInfo) (os.F
 		return os.Lstat(fullPath)
 	}
 
-	resultCh := make(chan os.FileInfo, 1)
-	err := externalMountGuard.run(mounted.Path, mounted.Invalid, "external_root_metadata", func() error {
-		info, statErr := os.Lstat(fullPath)
-		if statErr == nil {
-			resultCh <- info
-		}
-		return statErr
-	})
-	if err != nil {
+	if err := externalMountGuard.ensureAvailable(mounted.Path, mounted, "external_root_metadata"); err != nil {
 		return nil, err
 	}
 
-	return <-resultCh, nil
+	return os.Lstat(fullPath)
 }
 
 func (s *PosixStorage) getFiles(fileParam *models.FileParam, expand, content bool) (*files.FileInfo, error) {
