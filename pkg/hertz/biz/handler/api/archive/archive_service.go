@@ -13,7 +13,6 @@ package archive
 import (
 	"archive/zip"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +27,7 @@ import (
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
 	bizhandler "files/pkg/hertz/biz/handler"
+	"files/pkg/hertz/biz/handler/stream"
 	archmodel "files/pkg/hertz/biz/model/api/archive"
 	"files/pkg/models"
 
@@ -330,32 +330,22 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	defer rd.Close()
 
-	c.SetContentType("application/x-ndjson; charset=utf-8")
-	c.Response.Header.Set("Cache-Control", "no-store")
-	c.Response.Header.Set("X-Content-Type-Options", "nosniff")
-	c.SetStatusCode(http.StatusOK)
-
-	w := c.Response.BodyWriter()
-	enc := json.NewEncoder(w)
+	w := stream.NewWriter(c)
 	var total int64
 	streamErr := rd.Walk(ctx, func(e reader.Entry) error {
-		if err := enc.Encode(e); err != nil {
+		if err := w.Emit(e); err != nil {
 			return err
 		}
 		total++
-		c.Flush()
 		return nil
 	})
 
 	if streamErr != nil {
-		code := classifyStreamError(streamErr)
-		_ = enc.Encode(map[string]any{"_error": streamErr.Error(), "code": code})
-		c.Flush()
+		w.Fail(streamErr, classifyStreamError(streamErr))
 		klog.V(2).Infof("[archive] entries stream error after %d entries: %v", total, streamErr)
 		return
 	}
-	_ = enc.Encode(map[string]any{"_done": true, "total": total})
-	c.Flush()
+	w.Done(map[string]any{"total": total})
 }
 
 // EntryMethod handles GET /api/archive/:node/entry?source=<uri>&path=<inner>.
