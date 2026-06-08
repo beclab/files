@@ -161,7 +161,10 @@ func Classify(err error, out string) error {
 	case strings.Contains(low, "enter password") || strings.Contains(low, "password is not defined"):
 		return ErrPasswordRequired
 	case strings.Contains(low, "can not find the file for archive volume"),
-		strings.Contains(low, "missing volume"):
+		strings.Contains(low, "missing volume"),
+		strings.Contains(low, "can not open file as archive"),
+		strings.Contains(low, "can not open the file as archive"),
+		strings.Contains(low, "missing required next volume"):
 		return ErrVolumeMissing
 	case strings.Contains(low, "is not archive"),
 		strings.Contains(low, "headers error"),

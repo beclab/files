@@ -18,8 +18,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"files/pkg/archive/reader"
@@ -100,6 +102,9 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	if !common.ListContains(common.PosixFileTypes, dst.FileType) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive only supported on local storages"})
+		return
+	}
+	if rejectArchiveNameTooLong(c, req.Destination, req.VolumeSizeMB > 0) {
 		return
 	}
 
@@ -184,6 +189,7 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
 		return
 	}
+	req.Source = normalizeVolumeSrc(req.Source)
 
 	src, err := models.CreateFileParam(owner, req.Source)
 	if err != nil {
@@ -225,6 +231,10 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 	srcUri, err := src.GetResourceUri()
 	if err != nil {
 		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		return
+	}
+	if missing := firstMissingVolume(srcUri + src.Path); missing != "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("archive volume missing: %s", filepath.Base(missing))})
 		return
 	}
 	if status, body, hit := archivePasswordPreflight(ctx, srcUri+src.Path, password); hit {
@@ -290,6 +300,7 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
 		return
 	}
+	req.Source = normalizeVolumeSrc(req.Source)
 
 	src, err := models.CreateFileParam(owner, req.Source)
 	if err != nil {
@@ -316,6 +327,11 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	absPath := uri + src.Path
 
+	if missing := firstMissingVolume(absPath); missing != "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("archive volume missing: %s", filepath.Base(missing))})
+		return
+	}
+
 	password := string(c.GetHeader(HeaderPassword))
 
 	if status, body, hit := archivePasswordPreflight(ctx, absPath, password); hit {
@@ -325,7 +341,7 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 
 	rd, err := reader.Open(absPath, password)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": friendlyArchiveMsg(err)})
 		return
 	}
 	defer rd.Close()
@@ -349,7 +365,7 @@ func EntriesMethod(ctx context.Context, c *app.RequestContext) {
 
 	if streamErr != nil {
 		code := classifyStreamError(streamErr)
-		_ = enc.Encode(map[string]any{"_error": streamErr.Error(), "code": code})
+		_ = enc.Encode(map[string]any{"_error": friendlyArchiveMsg(streamErr), "code": code})
 		c.Flush()
 		klog.V(2).Infof("[archive] entries stream error after %d entries: %v", total, streamErr)
 		return
@@ -371,6 +387,7 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "user not found"})
 		return
 	}
+	req.Source = normalizeVolumeSrc(req.Source)
 
 	src, err := models.CreateFileParam(owner, req.Source)
 	if err != nil {
@@ -397,6 +414,11 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	absPath := uri + src.Path
 
+	if missing := firstMissingVolume(absPath); missing != "" {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("archive volume missing: %s", filepath.Base(missing))})
+		return
+	}
+
 	password := string(c.GetHeader(HeaderPassword))
 
 	if status, body, hit := archivePasswordPreflight(ctx, absPath, password); hit {
@@ -406,7 +428,7 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 
 	rd, err := reader.Open(absPath, password)
 	if err != nil {
-		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
+		c.AbortWithStatusJSON(consts.StatusInternalServerError, utils.H{"error": friendlyArchiveMsg(err)})
 		return
 	}
 	defer rd.Close()
@@ -414,7 +436,7 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 	rc, err := rd.Open(req.Path)
 	if err != nil {
 		code, status := classifyEntryError(err)
-		c.AbortWithStatusJSON(status, utils.H{"error": err.Error(), "code": code})
+		c.AbortWithStatusJSON(status, utils.H{"error": friendlyArchiveMsg(err), "code": code})
 		return
 	}
 	defer rc.Close()
@@ -440,6 +462,92 @@ func EntryMethod(ctx context.Context, c *app.RequestContext) {
 // true if the request may proceed; on denial Gate writes a 403.
 func gateAccess(ctx context.Context, c *app.RequestContext, fp *models.FileParam, action models.Action) bool {
 	return bizhandler.Gate(ctx, c, fp, action, false, "archive")
+}
+
+// archiveNameMax is the POSIX NAME_MAX shared by ext4 / xfs / nfs / smb / fat-LFN.
+const archiveNameMax = 255
+
+// archiveTmpOverheadVolume is the worst-case 7z multi-volume tmp suffix `.NNNN.<8hex>.tmp` plus 2 bytes slack.
+const archiveTmpOverheadVolume = 20
+
+// archiveTmpOverheadSingle is the suffix overhead for non-volume `<dst>.tmp` writes.
+const archiveTmpOverheadSingle = 4
+
+// normalizeVolumeSrc rewrites src ending in `.NNN+` (NNN >= 2) to the equivalent `.001` so any volume the user picks resolves to the first.
+func normalizeVolumeSrc(src string) string {
+	ext := filepath.Ext(src)
+	if len(ext) >= 4 && ext[0] == '.' {
+		if n, err := strconv.Atoi(ext[1:]); err == nil && n >= 2 {
+			return strings.TrimSuffix(src, ext) + ".001"
+		}
+	}
+	return src
+}
+
+// firstMissingVolume scans the directory for `<prefix>.NNN` siblings of absPath and returns the path of the first absent volume between .001 and the highest present, or "" if continuous (or absPath is not a numeric volume).
+func firstMissingVolume(absPath string) string {
+	ext := filepath.Ext(absPath)
+	if len(ext) < 4 || ext[0] != '.' {
+		return ""
+	}
+	digits := ext[1:]
+	if _, err := strconv.Atoi(digits); err != nil {
+		return ""
+	}
+	width := len(digits)
+	dir := filepath.Dir(absPath)
+	prefix := strings.TrimSuffix(filepath.Base(absPath), ext) + "."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	present := make(map[int]bool)
+	maxN := 0
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasPrefix(n, prefix) {
+			continue
+		}
+		num, err := strconv.Atoi(strings.TrimPrefix(n, prefix))
+		if err != nil || num <= 0 {
+			continue
+		}
+		present[num] = true
+		if num > maxN {
+			maxN = num
+		}
+	}
+	for i := 1; i <= maxN; i++ {
+		if !present[i] {
+			return filepath.Join(dir, prefix+fmt.Sprintf("%0*d", width, i))
+		}
+	}
+	return ""
+}
+
+// rejectArchiveNameTooLong aborts with 400 when basename + worst-case 7z tmp suffix would overflow NAME_MAX.
+func rejectArchiveNameTooLong(c *app.RequestContext, p string, withVolume bool) bool {
+	overhead := archiveTmpOverheadSingle
+	if withVolume {
+		overhead = archiveTmpOverheadVolume
+	}
+	if base := filepath.Base(p); len(base)+overhead > archiveNameMax {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": fmt.Sprintf("archive name too long: %d bytes (max %d)", len(base), archiveNameMax-overhead)})
+		return true
+	}
+	return false
+}
+
+// friendlyArchiveMsg replaces a raw 7z `exit status N` error text with a generic message; other errors pass through.
+func friendlyArchiveMsg(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "exit status ") {
+		return "archive operation failed; please check the archive integrity"
+	}
+	return msg
 }
 
 // extractDirPath strips a recognised archive suffix from the extract
@@ -515,7 +623,7 @@ func archivePasswordPreflight(ctx context.Context, absPath, password string) (in
 					if errors.Is(verr, sevenz.ErrPasswordInvalid) {
 						return consts.StatusBadRequest, utils.H{"code": 30002, "message": "archive password is incorrect"}, true
 					}
-					return consts.StatusInternalServerError, utils.H{"error": verr.Error()}, true
+					return consts.StatusInternalServerError, utils.H{"error": friendlyArchiveMsg(verr)}, true
 				}
 			}
 			return 0, nil, false
@@ -545,10 +653,10 @@ func archivePasswordPreflight(ctx context.Context, absPath, password string) (in
 			if errors.Is(verr, sevenz.ErrPasswordInvalid) {
 				return consts.StatusBadRequest, utils.H{"code": 30002, "message": "archive password is incorrect"}, true
 			}
-			return consts.StatusInternalServerError, utils.H{"error": verr.Error()}, true
+			return consts.StatusInternalServerError, utils.H{"error": friendlyArchiveMsg(verr)}, true
 		}
 	default:
-		return consts.StatusInternalServerError, utils.H{"error": err.Error()}, true
+		return consts.StatusInternalServerError, utils.H{"error": friendlyArchiveMsg(err)}, true
 	}
 	return 0, nil, false
 }
