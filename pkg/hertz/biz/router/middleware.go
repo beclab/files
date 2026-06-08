@@ -90,7 +90,7 @@ func Cors() app.HandlerFunc {
 			c.Response.Header.Set("Access-Control-Allow-Credentials", "true")
 			c.Response.Header.Add("Vary", "Origin")
 		}
-		c.Response.Header.Set("Access-Control-Allow-Headers", "access-control-allow-headers,access-control-allow-methods,access-control-allow-origin,content-type,x-auth,x-unauth-error,x-authorization")
+		c.Response.Header.Set("Access-Control-Allow-Headers", "access-control-allow-headers,access-control-allow-methods,access-control-allow-origin,content-type,x-auth,x-unauth-error,x-authorization,x-archive-password")
 		c.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Response.Header.Set("Access-Control-Max-Age", "600")
 
@@ -110,7 +110,7 @@ func Options() app.HandlerFunc {
 				ctx.Header("Vary", "Origin")
 			}
 			ctx.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-			ctx.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			ctx.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Archive-Password")
 			ctx.Header("Access-Control-Max-Age", "86400")
 			ctx.Status(204)
 			return

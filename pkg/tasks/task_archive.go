@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"k8s.io/klog/v2"
@@ -95,15 +96,21 @@ func (t *Task) Compress() (retErr error) {
 				overwriteBackups = append(overwriteBackups, [2]string{p, bak})
 			}
 		case common.ArchiveConflictSkip:
-			existing := dstPath
+			var hasExisting bool
 			if isVolume {
-				existing = dstPath + ".001"
-			}
-			if _, e := os.Stat(existing); e == nil {
-				klog.Infof("[Task] Id: %s, compress, skip existing archive: %s", t.id, existing)
-				return nil
+				has, e := archiveDstHas(dstPath)
+				if e != nil {
+					return e
+				}
+				hasExisting = has
+			} else if _, e := os.Stat(dstPath); e == nil {
+				hasExisting = true
 			} else if !errors.Is(e, os.ErrNotExist) {
 				return e
+			}
+			if hasExisting {
+				klog.Infof("[Task] Id: %s, compress, skip existing archive: %s", t.id, dstPath)
+				return nil
 			}
 		default: // rename or unset
 			if newName, newPath, e := t.generateArchiveDstName(dstPath, dstUri, isVolume); e != nil {
@@ -167,7 +174,7 @@ func (t *Task) Compress() (retErr error) {
 		if cerr := t.ctx.Err(); cerr != nil {
 			return cerr
 		}
-		return err
+		return scrubExitStatus(err, "archive compress failed; please check sources and free disk space")
 	}
 
 	// Match the rsync path: chown the produced archive(s) to 1000:1000
@@ -241,8 +248,7 @@ func (t *Task) Extract() (retErr error) {
 			}
 			return nil
 		}); err != nil {
-			// Walk errors are already Classify'd by sevenz.
-			return err
+			return mapExtractErr(srcPath, err)
 		}
 	}
 	// xz / bzip2 / tar.xz / tar.bz2 stream formats don't expose unpacked size; fall back to packed src size.
@@ -347,7 +353,7 @@ func (t *Task) Extract() (retErr error) {
 		if cerr := t.ctx.Err(); cerr != nil {
 			return cerr
 		}
-		return err
+		return mapExtractErr(srcPath, err)
 	}
 
 	var chownRoots []string
@@ -479,22 +485,55 @@ func (t *Task) validateArchiveExtract() error {
 
 // generateArchiveDstName returns ("","",nil) when no collision, or
 // ("foo (1).zip","/Home/foo (1).zip", nil) when a unique sibling name
-// is found. For multi-volume archives the .001 first volume controls
-// collision detection.
+// is found. For multi-volume archives any existing `<base>.NNN` numeric
+// volume sibling counts as a collision.
 func (t *Task) generateArchiveDstName(dstPath, dstUri string, isVolume bool) (string, string, error) {
-	probe := dstPath
-	if isVolume {
-		probe = dstPath + ".001"
-	}
-	if _, err := os.Stat(probe); errors.Is(err, os.ErrNotExist) {
-		return "", "", nil
-	} else if err != nil {
-		return "", "", err
-	}
 	base := filepath.Base(dstPath)
 	_, ext := common.SplitNameExt(base)
 	name := strings.TrimSuffix(base, ext)
 	dir := filepath.Dir(dstPath)
+	if isVolume {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return "", "", err
+		}
+		names := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			names[e.Name()] = true
+		}
+		// taken reports whether `cand` clashes with any existing file: the bare name, or any `<cand>.NNN` numeric volume sibling.
+		taken := func(cand string) bool {
+			if names[cand] {
+				return true
+			}
+			prefix := cand + "."
+			for n := range names {
+				if !strings.HasPrefix(n, prefix) {
+					continue
+				}
+				suf := n[len(prefix):]
+				if _, err := strconv.Atoi(suf); err == nil {
+					return true
+				}
+			}
+			return false
+		}
+		if !taken(base) {
+			return "", "", nil
+		}
+		for i := 1; i < 10000; i++ {
+			cand := fmt.Sprintf("%s (%d)%s", name, i, ext)
+			if !taken(cand) {
+				return cand, strings.TrimPrefix(dir+"/"+cand, dstUri), nil
+			}
+		}
+		return "", "", nil
+	}
+	if _, err := os.Stat(dstPath); errors.Is(err, os.ErrNotExist) {
+		return "", "", nil
+	} else if err != nil {
+		return "", "", err
+	}
 	siblings, err := files.CollectDupNames(dir, name, ext, false)
 	if err != nil {
 		return "", "", err
@@ -529,17 +568,24 @@ func (t *Task) generateExtractDstDir(dstPath, dstUri string) (string, error) {
 	return strings.TrimPrefix(dir+"/"+newName, dstUri), nil
 }
 
-// archiveOutputPaths returns all on-disk files that compose the
-// archive at dstPath: the bare file plus any .NNN volume parts.
+// archiveOutputPaths returns dstPath plus every existing `<base>.NNN` numeric volume sibling, regardless of gaps.
 func archiveOutputPaths(dstPath string) []string {
 	out := []string{dstPath}
-	// Walk siblings dstPath.001, .002, ... until a gap is found.
-	for i := 1; i < 1000; i++ {
-		p := fmt.Sprintf("%s.%03d", dstPath, i)
-		if _, err := os.Stat(p); err != nil {
-			break
+	dir := filepath.Dir(dstPath)
+	base := filepath.Base(dstPath)
+	prefix := base + "."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasPrefix(n, prefix) {
+			continue
 		}
-		out = append(out, p)
+		if _, err := strconv.Atoi(n[len(prefix):]); err == nil {
+			out = append(out, filepath.Join(dir, n))
+		}
 	}
 	return out
 }
@@ -558,4 +604,62 @@ func cleanupArchiveOutputs(dstPath string) {
 			}
 		}
 	}
+}
+
+// archiveDstHas reports whether dst's directory already holds the bare dst or any numeric volume sibling (`<base>.NNN`).
+func archiveDstHas(dstPath string) (bool, error) {
+	dir := filepath.Dir(dstPath)
+	base := filepath.Base(dstPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	prefix := base + "."
+	for _, e := range entries {
+		n := e.Name()
+		if n == base {
+			return true, nil
+		}
+		if !strings.HasPrefix(n, prefix) {
+			continue
+		}
+		if _, err := strconv.Atoi(n[len(prefix):]); err == nil {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// mapExtractErr rewrites typed/unknown 7z errors into actionable messages, treating any non-password failure on a multi-volume src as a missing/corrupt volume.
+func mapExtractErr(srcPath string, err error) error {
+	if errors.Is(err, sevenz.ErrVolumeMissing) {
+		return errors.New("archive volume missing or incomplete; please ensure all parts are present")
+	}
+	if errors.Is(err, sevenz.ErrPasswordRequired) || errors.Is(err, sevenz.ErrPasswordInvalid) {
+		return err
+	}
+	if errors.Is(err, sevenz.ErrCorrupt) {
+		return errors.New("archive is corrupted or unreadable")
+	}
+	ext := filepath.Ext(srcPath)
+	if len(ext) >= 4 && ext[0] == '.' {
+		if _, e := strconv.Atoi(ext[1:]); e == nil {
+			return errors.New("archive volume missing or corrupted; please check that all parts are complete")
+		}
+	}
+	return scrubExitStatus(err, "archive extract failed; please check the archive integrity and try again")
+}
+
+// scrubExitStatus turns a raw `exit status N` error into msg; any other error is returned unchanged.
+func scrubExitStatus(err error, msg string) error {
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(err.Error(), "exit status ") {
+		return errors.New(msg)
+	}
+	return err
 }
