@@ -111,6 +111,21 @@ func TestHydrateExternalRootItemMetadataMountedValid(t *testing.T) {
 		Invalid: false,
 	}
 
+	// Skip the asynchronous mount probe by injecting a healthy state directly.
+	externalMountGuard.mu.Lock()
+	externalMountGuard.states[mounted.Path] = &mountGuardState{
+		mounted:       true,
+		probeState:    mountProbeHealthy,
+		lastHealthyAt: time.Now(),
+		probePath:     fullPath,
+	}
+	externalMountGuard.mu.Unlock()
+	defer func() {
+		externalMountGuard.mu.Lock()
+		delete(externalMountGuard.states, mounted.Path)
+		externalMountGuard.mu.Unlock()
+	}()
+
 	hydrateExternalRootItemMetadata(item, fullPath, "/", mounted, true)
 
 	if !item.ModTime.Equal(modTime) {
