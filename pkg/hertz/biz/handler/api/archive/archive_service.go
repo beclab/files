@@ -75,7 +75,6 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 	// Resolve every source URI to a FileParam; reject as soon as any
 	// one isn't a posix-class storage.
 	srcs := make([]*models.FileParam, 0, len(req.Sources))
-	var srcFileType string
 	for _, s := range req.Sources {
 		fp, err := models.CreateFileParam(owner, s)
 		if err != nil {
@@ -86,10 +85,8 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive only supported on local storages"})
 			return
 		}
-		if srcFileType == "" {
-			srcFileType = fp.FileType
-		} else if srcFileType != fp.FileType {
-			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "all sources must share one storage type"})
+		if len(srcs) > 0 && !archiveSameStorage(srcs[0], fp) {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "all sources must reside on the same storage"})
 			return
 		}
 		srcs = append(srcs, fp)
@@ -102,6 +99,10 @@ func CompressMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	if !common.ListContains(common.PosixFileTypes, dst.FileType) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive only supported on local storages"})
+		return
+	}
+	if len(srcs) > 0 && !archiveSameStorage(srcs[0], dst) {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive sources and destination must reside on the same storage"})
 		return
 	}
 	if rejectArchiveNameTooLong(c, req.Destination, req.VolumeSizeMB > 0) {
@@ -207,6 +208,10 @@ func ExtractMethod(ctx context.Context, c *app.RequestContext) {
 	}
 	if !common.ListContains(common.PosixFileTypes, dst.FileType) {
 		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive only supported on local storages"})
+		return
+	}
+	if !archiveSameStorage(src, dst) {
+		c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "archive source and destination must reside on the same storage"})
 		return
 	}
 
@@ -472,6 +477,30 @@ const archiveTmpOverheadVolume = 20
 
 // archiveTmpOverheadSingle is the suffix overhead for non-volume `<dst>.tmp` writes.
 const archiveTmpOverheadSingle = 4
+
+// archiveSameStorage reports whether a and b live on the same closed storage area: same FileType + Extend, plus same first path segment for external-class mounts.
+func archiveSameStorage(a, b *models.FileParam) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	if a.FileType != b.FileType || a.Extend != b.Extend {
+		return false
+	}
+	switch a.FileType {
+	case common.External, common.Internal, common.Smb, common.Usb, common.Hdd:
+		return firstPathSegment(a.Path) == firstPathSegment(b.Path)
+	}
+	return true
+}
+
+// firstPathSegment returns the first non-empty segment of a `/foo/bar/baz` style path.
+func firstPathSegment(p string) string {
+	p = strings.TrimPrefix(p, "/")
+	if i := strings.Index(p, "/"); i >= 0 {
+		return p[:i]
+	}
+	return p
+}
 
 // normalizeVolumeSrc rewrites src ending in `.NNN+` (NNN >= 2) to the equivalent `.001` so any volume the user picks resolves to the first.
 func normalizeVolumeSrc(src string) string {

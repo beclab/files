@@ -146,6 +146,9 @@ var ErrCorrupt = errors.New("archive_corrupt")
 // file (e.g., .002 missing while opening .001).
 var ErrVolumeMissing = errors.New("archive_volume_missing")
 
+// ErrSpecialFileSkipped is returned when 7z exits with warnings because the source contains files it cannot archive (sockets, device files, FIFOs, ...).
+var ErrSpecialFileSkipped = errors.New("archive_special_files_skipped")
+
 // Classify inspects err and the captured stderr/stdout buffer of a 7z
 // subprocess and maps to one of the typed errors above when possible.
 func Classify(err error, out string) error {
@@ -166,6 +169,8 @@ func Classify(err error, out string) error {
 		strings.Contains(low, "can not open the file as archive"),
 		strings.Contains(low, "missing required next volume"):
 		return ErrVolumeMissing
+	case strings.Contains(low, "errno=6") || strings.Contains(low, "no such device or address"):
+		return ErrSpecialFileSkipped
 	case strings.Contains(low, "is not archive"),
 		strings.Contains(low, "headers error"),
 		strings.Contains(low, "unexpected end of archive"):
@@ -472,10 +477,14 @@ func extractTarCompound(ctx context.Context, bin string, opts ExtractOpts, prog 
 	wg.Wait()
 
 	if waitErr1 != nil {
-		return Classify(waitErr1, cmd1StderrBuf.String())
+		out := cmd1StderrBuf.String()
+		klog.Errorf("[sevenz] tar-compound outer exit err: %v; stderr: %s", waitErr1, common.RemoveBlank(out))
+		return Classify(waitErr1, out)
 	}
 	if waitErr2 != nil {
-		return Classify(waitErr2, cmd2StderrBuf.String())
+		out := cmd2StderrBuf.String()
+		klog.Errorf("[sevenz] tar-compound inner exit err: %v; stderr: %s", waitErr2, common.RemoveBlank(out))
+		return Classify(waitErr2, out)
 	}
 	if prog != nil && lastPercent != 100 {
 		prog(100, 0)
@@ -531,7 +540,9 @@ func Walk(ctx context.Context, opts ListOpts, fn WalkFn) error {
 		for _, b := range stderrBufs {
 			combined.WriteString(b.String())
 		}
-		return Classify(firstWaitErr, combined.String())
+		out := combined.String()
+		klog.Errorf("[sevenz] walk exit err: %v; stderr: %s", firstWaitErr, common.RemoveBlank(out))
+		return Classify(firstWaitErr, out)
 	}
 	return nil
 }
@@ -845,7 +856,7 @@ func runWithProgress(ctx context.Context, bin string, args []string, workdir str
 
 	if waitErr != nil {
 		out := stderrBuf.String()
-		klog.V(2).Infof("[sevenz] exit err: %v; stderr: %s", waitErr, common.RemoveBlank(out))
+		klog.Errorf("[sevenz] run exit err: %v; stderr: %s", waitErr, common.RemoveBlank(out))
 		return Classify(waitErr, out)
 	}
 	if prog != nil && lastPercent != 100 {

@@ -174,7 +174,11 @@ func (t *Task) Compress() (retErr error) {
 		if cerr := t.ctx.Err(); cerr != nil {
 			return cerr
 		}
-		return scrubExitStatus(err, "archive compress failed; please check sources and free disk space")
+		klog.Errorf("[Task] Id: %s, compress raw err: %v", t.id, err)
+		if errors.Is(err, sevenz.ErrSpecialFileSkipped) {
+			return errors.New("some files (e.g. sockets or device files) could not be archived; please remove them from the source and retry")
+		}
+		return scrubExitStatus(err, "archive compress failed; please check sources, permissions or other prerequisites")
 	}
 
 	// Match the rsync path: chown the produced archive(s) to 1000:1000
@@ -633,7 +637,7 @@ func archiveDstHas(dstPath string) (bool, error) {
 	return false, nil
 }
 
-// mapExtractErr rewrites typed/unknown 7z errors into actionable messages, treating any non-password failure on a multi-volume src as a missing/corrupt volume.
+// mapExtractErr rewrites typed/unknown 7z errors into actionable messages; raw errors are logged before being masked.
 func mapExtractErr(srcPath string, err error) error {
 	if errors.Is(err, sevenz.ErrVolumeMissing) {
 		return errors.New("archive volume missing or incomplete; please ensure all parts are present")
@@ -644,6 +648,7 @@ func mapExtractErr(srcPath string, err error) error {
 	if errors.Is(err, sevenz.ErrCorrupt) {
 		return errors.New("archive is corrupted or unreadable")
 	}
+	klog.Errorf("[archive] extract raw err src=%s: %v", srcPath, err)
 	ext := filepath.Ext(srcPath)
 	if len(ext) >= 4 && ext[0] == '.' {
 		if _, e := strconv.Atoi(ext[1:]); e == nil {
