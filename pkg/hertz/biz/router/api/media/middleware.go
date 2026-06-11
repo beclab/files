@@ -3,6 +3,8 @@
 package media
 
 import (
+	bizhandler "files/pkg/hertz/biz/handler"
+
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
@@ -61,10 +63,7 @@ func _getvarianthlsvideoplaylistMw() []app.HandlerFunc {
 	return nil
 }
 
-func _nodeMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
+func _nodeMw() []app.HandlerFunc { return []app.HandlerFunc{bizhandler.NodeGuard()} }
 
 func _playlistidMw() []app.HandlerFunc {
 	// your code...

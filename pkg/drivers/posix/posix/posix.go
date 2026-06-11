@@ -545,10 +545,6 @@ func (s *PosixStorage) Rename(contextArgs *models.HttpContextArgs) ([]byte, erro
 		klog.Infof("Posix rename, user: %s, uri: %s, args: %s", owner, uri, common.ToJson(contextArgs))
 
 		var srcName, isSrcFile = files.GetFileNameFromPath(fileParam.Path)
-		srcName, err = url.PathUnescape(srcName)
-		if err != nil {
-			return nil, err
-		}
 		dstName, err := url.PathUnescape(contextArgs.QueryParam.Destination) // no /
 		if err != nil {
 			return nil, err
