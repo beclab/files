@@ -7,6 +7,7 @@ import (
 	"files/pkg/common"
 	"files/pkg/drivers"
 	"files/pkg/drivers/base"
+	"files/pkg/global"
 	"files/pkg/models"
 	"fmt"
 	"net/http"
@@ -16,6 +17,18 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"k8s.io/klog/v2"
 )
+
+// NodeGuard rejects requests whose :node segment is not a known cluster node.
+func NodeGuard() app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		node := c.Param("node")
+		if node != global.CurrentNodeName && !global.GlobalNode.CheckNodeExists(node) {
+			c.AbortWithStatusJSON(consts.StatusBadRequest, utils.H{"error": "invalid node"})
+			return
+		}
+		c.Next(ctx)
+	}
+}
 
 func RespSuccess(c *app.RequestContext, data interface{}) {
 	c.JSON(http.StatusOK, utils.H{"code": 0, "data": data})

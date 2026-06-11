@@ -3,6 +3,8 @@
 package external
 
 import (
+	bizhandler "files/pkg/hertz/biz/handler"
+
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
@@ -71,20 +73,9 @@ func _accountsmethodMw() []app.HandlerFunc {
 	return nil
 }
 
-func _nodeMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _node0Mw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _node1Mw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
+func _nodeMw() []app.HandlerFunc  { return []app.HandlerFunc{bizhandler.NodeGuard()} }
+func _node0Mw() []app.HandlerFunc { return []app.HandlerFunc{bizhandler.NodeGuard()} }
+func _node1Mw() []app.HandlerFunc { return []app.HandlerFunc{bizhandler.NodeGuard()} }
 
 func _mounted_statesMw() []app.HandlerFunc {
 	// your code...
